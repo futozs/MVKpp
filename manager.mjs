@@ -4,8 +4,8 @@
  * MVK MobilON+ — Unified Instance Manager & SaaS Process Hub
  * Orchestrates:
  *   1. Backend API Gateway (Hono + TypeScript on :8088)
- *   2. Main Frontend Dashboard (Vite on :5173)
- *   3. Dedicated System Hub (Vite on :5174)
+ *   2. Main Frontend Dashboard (Vite on :5173, or static from :5173 in prod)
+ *   3. Dedicated System Hub (Vite on :5174, or static from :5174 in prod)
  *   4. Token Worker (Background daemon for Mac MVK App Attest token refresh)
  */
 
@@ -13,6 +13,8 @@ import { spawn, execSync } from 'node:child_process'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { existsSync, mkdirSync, appendFileSync, readFileSync, writeFileSync, statSync, rmSync } from 'node:fs'
+import { createServer } from 'node:http'
+import { createReadStream } from 'node:fs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const BACKEND_DIR = join(__dirname, 'backend')
@@ -22,6 +24,9 @@ const WORKER_SCRIPT = join(BACKEND_DIR, 'tools', 'token_worker.sh')
 const LOGS_DIR = join(__dirname, 'logs')
 const STATE_DIR = join(BACKEND_DIR, 'state')
 const PID_FILE = join(STATE_DIR, 'manager.pid')
+
+// Check if --prod flag is passed
+const PROD_MODE = process.argv.includes('--prod')
 
 mkdirSync(LOGS_DIR, { recursive: true })
 mkdirSync(STATE_DIR, { recursive: true })
@@ -64,6 +69,7 @@ console.log(`
 ${C.yellow}${C.bold}╔════════════════════════════════════════════════════════════════════╗
 ║                  MVK MobilON+ — SAAS CONTROL HUB                   ║
 ║         Valos Ideju Tranzit Rendszer & Folyamatkezelo             ║
+${PROD_MODE ? `║                        PRODUCTION MODE                                 ║` : ''}
 ╚════════════════════════════════════════════════════════════════════╝${C.reset}
 `)
 
@@ -135,40 +141,103 @@ const backendProc = startBackend()
 backendEntry = { name: 'backend', proc: backendProc }
 processes.push(backendEntry)
 
+// ── Static file server for prod mode ────────────────────────────────────────
+function startStaticServer(distDir, port, name) {
+  const server = createServer((req, res) => {
+    let filePath = join(distDir, req.url === '/' ? 'index.html' : req.url)
+    
+    // Try exact file, then index.html (for SPA routing)
+    if (!existsSync(filePath) || !filePath.startsWith(distDir)) {
+      filePath = join(distDir, 'index.html')
+    }
+    
+    if (!existsSync(filePath)) {
+      res.writeHead(404, { 'Content-Type': 'text/plain' })
+      res.end('404 Not Found')
+      return
+    }
+
+    const mimeTypes = {
+      '.html': 'text/html; charset=utf-8',
+      '.js': 'application/javascript',
+      '.css': 'text/css',
+      '.json': 'application/json',
+      '.svg': 'image/svg+xml',
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.gif': 'image/gif',
+      '.woff': 'font/woff',
+      '.woff2': 'font/woff2',
+    }
+    
+    const ext = filePath.substring(filePath.lastIndexOf('.')).toLowerCase()
+    const contentType = mimeTypes[ext] || 'application/octet-stream'
+    
+    res.writeHead(200, { 'Content-Type': contentType, 'Cache-Control': 'no-cache' })
+    createReadStream(filePath).pipe(res)
+  })
+
+  server.listen(port, '0.0.0.0', () => {
+    logLine(name, C.cyan, `statikus szerver: :${port}`)
+  })
+  server.on('error', (e) => logLine(name, C.red, `szerver hiba: ${e.message}`))
+  return server
+}
+
 // 2. Start Main Frontend Server
 console.log(`${C.cyan}*${C.reset} ${C.bold}Fő Frontend Dashboard inditasa (:5173)...${C.reset}`)
-const frontendProc = spawn('npx', ['vite', '--host', '0.0.0.0', '--port', '5173'], {
-  cwd: FRONTEND_DIR,
-  env: { ...process.env },
-  stdio: ['ignore', 'pipe', 'pipe'],
-})
-processes.push({ name: 'frontend', proc: frontendProc })
 
-frontendProc.stdout.on('data', (d) => {
-  const str = d.toString()
-  if (str.includes('ready in') || str.includes('Local:')) {
-    logLine('FRONTEND', C.cyan, str)
+if (PROD_MODE) {
+  const frontendDist = join(FRONTEND_DIR, 'dist')
+  if (!existsSync(frontendDist)) {
+    logLine('FRONTEND', C.red, `HIBA: frontend dist nem található (${frontendDist}) — futtasd: npm run build`)
+  } else {
+    startStaticServer(frontendDist, 5173, 'FRONTEND')
   }
-})
-frontendProc.stderr.on('data', (d) => logLine('FRONTEND', C.red, d))
+} else {
+  const frontendProc = spawn('npx', ['vite', '--host', '0.0.0.0', '--port', '5173'], {
+    cwd: FRONTEND_DIR,
+    env: { ...process.env },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  processes.push({ name: 'frontend', proc: frontendProc })
+
+  frontendProc.stdout.on('data', (d) => {
+    const str = d.toString()
+    if (str.includes('ready in') || str.includes('Local:')) {
+      logLine('FRONTEND', C.cyan, str)
+    }
+  })
+  frontendProc.stderr.on('data', (d) => logLine('FRONTEND', C.red, d))
+}
 
 // 3. Start Dedicated System Hub
 if (existsSync(HUB_DIR)) {
   console.log(`${C.magenta}*${C.reset} ${C.bold}Dedikalt Rendszer Hub inditasa (:5174)...${C.reset}`)
-  const hubProc = spawn('npx', ['vite', '--host', '0.0.0.0', '--port', '5174'], {
-    cwd: HUB_DIR,
-    env: { ...process.env },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
-  processes.push({ name: 'hub', proc: hubProc })
-
-  hubProc.stdout.on('data', (d) => {
-    const str = d.toString()
-    if (str.includes('ready in') || str.includes('Local:')) {
-      logLine('HUB', C.magenta, str)
+  
+  if (PROD_MODE) {
+    const hubDist = join(HUB_DIR, 'dist')
+    if (!existsSync(hubDist)) {
+      logLine('HUB', C.red, `HIBA: hub dist nem található (${hubDist}) — futtasd: npm run build`)
+    } else {
+      startStaticServer(hubDist, 5174, 'HUB')
     }
-  })
-  hubProc.stderr.on('data', (d) => logLine('HUB', C.red, d))
+  } else {
+    const hubProc = spawn('npx', ['vite', '--host', '0.0.0.0', '--port', '5174'], {
+      cwd: HUB_DIR,
+      env: { ...process.env },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    processes.push({ name: 'hub', proc: hubProc })
+
+    hubProc.stdout.on('data', (d) => {
+      const str = d.toString()
+      if (str.includes('ready in') || str.includes('Local:')) {
+        logLine('HUB', C.magenta, str)
+      }
+    })
+    hubProc.stderr.on('data', (d) => logLine('HUB', C.red, d))
+  }
 }
 
 // 4. Start Statistics Worker (MySQL adatraktar: gyujtes -> tenyek -> aggregatumok)
