@@ -6,7 +6,12 @@
  * (503). A hívóknak ezt külön kell kezelniük — a térkép attól még működik, hogy
  * a statisztika épp nem áll rendelkezésre.
  */
-const API_BASE = import.meta.env.VITE_API_URL || ''
+let API_BASE = import.meta.env.VITE_API_URL ?? ''
+if (!API_BASE && typeof window !== 'undefined' && import.meta.env.PROD) {
+  // Prod mode: backend on port 8088, frontend on port 5173
+  const { protocol, hostname } = window.location
+  API_BASE = `${protocol}//${hostname}:8088`
+}
 
 /** Az adatraktár nem érhető el — külön típus, hogy a UI megkülönböztethesse. */
 export class StatsUnavailableError extends Error {

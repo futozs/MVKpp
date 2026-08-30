@@ -9,6 +9,7 @@ import { LogViewer } from '@/components/LogViewer'
 import { Button } from '@/components/ui/button'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { dashboardUrl } from '@/lib/links'
+import { getSystemUrl } from '@/lib/admin'
 import { cn } from '@/lib/utils'
 
 const POLL_MS = 10000
@@ -24,9 +25,9 @@ export function App() {
     setLoading(true)
     try {
       const [h, s, c] = await Promise.all([
-        fetch('/_health').then((r) => r.json()),
-        fetch('/system/info').then((r) => r.json()).catch(() => null),
-        fetch('/system/cache').then((r) => r.json()).catch(() => null),
+        fetch(getSystemUrl('/_health')).then((r) => r.json()),
+        fetch(getSystemUrl('/system/info')).then((r) => r.json()).catch(() => null),
+        fetch(getSystemUrl('/system/cache')).then((r) => r.json()).catch(() => null),
       ])
       setHealth(h)
       if (s) setSysInfo(s)

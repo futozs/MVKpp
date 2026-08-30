@@ -5,11 +5,11 @@
   "type": "module",
   "description": "MVK MobilON+ valós idejű tranzit SaaS rendszer, multi-megálló figyelő, backend gateway és folyamatkezelő.",
   "scripts": {
-    "start": "git pull && npm run build && node manager.mjs -- --prod",
+    "start": "git pull && bun run build && node manager.mjs -- --prod",
     "dev": "node manager.mjs",
-    "build:frontend": "cd frontend && npm run build",
-    "build:hub": "cd hub && npm run build",
-    "build:backend": "cd backend && npm run build",
-    "build": "npm run build:frontend && npm run build:hub && npm run build:backend"
+    "build:frontend": "cd frontend && bun run build",
+    "build:hub": "cd hub && bun run build",
+    "build:backend": "cd backend && bun run build",
+    "build": "bun run build:frontend && bun run build:hub && bun run build:backend"
   }
 }

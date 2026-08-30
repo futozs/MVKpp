@@ -12,7 +12,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { adminHeaders, deployStatusUrl, getAdminToken, setAdminToken } from '@/lib/admin'
+import { adminHeaders, deployStatusUrl, getAdminToken, setAdminToken, getSystemUrl } from '@/lib/admin'
 import { cn } from '@/lib/utils'
 
 type StepState = 'pending' | 'running' | 'done' | 'failed'
@@ -131,7 +131,7 @@ export function RedeployPanel({ onFinished }: { onFinished: () => void }) {
     setError(null)
     wasRunning.current = false
     try {
-      const res = await fetch('/system/redeploy', {
+      const res = await fetch(getSystemUrl('/system/redeploy'), {
         method: 'POST',
         headers: adminHeaders(),
         body: JSON.stringify({ skipPull }),

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Pause, Play, ScrollText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { adminHeaders } from '@/lib/admin'
+import { adminHeaders, getSystemUrl } from '@/lib/admin'
 import { cn } from '@/lib/utils'
 
 type LogSource = { name: string; label: string; size: number; mtime: string | null; exists: boolean }
@@ -37,7 +37,7 @@ export function LogViewer() {
 
   const loadSources = useCallback(async () => {
     try {
-      const res = await fetch('/system/logs', { cache: 'no-store', headers: adminHeaders() })
+      const res = await fetch(getSystemUrl('/system/logs'), { cache: 'no-store', headers: adminHeaders() })
       const data = await res.json()
       setSources(data.sources ?? [])
     } catch {
@@ -48,7 +48,7 @@ export function LogViewer() {
   const loadLines = useCallback(async (source: string) => {
     setLoading(true)
     try {
-      const res = await fetch(`/system/logs/${source}?lines=${LINES}`, {
+      const res = await fetch(getSystemUrl(`/system/logs/${source}?lines=${LINES}`), {
         cache: 'no-store',
         headers: adminHeaders(),
       })

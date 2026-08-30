@@ -69,7 +69,7 @@ console.log(`
 ${C.yellow}${C.bold}╔════════════════════════════════════════════════════════════════════╗
 ║                  MVK MobilON+ — SAAS CONTROL HUB                   ║
 ║         Valos Ideju Tranzit Rendszer & Folyamatkezelo             ║
-${PROD_MODE ? `║                        PRODUCTION MODE                                 ║` : ''}
+${PROD_MODE ? `║                        🔴 PRODUCTION MODE 🔴                          ║` : '║                         (dev mode)                                   ║'}
 ╚════════════════════════════════════════════════════════════════════╝${C.reset}
 `)
 
@@ -114,10 +114,25 @@ console.log(`${C.green}*${C.reset} ${C.bold}Backend API Gateway inditasa (:8088)
 function startBackend(reason) {
   if (reason) logLine('MANAGER', C.green, `Backend ujrainditasa (${reason})...`)
 
-  const proc = spawn('node', ['src/index.ts'], {
+  // Prod módban: dist/index.js | Dev módban: src/index.ts
+  const script = PROD_MODE ? 'dist/index.js' : 'src/index.ts'
+  const distExists = existsSync(join(BACKEND_DIR, 'dist', 'index.js'))
+  
+  if (PROD_MODE && !distExists) {
+    logLine('BACKEND', C.red, `HIBA: backend dist nem található (${join(BACKEND_DIR, 'dist', 'index.js')}) — futtasd: npm run build`)
+    process.exit(1)
+  }
+
+  const proc = spawn('node', [script], {
     cwd: BACKEND_DIR,
     // MVK_MANAGED: a backend ebbol tudja, hogy kilepes utan van, aki visszahozza.
-    env: { ...process.env, PORT: '8088', AUTO_RENEW: '0', MVK_MANAGED: '1' },
+    env: { 
+      ...process.env, 
+      PORT: '8088', 
+      AUTO_RENEW: '0', 
+      MVK_MANAGED: '1',
+      NODE_ENV: PROD_MODE ? 'production' : 'development'
+    },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
 

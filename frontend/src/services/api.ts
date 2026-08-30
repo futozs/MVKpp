@@ -15,8 +15,16 @@ import type {
   WeatherResponse,
 } from '../types'
 
-// Automatically detect API host: in dev with proxy, use empty base (origin), or fallback to localhost:8088
-const API_BASE = import.meta.env.VITE_API_URL || ''
+// Automatically detect API host:
+// - Env override: VITE_API_URL
+// - Dev mode with Vite proxy: empty string (relative URLs use Vite proxy)
+// - Prod mode: explicit http://hostname:8088 (different port)
+let API_BASE = import.meta.env.VITE_API_URL ?? ''
+if (!API_BASE && typeof window !== 'undefined' && import.meta.env.PROD) {
+  // Prod mode: backend on port 8088, frontend on port 5173
+  const { protocol, hostname } = window.location
+  API_BASE = `${protocol}//${hostname}:8088`
+}
 
 async function handleResponse<T>(res: Response, endpoint: string): Promise<T> {
   if (!res.ok) {

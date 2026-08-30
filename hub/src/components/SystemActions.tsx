@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { getSystemUrl } from '@/lib/admin'
 import { cn } from '@/lib/utils'
 
 type SystemActionsProps = {

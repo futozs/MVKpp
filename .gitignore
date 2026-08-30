@@ -1,5 +1,78 @@
-/.DS_Store
+# ════════════════════════════════════════════════════════════════════
+# OS & IDE
+# ════════════════════════════════════════════════════════════════════
+.DS_Store
+Thumbs.db
+.env.local
+.env.*.local
+*.swp
+*.swo
+*~
+.vscode/settings.json
+.idea/
+
+# ════════════════════════════════════════════════════════════════════
+# Felhasználó / claude.ai
+# ════════════════════════════════════════════════════════════════════
 /.claude
-logs
-node_modules
-.next
+.claude.json
+
+# ════════════════════════════════════════════════════════════════════
+# Build output & artifacts
+# ════════════════════════════════════════════════════════════════════
+node_modules/
+.next/
+dist/
+build/
+*.tsbuildinfo
+backend/dist/
+frontend/dist/
+hub/dist/
+.parcel-cache/
+
+# ════════════════════════════════════════════════════════════════════
+# Naplók & Státusz
+# ════════════════════════════════════════════════════════════════════
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+backend/logs/
+frontend/logs/
+hub/logs/
+
+# ════════════════════════════════════════════════════════════════════
+# Runtime state (mindig generálódik, SOHA nem verziókezelendő!)
+# ════════════════════════════════════════════════════════════════════
+backend/state/
+state/
+*.pid
+*.lock
+.pnpm-debug.log
+
+# ════════════════════════════════════════════════════════════════════
+# Titkok & Privát fájlok (txt, json, html, stb)
+# ════════════════════════════════════════════════════════════════════
+*.txt
+!README.txt
+!LICENSE.txt
+# Az alábbiak a backend/state/-ben élnek és SOHA nem mennek repo-ba:
+# - admin_token.txt
+# - jwt.txt
+# - installation_id.txt
+# - deploy-status.json
+# - deploy.lock
+
+# ════════════════════════════════════════════════════════════════════
+# Temp & egyéb
+# ════════════════════════════════════════════════════════════════════
+*.bak
+*.tmp
+*.temp
+.cache/
+.turbo/
+dist-*
+*.zip
+*.tar.gz

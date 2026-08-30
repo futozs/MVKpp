@@ -380,15 +380,27 @@ app.get('/hub/*', (c) => {
 })
 
 // Static frontend serving (dist fallback or dashboard.html)
-app.get('/', (c) => {
-  try {
-    if (existsSync(FRONTEND_INDEX)) return c.html(readFileSync(FRONTEND_INDEX, 'utf8'))
-    if (existsSync(FRONTEND)) return c.html(readFileSync(FRONTEND, 'utf8'))
-    return c.html('<h1>MVK MobilON+ API Gateway</h1><p>Frontend elérhető: <a href="http://localhost:5173">http://localhost:5173</a></p>')
-  } catch {
-    return c.text('Frontend fájl nem található', 500)
-  }
-})
+// CSAK dev módban: prod módban a frontend szerver az 5173-as porton serve-eli ezt.
+if (process.env.NODE_ENV !== 'production') {
+  app.get('/', (c) => {
+    try {
+      if (existsSync(FRONTEND_INDEX)) return c.html(readFileSync(FRONTEND_INDEX, 'utf8'))
+      if (existsSync(FRONTEND)) return c.html(readFileSync(FRONTEND, 'utf8'))
+      return c.html('<h1>MVK MobilON+ API Gateway</h1><p>Frontend elérhető: <a href="http://localhost:5173">http://localhost:5173</a></p>')
+    } catch {
+      return c.text('Frontend fájl nem található', 500)
+    }
+  })
+} else {
+  // Prod módban: csak info
+  app.get('/', (c) => {
+    return c.json({
+      message: 'MVK MobilON+ API Gateway',
+      status: 'running',
+      endpoints: ['/api/*', '/live/*', '/gtfs/*', '/stats/*', '/system/*', '/_health', '/_jwt', '/_export']
+    })
+  })
+}
 
 // Serve static assets from frontend/dist/assets if available
 app.get('/assets/*', (c) => {
