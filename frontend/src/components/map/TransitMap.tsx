@@ -7,7 +7,9 @@ import React, {
 } from "react";
 import L from "leaflet";
 import {
+  CornerDownLeft,
   Crosshair,
+  Hash,
   LocateFixed,
   Plus,
   Search,
@@ -42,44 +44,58 @@ export interface TileLayerOption {
   url: string;
   labelsUrl?: string;
   attribution: string;
+  /** Ameddig a szolgáltató valódi csempét ad; efölött a Leaflet nagyítana. */
   maxNativeZoom: number;
   swatch: string;
+  /** CSS-szűrő a csempepanelre — így lesz sötét lapunk natív zoom feláldozása nélkül. */
+  filter?: string;
 }
 
+const OSM_ATTRIB =
+  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> közreműködők';
+const OSM_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+
+/**
+ * Minden réteg 19-es natív zoomig ad valódi csempét (a domborzat 17-ig). Ez
+ * azért számít, mert retina kijelzőn a Leaflet eggyel mélyebbről kéri a
+ * csempét, és félakkorán rajzolja ki — ettől lesz éles. Ha a szolgáltató
+ * natív maximuma ennél sekélyebb (a korábbi Esri Canvas lapok 16-ig mentek),
+ * ugyanez a mechanizmus nagyítássá válik: pont ez pixelesítette el a térképet
+ * telefonon, miközben a gépen — ahol nincs retina-korrekció — éles maradt.
+ *
+ * A sötét és a halvány lap ezért nem külön szolgáltatótól jön, hanem az OSM-lap
+ * színszűrt változata: így megmarad a 19-es natív mélység.
+ */
 export const TILE_LAYERS: TileLayerOption[] = [
   {
     id: "osm",
-    name: "OpenStreetMap",
-    note: "A klasszikus utcatérkép, legtöbb részlettel",
-    url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-    attribution:
-      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> közreműködők',
+    name: "Utcatérkép",
+    note: "OpenStreetMap — a legtöbb részlettel",
+    url: OSM_URL,
+    attribution: OSM_ATTRIB,
     maxNativeZoom: 19,
     swatch: "#E8E0D8",
   },
   {
     id: "dark",
     name: "Sötét",
-    note: "Esri Dark Gray — a járatszínek ezen ütnek ki legjobban",
-    url: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
-    labelsUrl:
-      "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
-    attribution:
-      '&copy; <a href="https://www.esri.com/">Esri</a>, HERE, Garmin, &copy; OpenStreetMap',
-    maxNativeZoom: 16,
-    swatch: "#2B2B2B",
+    note: "Éjszakai lap — a járatszínek ezen ütnek ki legjobban",
+    url: OSM_URL,
+    attribution: OSM_ATTRIB,
+    maxNativeZoom: 19,
+    swatch: "#20241F",
+    filter:
+      "invert(1) hue-rotate(180deg) brightness(0.86) contrast(0.92) saturate(0.65)",
   },
   {
     id: "light",
-    name: "Világos",
-    note: "Esri Light Gray — visszafogott, nappali használatra",
-    url: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
-    labelsUrl:
-      "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
-    attribution:
-      '&copy; <a href="https://www.esri.com/">Esri</a>, HERE, Garmin, &copy; OpenStreetMap',
-    maxNativeZoom: 16,
-    swatch: "#D9D9D6",
+    name: "Halvány",
+    note: "Kifakított utcatérkép — nappal, sok jármű mellé",
+    url: OSM_URL,
+    attribution: OSM_ATTRIB,
+    maxNativeZoom: 19,
+    swatch: "#DEDEDC",
+    filter: "grayscale(0.85) brightness(1.06) contrast(0.9)",
   },
   {
     id: "satellite",
@@ -96,7 +112,7 @@ export const TILE_LAYERS: TileLayerOption[] = [
   {
     id: "topo",
     name: "Domborzat",
-    note: "OpenTopoMap — szintvonalakkal",
+    note: "OpenTopoMap — szintvonalakkal, 17-es zoomig",
     url: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
     attribution:
       'Csempe: <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA), adat: &copy; OpenStreetMap',
@@ -105,11 +121,49 @@ export const TILE_LAYERS: TileLayerOption[] = [
   },
 ];
 
+const MAX_MAP_ZOOM = 19;
+
+/** A választott réteg, ismeretlen azonosítóra az elsővel visszaesve. */
+const layerConf = (id: string) =>
+  TILE_LAYERS.find((l) => l.id === id) || TILE_LAYERS[0];
+
+function makeTile(conf: TileLayerOption, labels: boolean): L.TileLayer {
+  const layer = L.tileLayer(labels ? conf.labelsUrl! : conf.url, {
+    // 20-at adunk meg, mert retina kijelzőn a Leaflet magától eggyel
+    // csökkenti — így a réteg a térkép 19-es maximumáig végig tölt.
+    maxZoom: MAX_MAP_ZOOM + 1,
+    maxNativeZoom: conf.maxNativeZoom,
+    detectRetina: true,
+    keepBuffer: 2,
+    ...(labels ? { pane: "shadowPane" } : { attribution: conf.attribution }),
+  });
+
+  if (!labels && conf.filter) {
+    layer.on("add", () => {
+      const el = layer.getContainer();
+      if (el) el.style.filter = conf.filter!;
+    });
+  }
+  return layer;
+}
+
 const MAX_WATCHED = 12;
 
 const NEAR_STOP_KM = 0.4;
 const CLOSE_ZOOM = 18;
 const ME_ZOOM = 17;
+
+/** Érintőképernyőn az ujj nem pixelpontos — a találati sugár ezt pótolja. */
+const IS_TOUCH =
+  typeof window !== "undefined" &&
+  (window.matchMedia?.("(pointer: coarse)").matches ?? false);
+
+/** Canvas-találati ráhagyás képpontban: ennyivel a pötty mellé is lehet nyúlni. */
+const HIT_TOLERANCE = IS_TOUCH ? 15 : 6;
+
+/** A megállópöttyök rajzolt mérete — érintésre nagyobb, hogy látszódjon is. */
+const STOP_R = IS_TOUCH ? 5 : 3.5;
+const STOP_R_ACTIVE = IS_TOUCH ? 7.5 : 6;
 
 interface TransitMapProps {
   stops: Stop[];
@@ -164,36 +218,33 @@ export function TransitMap({
   const [stopQuery, setStopQuery] = useState("");
   const [typedId, setTypedId] = useState("");
 
+  const [codeOpen, setCodeOpen] = useState(false);
+  const [codeValue, setCodeValue] = useState("");
+  const [codeError, setCodeError] = useState<string | null>(null);
+  const [codeBusy, setCodeBusy] = useState(false);
+  const codeInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
 
     const saved = initialMapView();
-    if (saved) autoZoomRef.current = "done";
 
     const map = L.map(mapContainerRef.current, {
       zoomControl: false,
       attributionControl: false,
-      preferCanvas: true,
+      // A közös canvas-renderer találati ráhagyása minden körre és vonalra
+      // érvényes — ettől lesz eltalálható a megállópötty telefonon.
+      renderer: L.canvas({ tolerance: HIT_TOLERANCE, padding: 0.4 }),
+      maxZoom: MAX_MAP_ZOOM,
       center: saved ? [saved.lat, saved.lon] : [48.104, 20.79],
       zoom: saved ? saved.zoom : 13,
     });
     L.control.zoom({ position: "bottomright" }).addTo(map);
 
-    const initial =
-      TILE_LAYERS.find((l) => l.id === tileLayerId) || TILE_LAYERS[0];
-    tileLayerRef.current = L.tileLayer(initial.url, {
-      maxZoom: 19,
-      maxNativeZoom: initial.maxNativeZoom,
-      detectRetina: true,
-      attribution: initial.attribution,
-    }).addTo(map);
+    const initial = layerConf(tileLayerId);
+    tileLayerRef.current = makeTile(initial, false).addTo(map);
     if (initial.labelsUrl) {
-      labelLayerRef.current = L.tileLayer(initial.labelsUrl, {
-        maxZoom: 19,
-        maxNativeZoom: initial.maxNativeZoom,
-        detectRetina: true,
-        pane: "shadowPane",
-      }).addTo(map);
+      labelLayerRef.current = makeTile(initial, true).addTo(map);
     }
 
     routeLayerRef.current = L.layerGroup().addTo(map);
@@ -233,8 +284,7 @@ export function TransitMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    const conf =
-      TILE_LAYERS.find((l) => l.id === tileLayerId) || TILE_LAYERS[0];
+    const conf = layerConf(tileLayerId);
 
     if (tileLayerRef.current) map.removeLayer(tileLayerRef.current);
     if (labelLayerRef.current) {
@@ -242,21 +292,8 @@ export function TransitMap({
       labelLayerRef.current = null;
     }
 
-    tileLayerRef.current = L.tileLayer(conf.url, {
-      maxZoom: 19,
-      maxNativeZoom: conf.maxNativeZoom,
-      detectRetina: true,
-      attribution: conf.attribution,
-    }).addTo(map);
-
-    if (conf.labelsUrl) {
-      labelLayerRef.current = L.tileLayer(conf.labelsUrl, {
-        maxZoom: 19,
-        maxNativeZoom: conf.maxNativeZoom,
-        detectRetina: true,
-        pane: "shadowPane",
-      }).addTo(map);
-    }
+    tileLayerRef.current = makeTile(conf, false).addTo(map);
+    if (conf.labelsUrl) labelLayerRef.current = makeTile(conf, true).addTo(map);
   }, [tileLayerId]);
 
   const createVehicleIcon = (
@@ -348,6 +385,7 @@ export function TransitMap({
       opacity: 0.5,
       fillColor: mine,
       fillOpacity: 0.12,
+      interactive: false,
     }).addTo(layer);
 
     L.circleMarker([lat, lon], {
@@ -356,6 +394,7 @@ export function TransitMap({
       weight: 3,
       fillColor: mine,
       fillOpacity: 1,
+      interactive: false,
     })
       .bindTooltip("Itt vagy", { direction: "top", offset: [0, -8] })
       .addTo(layer);
@@ -443,10 +482,18 @@ export function TransitMap({
         if (!shapes) return;
         const color = `#${routes[id]?.color || "1FB574"}`;
         shapes.forEach((line) => {
-          L.polyline(line, { color: halo, weight: 6, opacity: 0.55 }).addTo(
-            layer,
-          );
-          L.polyline(line, { color, weight: 3, opacity: 0.95 }).addTo(layer);
+          L.polyline(line, {
+            color: halo,
+            weight: 6,
+            opacity: 0.55,
+            interactive: false,
+          }).addTo(layer);
+          L.polyline(line, {
+            color,
+            weight: 3,
+            opacity: 0.95,
+            interactive: false,
+          }).addTo(layer);
         });
       });
     };
@@ -464,29 +511,41 @@ export function TransitMap({
     const brand = token("--primary");
     const outline = token("--background");
     const watched = new Set(monitoredStopIds);
+    const list = filters.onlyWatched
+      ? stops.filter((s) => watched.has(s.id))
+      : stops;
 
-    stops.forEach((s) => {
+    list.forEach((s) => {
       const isWatched = watched.has(s.id);
       const isSelected = selectedStopId === s.id;
+      const active = isWatched || isSelected;
 
       const marker = L.circleMarker([s.lat, s.lon], {
-        radius: isWatched || isSelected ? 6 : 3.5,
+        radius: active ? STOP_R_ACTIVE : STOP_R,
         color: outline,
         weight: 1.5,
-        fillColor: isWatched || isSelected ? brand : neutral,
+        fillColor: active ? brand : neutral,
         fillOpacity: 1,
+        // A renderer 15 képpontos ráhagyásával együtt ez adja a
+        // hüvelykujjnak elég nagy érzékeny felületet.
+        bubblingMouseEvents: false,
       });
 
-      marker.bindTooltip(
-        `<strong>${s.name}</strong><br><span style="opacity:.65">${s.code || s.id}</span>`,
-        { direction: "top", offset: [0, -4] },
-      );
+      // Érintőképernyőn a tooltip csak egy fölösleges lebegő doboz, amit a
+      // koppintás azonnal ki is vált — ott a részletlap a válasz.
+      if (!IS_TOUCH) {
+        marker.bindTooltip(
+          `<strong>${s.name}</strong><br><span style="opacity:.65">${s.code || s.id}</span>`,
+          { direction: "top", offset: [0, -4] },
+        );
+      }
       marker.on("click", () => onSelectStop(s.id));
       marker.addTo(layer);
     });
   }, [
     stops,
     filters.stops,
+    filters.onlyWatched,
     focusTripId,
     onSelectStop,
     monitoredStopIds,
@@ -610,12 +669,18 @@ export function TransitMap({
         const bounds: [number, number][] = [];
 
         if (res.shape?.length) {
-          L.polyline(res.shape, { color: halo, weight: 8, opacity: 0.6 }).addTo(
-            layer,
-          );
-          L.polyline(res.shape, { color, weight: 4, opacity: 0.95 }).addTo(
-            layer,
-          );
+          L.polyline(res.shape, {
+            color: halo,
+            weight: 8,
+            opacity: 0.6,
+            interactive: false,
+          }).addTo(layer);
+          L.polyline(res.shape, {
+            color,
+            weight: 4,
+            opacity: 0.95,
+            interactive: false,
+          }).addTo(layer);
           res.shape.forEach((pt) => bounds.push(pt));
         }
 
@@ -706,6 +771,62 @@ export function TransitMap({
     );
   }, [vehicles, filters, geo.position]);
 
+  /**
+   * Megállókód → megálló. A GTFS-azonosító `SP` + kód alakú, a kiírt tábla
+   * viszont csak a számot mutatja, ezért mindkettőt elfogadjuk.
+   */
+  const findByCode = (raw: string): Stop | null => {
+    const code = raw.trim().replace(/^sp/i, "");
+    if (!code) return null;
+    const lower = code.toLowerCase();
+    return (
+      stops.find((s) => (s.code || "").toLowerCase() === lower) ??
+      stops.find((s) => s.id.toLowerCase() === `sp${lower}`) ??
+      stops.find((s) => s.id.toLowerCase() === lower) ??
+      null
+    );
+  };
+
+  const closeCodeSearch = () => {
+    setCodeOpen(false);
+    setCodeValue("");
+    setCodeError(null);
+  };
+
+  const jumpToCode = async () => {
+    const raw = codeValue.trim();
+    if (!raw) return;
+
+    const local = findByCode(raw);
+    if (local) {
+      mapRef.current?.flyTo([local.lat, local.lon], CLOSE_ZOOM, {
+        duration: 0.7,
+      });
+      onSelectStop(local.id);
+      closeCodeSearch();
+      return;
+    }
+
+    // Nincs a betöltött listában — az arrivals végpont még ismerheti.
+    setCodeBusy(true);
+    setCodeError(null);
+    try {
+      const id = `SP${raw.replace(/^sp/i, "")}`;
+      const res = await api.getArrivals(id, 16);
+      if (res.stop?.lat != null && res.stop?.lon != null) {
+        mapRef.current?.flyTo([res.stop.lat, res.stop.lon], CLOSE_ZOOM, {
+          duration: 0.7,
+        });
+      }
+      onSelectStop(res.stop?.id ?? id);
+      closeCodeSearch();
+    } catch {
+      setCodeError(`Nincs ${raw} kódú megálló.`);
+    } finally {
+      setCodeBusy(false);
+    }
+  };
+
   const flyToVehicle = (v: LiveVehicle) => {
     if (v.lat != null && v.lon != null && mapRef.current) {
       mapRef.current.flyTo([v.lat, v.lon], 16, { duration: 0.5 });
@@ -720,6 +841,7 @@ export function TransitMap({
     filters.speed !== "all" ||
     filters.maxAgeSec != null ||
     filters.nearMeKm != null ||
+    filters.onlyWatched ||
     !filters.stops;
 
   const filterSummary = filters.watch.length
@@ -734,10 +856,17 @@ export function TransitMap({
             ? "Csak álló járművek"
             : filters.maxAgeSec != null
               ? `Friss jelentés (${filters.maxAgeSec / 60} perc)`
-              : `Szűrés aktív · ${vehicleResults.length} jármű`;
+              : filters.onlyWatched
+                ? `Csak a figyelt megállók (${monitoredStopIds.length})`
+                : `Szűrés aktív · ${vehicleResults.length} jármű`;
 
   const LAYER_TOGGLES = [
     { key: "stops", label: "Megállók", description: "Minden GTFS megállópont" },
+    {
+      key: "onlyWatched",
+      label: "Csak a figyeltek",
+      description: `Csak a figyelőre felvett megállók (${monitoredStopIds.length})`,
+    },
     {
       key: "shape",
       label: "Járatnyomvonal",
@@ -1270,6 +1399,84 @@ export function TransitMap({
           <SlidersHorizontal />
           Szűrés
         </Button>
+
+        {}
+        <Button
+          variant="secondary"
+          size="icon"
+          onClick={() => {
+            setCodeOpen(true);
+            setCodeError(null);
+            requestAnimationFrame(() => codeInputRef.current?.focus());
+          }}
+          aria-label="Ugrás megállókód alapján"
+          className="absolute bottom-[92px] left-3 z-overlay h-11 w-11 shadow-lg"
+        >
+          <Hash />
+        </Button>
+
+        {}
+        {codeOpen ? (
+          <div className="absolute inset-0 z-drawer flex items-center justify-center px-6">
+            <button
+              type="button"
+              aria-label="Megállókód-kereső bezárása"
+              onClick={closeCodeSearch}
+              className="absolute inset-0 bg-background/60 backdrop-blur-sm"
+            />
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                jumpToCode();
+              }}
+              className="relative w-full max-w-[260px] rounded-2xl border border-border bg-card p-3 shadow-2xl"
+            >
+              <label
+                htmlFor="stop-code"
+                className="block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
+              >
+                Megállókód
+              </label>
+              <div className="mt-2 flex items-center gap-2">
+                <Input
+                  id="stop-code"
+                  ref={codeInputRef}
+                  value={codeValue}
+                  onChange={(e) => {
+                    setCodeValue(e.target.value.replace(/[^0-9]/g, ""));
+                    setCodeError(null);
+                  }}
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  autoComplete="off"
+                  enterKeyHint="go"
+                  placeholder="pl. 1"
+                  aria-label="Megálló kódja"
+                  className="h-12 text-center font-mono text-xl font-bold tabular-nums"
+                />
+                <Button
+                  type="submit"
+                  size="icon"
+                  className="h-12 w-12 shrink-0"
+                  disabled={!codeValue.trim() || codeBusy}
+                  aria-label="Ugrás a megállóhoz"
+                >
+                  <CornerDownLeft />
+                </Button>
+              </div>
+              {codeError ? (
+                <p role="alert" className="mt-2 text-[11px] text-destructive">
+                  {codeError}
+                </p>
+              ) : (
+                <p className="mt-2 text-[11px] text-muted-foreground">
+                  A megállótáblán lévő szám — a térkép ráugrik, és megnyílik az
+                  adatlapja.
+                </p>
+              )}
+            </form>
+          </div>
+        ) : null}
 
         {}
         <div className="absolute bottom-[92px] right-3 z-overlay flex flex-col items-end gap-2">

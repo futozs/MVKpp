@@ -73,10 +73,17 @@ export function RedeployPanel({ onFinished }: { onFinished: () => void }) {
   const logRef = useRef<HTMLPreElement>(null)
   const wasRunning = useRef(false)
 
-  const poll = useCallback(async () => {
-    // Először a telepítő saját szervere: telepítés közben csak ez él.
-    // Ha az nem elérhető (már vége, port lezárva), a gateway másolatát kérjük.
-    for (const url of [deployStatusUrl(), '/system/deploy-status']) {
+  const poll = useCallback(async (deployInFlight = false) => {
+    // Üresjáratban a gateway a forrás: a telepítő :8089-es szervere ilyenkor
+    // nem is figyel, és a felesleges hívás csak ERR_CONNECTION_REFUSED-ot
+    // dobna a konzolba minden körben.
+    //
+    // Telepítés közben viszont a gateway maga is halott, ezért olyankor a
+    // telepítő saját szervere az első forrás — így a folyamat végig követhető.
+    const gateway = getSystemUrl('/system/deploy-status')
+    const sources = deployInFlight ? [deployStatusUrl(), gateway] : [gateway, deployStatusUrl()]
+
+    for (const url of sources) {
       try {
         const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(4000) })
         if (!res.ok) continue
@@ -93,7 +100,7 @@ export function RedeployPanel({ onFinished }: { onFinished: () => void }) {
   useEffect(() => {
     if (!polling) return
     const timer = setInterval(async () => {
-      const data = await poll()
+      const data = await poll(true)
       if (data && !data.running && wasRunning.current) {
         setPolling(false)
         onFinished()

@@ -92,14 +92,14 @@ export function StopDetailDrawer({
       transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
       aria-label={`${stop.name} indulásai`}
       className={cn(
-        "absolute inset-x-0 bottom-0 z-drawer flex max-h-[70vh] flex-col overflow-hidden",
-        "border-t border-border bg-card shadow-xl",
-        "md:inset-x-auto md:bottom-4 md:right-4 md:w-[380px] md:rounded-xl md:border",
+        "absolute inset-x-0 bottom-0 z-drawer flex max-h-[50dvh] flex-col overflow-hidden",
+        "rounded-t-2xl border-t border-border bg-card shadow-2xl",
+        "md:inset-x-auto md:bottom-4 md:right-4 md:max-h-[min(62vh,520px)] md:w-[340px] md:rounded-xl md:border",
       )}
     >
-      <div className="flex shrink-0 items-start justify-between gap-2 border-b border-border px-4 py-3">
+      <div className="flex shrink-0 items-start justify-between gap-2 border-b border-border px-3 py-2.5">
         <div className="min-w-0">
-          <h3 className="truncate text-base font-bold tracking-tight">
+          <h3 className="truncate text-sm font-bold tracking-tight">
             {stop.name}
           </h3>
           <p className="mt-0.5 flex items-center gap-1.5 font-mono text-[11px] tabular-nums text-muted-foreground">
@@ -151,7 +151,7 @@ export function StopDetailDrawer({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)] md:pb-0">
         {error ? (
           <p
             role="alert"
@@ -192,7 +192,7 @@ export function StopDetailDrawer({
                         : undefined
                     }
                     className={cn(
-                      "flex items-center gap-3 px-4 py-2.5 transition-colors duration-fast",
+                      "flex items-center gap-2.5 px-3 py-2 transition-colors duration-fast",
                       focusable &&
                         "cursor-pointer hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
                     )}
@@ -229,7 +229,7 @@ export function StopDetailDrawer({
                       ) : null}
                     </div>
 
-                    <span className="shrink-0 font-mono text-base font-bold tabular-nums">
+                    <span className="shrink-0 font-mono text-sm font-bold tabular-nums">
                       {arr.etaMin <= 0 ? (
                         <span className="text-live">most</span>
                       ) : (

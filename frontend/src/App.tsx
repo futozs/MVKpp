@@ -10,6 +10,7 @@ import type {
 import { api } from "@/services/api";
 import { Header } from "@/components/layout/Header";
 import { MobileHeader } from "@/components/layout/MobileHeader";
+import { InstallBanner } from "@/components/layout/InstallBanner";
 import { TransitMap } from "@/components/map/TransitMap";
 import { MultiStopDashboard } from "@/components/multistop/MultiStopDashboard";
 import { StopDetailDrawer } from "@/components/stops/StopDetailDrawer";
@@ -21,6 +22,15 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { GeoProvider } from "@/context/GeoContext";
 import { initialView, saveView } from "@/lib/viewState";
 
+const TAB_IDS: ActiveTab[] = ["map", "multistop", "timetable", "stats"];
+
+/** A manifest gyorsindítói `#map`, `#timetable` stb. alakban nyitják az appot. */
+function hashTab(): ActiveTab | null {
+  if (typeof window === "undefined") return null;
+  const id = window.location.hash.replace(/^#/, "");
+  return (TAB_IDS as string[]).includes(id) ? (id as ActiveTab) : null;
+}
+
 const DEFAULT_FILTERS: FilterState = {
   vq: "",
   watch: [],
@@ -31,6 +41,7 @@ const DEFAULT_FILTERS: FilterState = {
   nearMeKm: null,
   sort: "route",
   stops: true,
+  onlyWatched: false,
   shape: true,
   rstops: false,
   labels: false,
@@ -40,10 +51,12 @@ const DEFAULT_FILTERS: FilterState = {
 export function App() {
   const restored = initialView();
 
-  const [activeTab, setActiveTab] = useState<ActiveTab>(restored?.tab ?? "map");
+  const [activeTab, setActiveTab] = useState<ActiveTab>(
+    () => hashTab() ?? restored?.tab ?? "map",
+  );
   const [stops, setStops] = useState<Stop[]>([]);
   const [routes, setRoutes] = useState<Record<string, Route>>({});
-  const [, setGtfsMeta] = useState<GtfsMeta | null>(null);
+  const [gtfsMeta, setGtfsMeta] = useState<GtfsMeta | null>(null);
   const [liveVehicles, setLiveVehicles] = useState<LiveVehicle[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -236,6 +249,8 @@ export function App() {
             onOpenMapPicker={() => setMapPickerOpen(true)}
           />
 
+          <InstallBanner />
+
           {}
           <div className="flex-1 flex overflow-hidden relative">
             {}
@@ -309,6 +324,7 @@ export function App() {
                 stops={stops}
                 liveVehicles={liveVehicles}
                 onFocusTrip={handleFocusTripOnMap}
+                serviceRange={gtfsMeta?.serviceRange ?? null}
               />
             )}
           </div>

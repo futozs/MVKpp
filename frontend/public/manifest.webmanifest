@@ -3,13 +3,17 @@
   "short_name": "MVK Pult",
   "description": "Miskolci tömegközlekedés élőben: forgalmi térkép, megállófigyelő és menetrendkönyv.",
   "lang": "hu",
-  "start_url": "/",
+  "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#090D0C",
   "theme_color": "#090D0C",
-  "categories": ["travel", "navigation", "utilities"],
+  "categories": [
+    "travel",
+    "navigation",
+    "utilities"
+  ],
   "icons": [
     {
       "src": "/icon-192.png",
@@ -28,6 +32,46 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
+    }
+  ],
+  "id": "/",
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
+  "shortcuts": [
+    {
+      "name": "Forgalmi térkép",
+      "short_name": "Térkép",
+      "url": "/?source=pwa#map",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Megállófigyelő",
+      "short_name": "Figyelő",
+      "url": "/?source=pwa#multistop",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Menetrend",
+      "short_name": "Menetrend",
+      "url": "/?source=pwa#timetable",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
     }
   ]
 }

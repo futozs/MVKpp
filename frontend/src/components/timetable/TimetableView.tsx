@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarDays,
   ChevronLeft,
+  ChevronRight,
   Clock,
   Crosshair,
   Search,
@@ -34,16 +35,104 @@ interface TimetableViewProps {
   stops: Stop[];
   liveVehicles: LiveVehicle[];
   onFocusTrip: (tripId: string, vehicleId?: string) => void;
+  /** A GTFS naptári érvényessége (YYYYMMDD) — ezen kívülre nincs menetrend. */
+  serviceRange: { from: string; to: string } | null;
 }
 
 function secondsSinceMidnight(d: Date) {
   return d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
 }
 
+/** YYYYMMDD ↔ YYYY-MM-DD: a backend az előbbit, az <input type="date"> az utóbbit érti. */
+const ymdToIso = (ymd: string) =>
+  `${ymd.slice(0, 4)}-${ymd.slice(4, 6)}-${ymd.slice(6, 8)}`;
+const isoToYmd = (iso: string) => iso.replace(/-/g, "");
+
+function todayIso(): string {
+  const d = new Date();
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 10);
+}
+
+const clampIso = (iso: string, min: string | null, max: string | null) =>
+  min && iso < min ? min : max && iso > max ? max : iso;
+
+function DayPicker({
+  value,
+  onChange,
+  min,
+  max,
+  className,
+}: {
+  value: string;
+  onChange: (iso: string) => void;
+  min: string | null;
+  max: string | null;
+  className?: string;
+}) {
+  const shift = (days: number) => {
+    const d = new Date(`${value}T12:00:00`);
+    d.setDate(d.getDate() + days);
+    const next = d.toISOString().slice(0, 10);
+    if ((min && next < min) || (max && next > max)) return;
+    onChange(next);
+  };
+
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-1 rounded-lg border border-border bg-muted/50 p-0.5",
+        className,
+      )}
+    >
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7 shrink-0"
+        onClick={() => shift(-1)}
+        disabled={Boolean(min) && value <= min!}
+        aria-label="Előző nap"
+      >
+        <ChevronLeft className="h-3.5 w-3.5" />
+      </Button>
+
+      <label className="relative flex min-w-0 flex-1 items-center justify-center">
+        <span className="sr-only">Menetrend napja</span>
+        <CalendarDays
+          aria-hidden
+          className="pointer-events-none mr-1.5 h-3.5 w-3.5 shrink-0 text-primary"
+        />
+        <input
+          type="date"
+          value={value}
+          min={min ?? undefined}
+          max={max ?? undefined}
+          onChange={(e) =>
+            e.target.value && onChange(clampIso(e.target.value, min, max))
+          }
+          className="w-[7.5rem] bg-transparent text-center font-mono text-xs font-semibold tabular-nums text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        />
+      </label>
+
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7 shrink-0"
+        onClick={() => shift(1)}
+        disabled={Boolean(max) && value >= max!}
+        aria-label="Következő nap"
+      >
+        <ChevronRight className="h-3.5 w-3.5" />
+      </Button>
+    </div>
+  );
+}
+
 export function TimetableView({
   stops,
   liveVehicles,
   onFocusTrip,
+  serviceRange,
 }: TimetableViewProps) {
   const restored = initialTimetableView();
   const [routes, setRoutes] = useState<TimetableRoute[]>([]);
@@ -60,6 +149,18 @@ export function TimetableView({
   const pendingTripRef = useRef<string | null>(restored?.tripId ?? null);
   const { favorites, isFavorite, toggleFavorite } = useFavorites();
 
+  const minIso = serviceRange ? ymdToIso(serviceRange.from) : null;
+  const maxIso = serviceRange ? ymdToIso(serviceRange.to) : null;
+  const [date, setDate] = useState(todayIso());
+
+  // A feed betöltése után derül ki, meddig ér az érvényesség — ha a mai nap
+  // kilóg belőle, a legközelebbi érvényes napra igazítunk.
+  useEffect(() => {
+    setDate((prev) => clampIso(prev, minIso, maxIso));
+  }, [minIso, maxIso]);
+
+  const isToday = date === todayIso();
+
   const [nowSec, setNowSec] = useState(() => secondsSinceMidnight(new Date()));
   useEffect(() => {
     const timer = setInterval(
@@ -70,14 +171,19 @@ export function TimetableView({
   }, []);
 
   useEffect(() => {
+    let alive = true;
     api
-      .getTimetableRoutes()
+      .getTimetableRoutes(isoToYmd(date))
       .then((res) => {
+        if (!alive) return;
         setRoutes(res.routes);
         setRoutesError(null);
       })
-      .catch((err) => setRoutesError((err as Error).message));
-  }, []);
+      .catch((err) => alive && setRoutesError((err as Error).message));
+    return () => {
+      alive = false;
+    };
+  }, [date]);
 
   useEffect(() => {
     saveTimetableView({
@@ -98,7 +204,7 @@ export function TimetableView({
     setTableLoading(true);
     setSelectedTrip(null);
     api
-      .getTimetable(selectedRouteId, selectedDir)
+      .getTimetable(selectedRouteId, selectedDir, isoToYmd(date))
       .then((res) => {
         if (!alive) return;
         setTable(res);
@@ -113,7 +219,7 @@ export function TimetableView({
     return () => {
       alive = false;
     };
-  }, [selectedRouteId, selectedDir]);
+  }, [selectedRouteId, selectedDir, date]);
 
   const vehicleByTrip = useMemo(() => {
     const map = new Map<string, LiveVehicle>();
@@ -167,10 +273,12 @@ export function TimetableView({
   const selectedVehicle = selectedTrip
     ? (vehicleByTrip.get(selectedTrip.tripId) ?? null)
     : null;
-  const todayLabel = new Date().toLocaleDateString("hu-HU", {
+  const dayLabel = new Date(`${date}T12:00:00`).toLocaleDateString("hu-HU", {
     month: "short",
     day: "numeric",
+    weekday: "short",
   });
+  const runsWord = isToday ? "menet ma" : "menet ezen a napon";
 
   return (
     <div className="flex h-full min-w-0 flex-1 overflow-hidden">
@@ -198,10 +306,24 @@ export function TimetableView({
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
             <p className="text-[11px] text-muted-foreground">
-              {visibleRoutes.length} járat · {todayLabel}
+              {visibleRoutes.length} járat · {dayLabel}
             </p>
             <HereChip stops={stops} />
           </div>
+
+          <DayPicker
+            value={date}
+            onChange={setDate}
+            min={minIso}
+            max={maxIso}
+            className="mt-2 w-full"
+          />
+          {maxIso ? (
+            <p className="mt-1.5 text-[10px] text-muted-foreground">
+              A GTFS-menetrend {ymdToIso(serviceRange!.from)} és {maxIso} között
+              érvényes.
+            </p>
+          ) : null}
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
@@ -259,8 +381,10 @@ export function TimetableView({
                               </span>
                               <span className="block text-[11px] text-muted-foreground">
                                 {fav.tripsToday > 0
-                                  ? `${fav.tripsToday} menet ma`
-                                  : "Ma nem közlekedik"}
+                                  ? `${fav.tripsToday} ${runsWord}`
+                                  : isToday
+                                    ? "Ma nem közlekedik"
+                                    : "Ezen a napon nem közlekedik"}
                               </span>
                             </span>
                           </button>
@@ -302,8 +426,10 @@ export function TimetableView({
                           </span>
                           <span className="block text-[11px] text-muted-foreground">
                             {tripsToday > 0
-                              ? `${tripsToday} menet ma`
-                              : "Ma nem közlekedik"}
+                              ? `${tripsToday} ${runsWord}`
+                              : isToday
+                                ? "Ma nem közlekedik"
+                                : "Ezen a napon nem közlekedik"}
                           </span>
                         </span>
                       </button>
@@ -403,13 +529,13 @@ export function TimetableView({
                   />
                 </Button>
 
-                <span className="hidden shrink-0 items-center gap-1.5 rounded-lg border border-border bg-muted/60 px-2.5 py-1.5 text-xs font-medium sm:flex">
-                  <CalendarDays
-                    aria-hidden
-                    className="h-3.5 w-3.5 text-primary"
-                  />
-                  {todayLabel}
-                </span>
+                <DayPicker
+                  value={date}
+                  onChange={setDate}
+                  min={minIso}
+                  max={maxIso}
+                  className="hidden shrink-0 sm:flex"
+                />
               </div>
 
               {}
@@ -446,6 +572,14 @@ export function TimetableView({
                 })}
               </div>
 
+              <DayPicker
+                value={date}
+                onChange={setDate}
+                min={minIso}
+                max={maxIso}
+                className="mt-2.5 w-full sm:hidden"
+              />
+
               {!selectedTrip ? (
                 <HereChip stops={stops} className="mt-2.5 md:hidden" />
               ) : null}
@@ -459,7 +593,8 @@ export function TimetableView({
                 </p>
               ) : !table || table.trips.length === 0 ? (
                 <p className="px-4 py-10 text-center text-sm text-muted-foreground">
-                  {table?.note ?? "Ezen az irányon ma nem közlekedik járat."}
+                  {table?.note ??
+                    "Ezen az irányon ezen a napon nem közlekedik járat."}
                 </p>
               ) : (
                 <TimetableGrid
@@ -471,7 +606,7 @@ export function TimetableView({
                       prev?.tripId === t.tripId ? null : t,
                     )
                   }
-                  nowSec={nowSec}
+                  nowSec={isToday ? nowSec : -1}
                 />
               )}
             </div>

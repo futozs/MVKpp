@@ -14,7 +14,7 @@ import {
   LineChart,
   StatTile,
 } from "@/components/charts/Charts";
-import { QueryBoundary, PillPicker } from "./PanelState";
+import { QueryBoundary, PillPicker, SearchablePicker } from "./PanelState";
 import { useStatsQuery } from "./useStatsQuery";
 
 const RANGES = [
@@ -76,13 +76,15 @@ export function RoutePanel({ routes }: { routes: Route[] }) {
     <div className="space-y-4">
       <div className="space-y-2">
         <h2 className="text-lg font-bold tracking-tight sm:text-xl">Vonalak</h2>
-        <PillPicker
-          ariaLabel="Vonal választása"
+        <SearchablePicker
+          ariaLabel="Vonal keresése"
+          placeholder="Vonalszám vagy útvonal, pl. 1 vagy Tiszai"
           value={short}
           onChange={setShort}
           items={sorted.map((r) => ({
             id: r.short,
             label: r.short,
+            search: r.long,
             color: r.color,
           }))}
         />

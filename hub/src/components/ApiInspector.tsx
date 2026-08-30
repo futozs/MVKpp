@@ -3,6 +3,7 @@ import { AlertCircle, Check, CheckCircle, Code, Copy, Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { getSystemUrl } from '@/lib/admin'
 import { cn } from '@/lib/utils'
 
 const PRESETS = [
@@ -38,7 +39,7 @@ export function ApiInspector() {
     const startedAt = performance.now()
 
     try {
-      const res = await fetch(endpoint + param)
+      const res = await fetch(getSystemUrl(endpoint + param))
       setDurationMs(Math.round(performance.now() - startedAt))
       setStatus(res.status)
       const text = await res.text()

@@ -53,7 +53,10 @@ export function StatsView({
       {}
       <nav
         aria-label="Statisztikai nézetek"
-        className="shrink-0 overflow-x-auto border-b border-border bg-background/80 px-3 backdrop-blur-sm sm:px-4"
+        className={cn(
+          "shrink-0 overflow-x-auto border-b border-border bg-background/85 px-3 backdrop-blur-sm sm:px-4",
+          "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+        )}
       >
         <ul className="flex min-w-max gap-1 py-2">
           {PANELS.map((p) => {
@@ -66,7 +69,7 @@ export function StatsView({
                   onClick={() => setPanel(p.id)}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-colors",
+                    "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-semibold transition-colors",
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
                     active
                       ? "bg-primary text-primary-foreground"
@@ -84,7 +87,7 @@ export function StatsView({
       </nav>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
+        <div className="w-full space-y-4 px-3 py-3 sm:px-4 sm:py-4 lg:px-6 lg:py-6 2xl:px-10">
           {panel === "overview" && (
             <OverviewPanel onJumpToVehicles={() => setPanel("vehicle")} />
           )}

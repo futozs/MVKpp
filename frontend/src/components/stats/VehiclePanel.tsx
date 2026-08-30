@@ -28,7 +28,7 @@ import {
   useMeasure,
 } from "@/components/charts/Charts";
 import { Button } from "@/components/ui/button";
-import { QueryBoundary, PillPicker } from "./PanelState";
+import { QueryBoundary, SearchablePicker } from "./PanelState";
 import { useStatsQuery } from "./useStatsQuery";
 import { cn } from "@/lib/utils";
 
@@ -259,8 +259,9 @@ export function VehiclePanel({
             <h2 className="text-lg font-bold tracking-tight sm:text-xl">
               Járművek
             </h2>
-            <PillPicker
-              ariaLabel="Jármű választása"
+            <SearchablePicker
+              ariaLabel="Jármű keresése"
+              placeholder="Rendszám, pl. 1641"
               value={vehicleId}
               onChange={setVehicleId}
               items={d.vehicles.map((v) => ({

@@ -333,7 +333,10 @@ const app = new Hono()
 app.use('*', async (c, next) => {
   c.header('Access-Control-Allow-Origin', '*')
   c.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-  c.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With')
+  // Az X-Admin-Token nelkul a hub uzemeltetesi hivasai (naplok, ujratelepites)
+  // mar a preflightnal elbuknanak, amikor a hub nem a gateway origin-jerol jon.
+  c.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Admin-Token')
+  c.header('Access-Control-Max-Age', '86400')
   if (c.req.method === 'OPTIONS') return c.body(null, 204)
   await next()
 })

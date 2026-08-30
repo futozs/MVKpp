@@ -35,12 +35,26 @@ function StopSelect({
   onChange: (id: string) => void;
 }) {
   const [text, setText] = useState("");
+  // Névre és kódra is keresünk: azonos nevű megállóból több is van, a kód
+  // viszont egyedi — ezzel lehet a megfelelőt kiválasztani.
   const matches = useMemo(() => {
     const t = text.trim().toLowerCase();
     if (!t) return [];
-    return stops.filter((s) => s.name.toLowerCase().includes(t)).slice(0, 6);
+    return stops
+      .filter(
+        (s) =>
+          s.name.toLowerCase().includes(t) ||
+          (s.code || "").toLowerCase().includes(t) ||
+          s.id.toLowerCase().includes(t),
+      )
+      .slice(0, 8);
   }, [text, stops]);
   const selected = stops.find((s) => s.id === value);
+
+  /** Ugyanaz a név többször is előfordul — az irány adja a különbséget. */
+  const twinCount = selected
+    ? stops.filter((s) => s.name === selected.name).length
+    : 0;
 
   return (
     <div className="space-y-1.5">
@@ -56,7 +70,13 @@ function StopSelect({
           }}
           className="flex w-full items-center justify-between gap-2 rounded-lg border border-primary bg-primary/10 px-3 py-2 text-left text-sm font-semibold transition-colors hover:bg-primary/15"
         >
-          <span className="min-w-0 truncate">{selected.name}</span>
+          <span className="min-w-0">
+            <span className="block truncate">{selected.name}</span>
+            <span className="block font-mono text-[11px] font-normal tabular-nums text-muted-foreground">
+              {selected.code || selected.id}
+              {twinCount > 1 ? ` · ${twinCount} ilyen nevű megálló van` : ""}
+            </span>
+          </span>
           <span className="shrink-0 text-[11px] font-normal text-muted-foreground">
             módosít
           </span>
@@ -66,7 +86,7 @@ function StopSelect({
           <Input
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="Megálló neve…"
+            placeholder="Megálló neve vagy kódja…"
             aria-label={label}
           />
           {matches.length ? (
@@ -79,9 +99,12 @@ function StopSelect({
                       onChange(s.id);
                       setText("");
                     }}
-                    className="w-full px-3 py-2 text-left text-xs transition-colors hover:bg-accent"
+                    className="flex w-full items-baseline justify-between gap-2 px-3 py-2 text-left text-xs transition-colors hover:bg-accent"
                   >
-                    {s.name}
+                    <span className="min-w-0 truncate">{s.name}</span>
+                    <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
+                      {s.code || s.id}
+                    </span>
                   </button>
                 </li>
               ))}
@@ -121,6 +144,9 @@ export function TravelTimePanel({ stops }: { stops: Stop[] }) {
       setLoading(false);
     }
   };
+
+  const fromStop = stops.find((s) => s.id === from);
+  const toStop = stops.find((s) => s.id === to);
 
   const swap = () => {
     setFrom(to);
@@ -189,6 +215,19 @@ export function TravelTimePanel({ stops }: { stops: Stop[] }) {
 
       {result ? (
         <div className="space-y-4">
+          {}
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+            <strong className="text-foreground">{fromStop?.name}</strong>
+            <span className="font-mono tabular-nums">
+              ({fromStop?.code || fromStop?.id})
+            </span>
+            <ArrowDown aria-hidden className="h-3 w-3 rotate-[-90deg]" />
+            <strong className="text-foreground">{toStop?.name}</strong>
+            <span className="font-mono tabular-nums">
+              ({toStop?.code || toStop?.id})
+            </span>
+          </p>
+
           <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
             <StatTile label="Menetrend szerint" value={fmtMin(result.schedS)} />
             <StatTile

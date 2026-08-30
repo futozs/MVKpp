@@ -1,5 +1,6 @@
-import { AlertTriangle, DatabaseZap, Loader2 } from "lucide-react";
-import type { ReactNode } from "react";
+import { AlertTriangle, DatabaseZap, Loader2, Search, X } from "lucide-react";
+import { useMemo, useState, type ReactNode } from "react";
+import { Input } from "@/components/ui/input";
 import type { QueryState } from "./useStatsQuery";
 
 export function QueryBoundary<T>({
@@ -100,11 +101,107 @@ export function PillPicker<T extends string>({
                 />
               ) : null}
               <span className="tabular-nums">{it.label}</span>
-              {it.sub ? <span className="opacity-60">{it.sub}</span> : null}
+              {it.sub ? (
+                <span className="max-w-[9rem] truncate opacity-60">
+                  {it.sub}
+                </span>
+              ) : null}
             </button>
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Kereshető változat: sok száz jármű vagy vonal között a vízszintes
+ * görgetés önmagában használhatatlan, ezért szűrőmező kerül elé. A találatok
+ * ugyanabban a pill-sorban jelennek meg, így a megszokott kép nem változik.
+ */
+export function SearchablePicker<T extends string>({
+  items,
+  value,
+  onChange,
+  ariaLabel,
+  placeholder,
+  limit = 120,
+}: {
+  /** A `search` csak a szűréshez kell — a pillen nem jelenik meg. */
+  items: {
+    id: T;
+    label: string;
+    sub?: string;
+    search?: string;
+    color?: string | null;
+  }[];
+  value: T | null;
+  onChange: (id: T) => void;
+  ariaLabel: string;
+  placeholder: string;
+  limit?: number;
+}) {
+  const [q, setQ] = useState("");
+
+  const filtered = useMemo(() => {
+    const t = q.trim().toLowerCase();
+    if (!t) return items.slice(0, limit);
+    return items
+      .filter(
+        (it) =>
+          it.label.toLowerCase().includes(t) ||
+          (it.sub ?? "").toLowerCase().includes(t) ||
+          (it.search ?? "").toLowerCase().includes(t),
+      )
+      .slice(0, limit);
+  }, [items, q, limit]);
+
+  return (
+    <div className="space-y-2">
+      <div className="relative">
+        <Search
+          aria-hidden
+          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+        />
+        <Input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder={placeholder}
+          aria-label={ariaLabel}
+          className="pl-9 pr-9"
+        />
+        {q ? (
+          <button
+            type="button"
+            onClick={() => setQ("")}
+            aria-label="Keresés törlése"
+            className="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
+      </div>
+
+      {filtered.length === 0 ? (
+        <p className="px-1 text-xs text-muted-foreground">
+          Nincs „{q}” találat.
+        </p>
+      ) : (
+        <>
+          <PillPicker
+            ariaLabel={ariaLabel}
+            value={value}
+            onChange={onChange}
+            items={filtered}
+          />
+          {items.length > filtered.length ? (
+            <p className="px-1 text-[11px] text-muted-foreground">
+              {filtered.length} látszik a(z) {items.length} elemből — szűkíts a
+              kereséssel.
+            </p>
+          ) : null}
+        </>
+      )}
     </div>
   );
 }

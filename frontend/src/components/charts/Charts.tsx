@@ -88,7 +88,7 @@ export function StatTile({
       </p>
       <p
         className={cn(
-          "mt-1 text-xl font-bold tabular-nums tracking-tight sm:text-2xl",
+          "mt-1 text-lg font-bold tabular-nums tracking-tight [overflow-wrap:anywhere] sm:text-2xl",
           toneClass,
         )}
       >

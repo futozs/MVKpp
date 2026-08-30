@@ -55,7 +55,7 @@ export function useGeolocation(): GeoState {
     setPosition(null);
     setStale(false);
     try {
-      localStorage.removeItem(ENABLED_KEY);
+      localStorage.setItem(ENABLED_KEY, "0");
       localStorage.removeItem(LAST_FIX_KEY);
     } catch {}
   }, []);
@@ -101,7 +101,7 @@ export function useGeolocation(): GeoState {
           setStale(false);
           setError("A helymeghatározás le van tiltva ehhez az oldalhoz.");
           try {
-            localStorage.removeItem(ENABLED_KEY);
+            localStorage.setItem(ENABLED_KEY, "0");
             localStorage.removeItem(LAST_FIX_KEY);
           } catch {}
         } else {
@@ -117,14 +117,17 @@ export function useGeolocation(): GeoState {
     );
   }, []);
 
+  // Betöltéskor magától elindul, hogy a térkép rögtön a felhasználó
+  // környékére tudjon zoomolni. Csak akkor marad csendben, ha a felhasználó
+  // korábban kifejezetten kikapcsolta ("0"), vagy a böngésző letiltotta.
   useEffect(() => {
-    let enabled = false;
+    let optedOut = false;
     try {
-      enabled = localStorage.getItem(ENABLED_KEY) === "1";
+      optedOut = localStorage.getItem(ENABLED_KEY) === "0";
     } catch {
-      enabled = false;
+      optedOut = false;
     }
-    if (!enabled) return;
+    if (optedOut) return;
 
     if (!("permissions" in navigator)) {
       start();

@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { getSystemUrl } from '@/lib/admin'
+import { adminHeaders, getSystemUrl } from '@/lib/admin'
 import { cn } from '@/lib/utils'
 
 type SystemActionsProps = {
@@ -74,7 +74,7 @@ export function SystemActions({ onRefreshed }: SystemActionsProps) {
     await new Promise((r) => setTimeout(r, 1200))
     while (Date.now() < deadline) {
       try {
-        const res = await fetch('/_health', { cache: 'no-store' })
+        const res = await fetch(getSystemUrl('/_health'), { cache: 'no-store' })
         if (res.ok) return true
       } catch {
         /* még nem jött vissza */
@@ -91,7 +91,7 @@ export function SystemActions({ onRefreshed }: SystemActionsProps) {
     setRestarting(true)
     setRestartResult(null)
     try {
-      const res = await fetch('/system/restart', { method: 'POST' })
+      const res = await fetch(getSystemUrl('/system/restart'), { method: 'POST' })
       const data = await res.json()
 
       if (!data.managed) {
@@ -128,7 +128,7 @@ export function SystemActions({ onRefreshed }: SystemActionsProps) {
     setReloading(true)
     setReloadResult(null)
     try {
-      const res = await fetch('/system/reload-gtfs', { method: 'POST' })
+      const res = await fetch(getSystemUrl('/system/reload-gtfs'), { method: 'POST', headers: adminHeaders() })
       const data = await res.json()
       setReloadResult(
         data.ok
@@ -150,7 +150,7 @@ export function SystemActions({ onRefreshed }: SystemActionsProps) {
     setTokenRefreshing(true)
     setTokenResult(null)
     try {
-      const res = await fetch('/system/refresh-app-token', { method: 'POST' })
+      const res = await fetch(getSystemUrl('/system/refresh-app-token'), { method: 'POST', headers: adminHeaders() })
       const data = await res.json()
       setTokenResult({
         ok: Boolean(res.ok && data.ok),
@@ -172,7 +172,7 @@ export function SystemActions({ onRefreshed }: SystemActionsProps) {
       const body = instInput.trim()
         ? JSON.stringify({ jwt: jwtInput.trim(), installationId: instInput.trim() })
         : jwtInput.trim()
-      const res = await fetch('/_ingest', {
+      const res = await fetch(getSystemUrl('/_ingest'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body,
@@ -195,7 +195,7 @@ export function SystemActions({ onRefreshed }: SystemActionsProps) {
 
   const handleCopyExport = async () => {
     try {
-      const res = await fetch('/_export').then((r) => r.json())
+      const res = await fetch(getSystemUrl('/_export')).then((r) => r.json())
       await navigator.clipboard.writeText(JSON.stringify(res, null, 2))
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
