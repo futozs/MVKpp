@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState } from "react";
 import {
   Plus,
   X,
@@ -8,16 +8,16 @@ import {
   Bus,
   Layers,
   Sparkles,
-} from 'lucide-react'
-import type { Route, LiveVehicle, FilterState } from '../../types'
-import { RouteChips } from './RouteChips'
+} from "lucide-react";
+import type { Route, LiveVehicle, FilterState } from "../../types";
+import { RouteChips } from "./RouteChips";
 
 interface FleetFilterProps {
-  routes: Record<string, Route>
-  liveVehicles: LiveVehicle[]
-  filters: FilterState
-  setFilters: React.Dispatch<React.SetStateAction<FilterState>>
-  onFocusVehicle: (vehicle: LiveVehicle) => void
+  routes: Record<string, Route>;
+  liveVehicles: LiveVehicle[];
+  filters: FilterState;
+  setFilters: React.Dispatch<React.SetStateAction<FilterState>>;
+  onFocusVehicle: (vehicle: LiveVehicle) => void;
 }
 
 export const FleetFilter: React.FC<FleetFilterProps> = ({
@@ -27,98 +27,103 @@ export const FleetFilter: React.FC<FleetFilterProps> = ({
   setFilters,
   onFocusVehicle,
 }) => {
-  const [typedId, setTypedId] = useState('')
+  const [typedId, setTypedId] = useState("");
 
-  // Add vehicle ID to watchlist
   const handleAddWatch = (idToAdd?: string) => {
-    const target = (idToAdd || typedId).trim()
-    if (!target) return
-    if (filters.watch.length >= 12) return
+    const target = (idToAdd || typedId).trim();
+    if (!target) return;
+    if (filters.watch.length >= 12) return;
 
     if (!filters.watch.some((x) => x.toLowerCase() === target.toLowerCase())) {
       setFilters((prev) => ({
         ...prev,
         watch: [...prev.watch, target],
-        vq: '',
-      }))
-      setTypedId('')
+        vq: "",
+      }));
+      setTypedId("");
     }
-  }
+  };
 
   const handleRemoveWatch = (idToRemove: string) => {
     setFilters((prev) => ({
       ...prev,
-      watch: prev.watch.filter((x) => x.toLowerCase() !== idToRemove.toLowerCase()),
-    }))
-  }
+      watch: prev.watch.filter(
+        (x) => x.toLowerCase() !== idToRemove.toLowerCase(),
+      ),
+    }));
+  };
 
   const handleClearWatch = () => {
-    setFilters((prev) => ({ ...prev, watch: [], vq: '' }))
-  }
+    setFilters((prev) => ({ ...prev, watch: [], vq: "" }));
+  };
 
   const handleToggleRoute = (routeId: string) => {
     setFilters((prev) => {
-      const current = prev.routes
+      const current = prev.routes;
       const updated = current.includes(routeId)
         ? current.filter((id) => id !== routeId)
-        : [...current, routeId]
-      return { ...prev, routes: updated }
-    })
-  }
+        : [...current, routeId];
+      return { ...prev, routes: updated };
+    });
+  };
 
   const handleSetRoutes = (routeIds: string[]) => {
-    setFilters((prev) => ({ ...prev, routes: routeIds }))
-  }
+    setFilters((prev) => ({ ...prev, routes: routeIds }));
+  };
 
-  // Get matching vehicles for active queries
   const activeQueries = React.useMemo(() => {
-    const list = [...filters.watch]
-    const q = typedId.trim()
+    const list = [...filters.watch];
+    const q = typedId.trim();
     if (q && !list.some((x) => x.toLowerCase() === q.toLowerCase())) {
-      list.push(q)
+      list.push(q);
     }
-    return list
-  }, [filters.watch, typedId])
+    return list;
+  }, [filters.watch, typedId]);
 
-  // Matching live vehicles for fleet list
   const filteredVehicles = React.useMemo(() => {
-    let list = liveVehicles.slice()
+    let list = liveVehicles.slice();
 
     if (activeQueries.length > 0) {
       return list.filter((v) => {
-        const vid = String(v.id || '').toLowerCase()
-        const vlabel = String(v.label || '').toLowerCase()
-        return activeQueries.some((q) => vid.includes(q.toLowerCase()) || vlabel.includes(q.toLowerCase()))
-      })
+        const vid = String(v.id || "").toLowerCase();
+        const vlabel = String(v.label || "").toLowerCase();
+        return activeQueries.some(
+          (q) =>
+            vid.includes(q.toLowerCase()) || vlabel.includes(q.toLowerCase()),
+        );
+      });
     }
 
-    if (filters.type !== 'all') {
+    if (filters.type !== "all") {
       list = list.filter((v) => {
-        const r = routes[v.routeId]
-        const isTram = r?.type === '900' || v.label === 'TRAM'
-        return filters.type === 'tram' ? isTram : !isTram
-      })
+        const r = routes[v.routeId];
+        const isTram = r?.type === "900" || v.label === "TRAM";
+        return filters.type === "tram" ? isTram : !isTram;
+      });
     }
 
     if (filters.routes.length > 0) {
-      const set = new Set(filters.routes)
-      list = list.filter((v) => set.has(v.routeId))
+      const set = new Set(filters.routes);
+      list = list.filter((v) => set.has(v.routeId));
     }
 
-    if (filters.speed === 'moving') {
-      list = list.filter((v) => (v.speed || 0) > 0.5)
-    } else if (filters.speed === 'idle') {
-      list = list.filter((v) => (v.speed || 0) <= 0.5)
+    if (filters.speed === "moving") {
+      list = list.filter((v) => (v.speed || 0) > 0.5);
+    } else if (filters.speed === "idle") {
+      list = list.filter((v) => (v.speed || 0) <= 0.5);
     }
 
     return list.sort((a, b) => {
-      return a.routeShort.localeCompare(b.routeShort, 'hu') || a.id.localeCompare(b.id, 'hu')
-    })
-  }, [liveVehicles, activeQueries, filters, routes])
+      return (
+        a.routeShort.localeCompare(b.routeShort, "hu") ||
+        a.id.localeCompare(b.id, "hu")
+      );
+    });
+  }, [liveVehicles, activeQueries, filters, routes]);
 
   return (
     <div className="flex flex-col h-full bg-[#141820] divide-y divide-[#283344] overflow-y-auto">
-      {/* 1. Vehicle ID Tracker Section */}
+      {}
       <div className="p-4 space-y-3">
         <div className="flex items-center justify-between">
           <label className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
@@ -135,16 +140,16 @@ export const FleetFilter: React.FC<FleetFilterProps> = ({
           )}
         </div>
 
-        {/* Input & Action Buttons */}
+        {}
         <div className="flex items-center gap-2">
           <input
             type="text"
             value={typedId}
             onChange={(e) => {
-              setTypedId(e.target.value)
-              setFilters((prev) => ({ ...prev, vq: e.target.value }))
+              setTypedId(e.target.value);
+              setFilters((prev) => ({ ...prev, vq: e.target.value }));
             }}
-            onKeyDown={(e) => e.key === 'Enter' && handleAddWatch()}
+            onKeyDown={(e) => e.key === "Enter" && handleAddWatch()}
             placeholder="pl. 1641 vagy rendszám..."
             className="flex-1 bg-[#1c232d] border border-[#283344] focus:border-[#FDCC00] text-sm text-white font-mono rounded-xl px-3 py-2 outline-none transition-all placeholder:text-[#64748b]"
           />
@@ -159,8 +164,8 @@ export const FleetFilter: React.FC<FleetFilterProps> = ({
           {typedId && (
             <button
               onClick={() => {
-                setTypedId('')
-                setFilters((prev) => ({ ...prev, vq: '' }))
+                setTypedId("");
+                setFilters((prev) => ({ ...prev, vq: "" }));
               }}
               className="p-2 rounded-xl bg-[#1c232d] text-[#94a3b8] hover:text-white border border-[#283344] transition-all"
             >
@@ -169,14 +174,16 @@ export const FleetFilter: React.FC<FleetFilterProps> = ({
           )}
         </div>
 
-        {/* Watched Cards Result */}
+        {}
         {activeQueries.length > 0 && (
           <div className="space-y-1.5 pt-1">
             {activeQueries.map((query) => {
               const hits = liveVehicles.filter((v) =>
-                v.id.toLowerCase().includes(query.toLowerCase())
-              )
-              const isPinned = filters.watch.some((w) => w.toLowerCase() === query.toLowerCase())
+                v.id.toLowerCase().includes(query.toLowerCase()),
+              );
+              const isPinned = filters.watch.some(
+                (w) => w.toLowerCase() === query.toLowerCase(),
+              );
 
               if (hits.length === 0) {
                 return (
@@ -186,20 +193,31 @@ export const FleetFilter: React.FC<FleetFilterProps> = ({
                   >
                     <div>
                       <strong className="text-white font-mono">{query}</strong>
-                      <div className="text-[11px] text-[#64748b]">Nincs bevetésen (nem ad élő jelet)</div>
+                      <div className="text-[11px] text-[#64748b]">
+                        Nincs bevetésen (nem ad élő jelet)
+                      </div>
                     </div>
                     <button
-                      onClick={() => (isPinned ? handleRemoveWatch(query) : handleAddWatch(query))}
+                      onClick={() =>
+                        isPinned
+                          ? handleRemoveWatch(query)
+                          : handleAddWatch(query)
+                      }
                       className="p-1 rounded-lg hover:bg-[#283344] text-[#94a3b8] hover:text-white"
                     >
-                      {isPinned ? <X className="w-3.5 h-3.5 text-red-400" /> : <Plus className="w-3.5 h-3.5 text-[#FDCC00]" />}
+                      {isPinned ? (
+                        <X className="w-3.5 h-3.5 text-red-400" />
+                      ) : (
+                        <Plus className="w-3.5 h-3.5 text-[#FDCC00]" />
+                      )}
                     </button>
                   </div>
-                )
+                );
               }
 
               return hits.slice(0, 3).map((v) => {
-                const speedKmh = v.speed != null ? Math.round(v.speed * 3.6) : null
+                const speedKmh =
+                  v.speed != null ? Math.round(v.speed * 3.6) : null;
                 return (
                   <div
                     key={v.id}
@@ -210,31 +228,40 @@ export const FleetFilter: React.FC<FleetFilterProps> = ({
                       <span
                         className="px-2 py-0.5 rounded font-black text-xs shrink-0"
                         style={{
-                          backgroundColor: '#' + (v.routeColor || 'FDCC00'),
-                          color: '#' + (v.routeText || '000000'),
+                          backgroundColor: "#" + (v.routeColor || "FDCC00"),
+                          color: "#" + (v.routeText || "000000"),
                         }}
                       >
                         {v.routeShort}
                       </span>
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <strong className="text-white font-mono text-xs">{v.id}</strong>
+                          <strong className="text-white font-mono text-xs">
+                            {v.id}
+                          </strong>
                           <span className="w-1.5 h-1.5 rounded-full bg-[#3ddc84]" />
                         </div>
-                        <div className="text-[11px] text-[#94a3b8] truncate">{v.headsign}</div>
+                        <div className="text-[11px] text-[#94a3b8] truncate">
+                          {v.headsign}
+                        </div>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">
                       {speedKmh != null && (
                         <span className="text-xs font-mono font-bold text-[#e2e8f0]">
-                          {speedKmh} <span className="text-[10px] text-[#64748b]">km/h</span>
+                          {speedKmh}{" "}
+                          <span className="text-[10px] text-[#64748b]">
+                            km/h
+                          </span>
                         </span>
                       )}
                       <button
                         onClick={(e) => {
-                          e.stopPropagation()
-                          isPinned ? handleRemoveWatch(query) : handleAddWatch(query)
+                          e.stopPropagation();
+                          isPinned
+                            ? handleRemoveWatch(query)
+                            : handleAddWatch(query);
                         }}
                         className="p-1 rounded-lg hover:bg-[#283344] text-[#94a3b8] hover:text-white"
                       >
@@ -246,13 +273,13 @@ export const FleetFilter: React.FC<FleetFilterProps> = ({
                       </button>
                     </div>
                   </div>
-                )
-              })
+                );
+              });
             })}
           </div>
         )}
 
-        {/* Map Follow Mode Toggle */}
+        {}
         <label className="flex items-center justify-between p-2 rounded-xl bg-[#10141b] border border-[#283344] cursor-pointer text-xs text-[#e2e8f0] font-medium">
           <span className="flex items-center gap-1.5">
             <Crosshair className="w-3.5 h-3.5 text-[#FDCC00]" />
@@ -261,36 +288,38 @@ export const FleetFilter: React.FC<FleetFilterProps> = ({
           <input
             type="checkbox"
             checked={filters.follow}
-            onChange={(e) => setFilters((prev) => ({ ...prev, follow: e.target.checked }))}
+            onChange={(e) =>
+              setFilters((prev) => ({ ...prev, follow: e.target.checked }))
+            }
             className="w-4 h-4 accent-[#FDCC00] rounded cursor-pointer"
           />
         </label>
       </div>
 
-      {/* 2. Vehicle Type Selector */}
+      {}
       <div className="p-4 space-y-2.5">
         <label className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
           <Bus className="w-3.5 h-3.5 text-[#FDCC00]" />
           Járműtípus
         </label>
         <div className="grid grid-cols-3 gap-1.5 bg-[#0e1116] p-1 rounded-xl border border-[#283344]">
-          {(['all', 'bus', 'tram'] as const).map((t) => (
+          {(["all", "bus", "tram"] as const).map((t) => (
             <button
               key={t}
               onClick={() => setFilters((prev) => ({ ...prev, type: t }))}
               className={`py-1.5 rounded-lg text-xs font-bold transition-all ${
                 filters.type === t
-                  ? 'bg-[#FDCC00] text-black shadow-sm'
-                  : 'text-[#94a3b8] hover:text-white'
+                  ? "bg-[#FDCC00] text-black shadow-sm"
+                  : "text-[#94a3b8] hover:text-white"
               }`}
             >
-              {t === 'all' ? 'Mind' : t === 'bus' ? '🚌 Busz' : '🚋 Villamos'}
+              {t === "all" ? "Mind" : t === "bus" ? "🚌 Busz" : "🚋 Villamos"}
             </button>
           ))}
         </div>
       </div>
 
-      {/* 3. Route Selector & Chips */}
+      {}
       <div className="p-4 space-y-2.5">
         <div className="flex items-center justify-between">
           <label className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
@@ -298,7 +327,9 @@ export const FleetFilter: React.FC<FleetFilterProps> = ({
             Járatok Kiválasztása
           </label>
           <span className="text-xs text-[#94a3b8]">
-            {filters.routes.length > 0 ? `${filters.routes.length} kijelölve` : 'Mind'}
+            {filters.routes.length > 0
+              ? `${filters.routes.length} kijelölve`
+              : "Mind"}
           </span>
         </div>
         <RouteChips
@@ -310,7 +341,7 @@ export const FleetFilter: React.FC<FleetFilterProps> = ({
         />
       </div>
 
-      {/* 4. Display Toggles */}
+      {}
       <div className="p-4 space-y-2">
         <label className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5 mb-1">
           <Eye className="w-3.5 h-3.5 text-[#FDCC00]" />
@@ -318,11 +349,11 @@ export const FleetFilter: React.FC<FleetFilterProps> = ({
         </label>
 
         {[
-          { key: 'stops', label: 'Megállók a térképen' },
-          { key: 'shape', label: 'Kijelölt járatok nyomvonala' },
-          { key: 'rstops', label: 'Csak a kijelölt járatok megállói' },
-          { key: 'moving', label: 'Csak a mozgó járművek (>0.5 km/h)' },
-          { key: 'labels', label: 'Jármű ID címke a térképen' },
+          { key: "stops", label: "Megállók a térképen" },
+          { key: "shape", label: "Kijelölt járatok nyomvonala" },
+          { key: "rstops", label: "Csak a kijelölt járatok megállói" },
+          { key: "moving", label: "Csak a mozgó járművek (>0.5 km/h)" },
+          { key: "labels", label: "Jármű ID címke a térképen" },
         ].map(({ key, label }) => (
           <label
             key={key}
@@ -341,7 +372,7 @@ export const FleetFilter: React.FC<FleetFilterProps> = ({
         ))}
       </div>
 
-      {/* 5. Live Fleet List Table */}
+      {}
       <div className="p-4 space-y-2 flex-1">
         <div className="flex items-center justify-between">
           <label className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
@@ -353,7 +384,8 @@ export const FleetFilter: React.FC<FleetFilterProps> = ({
         <div className="space-y-1 max-h-72 overflow-y-auto pr-1">
           {filteredVehicles.length > 0 ? (
             filteredVehicles.map((v) => {
-              const speed = v.speed != null ? `${Math.round(v.speed * 3.6)} km/h` : '—'
+              const speed =
+                v.speed != null ? `${Math.round(v.speed * 3.6)} km/h` : "—";
               return (
                 <div
                   key={v.id}
@@ -364,15 +396,19 @@ export const FleetFilter: React.FC<FleetFilterProps> = ({
                     <span
                       className="px-2 py-0.5 rounded font-black text-xs shrink-0"
                       style={{
-                        backgroundColor: '#' + (v.routeColor || 'FDCC00'),
-                        color: '#' + (v.routeText || '000000'),
+                        backgroundColor: "#" + (v.routeColor || "FDCC00"),
+                        color: "#" + (v.routeText || "000000"),
                       }}
                     >
                       {v.routeShort}
                     </span>
                     <div className="min-w-0">
-                      <strong className="text-white font-mono text-xs">{v.id}</strong>
-                      <div className="text-[11px] text-[#94a3b8] truncate">{v.headsign}</div>
+                      <strong className="text-white font-mono text-xs">
+                        {v.id}
+                      </strong>
+                      <div className="text-[11px] text-[#94a3b8] truncate">
+                        {v.headsign}
+                      </div>
                     </div>
                   </div>
 
@@ -380,7 +416,7 @@ export const FleetFilter: React.FC<FleetFilterProps> = ({
                     {speed}
                   </span>
                 </div>
-              )
+              );
             })
           ) : (
             <div className="text-xs text-[#64748b] py-4 text-center">
@@ -390,5 +426,5 @@ export const FleetFilter: React.FC<FleetFilterProps> = ({
         </div>
       </div>
     </div>
-  )
-}
+  );
+};

@@ -1,39 +1,32 @@
-import { Navigation, Radio } from 'lucide-react'
-import type { ArrivalVehicle } from '@/types'
-import { cn } from '@/lib/utils'
+import { Navigation, Radio } from "lucide-react";
+import type { ArrivalVehicle } from "@/types";
+import { cn } from "@/lib/utils";
 
-/**
- * „Melyik busz, és hol jár most.”
- *
- * A megállófigyelő két legfontosabb adata — ezért kap saját, kiemelt
- * felületet a kártyán belül, nem egy 10 pixeles lábjegyzetet. A rendszám
- * nagy monóval, a pozíció teljes méretű szöveggel olvasható.
- */
 export function VehicleTrack({
   vehicle,
   progressDesc,
   onTrack,
   className,
 }: {
-  vehicle: ArrivalVehicle | null
-  progressDesc?: string | null
-  onTrack?: () => void
-  className?: string
+  vehicle: ArrivalVehicle | null;
+  progressDesc?: string | null;
+  onTrack?: () => void;
+  className?: string;
 }) {
-  if (!vehicle && !progressDesc) return null
+  if (!vehicle && !progressDesc) return null;
 
-  const speedKmh = vehicle?.speed != null ? Math.round(vehicle.speed * 3.6) : null
-  const moving = speedKmh != null && speedKmh > 2
+  const speedKmh =
+    vehicle?.speed != null ? Math.round(vehicle.speed * 3.6) : null;
+  const moving = speedKmh != null && speedKmh > 2;
 
   return (
     <div
       className={cn(
-        'rounded-lg border border-primary/25 bg-primary/[0.07] p-2 shadow-xs sm:p-3',
-        className
+        "rounded-lg border border-primary/25 bg-primary/[0.07] p-2 shadow-xs sm:p-3",
+        className,
       )}
     >
-      {/* Telefonon egyetlen sűrű sor: rendszám · sebesség · hol jár.
-          Nagyobb képernyőn kap saját feliratozott blokkokat. */}
+      {}
       <div className="flex items-center gap-2 sm:hidden">
         <Radio aria-hidden className="h-3.5 w-3.5 shrink-0 text-primary" />
         {vehicle ? (
@@ -46,8 +39,8 @@ export function VehicleTrack({
         {speedKmh != null ? (
           <span
             className={cn(
-              'shrink-0 font-mono text-xs font-semibold tabular-nums',
-              moving ? 'text-foreground' : 'text-muted-foreground'
+              "shrink-0 font-mono text-xs font-semibold tabular-nums",
+              moving ? "text-foreground" : "text-muted-foreground",
             )}
           >
             {speedKmh} km/h
@@ -83,7 +76,9 @@ export function VehicleTrack({
                   {vehicle.id}
                 </p>
               ) : (
-                <p className="text-sm text-muted-foreground">Nincs hozzárendelve</p>
+                <p className="text-sm text-muted-foreground">
+                  Nincs hozzárendelve
+                </p>
               )}
             </div>
           </div>
@@ -95,8 +90,8 @@ export function VehicleTrack({
               </p>
               <p
                 className={cn(
-                  'font-mono text-xl font-bold leading-tight tabular-nums',
-                  moving ? 'text-foreground' : 'text-muted-foreground'
+                  "font-mono text-xl font-bold leading-tight tabular-nums",
+                  moving ? "text-foreground" : "text-muted-foreground",
                 )}
               >
                 {speedKmh}
@@ -110,7 +105,10 @@ export function VehicleTrack({
 
         {progressDesc ? (
           <p className="mt-2.5 flex items-start gap-2 border-t border-primary/15 pt-2.5 text-sm leading-snug text-foreground">
-            <Navigation aria-hidden className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+            <Navigation
+              aria-hidden
+              className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary"
+            />
             <span className="min-w-0">{progressDesc}</span>
           </p>
         ) : null}
@@ -126,5 +124,5 @@ export function VehicleTrack({
         ) : null}
       </div>
     </div>
-  )
+  );
 }

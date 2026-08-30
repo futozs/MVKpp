@@ -1,27 +1,26 @@
-import { useMemo, useState } from 'react'
-import { Check, MapPin, Plus, Search } from 'lucide-react'
-import type { Stop } from '@/types'
-import { Button } from '@/components/ui/button'
+import { useMemo, useState } from "react";
+import { Check, MapPin, Plus, Search } from "lucide-react";
+import type { Stop } from "@/types";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { cn } from '@/lib/utils'
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { cn } from "@/lib/utils";
 
 type AddStopModalProps = {
-  isOpen: boolean
-  onClose: () => void
-  stops: Stop[]
-  selectedStopIds: string[]
-  onToggleStop: (stopId: string) => void
-}
+  isOpen: boolean;
+  onClose: () => void;
+  stops: Stop[];
+  selectedStopIds: string[];
+  onToggleStop: (stopId: string) => void;
+};
 
-/** shadcn Dialog: fókuszcsapda, Escape, háttérkattintás és aria készen jön. */
 export function AddStopModal({
   isOpen,
   onClose,
@@ -29,21 +28,20 @@ export function AddStopModal({
   selectedStopIds,
   onToggleStop,
 }: AddStopModalProps) {
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useState("");
 
   const results = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    if (!q) return stops.slice(0, 60)
+    const q = query.trim().toLowerCase();
+    if (!q) return stops.slice(0, 60);
     return stops
       .filter(
         (s) =>
           s.name.toLowerCase().includes(q) ||
           (s.code && s.code.toLowerCase().includes(q)) ||
-          s.id.toLowerCase().includes(q)
+          s.id.toLowerCase().includes(q),
       )
-      .slice(0, 80)
-  }, [stops, query])
-
+      .slice(0, 80);
+  }, [stops, query]);
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -53,8 +51,9 @@ export function AddStopModal({
           <DialogDescription>
             {selectedStopIds.length > 0
               ? `${selectedStopIds.length} megálló a figyelőn. `
-              : ''}
-            A figyelő minden kiválasztott megállóról a következő indulásokat mutatja.
+              : ""}
+            A figyelő minden kiválasztott megállóról a következő indulásokat
+            mutatja.
           </DialogDescription>
         </DialogHeader>
 
@@ -83,7 +82,7 @@ export function AddStopModal({
           ) : (
             <ul className="divide-y divide-border/60">
               {results.map((stop) => {
-                const selected = selectedStopIds.includes(stop.id)
+                const selected = selectedStopIds.includes(stop.id);
 
                 return (
                   <li key={stop.id}>
@@ -92,17 +91,17 @@ export function AddStopModal({
                       onClick={() => onToggleStop(stop.id)}
                       aria-pressed={selected}
                       className={cn(
-                        'flex w-full items-center gap-3 px-5 py-2.5 text-left transition-colors duration-fast',
-                        'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring',
-                        selected ? 'bg-primary/10' : 'hover:bg-accent'
+                        "flex w-full items-center gap-3 px-5 py-2.5 text-left transition-colors duration-fast",
+                        "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
+                        selected ? "bg-primary/10" : "hover:bg-accent",
                       )}
                     >
                       <span
                         className={cn(
-                          'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors duration-fast',
+                          "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors duration-fast",
                           selected
-                            ? 'bg-primary text-primary-foreground shadow-sm'
-                            : 'bg-muted text-muted-foreground'
+                            ? "bg-primary text-primary-foreground shadow-sm"
+                            : "bg-muted text-muted-foreground",
                         )}
                       >
                         {selected ? (
@@ -115,8 +114,8 @@ export function AddStopModal({
                       <span className="min-w-0 flex-1">
                         <span
                           className={cn(
-                            'block truncate text-sm',
-                            selected ? 'font-semibold' : 'font-medium'
+                            "block truncate text-sm",
+                            selected ? "font-semibold" : "font-medium",
                           )}
                         >
                           {stop.name}
@@ -127,11 +126,14 @@ export function AddStopModal({
                       </span>
 
                       {!selected ? (
-                        <Plus aria-hidden className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        <Plus
+                          aria-hidden
+                          className="h-4 w-4 shrink-0 text-muted-foreground"
+                        />
                       ) : null}
                     </button>
                   </li>
-                )
+                );
               })}
             </ul>
           )}
@@ -140,7 +142,7 @@ export function AddStopModal({
         <div className="flex items-center justify-between gap-3 border-t border-border px-5 py-3">
           <span className="text-xs text-muted-foreground">
             {selectedStopIds.length === 0
-              ? 'Még nincs kiválasztott megálló'
+              ? "Még nincs kiválasztott megálló"
               : `${selectedStopIds.length} megálló kiválasztva`}
           </span>
           <Button size="sm" onClick={onClose}>
@@ -149,5 +151,5 @@ export function AddStopModal({
         </div>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

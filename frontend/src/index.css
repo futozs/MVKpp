@@ -1,4 +1,4 @@
-@import '../../theme/tokens.css';
+@import "../../theme/tokens.css";
 
 @tailwind base;
 @tailwind components;
@@ -16,10 +16,9 @@
   body {
     @apply bg-background text-foreground antialiased;
     font-family: var(--font-sans);
-    font-feature-settings: 'ss01' 1;
+    font-feature-settings: "ss01" 1;
   }
 
-  /* Minden szám tabuláris: a visszaszámláló és a sebesség nem ugrál. */
   .tnum,
   .font-mono {
     font-variant-numeric: tabular-nums;
@@ -30,9 +29,6 @@
   }
 }
 
-/* --------------------------------------------------------------------------
-   Görgetősáv
-   -------------------------------------------------------------------------- */
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
@@ -51,12 +47,6 @@
   background-clip: content-box;
 }
 
-/* --------------------------------------------------------------------------
-   Térképi jármű-jelölő
-   Lekerekített csempe a járat színével, erős vetett árnyékkal — a térkép
-   fölött lebeg, ezért látszania kell, hogy lebeg. A járatszám nagy és
-   kiolvasható, alatta a rendszám külön, jól olvasható címkén.
-   -------------------------------------------------------------------------- */
 .mvk-vehicle {
   position: relative;
 }
@@ -104,7 +94,6 @@
   pointer-events: none;
 }
 
-/* Követett jármű: zöld gyűrű és izzás. */
 .mvk-vehicle.tracked .tile {
   box-shadow:
     0 0 0 2px hsl(var(--background)),
@@ -122,9 +111,6 @@
     0 0 0 1px hsl(var(--primary) / 0.25);
 }
 
-/* --------------------------------------------------------------------------
-   Leaflet a téma anyagára hangolva
-   -------------------------------------------------------------------------- */
 .leaflet-container {
   background: hsl(var(--background));
   font-family: var(--font-sans);

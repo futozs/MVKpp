@@ -1,68 +1,66 @@
-import { useEffect, useRef, useState } from 'react'
-import { motion, useReducedMotion } from 'framer-motion'
-import { Gauge, Navigation, X } from 'lucide-react'
-import type { TripPathResponse } from '@/types'
-import { api } from '@/services/api'
-import { Button } from '@/components/ui/button'
-import { RouteTile } from '@/components/transit/RouteTile'
-import { LiveDot } from '@/components/transit/LiveDot'
-import { cn } from '@/lib/utils'
+import { useEffect, useRef, useState } from "react";
+import { motion, useReducedMotion } from "framer-motion";
+import { Gauge, Navigation, X } from "lucide-react";
+import type { TripPathResponse } from "@/types";
+import { api } from "@/services/api";
+import { Button } from "@/components/ui/button";
+import { RouteTile } from "@/components/transit/RouteTile";
+import { LiveDot } from "@/components/transit/LiveDot";
+import { cn } from "@/lib/utils";
 
-const POLL_MS = 4000
+const POLL_MS = 4000;
 
 type VehicleFocusCardProps = {
-  tripId: string
-  vehicleId: string | null
-  onClose: () => void
-}
+  tripId: string;
+  vehicleId: string | null;
+  onClose: () => void;
+};
 
-/**
- * A követett jármű kártyája.
- *
- * Menetkövetés közben ez váltja a megállók indulási paneljét: amíg a térkép
- * a buszt követi, alul az látszik, melyik buszt nézed és hol tart — nem
- * pedig a megálló menetrendje, amit épp elhagytál.
- */
-export function VehicleFocusCard({ tripId, vehicleId, onClose }: VehicleFocusCardProps) {
-  const [data, setData] = useState<TripPathResponse | null>(null)
-  const [lost, setLost] = useState(false)
-  const reduce = useReducedMotion()
-  const mounted = useRef(true)
+export function VehicleFocusCard({
+  tripId,
+  vehicleId,
+  onClose,
+}: VehicleFocusCardProps) {
+  const [data, setData] = useState<TripPathResponse | null>(null);
+  const [lost, setLost] = useState(false);
+  const reduce = useReducedMotion();
+  const mounted = useRef(true);
 
   useEffect(() => {
-    mounted.current = true
+    mounted.current = true;
     return () => {
-      mounted.current = false
-    }
-  }, [])
+      mounted.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     const load = async () => {
       try {
-        const res = await api.getTripPath(tripId, vehicleId ?? undefined)
-        if (!mounted.current) return
-        setData(res)
-        setLost(!res.vehicle)
+        const res = await api.getTripPath(tripId, vehicleId ?? undefined);
+        if (!mounted.current) return;
+        setData(res);
+        setLost(!res.vehicle);
       } catch {
-        if (mounted.current) setLost(true)
+        if (mounted.current) setLost(true);
       }
-    }
+    };
 
-    load()
-    const timer = setInterval(load, POLL_MS)
-    return () => clearInterval(timer)
-  }, [tripId, vehicleId])
+    load();
+    const timer = setInterval(load, POLL_MS);
+    return () => clearInterval(timer);
+  }, [tripId, vehicleId]);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
-  const vehicle = data?.vehicle ?? null
-  const speedKmh = vehicle?.speed != null ? Math.round(vehicle.speed * 3.6) : null
-  const moving = speedKmh != null && speedKmh > 2
-  const shownId = vehicle?.id ?? vehicleId
+  const vehicle = data?.vehicle ?? null;
+  const speedKmh =
+    vehicle?.speed != null ? Math.round(vehicle.speed * 3.6) : null;
+  const moving = speedKmh != null && speedKmh > 2;
+  const shownId = vehicle?.id ?? vehicleId;
 
   return (
     <motion.aside
@@ -71,14 +69,14 @@ export function VehicleFocusCard({ tripId, vehicleId, onClose }: VehicleFocusCar
       transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
       aria-label="Követett jármű"
       className={cn(
-        'absolute inset-x-0 bottom-0 z-drawer overflow-hidden',
-        'border-t border-border bg-card shadow-xl',
-        'md:inset-x-auto md:bottom-4 md:right-4 md:w-[380px] md:rounded-xl md:border'
+        "absolute inset-x-0 bottom-0 z-drawer overflow-hidden",
+        "border-t border-border bg-card shadow-xl",
+        "md:inset-x-auto md:bottom-4 md:right-4 md:w-[380px] md:rounded-xl md:border",
       )}
     >
       <div className="flex items-start gap-3 px-4 py-3">
         <RouteTile
-          short={data?.route ?? '…'}
+          short={data?.route ?? "…"}
           color={data?.color}
           text={data?.text}
           size="lg"
@@ -86,7 +84,9 @@ export function VehicleFocusCard({ tripId, vehicleId, onClose }: VehicleFocusCar
 
         <div className="min-w-0 flex-1">
           <p className="flex items-center gap-1.5 truncate text-sm font-bold tracking-tight">
-            <span className="truncate">{data?.headsign ?? 'Menet betöltése…'}</span>
+            <span className="truncate">
+              {data?.headsign ?? "Menet betöltése…"}
+            </span>
             {vehicle ? <LiveDot /> : null}
           </p>
 
@@ -100,8 +100,8 @@ export function VehicleFocusCard({ tripId, vehicleId, onClose }: VehicleFocusCar
             {speedKmh != null ? (
               <span
                 className={cn(
-                  'flex items-center gap-1 font-mono text-xs font-semibold tabular-nums',
-                  moving ? 'text-foreground' : 'text-muted-foreground'
+                  "flex items-center gap-1 font-mono text-xs font-semibold tabular-nums",
+                  moving ? "text-foreground" : "text-muted-foreground",
                 )}
               >
                 <Gauge aria-hidden className="h-3.5 w-3.5" />
@@ -111,7 +111,7 @@ export function VehicleFocusCard({ tripId, vehicleId, onClose }: VehicleFocusCar
 
             <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
               <Navigation aria-hidden className="h-3 w-3 text-primary" />
-              {lost ? 'A jármű kiesett a jelentésből' : 'A térkép követi'}
+              {lost ? "A jármű kiesett a jelentésből" : "A térkép követi"}
             </span>
           </div>
         </div>
@@ -127,5 +127,5 @@ export function VehicleFocusCard({ tripId, vehicleId, onClose }: VehicleFocusCar
         </Button>
       </div>
     </motion.aside>
-  )
+  );
 }

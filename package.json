@@ -11,5 +11,8 @@
     "build:hub": "cd hub && bun run build",
     "build:backend": "cd backend && bun run build",
     "build": "bun run build:frontend && bun run build:hub && bun run build:backend"
+  },
+  "dependencies": {
+    "typescript": "^7.0.2"
   }
 }

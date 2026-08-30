@@ -1,5 +1,4 @@
-/** A rendszerpult (hub) Vite-portja. */
-const HUB_PORT = '5174'
+const HUB_PORT = "5174";
 
 /**
  * A rendszerpult címe ugyanazon a gépen, ahonnan az oldal betöltődött.
@@ -10,7 +9,7 @@ const HUB_PORT = '5174'
  * port cserélődik.
  */
 export function hubUrl(): string {
-  if (typeof window === 'undefined') return `http://localhost:${HUB_PORT}`
-  const { protocol, hostname } = window.location
-  return `${protocol}//${hostname}:${HUB_PORT}`
+  if (typeof window === "undefined") return `http://localhost:${HUB_PORT}`;
+  const { protocol, hostname } = window.location;
+  return `${protocol}//${hostname}:${HUB_PORT}`;
 }

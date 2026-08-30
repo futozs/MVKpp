@@ -1,119 +1,121 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
-import L from 'leaflet'
-import { Crosshair, LocateFixed, Plus, Search, SlidersHorizontal, X } from 'lucide-react'
-import type { FilterState, LiveVehicle, Route, Stop } from '@/types'
-import { api } from '@/services/api'
-import { RouteChips } from '@/components/fleet/RouteChips'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { RouteTile } from '@/components/transit/RouteTile'
-import { LiveDot } from '@/components/transit/LiveDot'
-import { useGeolocation } from '@/hooks/useGeolocation'
-import { distanceKm } from '@/lib/geo'
-import { token } from '@/lib/theme'
-import { cn } from '@/lib/utils'
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import L from "leaflet";
+import {
+  Crosshair,
+  LocateFixed,
+  Plus,
+  Search,
+  SlidersHorizontal,
+  X,
+} from "lucide-react";
+import type { FilterState, LiveVehicle, Route, Stop } from "@/types";
+import { api } from "@/services/api";
+import { RouteChips } from "@/components/fleet/RouteChips";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { RouteTile } from "@/components/transit/RouteTile";
+import { LiveDot } from "@/components/transit/LiveDot";
+import { useGeolocation } from "@/hooks/useGeolocation";
+import { distanceKm } from "@/lib/geo";
+import { token } from "@/lib/theme";
+import { cn } from "@/lib/utils";
 
 export interface TileLayerOption {
-  id: string
-  name: string
-  note: string
-  url: string
-  /** Utcanevek külön rétegen (az Esri alaptérképek felirat nélkül jönnek). */
-  labelsUrl?: string
-  attribution: string
-  /** Ameddig a szolgáltató valódi csempét ad; efölött Leaflet nagyítja fel. */
-  maxNativeZoom: number
-  /** Előnézeti szín a választóban. */
-  swatch: string
+  id: string;
+  name: string;
+  note: string;
+  url: string;
+  labelsUrl?: string;
+  attribution: string;
+  maxNativeZoom: number;
+  swatch: string;
 }
 
-/**
- * Alaptérképek.
- *
- * Kizárólag olyan szolgáltatók, amelyek API-kulcs nélkül, ingyenesen adnak
- * csempét — mindegyik le van ellenőrizve. A Carto sötét/világos csempéi
- * szándékosan hiányoznak: ma már kulcsot kérnek, és kulcs nélkül csak egy
- * „API KEY REQUIRED” vízjelet adnak vissza.
- */
 export const TILE_LAYERS: TileLayerOption[] = [
   {
-    id: 'osm',
-    name: 'OpenStreetMap',
-    note: 'A klasszikus utcatérkép, legtöbb részlettel',
-    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    id: "osm",
+    name: "OpenStreetMap",
+    note: "A klasszikus utcatérkép, legtöbb részlettel",
+    url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
     attribution:
       '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> közreműködők',
     maxNativeZoom: 19,
-    swatch: '#E8E0D8',
+    swatch: "#E8E0D8",
   },
   {
-    id: 'dark',
-    name: 'Sötét',
-    note: 'Esri Dark Gray — a járatszínek ezen ütnek ki legjobban',
-    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+    id: "dark",
+    name: "Sötét",
+    note: "Esri Dark Gray — a járatszínek ezen ütnek ki legjobban",
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
     labelsUrl:
-      'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
-    attribution: '&copy; <a href="https://www.esri.com/">Esri</a>, HERE, Garmin, &copy; OpenStreetMap',
+      "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
+    attribution:
+      '&copy; <a href="https://www.esri.com/">Esri</a>, HERE, Garmin, &copy; OpenStreetMap',
     maxNativeZoom: 16,
-    swatch: '#2B2B2B',
+    swatch: "#2B2B2B",
   },
   {
-    id: 'light',
-    name: 'Világos',
-    note: 'Esri Light Gray — visszafogott, nappali használatra',
-    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+    id: "light",
+    name: "Világos",
+    note: "Esri Light Gray — visszafogott, nappali használatra",
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
     labelsUrl:
-      'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
-    attribution: '&copy; <a href="https://www.esri.com/">Esri</a>, HERE, Garmin, &copy; OpenStreetMap',
+      "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
+    attribution:
+      '&copy; <a href="https://www.esri.com/">Esri</a>, HERE, Garmin, &copy; OpenStreetMap',
     maxNativeZoom: 16,
-    swatch: '#D9D9D6',
+    swatch: "#D9D9D6",
   },
   {
-    id: 'satellite',
-    name: 'Műhold',
-    note: 'Esri World Imagery, utcanevekkel',
-    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    id: "satellite",
+    name: "Műhold",
+    note: "Esri World Imagery, utcanevekkel",
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
     labelsUrl:
-      'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+      "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
     attribution:
       '&copy; <a href="https://www.esri.com/">Esri</a>, Maxar, Earthstar Geographics',
     maxNativeZoom: 19,
-    swatch: '#3F5B3C',
+    swatch: "#3F5B3C",
   },
   {
-    id: 'topo',
-    name: 'Domborzat',
-    note: 'OpenTopoMap — szintvonalakkal',
-    url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+    id: "topo",
+    name: "Domborzat",
+    note: "OpenTopoMap — szintvonalakkal",
+    url: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
     attribution:
       'Csempe: <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA), adat: &copy; OpenStreetMap',
     maxNativeZoom: 17,
-    swatch: '#CBD3B0',
+    swatch: "#CBD3B0",
   },
-]
+];
 
-const MAX_WATCHED = 12
+const MAX_WATCHED = 12;
 
 interface TransitMapProps {
-  stops: Stop[]
-  routes: Record<string, Route>
-  vehicles: LiveVehicle[]
-  filters: FilterState
-  setFilters: React.Dispatch<React.SetStateAction<FilterState>>
-  onClearFilters: () => void
-  onSelectStop: (stopId: string) => void
-  focusTripId: string | null
-  focusVehicleId: string | null
-  onExitFocus: () => void
-  onFocusTrip: (tripId: string, vehicleId?: string) => void
-  tileLayerId: string
-  selectedStopId: string | null
-  monitoredStopIds: string[]
-  onToggleMonitorStop: (stopId: string) => void
+  stops: Stop[];
+  routes: Record<string, Route>;
+  vehicles: LiveVehicle[];
+  filters: FilterState;
+  setFilters: React.Dispatch<React.SetStateAction<FilterState>>;
+  onClearFilters: () => void;
+  onSelectStop: (stopId: string) => void;
+  focusTripId: string | null;
+  focusVehicleId: string | null;
+  onExitFocus: () => void;
+  onFocusTrip: (tripId: string, vehicleId?: string) => void;
+  tileLayerId: string;
+  selectedStopId: string | null;
+  monitoredStopIds: string[];
+  onToggleMonitorStop: (stopId: string) => void;
 }
 
 export function TransitMap({
@@ -133,102 +135,89 @@ export function TransitMap({
   monitoredStopIds,
   onToggleMonitorStop,
 }: TransitMapProps) {
-  const mapContainerRef = useRef<HTMLDivElement>(null)
-  const mapRef = useRef<L.Map | null>(null)
-  const tileLayerRef = useRef<L.TileLayer | null>(null)
-  const labelLayerRef = useRef<L.TileLayer | null>(null)
-  const stopLayerRef = useRef<L.LayerGroup | null>(null)
-  const busLayerRef = useRef<L.LayerGroup | null>(null)
-  const routeLayerRef = useRef<L.LayerGroup | null>(null)
-  const focusLayerRef = useRef<L.LayerGroup | null>(null)
-  const geoCacheRef = useRef<Record<string, [number, number][][]>>({})
-  const lastFocusKeyRef = useRef<string>('')
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const tileLayerRef = useRef<L.TileLayer | null>(null);
+  const labelLayerRef = useRef<L.TileLayer | null>(null);
+  const stopLayerRef = useRef<L.LayerGroup | null>(null);
+  const busLayerRef = useRef<L.LayerGroup | null>(null);
+  const routeLayerRef = useRef<L.LayerGroup | null>(null);
+  const focusLayerRef = useRef<L.LayerGroup | null>(null);
+  const geoCacheRef = useRef<Record<string, [number, number][][]>>({});
+  const lastFocusKeyRef = useRef<string>("");
 
-  /** Mobilon az oldalsáv rácsúszik a térképre; asztali nézetben mindig látszik. */
-  const [isPanelOpen, setPanelOpen] = useState(false)
-  const geo = useGeolocation()
-  const geoLayerRef = useRef<L.LayerGroup | null>(null)
-  const [stopQuery, setStopQuery] = useState('')
-  const [typedId, setTypedId] = useState('')
-
-  /* ---------------------------------------------------------------- térkép */
+  const [isPanelOpen, setPanelOpen] = useState(false);
+  const geo = useGeolocation();
+  const geoLayerRef = useRef<L.LayerGroup | null>(null);
+  const [stopQuery, setStopQuery] = useState("");
+  const [typedId, setTypedId] = useState("");
 
   useEffect(() => {
-    if (!mapContainerRef.current || mapRef.current) return
+    if (!mapContainerRef.current || mapRef.current) return;
 
     const map = L.map(mapContainerRef.current, {
-      // A saját helyén a bal felső sarokban ütközne a mobil „Szűrés” gombbal.
       zoomControl: false,
-      // Saját, nem publikus használatra készül, ezért a csempeszolgáltatók
-      // forráshivatkozó sávja nincs kirakva.
       attributionControl: false,
       preferCanvas: true,
       center: [48.104, 20.79],
       zoom: 13,
-    })
-    L.control.zoom({ position: 'bottomright' }).addTo(map)
+    });
+    L.control.zoom({ position: "bottomright" }).addTo(map);
 
-    const initial = TILE_LAYERS.find((l) => l.id === tileLayerId) || TILE_LAYERS[0]
+    const initial =
+      TILE_LAYERS.find((l) => l.id === tileLayerId) || TILE_LAYERS[0];
     tileLayerRef.current = L.tileLayer(initial.url, {
       maxZoom: 19,
       maxNativeZoom: initial.maxNativeZoom,
-      // Retina kijelzőn (telefon) negyed méretű csempéket kér eggyel nagyobb
-      // zoomról — enélkül a térkép felnagyított, pixeles képként látszik.
       detectRetina: true,
       attribution: initial.attribution,
-    }).addTo(map)
+    }).addTo(map);
     if (initial.labelsUrl) {
       labelLayerRef.current = L.tileLayer(initial.labelsUrl, {
         maxZoom: 19,
         maxNativeZoom: initial.maxNativeZoom,
         detectRetina: true,
-        pane: 'shadowPane',
-      }).addTo(map)
+        pane: "shadowPane",
+      }).addTo(map);
     }
 
-    routeLayerRef.current = L.layerGroup().addTo(map)
-    stopLayerRef.current = L.layerGroup().addTo(map)
-    busLayerRef.current = L.layerGroup().addTo(map)
-    focusLayerRef.current = L.layerGroup().addTo(map)
-    geoLayerRef.current = L.layerGroup().addTo(map)
-    mapRef.current = map
+    routeLayerRef.current = L.layerGroup().addTo(map);
+    stopLayerRef.current = L.layerGroup().addTo(map);
+    busLayerRef.current = L.layerGroup().addTo(map);
+    focusLayerRef.current = L.layerGroup().addTo(map);
+    geoLayerRef.current = L.layerGroup().addTo(map);
+    mapRef.current = map;
 
-    /*
-     * Böngésző-visszaállítás után (bfcache, háttérből előhozás, elforgatás)
-     * a Leaflet a régi konténerméretet hiszi, és szürke sávokkal vagy
-     * hiányzó csempékkel jön vissza. Az újraméretezés helyrerakja anélkül,
-     * hogy az egész oldalt újra kellene tölteni.
-     */
     const revalidateSize = () => {
-      if (document.visibilityState === 'visible') map.invalidateSize()
-    }
-    document.addEventListener('visibilitychange', revalidateSize)
-    window.addEventListener('pageshow', revalidateSize)
-    window.addEventListener('orientationchange', revalidateSize)
+      if (document.visibilityState === "visible") map.invalidateSize();
+    };
+    document.addEventListener("visibilitychange", revalidateSize);
+    window.addEventListener("pageshow", revalidateSize);
+    window.addEventListener("orientationchange", revalidateSize);
 
-    const observer = new ResizeObserver(() => map.invalidateSize())
-    observer.observe(mapContainerRef.current)
+    const observer = new ResizeObserver(() => map.invalidateSize());
+    observer.observe(mapContainerRef.current);
 
     return () => {
-      document.removeEventListener('visibilitychange', revalidateSize)
-      window.removeEventListener('pageshow', revalidateSize)
-      window.removeEventListener('orientationchange', revalidateSize)
-      observer.disconnect()
-      map.remove()
-      mapRef.current = null
-    }
-  }, [])
+      document.removeEventListener("visibilitychange", revalidateSize);
+      window.removeEventListener("pageshow", revalidateSize);
+      window.removeEventListener("orientationchange", revalidateSize);
+      observer.disconnect();
+      map.remove();
+      mapRef.current = null;
+    };
+  }, []);
 
-  // Alaptérkép cseréje a választóból.
   useEffect(() => {
-    const map = mapRef.current
-    if (!map) return
-    const conf = TILE_LAYERS.find((l) => l.id === tileLayerId) || TILE_LAYERS[0]
+    const map = mapRef.current;
+    if (!map) return;
+    const conf =
+      TILE_LAYERS.find((l) => l.id === tileLayerId) || TILE_LAYERS[0];
 
-    if (tileLayerRef.current) map.removeLayer(tileLayerRef.current)
+    if (tileLayerRef.current) map.removeLayer(tileLayerRef.current);
     if (labelLayerRef.current) {
-      map.removeLayer(labelLayerRef.current)
-      labelLayerRef.current = null
+      map.removeLayer(labelLayerRef.current);
+      labelLayerRef.current = null;
     }
 
     tileLayerRef.current = L.tileLayer(conf.url, {
@@ -236,104 +225,99 @@ export function TransitMap({
       maxNativeZoom: conf.maxNativeZoom,
       detectRetina: true,
       attribution: conf.attribution,
-    }).addTo(map)
+    }).addTo(map);
 
     if (conf.labelsUrl) {
       labelLayerRef.current = L.tileLayer(conf.labelsUrl, {
         maxZoom: 19,
         maxNativeZoom: conf.maxNativeZoom,
         detectRetina: true,
-        pane: 'shadowPane',
-      }).addTo(map)
+        pane: "shadowPane",
+      }).addTo(map);
     }
-  }, [tileLayerId])
+  }, [tileLayerId]);
 
-  /**
-   * Jármű-jelölő: lekerekített járatcsempe erős vetett árnyékkal, alatta a
-   * rendszám külön, jól olvasható címkén. A formát az index.css adja.
-   */
   const createVehicleIcon = (
     routeShort: string,
     color: string,
     textColor: string,
     tracked: boolean,
-    idText: string | null
+    idText: string | null,
   ) =>
     L.divIcon({
-      className: '',
+      className: "",
       iconSize: [27, 19],
       iconAnchor: [13, 10],
       html: `
-        <div class="mvk-vehicle ${tracked ? 'tracked' : ''}">
+        <div class="mvk-vehicle ${tracked ? "tracked" : ""}">
           <div class="tile" style="background:#${color};color:#${textColor}">${routeShort}</div>
-          ${idText ? `<div class="vid">${idText}</div>` : ''}
+          ${idText ? `<div class="vid">${idText}</div>` : ""}
         </div>
       `,
-    })
+    });
 
   const getVisibleVehicles = () => {
-    const q = filters.vq.trim().toLowerCase()
-    const watchList = filters.watch.map((w) => w.toLowerCase())
+    const q = filters.vq.trim().toLowerCase();
+    const watchList = filters.watch.map((w) => w.toLowerCase());
 
     if (watchList.length > 0 || q) {
-      const targets = [...watchList]
-      if (q && !targets.includes(q)) targets.push(q)
+      const targets = [...watchList];
+      if (q && !targets.includes(q)) targets.push(q);
       return vehicles.filter((v) => {
-        const vid = String(v.id || '').toLowerCase()
-        const label = String(v.label || '').toLowerCase()
-        return targets.some((t) => vid.includes(t) || label.includes(t))
-      })
+        const vid = String(v.id || "").toLowerCase();
+        const label = String(v.label || "").toLowerCase();
+        return targets.some((t) => vid.includes(t) || label.includes(t));
+      });
     }
 
-    let list = vehicles.slice()
+    let list = vehicles.slice();
 
-    if (filters.type !== 'all') {
+    if (filters.type !== "all") {
       list = list.filter((v) => {
-        const r = routes[v.routeId]
-        const isTram = r?.type === '900' || v.label === 'TRAM'
-        return filters.type === 'tram' ? isTram : !isTram
-      })
+        const r = routes[v.routeId];
+        const isTram = r?.type === "900" || v.label === "TRAM";
+        return filters.type === "tram" ? isTram : !isTram;
+      });
     }
 
     if (filters.routes.length > 0) {
-      const routeSet = new Set(filters.routes)
-      list = list.filter((v) => routeSet.has(v.routeId))
+      const routeSet = new Set(filters.routes);
+      list = list.filter((v) => routeSet.has(v.routeId));
     }
 
-    // Mozgásállapot. A 0,5 m/s küszöb kiszűri a GPS-remegést álló járműnél.
-    if (filters.speed === 'moving') list = list.filter((v) => (v.speed || 0) > 0.5)
-    else if (filters.speed === 'idle') list = list.filter((v) => (v.speed || 0) <= 0.5)
+    if (filters.speed === "moving")
+      list = list.filter((v) => (v.speed || 0) > 0.5);
+    else if (filters.speed === "idle")
+      list = list.filter((v) => (v.speed || 0) <= 0.5);
 
-    // Elavult jelentés: a régen frissült pozíció félrevezető.
     if (filters.maxAgeSec != null) {
-      const now = Date.now() / 1000
-      list = list.filter((v) => v.timestamp != null && now - v.timestamp <= filters.maxAgeSec!)
+      const now = Date.now() / 1000;
+      list = list.filter(
+        (v) => v.timestamp != null && now - v.timestamp <= filters.maxAgeSec!,
+      );
     }
 
-    // Csak a közelemben — a GPS-helyzet köré húzott sugár.
     if (filters.nearMeKm != null && geo.position) {
-      const { lat, lon } = geo.position
+      const { lat, lon } = geo.position;
       list = list.filter(
         (v) =>
           v.lat != null &&
           v.lon != null &&
-          distanceKm(lat, lon, v.lat, v.lon) <= filters.nearMeKm!
-      )
+          distanceKm(lat, lon, v.lat, v.lon) <= filters.nearMeKm!,
+      );
     }
 
-    return list
-  }
+    return list;
+  };
 
-  // Saját pozíció: pont + pontossági kör. Kék, hogy sose keveredjen össze a
-  // járatszínekkel vagy az „élő adat” zölddel.
   useEffect(() => {
-    const layer = geoLayerRef.current
-    if (!layer) return
-    layer.clearLayers()
-    if (!geo.position) return
+    const layer = geoLayerRef.current;
+    if (!layer) return;
+    layer.clearLayers();
+    if (!geo.position) return;
 
-    const { lat, lon, accuracyM } = geo.position
-    const mine = token('--early')
+    const { lat, lon, accuracyM } = geo.position;
+    const mine = token("--early");
 
     L.circle([lat, lon], {
       radius: Math.max(accuracyM, 12),
@@ -342,102 +326,93 @@ export function TransitMap({
       opacity: 0.5,
       fillColor: mine,
       fillOpacity: 0.12,
-    }).addTo(layer)
+    }).addTo(layer);
 
     L.circleMarker([lat, lon], {
       radius: 7,
-      color: token('--background'),
+      color: token("--background"),
       weight: 3,
       fillColor: mine,
       fillOpacity: 1,
     })
-      .bindTooltip('Itt vagy', { direction: 'top', offset: [0, -8] })
-      .addTo(layer)
-  }, [geo.position])
+      .bindTooltip("Itt vagy", { direction: "top", offset: [0, -8] })
+      .addTo(layer);
+  }, [geo.position]);
 
-  /**
-   * GPS gomb. Első koppintásra engedélyt kér, utána a helyzetedre és a
-   * körülötted lévő megállókra közelít — hogy egy mozdulattal rá lehessen
-   * koppintani a legközelebbire.
-   */
   const handleLocate = () => {
     if (!geo.position) {
-      geo.start()
-      return
+      geo.start();
+      return;
     }
-    const map = mapRef.current
-    if (!map) return
+    const map = mapRef.current;
+    if (!map) return;
 
-    const { lat, lon } = geo.position
+    const { lat, lon } = geo.position;
     const nearby = stops
       .map((s) => ({ s, d: distanceKm(lat, lon, s.lat, s.lon) }))
       .filter((x) => x.d <= 0.6)
       .sort((a, b) => a.d - b.d)
-      .slice(0, 8)
+      .slice(0, 8);
 
     if (nearby.length > 0) {
-      // A saját pozíció és a legközelebbi megállók együtt férjenek a képbe.
       const points: [number, number][] = [
         [lat, lon],
         ...nearby.map((x) => [x.s.lat, x.s.lon] as [number, number]),
-      ]
-      map.fitBounds(points, { padding: [70, 70], maxZoom: 17 })
+      ];
+      map.fitBounds(points, { padding: [70, 70], maxZoom: 17 });
     } else {
-      map.flyTo([lat, lon], 16, { duration: 0.6 })
+      map.flyTo([lat, lon], 16, { duration: 0.6 });
     }
-  }
+  };
 
-  // Járatnyomvonalak
   useEffect(() => {
-    if (!mapRef.current || !routeLayerRef.current) return
-    const layer = routeLayerRef.current
-    layer.clearLayers()
-    if (!filters.shape || filters.routes.length === 0) return
+    if (!mapRef.current || !routeLayerRef.current) return;
+    const layer = routeLayerRef.current;
+    layer.clearLayers();
+    if (!filters.shape || filters.routes.length === 0) return;
 
     const render = async () => {
-      const missing = filters.routes.filter((id) => !geoCacheRef.current[id])
+      const missing = filters.routes.filter((id) => !geoCacheRef.current[id]);
       if (missing.length > 0) {
         try {
-          const res = await api.getRouteGeo(missing)
+          const res = await api.getRouteGeo(missing);
           res.routes.forEach((r) => {
-            geoCacheRef.current[r.id] = r.shapes
-          })
-        } catch {
-          /* a nyomvonal hiánya nem állítja meg a térképet */
-        }
+            geoCacheRef.current[r.id] = r.shapes;
+          });
+        } catch {}
       }
 
-      const halo = token('--background')
+      const halo = token("--background");
       filters.routes.forEach((id) => {
-        const shapes = geoCacheRef.current[id]
-        if (!shapes) return
-        const color = `#${routes[id]?.color || '1FB574'}`
+        const shapes = geoCacheRef.current[id];
+        if (!shapes) return;
+        const color = `#${routes[id]?.color || "1FB574"}`;
         shapes.forEach((line) => {
-          L.polyline(line, { color: halo, weight: 6, opacity: 0.55 }).addTo(layer)
-          L.polyline(line, { color, weight: 3, opacity: 0.95 }).addTo(layer)
-        })
-      })
-    }
+          L.polyline(line, { color: halo, weight: 6, opacity: 0.55 }).addTo(
+            layer,
+          );
+          L.polyline(line, { color, weight: 3, opacity: 0.95 }).addTo(layer);
+        });
+      });
+    };
 
-    render()
-  }, [filters.routes, filters.shape, routes])
+    render();
+  }, [filters.routes, filters.shape, routes]);
 
-  // Megállópontok. A megálló nem élő adat, ezért semleges — zöldet csak
-  // az kap, amit épp figyelsz.
   useEffect(() => {
-    if (!mapRef.current || !stopLayerRef.current) return
-    const layer = stopLayerRef.current
-    layer.clearLayers()
-    if (!filters.stops || focusTripId) return
+    if (!mapRef.current || !stopLayerRef.current) return;
+    const layer = stopLayerRef.current;
+    layer.clearLayers();
+    if (!filters.stops || focusTripId) return;
 
-    const neutral = token('--muted-foreground')
-    const brand = token('--primary')
-    const outline = token('--background')
-    const watched = new Set(monitoredStopIds)
+    const neutral = token("--muted-foreground");
+    const brand = token("--primary");
+    const outline = token("--background");
+    const watched = new Set(monitoredStopIds);
 
     stops.forEach((s) => {
-      const isWatched = watched.has(s.id)
-      const isSelected = selectedStopId === s.id
+      const isWatched = watched.has(s.id);
+      const isSelected = selectedStopId === s.id;
 
       const marker = L.circleMarker([s.lat, s.lon], {
         radius: isWatched || isSelected ? 6 : 3.5,
@@ -445,53 +420,62 @@ export function TransitMap({
         weight: 1.5,
         fillColor: isWatched || isSelected ? brand : neutral,
         fillOpacity: 1,
-      })
+      });
 
       marker.bindTooltip(
         `<strong>${s.name}</strong><br><span style="opacity:.65">${s.code || s.id}</span>`,
-        { direction: 'top', offset: [0, -4] }
-      )
-      marker.on('click', () => onSelectStop(s.id))
-      marker.addTo(layer)
-    })
-  }, [stops, filters.stops, focusTripId, onSelectStop, monitoredStopIds, selectedStopId])
+        { direction: "top", offset: [0, -4] },
+      );
+      marker.on("click", () => onSelectStop(s.id));
+      marker.addTo(layer);
+    });
+  }, [
+    stops,
+    filters.stops,
+    focusTripId,
+    onSelectStop,
+    monitoredStopIds,
+    selectedStopId,
+  ]);
 
-  // Járművek
   useEffect(() => {
-    if (!mapRef.current || !busLayerRef.current) return
-    const layer = busLayerRef.current
-    layer.clearLayers()
-    if (focusTripId) return
+    if (!mapRef.current || !busLayerRef.current) return;
+    const layer = busLayerRef.current;
+    layer.clearLayers();
+    if (focusTripId) return;
 
-    const visible = getVisibleVehicles()
-    const watchSet = new Set(filters.watch.map((w) => w.toLowerCase()))
-    const activeQ = filters.vq.trim().toLowerCase()
+    const visible = getVisibleVehicles();
+    const watchSet = new Set(filters.watch.map((w) => w.toLowerCase()));
+    const activeQ = filters.vq.trim().toLowerCase();
 
     visible.forEach((v) => {
-      if (v.lat == null || v.lon == null) return
+      if (v.lat == null || v.lon == null) return;
 
       const tracked =
-        watchSet.has(v.id.toLowerCase()) || (activeQ ? v.id.toLowerCase().includes(activeQ) : false)
+        watchSet.has(v.id.toLowerCase()) ||
+        (activeQ ? v.id.toLowerCase().includes(activeQ) : false);
 
       const marker = L.marker([v.lat, v.lon], {
         icon: createVehicleIcon(
-          v.routeShort || '?',
-          v.routeColor || '1FB574',
-          v.routeText || 'FFFFFF',
+          v.routeShort || "?",
+          v.routeColor || "1FB574",
+          v.routeText || "FFFFFF",
           tracked,
-          filters.labels || tracked ? v.id : null
+          filters.labels || tracked ? v.id : null,
         ),
         zIndexOffset: tracked ? 1000 : 500,
-      })
+      });
 
-      const speed = v.speed != null ? `${Math.round(v.speed * 3.6)} km/h` : '—'
-      const age = v.timestamp ? Math.max(0, Math.round(Date.now() / 1000 - v.timestamp)) : null
+      const speed = v.speed != null ? `${Math.round(v.speed * 3.6)} km/h` : "—";
+      const age = v.timestamp
+        ? Math.max(0, Math.round(Date.now() / 1000 - v.timestamp))
+        : null;
 
       marker.bindPopup(`
         <div style="min-width:210px">
           <div style="display:flex;align-items:center;gap:9px;margin-bottom:10px">
-            <span style="display:inline-flex;align-items:center;justify-content:center;min-width:40px;height:26px;padding:0 8px;border-radius:8px;font-weight:800;font-size:14px;background:#${v.routeColor || '1FB574'};color:#${v.routeText || 'FFFFFF'}">${v.routeShort}</span>
-            <strong style="font-size:13px">${v.headsign || 'Járat'}</strong>
+            <span style="display:inline-flex;align-items:center;justify-content:center;min-width:40px;height:26px;padding:0 8px;border-radius:8px;font-weight:800;font-size:14px;background:#${v.routeColor || "1FB574"};color:#${v.routeText || "FFFFFF"}">${v.routeShort}</span>
+            <strong style="font-size:13px">${v.headsign || "Járat"}</strong>
           </div>
           <div style="border-radius:10px;background:hsl(var(--primary)/0.09);border:1px solid hsl(var(--primary)/0.25);padding:9px 11px;margin-bottom:8px">
             <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:hsl(var(--muted-foreground))">Rendszám</div>
@@ -499,7 +483,7 @@ export function TransitMap({
           </div>
           <div style="font-family:var(--font-mono);font-size:12px;color:hsl(var(--muted-foreground));display:grid;gap:3px">
             <div>Sebesség <strong style="color:hsl(var(--foreground))">${speed}</strong></div>
-            ${age != null ? `<div>Adat kora <strong style="color:hsl(var(--foreground))">${age} mp</strong></div>` : ''}
+            ${age != null ? `<div>Adat kora <strong style="color:hsl(var(--foreground))">${age} mp</strong></div>` : ""}
           </div>
           ${
             v.tripId
@@ -507,110 +491,131 @@ export function TransitMap({
                    <a href="#" data-trip="${v.tripId}" data-veh="${v.id}"
                       style="display:block;text-align:center;padding:7px;border-radius:8px;background:hsl(var(--primary));color:hsl(var(--primary-foreground));font-size:12px;font-weight:700;text-decoration:none">Követés a térképen</a>
                  </div>`
-              : ''
+              : ""
           }
         </div>
-      `)
+      `);
 
-      marker.on('popupopen', (e) => {
-        const link = e.popup.getElement()?.querySelector('a[data-trip]')
-        link?.addEventListener('click', (ev) => {
-          ev.preventDefault()
-          const tId = link.getAttribute('data-trip')
-          const vId = link.getAttribute('data-veh')
-          if (tId) onFocusTrip(tId, vId || undefined)
-        })
-      })
+      marker.on("popupopen", (e) => {
+        const link = e.popup.getElement()?.querySelector("a[data-trip]");
+        link?.addEventListener("click", (ev) => {
+          ev.preventDefault();
+          const tId = link.getAttribute("data-trip");
+          const vId = link.getAttribute("data-veh");
+          if (tId) onFocusTrip(tId, vId || undefined);
+        });
+      });
 
-      marker.addTo(layer)
-    })
+      marker.addTo(layer);
+    });
 
     if (filters.watch.length > 0 || activeQ) {
-      const key = `${filters.watch.join(',')}|${activeQ}`
-      if (visible.length > 0 && (filters.follow || key !== lastFocusKeyRef.current)) {
+      const key = `${filters.watch.join(",")}|${activeQ}`;
+      if (
+        visible.length > 0 &&
+        (filters.follow || key !== lastFocusKeyRef.current)
+      ) {
         const points = visible
           .filter((v) => v.lat != null && v.lon != null)
-          .map((v) => [v.lat!, v.lon!] as [number, number])
+          .map((v) => [v.lat!, v.lon!] as [number, number]);
 
         if (points.length === 1 && mapRef.current) {
-          mapRef.current.flyTo(points[0], Math.max(mapRef.current.getZoom(), 15), { duration: 0.6 })
+          mapRef.current.flyTo(
+            points[0],
+            Math.max(mapRef.current.getZoom(), 15),
+            { duration: 0.6 },
+          );
         } else if (points.length > 1 && mapRef.current) {
-          mapRef.current.fitBounds(points, { padding: [60, 60], maxZoom: 16 })
+          mapRef.current.fitBounds(points, { padding: [60, 60], maxZoom: 16 });
         }
       }
-      lastFocusKeyRef.current = key
+      lastFocusKeyRef.current = key;
     }
-  }, [vehicles, filters, focusTripId, routes, onFocusTrip])
+  }, [vehicles, filters, focusTripId, routes, onFocusTrip]);
 
-  // Menetkövetés
   useEffect(() => {
-    if (!mapRef.current || !focusLayerRef.current) return
-    const layer = focusLayerRef.current
-    layer.clearLayers()
-    if (!focusTripId) return
+    if (!mapRef.current || !focusLayerRef.current) return;
+    const layer = focusLayerRef.current;
+    layer.clearLayers();
+    if (!focusTripId) return;
 
-    let alive = true
+    let alive = true;
 
     const draw = async (fit: boolean) => {
       try {
-        const res = await api.getTripPath(focusTripId, focusVehicleId || undefined)
-        if (!alive) return
+        const res = await api.getTripPath(
+          focusTripId,
+          focusVehicleId || undefined,
+        );
+        if (!alive) return;
 
-        layer.clearLayers()
-        const color = `#${res.color || '1FB574'}`
-        const halo = token('--background')
-        const bounds: [number, number][] = []
+        layer.clearLayers();
+        const color = `#${res.color || "1FB574"}`;
+        const halo = token("--background");
+        const bounds: [number, number][] = [];
 
         if (res.shape?.length) {
-          L.polyline(res.shape, { color: halo, weight: 8, opacity: 0.6 }).addTo(layer)
-          L.polyline(res.shape, { color, weight: 4, opacity: 0.95 }).addTo(layer)
-          res.shape.forEach((pt) => bounds.push(pt))
+          L.polyline(res.shape, { color: halo, weight: 8, opacity: 0.6 }).addTo(
+            layer,
+          );
+          L.polyline(res.shape, { color, weight: 4, opacity: 0.95 }).addTo(
+            layer,
+          );
+          res.shape.forEach((pt) => bounds.push(pt));
         }
 
         if (res.vehicle?.lat != null && res.vehicle?.lon != null) {
           L.marker([res.vehicle.lat, res.vehicle.lon], {
-            icon: createVehicleIcon(res.route, res.color, res.text, true, res.vehicle.id),
+            icon: createVehicleIcon(
+              res.route,
+              res.color,
+              res.text,
+              true,
+              res.vehicle.id,
+            ),
             zIndexOffset: 1200,
-          }).addTo(layer)
+          }).addTo(layer);
 
-          bounds.push([res.vehicle.lat, res.vehicle.lon])
+          bounds.push([res.vehicle.lat, res.vehicle.lon]);
 
           if (fit && bounds.length && mapRef.current) {
-            mapRef.current.fitBounds(bounds, { padding: [60, 60], maxZoom: 16 })
+            mapRef.current.fitBounds(bounds, {
+              padding: [60, 60],
+              maxZoom: 16,
+            });
           } else if (mapRef.current) {
-            mapRef.current.flyTo([res.vehicle.lat, res.vehicle.lon], 15, { duration: 0.5 })
+            mapRef.current.flyTo([res.vehicle.lat, res.vehicle.lon], 15, {
+              duration: 0.5,
+            });
           }
         } else if (fit && bounds.length && mapRef.current) {
-          mapRef.current.fitBounds(bounds, { padding: [60, 60], maxZoom: 16 })
+          mapRef.current.fitBounds(bounds, { padding: [60, 60], maxZoom: 16 });
         }
-      } catch {
-        /* a menet eltűnhet a feedből; a sáv marad, a felhasználó kiléphet */
-      }
-    }
+      } catch {}
+    };
 
-    draw(true)
-    const timer = setInterval(() => draw(false), 5000)
+    draw(true);
+    const timer = setInterval(() => draw(false), 5000);
     return () => {
-      alive = false
-      clearInterval(timer)
-    }
-  }, [focusTripId, focusVehicleId])
-
-  /* --------------------------------------------------------------- vezérlés */
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [focusTripId, focusVehicleId]);
 
   const addWatch = (value?: string) => {
-    const target = (value ?? typedId).trim()
-    if (!target || filters.watch.length >= MAX_WATCHED) return
-    if (filters.watch.some((x) => x.toLowerCase() === target.toLowerCase())) return
-    setFilters((prev) => ({ ...prev, watch: [...prev.watch, target], vq: '' }))
-    setTypedId('')
-  }
+    const target = (value ?? typedId).trim();
+    if (!target || filters.watch.length >= MAX_WATCHED) return;
+    if (filters.watch.some((x) => x.toLowerCase() === target.toLowerCase()))
+      return;
+    setFilters((prev) => ({ ...prev, watch: [...prev.watch, target], vq: "" }));
+    setTypedId("");
+  };
 
   const removeWatch = (value: string) =>
     setFilters((prev) => ({
       ...prev,
       watch: prev.watch.filter((x) => x.toLowerCase() !== value.toLowerCase()),
-    }))
+    }));
 
   const toggleRoute = (routeId: string) =>
     setFilters((prev) => ({
@@ -618,85 +623,95 @@ export function TransitMap({
       routes: prev.routes.includes(routeId)
         ? prev.routes.filter((id) => id !== routeId)
         : [...prev.routes, routeId],
-    }))
+    }));
 
   const stopResults = useMemo(() => {
-    const q = stopQuery.trim().toLowerCase()
-    if (!q) return stops.slice(0, 60)
+    const q = stopQuery.trim().toLowerCase();
+    if (!q) return stops.slice(0, 60);
     return stops
       .filter(
         (s) =>
           s.name.toLowerCase().includes(q) ||
           (s.code && s.code.toLowerCase().includes(q)) ||
-          s.id.toLowerCase().includes(q)
+          s.id.toLowerCase().includes(q),
       )
-      .slice(0, 80)
-  }, [stops, stopQuery])
+      .slice(0, 80);
+  }, [stops, stopQuery]);
 
   const vehicleResults = useMemo(() => {
-    const list = getVisibleVehicles()
-    if (filters.sort === 'id') return list.sort((a, b) => a.id.localeCompare(b.id, 'hu'))
-    if (filters.sort === 'speed') return list.sort((a, b) => (b.speed || 0) - (a.speed || 0))
+    const list = getVisibleVehicles();
+    if (filters.sort === "id")
+      return list.sort((a, b) => a.id.localeCompare(b.id, "hu"));
+    if (filters.sort === "speed")
+      return list.sort((a, b) => (b.speed || 0) - (a.speed || 0));
     return list.sort(
-      (a, b) => a.routeShort.localeCompare(b.routeShort, 'hu') || a.id.localeCompare(b.id, 'hu')
-    )
-  }, [vehicles, filters, geo.position])
+      (a, b) =>
+        a.routeShort.localeCompare(b.routeShort, "hu") ||
+        a.id.localeCompare(b.id, "hu"),
+    );
+  }, [vehicles, filters, geo.position]);
 
   const flyToVehicle = (v: LiveVehicle) => {
     if (v.lat != null && v.lon != null && mapRef.current) {
-      mapRef.current.flyTo([v.lat, v.lon], 16, { duration: 0.5 })
+      mapRef.current.flyTo([v.lat, v.lon], 16, { duration: 0.5 });
     }
-  }
+  };
 
   const filterActive =
-    filters.vq.trim() !== '' ||
+    filters.vq.trim() !== "" ||
     filters.watch.length > 0 ||
     filters.routes.length > 0 ||
-    filters.type !== 'all' ||
-    filters.speed !== 'all' ||
+    filters.type !== "all" ||
+    filters.speed !== "all" ||
     filters.maxAgeSec != null ||
     filters.nearMeKm != null ||
-    !filters.stops
+    !filters.stops;
 
   const filterSummary = filters.watch.length
-    ? `${filters.watch.join(', ')} követése`
+    ? `${filters.watch.join(", ")} követése`
     : filters.routes.length
       ? `${filters.routes.length} járat · ${vehicleResults.length} jármű`
       : filters.nearMeKm != null
         ? `${filters.nearMeKm < 1 ? `${filters.nearMeKm * 1000} m` : `${filters.nearMeKm} km`} sugarú körben`
-        : filters.speed === 'moving'
-          ? 'Csak mozgó járművek'
-          : filters.speed === 'idle'
-            ? 'Csak álló járművek'
+        : filters.speed === "moving"
+          ? "Csak mozgó járművek"
+          : filters.speed === "idle"
+            ? "Csak álló járművek"
             : filters.maxAgeSec != null
               ? `Friss jelentés (${filters.maxAgeSec / 60} perc)`
-              : `Szűrés aktív · ${vehicleResults.length} jármű`
+              : `Szűrés aktív · ${vehicleResults.length} jármű`;
 
   const LAYER_TOGGLES = [
-    { key: 'stops', label: 'Megállók', description: 'Minden GTFS megállópont' },
-    { key: 'shape', label: 'Járatnyomvonal', description: 'A kiválasztott járatok útvonala' },
-    { key: 'labels', label: 'Rendszámok', description: 'Azonosító minden csempe alatt' },
-  ] as const
+    { key: "stops", label: "Megállók", description: "Minden GTFS megállópont" },
+    {
+      key: "shape",
+      label: "Járatnyomvonal",
+      description: "A kiválasztott járatok útvonala",
+    },
+    {
+      key: "labels",
+      label: "Rendszámok",
+      description: "Azonosító minden csempe alatt",
+    },
+  ] as const;
 
-  /** Meddig számít frissnek egy jármű-jelentés. */
   const AGE_OPTIONS: { value: number | null; label: string }[] = [
-    { value: null, label: 'Mindegy' },
-    { value: 60, label: '1 perc' },
-    { value: 180, label: '3 perc' },
-    { value: 600, label: '10 perc' },
-  ]
+    { value: null, label: "Mindegy" },
+    { value: 60, label: "1 perc" },
+    { value: 180, label: "3 perc" },
+    { value: 600, label: "10 perc" },
+  ];
 
-  /** Sugár a saját helyzetem körül. */
   const RADIUS_OPTIONS: { value: number | null; label: string }[] = [
-    { value: null, label: 'Nincs' },
-    { value: 0.5, label: '500 m' },
-    { value: 1.5, label: '1,5 km' },
-    { value: 5, label: '5 km' },
-  ]
+    { value: null, label: "Nincs" },
+    { value: 0.5, label: "500 m" },
+    { value: 1.5, label: "1,5 km" },
+    { value: 5, label: "5 km" },
+  ];
 
   return (
     <div className="relative flex h-full w-full min-w-0 flex-1 overflow-hidden">
-      {/* Mobil háttér: a nyitott panel mögé kattintva bezárul. */}
+      {}
       {isPanelOpen ? (
         <button
           type="button"
@@ -706,14 +721,14 @@ export function TransitMap({
         />
       ) : null}
 
-      {/* Oldalsáv */}
+      {}
       <Tabs
         defaultValue="filter"
         className={cn(
-          'absolute inset-y-0 left-0 z-drawer flex w-[86%] max-w-[340px] flex-col overflow-hidden',
-          'border-r border-border bg-card shadow-xl transition-transform duration-normal ease-out',
-          'md:static md:z-overlay md:w-[340px] md:max-w-none md:shrink-0 md:translate-x-0 md:shadow-none lg:w-[380px]',
-          isPanelOpen ? 'translate-x-0' : '-translate-x-full'
+          "absolute inset-y-0 left-0 z-drawer flex w-[86%] max-w-[340px] flex-col overflow-hidden",
+          "border-r border-border bg-card shadow-xl transition-transform duration-normal ease-out",
+          "md:static md:z-overlay md:w-[340px] md:max-w-none md:shrink-0 md:translate-x-0 md:shadow-none lg:w-[380px]",
+          isPanelOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
         <div className="shrink-0 border-b border-border p-2">
@@ -733,7 +748,7 @@ export function TransitMap({
           </TabsList>
         </div>
 
-        {/* Szűrés */}
+        {}
         <TabsContent
           value="filter"
           className="mt-0 min-h-0 flex-1 overflow-y-auto data-[state=inactive]:hidden focus-visible:outline-none"
@@ -754,10 +769,10 @@ export function TransitMap({
               <Input
                 value={typedId}
                 onChange={(e) => {
-                  setTypedId(e.target.value)
-                  setFilters((prev) => ({ ...prev, vq: e.target.value }))
+                  setTypedId(e.target.value);
+                  setFilters((prev) => ({ ...prev, vq: e.target.value }));
                 }}
-                onKeyDown={(e) => e.key === 'Enter' && addWatch()}
+                onKeyDown={(e) => e.key === "Enter" && addWatch()}
                 placeholder="Rendszám, pl. 1641"
                 aria-label="Jármű rendszáma"
                 className="h-9 font-mono tabular-nums"
@@ -766,7 +781,9 @@ export function TransitMap({
                 size="icon"
                 className="h-9 w-9 shrink-0"
                 onClick={() => addWatch()}
-                disabled={!typedId.trim() || filters.watch.length >= MAX_WATCHED}
+                disabled={
+                  !typedId.trim() || filters.watch.length >= MAX_WATCHED
+                }
                 aria-label="Jármű hozzáadása a követési listához"
               >
                 <Plus />
@@ -782,10 +799,10 @@ export function TransitMap({
                       onClick={() => removeWatch(id)}
                       aria-label={`${id} eltávolítása a követésből`}
                       className={cn(
-                        'inline-flex h-7 items-center gap-1.5 rounded-md border border-primary/35 bg-primary/12 px-2',
-                        'font-mono text-xs font-bold tabular-nums text-primary',
-                        'transition-colors duration-fast hover:border-destructive/50 hover:bg-destructive/12 hover:text-destructive',
-                        'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring'
+                        "inline-flex h-7 items-center gap-1.5 rounded-md border border-primary/35 bg-primary/12 px-2",
+                        "font-mono text-xs font-bold tabular-nums text-primary",
+                        "transition-colors duration-fast hover:border-destructive/50 hover:bg-destructive/12 hover:text-destructive",
+                        "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
                       )}
                     >
                       {id}
@@ -797,8 +814,13 @@ export function TransitMap({
             ) : null}
 
             <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 px-3 py-2.5">
-              <Label htmlFor="follow-toggle" className="cursor-pointer leading-snug">
-                <span className="block text-xs font-medium">Térkép kövesse a járművet</span>
+              <Label
+                htmlFor="follow-toggle"
+                className="cursor-pointer leading-snug"
+              >
+                <span className="block text-xs font-medium">
+                  Térkép kövesse a járművet
+                </span>
                 <span className="block text-[11px] font-normal text-muted-foreground">
                   Minden frissülésnél ráugrik
                 </span>
@@ -806,7 +828,9 @@ export function TransitMap({
               <Switch
                 id="follow-toggle"
                 checked={filters.follow}
-                onCheckedChange={(v) => setFilters((prev) => ({ ...prev, follow: v }))}
+                onCheckedChange={(v) =>
+                  setFilters((prev) => ({ ...prev, follow: v }))
+                }
               />
             </div>
           </section>
@@ -818,22 +842,24 @@ export function TransitMap({
             <div className="grid grid-cols-3 gap-1 rounded-lg border border-border bg-muted/60 p-1">
               {(
                 [
-                  { id: 'all', label: 'Mind' },
-                  { id: 'bus', label: 'Busz' },
-                  { id: 'tram', label: 'Villamos' },
+                  { id: "all", label: "Mind" },
+                  { id: "bus", label: "Busz" },
+                  { id: "tram", label: "Villamos" },
                 ] as const
               ).map((option) => (
                 <button
                   key={option.id}
                   type="button"
-                  onClick={() => setFilters((prev) => ({ ...prev, type: option.id }))}
+                  onClick={() =>
+                    setFilters((prev) => ({ ...prev, type: option.id }))
+                  }
                   aria-pressed={filters.type === option.id}
                   className={cn(
-                    'rounded-md py-1.5 text-xs font-semibold transition-all duration-fast',
-                    'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
+                    "rounded-md py-1.5 text-xs font-semibold transition-all duration-fast",
+                    "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
                     filters.type === option.id
-                      ? 'bg-primary text-primary-foreground shadow-sm'
-                      : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:bg-accent hover:text-foreground",
                   )}
                 >
                   {option.label}
@@ -849,22 +875,24 @@ export function TransitMap({
             <div className="grid grid-cols-3 gap-1 rounded-lg border border-border bg-muted/60 p-1">
               {(
                 [
-                  { id: 'all', label: 'Mind' },
-                  { id: 'moving', label: 'Mozgó' },
-                  { id: 'idle', label: 'Álló' },
+                  { id: "all", label: "Mind" },
+                  { id: "moving", label: "Mozgó" },
+                  { id: "idle", label: "Álló" },
                 ] as const
               ).map((option) => (
                 <button
                   key={option.id}
                   type="button"
-                  onClick={() => setFilters((prev) => ({ ...prev, speed: option.id }))}
+                  onClick={() =>
+                    setFilters((prev) => ({ ...prev, speed: option.id }))
+                  }
                   aria-pressed={filters.speed === option.id}
                   className={cn(
-                    'rounded-md py-1.5 text-xs font-semibold transition-all duration-fast',
-                    'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
+                    "rounded-md py-1.5 text-xs font-semibold transition-all duration-fast",
+                    "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
                     filters.speed === option.id
-                      ? 'bg-primary text-primary-foreground shadow-sm'
-                      : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:bg-accent hover:text-foreground",
                   )}
                 >
                   {option.label}
@@ -885,14 +913,16 @@ export function TransitMap({
                 <button
                   key={String(option.value)}
                   type="button"
-                  onClick={() => setFilters((prev) => ({ ...prev, maxAgeSec: option.value }))}
+                  onClick={() =>
+                    setFilters((prev) => ({ ...prev, maxAgeSec: option.value }))
+                  }
                   aria-pressed={filters.maxAgeSec === option.value}
                   className={cn(
-                    'rounded-md border px-2.5 py-1 text-xs font-semibold transition-all duration-fast',
-                    'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
+                    "rounded-md border px-2.5 py-1 text-xs font-semibold transition-all duration-fast",
+                    "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
                     filters.maxAgeSec === option.value
-                      ? 'border-primary bg-primary text-primary-foreground'
-                      : 'border-border bg-secondary text-muted-foreground hover:bg-accent hover:text-foreground'
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-secondary text-muted-foreground hover:bg-accent hover:text-foreground",
                   )}
                 >
                   {option.label}
@@ -901,7 +931,7 @@ export function TransitMap({
             </div>
           </section>
 
-          {/* Csak a közelemben — a GPS-helyzet köré húzott sugár. */}
+          {}
           <section className="space-y-2.5 border-b border-border px-4 py-4">
             <div className="flex items-baseline justify-between gap-2">
               <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -923,15 +953,17 @@ export function TransitMap({
                   key={String(option.value)}
                   type="button"
                   disabled={!geo.position && option.value !== null}
-                  onClick={() => setFilters((prev) => ({ ...prev, nearMeKm: option.value }))}
+                  onClick={() =>
+                    setFilters((prev) => ({ ...prev, nearMeKm: option.value }))
+                  }
                   aria-pressed={filters.nearMeKm === option.value}
                   className={cn(
-                    'rounded-md border px-2.5 py-1 text-xs font-semibold transition-all duration-fast',
-                    'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
-                    'disabled:cursor-not-allowed disabled:opacity-40',
+                    "rounded-md border px-2.5 py-1 text-xs font-semibold transition-all duration-fast",
+                    "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                    "disabled:cursor-not-allowed disabled:opacity-40",
                     filters.nearMeKm === option.value
-                      ? 'border-primary bg-primary text-primary-foreground'
-                      : 'border-border bg-secondary text-muted-foreground hover:bg-accent hover:text-foreground'
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-secondary text-muted-foreground hover:bg-accent hover:text-foreground",
                   )}
                 >
                   {option.label}
@@ -946,14 +978,18 @@ export function TransitMap({
                 Járatok
               </Label>
               <span className="text-[11px] text-muted-foreground">
-                {filters.routes.length > 0 ? `${filters.routes.length} kiválasztva` : 'mind'}
+                {filters.routes.length > 0
+                  ? `${filters.routes.length} kiválasztva`
+                  : "mind"}
               </span>
             </div>
             <RouteChips
               routes={routes}
               selectedRoutes={filters.routes}
               onToggleRoute={toggleRoute}
-              onSetRoutes={(ids) => setFilters((prev) => ({ ...prev, routes: ids }))}
+              onSetRoutes={(ids) =>
+                setFilters((prev) => ({ ...prev, routes: ids }))
+              }
               liveVehicles={vehicles}
             />
           </section>
@@ -968,7 +1004,10 @@ export function TransitMap({
                   key={key}
                   className="flex items-center justify-between gap-3 rounded-lg px-2 py-2 transition-colors duration-fast hover:bg-accent"
                 >
-                  <Label htmlFor={`layer-${key}`} className="cursor-pointer leading-snug">
+                  <Label
+                    htmlFor={`layer-${key}`}
+                    className="cursor-pointer leading-snug"
+                  >
                     <span className="block text-xs font-medium">{label}</span>
                     <span className="block text-[11px] font-normal text-muted-foreground">
                       {description}
@@ -977,7 +1016,9 @@ export function TransitMap({
                   <Switch
                     id={`layer-${key}`}
                     checked={filters[key] as boolean}
-                    onCheckedChange={(v) => setFilters((prev) => ({ ...prev, [key]: v }))}
+                    onCheckedChange={(v) =>
+                      setFilters((prev) => ({ ...prev, [key]: v }))
+                    }
                   />
                 </div>
               ))}
@@ -985,12 +1026,12 @@ export function TransitMap({
           </section>
         </TabsContent>
 
-        {/* Élő járművek */}
+        {}
         <TabsContent
           value="fleet"
           className="mt-0 min-h-0 flex-1 overflow-y-auto data-[state=inactive]:hidden focus-visible:outline-none"
         >
-          {/* Rendezés — a lista tetején marad görgetés közben is. */}
+          {}
           <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-card px-4 py-2">
             <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               Rendezés
@@ -998,22 +1039,24 @@ export function TransitMap({
             <div className="flex gap-1">
               {(
                 [
-                  { id: 'route', label: 'Járat' },
-                  { id: 'id', label: 'Rendszám' },
-                  { id: 'speed', label: 'Sebesség' },
+                  { id: "route", label: "Járat" },
+                  { id: "id", label: "Rendszám" },
+                  { id: "speed", label: "Sebesség" },
                 ] as const
               ).map((option) => (
                 <button
                   key={option.id}
                   type="button"
-                  onClick={() => setFilters((prev) => ({ ...prev, sort: option.id }))}
+                  onClick={() =>
+                    setFilters((prev) => ({ ...prev, sort: option.id }))
+                  }
                   aria-pressed={filters.sort === option.id}
                   className={cn(
-                    'rounded-md px-2 py-1 text-[11px] font-semibold transition-colors duration-fast',
-                    'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
+                    "rounded-md px-2 py-1 text-[11px] font-semibold transition-colors duration-fast",
+                    "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
                     filters.sort === option.id
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-accent hover:text-foreground",
                   )}
                 >
                   {option.label}
@@ -1033,18 +1076,22 @@ export function TransitMap({
                   <button
                     type="button"
                     onClick={() => {
-                      flyToVehicle(v)
-                      setPanelOpen(false)
+                      flyToVehicle(v);
+                      setPanelOpen(false);
                     }}
                     className={cn(
-                      'flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-fast hover:bg-accent',
-                      'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring'
+                      "flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-fast hover:bg-accent",
+                      "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
                     )}
                   >
-                    <RouteTile short={v.routeShort} color={v.routeColor} text={v.routeText} />
+                    <RouteTile
+                      short={v.routeShort}
+                      color={v.routeColor}
+                      text={v.routeText}
+                    />
 
                     <span className="min-w-0 flex-1">
-                      {/* A rendszám a lista fő adata. */}
+                      {}
                       <span className="flex items-center gap-1.5 font-mono text-sm font-bold tabular-nums">
                         {v.id}
                         <LiveDot />
@@ -1055,7 +1102,9 @@ export function TransitMap({
                     </span>
 
                     <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-muted-foreground">
-                      {v.speed != null ? `${Math.round(v.speed * 3.6)} km/h` : '—'}
+                      {v.speed != null
+                        ? `${Math.round(v.speed * 3.6)} km/h`
+                        : "—"}
                     </span>
                   </button>
                 </li>
@@ -1064,7 +1113,7 @@ export function TransitMap({
           )}
         </TabsContent>
 
-        {/* Megállók */}
+        {}
         <TabsContent
           value="stops"
           className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden data-[state=inactive]:hidden focus-visible:outline-none"
@@ -1093,24 +1142,28 @@ export function TransitMap({
             ) : (
               <ul className="divide-y divide-border/60">
                 {stopResults.map((s) => {
-                  const watched = monitoredStopIds.includes(s.id)
+                  const watched = monitoredStopIds.includes(s.id);
                   return (
                     <li
                       key={s.id}
                       className={cn(
-                        'flex items-center gap-1 transition-colors duration-fast',
-                        selectedStopId === s.id ? 'bg-primary/10' : 'hover:bg-accent'
+                        "flex items-center gap-1 transition-colors duration-fast",
+                        selectedStopId === s.id
+                          ? "bg-primary/10"
+                          : "hover:bg-accent",
                       )}
                     >
                       <button
                         type="button"
                         onClick={() => {
-                          onSelectStop(s.id)
-                          setPanelOpen(false)
+                          onSelectStop(s.id);
+                          setPanelOpen(false);
                         }}
                         className="min-w-0 flex-1 px-4 py-2.5 text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
                       >
-                        <span className="block truncate text-xs font-medium">{s.name}</span>
+                        <span className="block truncate text-xs font-medium">
+                          {s.name}
+                        </span>
                         <span className="block font-mono text-[11px] tabular-nums text-muted-foreground">
                           {s.code || s.id}
                         </span>
@@ -1119,7 +1172,7 @@ export function TransitMap({
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button
-                            variant={watched ? 'default' : 'ghost'}
+                            variant={watched ? "default" : "ghost"}
                             size="icon"
                             className="mr-3 h-7 w-7 shrink-0"
                             onClick={() => onToggleMonitorStop(s.id)}
@@ -1130,15 +1183,17 @@ export function TransitMap({
                                 : `${s.name} felvétele a figyelőre`
                             }
                           >
-                            <Plus className={cn(watched && 'rotate-45')} />
+                            <Plus className={cn(watched && "rotate-45")} />
                           </Button>
                         </TooltipTrigger>
                         <TooltipContent>
-                          {watched ? 'Levétel a figyelőről' : 'Felvétel a figyelőre'}
+                          {watched
+                            ? "Levétel a figyelőről"
+                            : "Felvétel a figyelőre"}
                         </TooltipContent>
                       </Tooltip>
                     </li>
-                  )
+                  );
                 })}
               </ul>
             )}
@@ -1146,11 +1201,11 @@ export function TransitMap({
         </TabsContent>
       </Tabs>
 
-      {/* Térkép */}
+      {}
       <div className="relative h-full w-full min-w-0 flex-1 bg-background">
         <div ref={mapContainerRef} className="z-map h-full w-full" />
 
-        {/* Vezérlőpanel nyitása mobilon. */}
+        {}
         <Button
           variant="secondary"
           size="sm"
@@ -1161,7 +1216,7 @@ export function TransitMap({
           Szűrés
         </Button>
 
-        {/* GPS: a zoom-vezérlő fölött, hüvelykujjal elérhető helyen. */}
+        {}
         <div className="absolute bottom-[92px] right-3 z-overlay flex flex-col items-end gap-2">
           {geo.error ? (
             <p
@@ -1175,20 +1230,26 @@ export function TransitMap({
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
-                variant={geo.isActive ? 'default' : 'secondary'}
+                variant={geo.isActive ? "default" : "secondary"}
                 size="icon"
                 className="h-11 w-11 shadow-lg"
                 onClick={handleLocate}
-                disabled={geo.status === 'requesting'}
+                disabled={geo.status === "requesting"}
                 aria-label={
-                  geo.position ? 'Ugrás a helyzetemre' : 'Helymeghatározás bekapcsolása'
+                  geo.position
+                    ? "Ugrás a helyzetemre"
+                    : "Helymeghatározás bekapcsolása"
                 }
               >
-                <LocateFixed className={cn(geo.status === 'requesting' && 'animate-pulse')} />
+                <LocateFixed
+                  className={cn(geo.status === "requesting" && "animate-pulse")}
+                />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="left">
-              {geo.position ? 'Helyzetem és a közeli megállók' : 'Helymeghatározás bekapcsolása'}
+              {geo.position
+                ? "Helyzetem és a közeli megállók"
+                : "Helymeghatározás bekapcsolása"}
             </TooltipContent>
           </Tooltip>
         </div>
@@ -1204,13 +1265,20 @@ export function TransitMap({
         {filterActive && !focusTripId ? (
           <div className="absolute right-3 top-3 z-overlay flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-xl border border-border bg-card/95 px-3 py-2 shadow-xl backdrop-blur-sm sm:max-w-sm sm:gap-3 sm:px-3.5 sm:py-2.5 md:right-4 md:top-4">
             <Crosshair aria-hidden className="h-4 w-4 shrink-0 text-primary" />
-            <span className="min-w-0 truncate text-xs font-medium">{filterSummary}</span>
-            <Button variant="ghost" size="sm" className="h-7 shrink-0 px-2 text-xs" onClick={onClearFilters}>
+            <span className="min-w-0 truncate text-xs font-medium">
+              {filterSummary}
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 shrink-0 px-2 text-xs"
+              onClick={onClearFilters}
+            >
               Alaphelyzet
             </Button>
           </div>
         ) : null}
       </div>
     </div>
-  )
+  );
 }

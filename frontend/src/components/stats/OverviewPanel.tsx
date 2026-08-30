@@ -1,47 +1,62 @@
-import { useCallback } from 'react'
-import { ArrowRight, CheckCircle2, RefreshCw, XCircle } from 'lucide-react'
-import { statsApi, type StatsHealth } from '@/services/statsApi'
-import { ChartFrame, StatTile } from '@/components/charts/Charts'
-import { Button } from '@/components/ui/button'
-import { QueryBoundary } from './PanelState'
-import { useStatsQuery } from './useStatsQuery'
+import { useCallback } from "react";
+import { ArrowRight, CheckCircle2, RefreshCw, XCircle } from "lucide-react";
+import { statsApi, type StatsHealth } from "@/services/statsApi";
+import { ChartFrame, StatTile } from "@/components/charts/Charts";
+import { Button } from "@/components/ui/button";
+import { QueryBoundary } from "./PanelState";
+import { useStatsQuery } from "./useStatsQuery";
 
-const nf = new Intl.NumberFormat('hu-HU')
+const nf = new Intl.NumberFormat("hu-HU");
 
-/** A worker-feladatok emberi nevei — a nyers azonosító nem mond semmit. */
 const JOB_LABELS: Record<string, string> = {
-  janitor: 'Partíciógondozás',
-  profile: 'Szakaszprofil',
-  ghosts: 'Szellemmenetek',
-  'roll:route': 'Vonal-összegzés',
-  'roll:stop': 'Megálló-összegzés',
-  'roll:vehicle': 'Jármű-összegzés',
-  'roll:vehroute': 'Jármű–vonal megoszlás',
-}
+  janitor: "Partíciógondozás",
+  profile: "Szakaszprofil",
+  ghosts: "Szellemmenetek",
+  "roll:route": "Vonal-összegzés",
+  "roll:stop": "Megálló-összegzés",
+  "roll:vehicle": "Jármű-összegzés",
+  "roll:vehroute": "Jármű–vonal megoszlás",
+};
 
-export function OverviewPanel({ onJumpToVehicles }: { onJumpToVehicles: () => void }) {
-  const fetcher = useCallback(() => statsApi.health(), [])
-  const q = useStatsQuery<StatsHealth>(fetcher, [])
+export function OverviewPanel({
+  onJumpToVehicles,
+}: {
+  onJumpToVehicles: () => void;
+}) {
+  const fetcher = useCallback(() => statsApi.health(), []);
+  const q = useStatsQuery<StatsHealth>(fetcher, []);
 
   return (
     <QueryBoundary query={q}>
       {(d) => {
-        const t = d.today
-        const dedup = t && t.pings_kept > 0 ? (t.pings_dup / t.pings_kept + 1).toFixed(1) : null
-        const pollTotal = t ? t.polls_ok + t.polls_fail : 0
-        const uptime = pollTotal ? Math.round((t!.polls_ok / pollTotal) * 100) : null
+        const t = d.today;
+        const dedup =
+          t && t.pings_kept > 0
+            ? (t.pings_dup / t.pings_kept + 1).toFixed(1)
+            : null;
+        const pollTotal = t ? t.polls_ok + t.polls_fail : 0;
+        const uptime = pollTotal
+          ? Math.round((t!.polls_ok / pollTotal) * 100)
+          : null;
 
         return (
           <div className="space-y-4">
             <header className="flex flex-wrap items-end justify-between gap-3">
               <div>
-                <h2 className="text-lg font-bold tracking-tight sm:text-xl">Adatraktár</h2>
+                <h2 className="text-lg font-bold tracking-tight sm:text-xl">
+                  Adatraktár
+                </h2>
                 <p className="text-xs text-muted-foreground">
                   A gyűjtés állapota és az eddig felhalmozott mennyiség.
                 </p>
               </div>
-              <Button variant="outline" size="sm" onClick={q.reload} disabled={q.loading}>
-                <RefreshCw className={q.loading ? 'animate-spin' : undefined} />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={q.reload}
+                disabled={q.loading}
+              >
+                <RefreshCw className={q.loading ? "animate-spin" : undefined} />
                 Frissítés
               </Button>
             </header>
@@ -57,14 +72,25 @@ export function OverviewPanel({ onJumpToVehicles }: { onJumpToVehicles: () => vo
                 value={nf.format(d.counts.segments)}
                 sub="ebből lesz az A→B becslés"
               />
-              <StatTile label="Menet" value={nf.format(d.counts.runs)} sub="teljesített és megkezdett" />
+              <StatTile
+                label="Menet"
+                value={nf.format(d.counts.runs)}
+                sub="teljesített és megkezdett"
+              />
               <StatTile
                 label="Nyers GPS-pont"
                 value={nf.format(d.counts.pings)}
                 sub="14 napig őrizve"
               />
-              <StatTile label="Szakaszprofil" value={nf.format(d.counts.profiles)} sub="napszakonként" />
-              <StatTile label="Ismert jármű" value={nf.format(d.counts.vehicles)} />
+              <StatTile
+                label="Szakaszprofil"
+                value={nf.format(d.counts.profiles)}
+                sub="napszakonként"
+              />
+              <StatTile
+                label="Ismert jármű"
+                value={nf.format(d.counts.vehicles)}
+              />
             </div>
 
             {t ? (
@@ -81,16 +107,20 @@ export function OverviewPanel({ onJumpToVehicles }: { onJumpToVehicles: () => vo
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
                   <StatTile
                     label="Feed elérhetőség"
-                    value={uptime != null ? `${uptime}%` : '—'}
+                    value={uptime != null ? `${uptime}%` : "—"}
                     sub={`${nf.format(t.polls_ok)} sikeres, ${nf.format(t.polls_fail)} hibás`}
-                    tone={uptime != null && uptime < 95 ? 'late' : 'ontime'}
+                    tone={uptime != null && uptime < 95 ? "late" : "ontime"}
                   />
                   <StatTile
                     label="Megtartott pont"
                     value={nf.format(t.pings_kept)}
                     sub={dedup ? `${dedup}× ismétlés kiszűrve` : undefined}
                   />
-                  <StatTile label="Csúcs járműszám" value={t.vehicles_max} sub="egyidejűleg" />
+                  <StatTile
+                    label="Csúcs járműszám"
+                    value={t.vehicles_max}
+                    sub="egyidejűleg"
+                  />
                   <StatTile
                     label="Eldobott ismétlés"
                     value={nf.format(t.pings_dup)}
@@ -107,7 +137,10 @@ export function OverviewPanel({ onJumpToVehicles }: { onJumpToVehicles: () => vo
               {d.jobs.length ? (
                 <ul className="divide-y divide-border">
                   {d.jobs.map((j, i) => (
-                    <li key={i} className="flex items-center gap-2.5 py-2 text-xs">
+                    <li
+                      key={i}
+                      className="flex items-center gap-2.5 py-2 text-xs"
+                    >
                       {j.ok ? (
                         <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-ontime" />
                       ) : (
@@ -122,9 +155,11 @@ export function OverviewPanel({ onJumpToVehicles }: { onJumpToVehicles: () => vo
                         </span>
                       ) : null}
                       <span className="shrink-0 tabular-nums text-muted-foreground">
-                        {new Date(j.started_at.replace(' ', 'T')).toLocaleTimeString('hu-HU', {
-                          hour: '2-digit',
-                          minute: '2-digit',
+                        {new Date(
+                          j.started_at.replace(" ", "T"),
+                        ).toLocaleTimeString("hu-HU", {
+                          hour: "2-digit",
+                          minute: "2-digit",
                         })}
                       </span>
                     </li>
@@ -137,8 +172,8 @@ export function OverviewPanel({ onJumpToVehicles }: { onJumpToVehicles: () => vo
               )}
             </ChartFrame>
           </div>
-        )
+        );
       }}
     </QueryBoundary>
-  )
+  );
 }

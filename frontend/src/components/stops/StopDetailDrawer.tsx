@@ -1,27 +1,30 @@
-import { useEffect, useRef, useState } from 'react'
-import { motion, useReducedMotion } from 'framer-motion'
-import { Check, Plus, X } from 'lucide-react'
-import type { ArrivalItem, Stop, StopArrivalsResponse } from '@/types'
-import { api } from '@/services/api'
-import { Button } from '@/components/ui/button'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { DelayBar } from '@/components/transit/DelayBar'
-import { LiveDot } from '@/components/transit/LiveDot'
-import { RouteTile } from '@/components/transit/RouteTile'
-import { cn } from '@/lib/utils'
+import { useEffect, useRef, useState } from "react";
+import { motion, useReducedMotion } from "framer-motion";
+import { Check, Plus, X } from "lucide-react";
+import type { ArrivalItem, Stop, StopArrivalsResponse } from "@/types";
+import { api } from "@/services/api";
+import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { DelayBar } from "@/components/transit/DelayBar";
+import { LiveDot } from "@/components/transit/LiveDot";
+import { RouteTile } from "@/components/transit/RouteTile";
+import { cn } from "@/lib/utils";
 
-const POLL_MS = 4000
+const POLL_MS = 4000;
 
 interface StopDetailDrawerProps {
-  stopId: string | null
-  stops: Stop[]
-  onClose: () => void
-  onFocusTrip: (tripId: string, vehicleId?: string) => void
-  monitoredStopIds: string[]
-  onToggleMonitorStop: (stopId: string) => void
+  stopId: string | null;
+  stops: Stop[];
+  onClose: () => void;
+  onFocusTrip: (tripId: string, vehicleId?: string) => void;
+  monitoredStopIds: string[];
+  onToggleMonitorStop: (stopId: string) => void;
 }
 
-/** A térképen kiválasztott megálló indulásai — lebegő panel valódi árnyékkal. */
 export function StopDetailDrawer({
   stopId,
   stops,
@@ -30,57 +33,57 @@ export function StopDetailDrawer({
   monitoredStopIds,
   onToggleMonitorStop,
 }: StopDetailDrawerProps) {
-  const [data, setData] = useState<StopArrivalsResponse | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const reduce = useReducedMotion()
-  const mounted = useRef(true)
+  const [data, setData] = useState<StopArrivalsResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const reduce = useReducedMotion();
+  const mounted = useRef(true);
 
   useEffect(() => {
-    mounted.current = true
+    mounted.current = true;
     return () => {
-      mounted.current = false
-    }
-  }, [])
+      mounted.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!stopId) {
-      setData(null)
-      setError(null)
-      return
+      setData(null);
+      setError(null);
+      return;
     }
 
     const load = async (silent: boolean) => {
-      if (!silent) setLoading(true)
+      if (!silent) setLoading(true);
       try {
-        const res = await api.getArrivals(stopId, 16)
-        if (!mounted.current) return
-        setData(res)
-        setError(null)
+        const res = await api.getArrivals(stopId, 16);
+        if (!mounted.current) return;
+        setData(res);
+        setError(null);
       } catch (err) {
-        if (mounted.current) setError((err as Error).message)
+        if (mounted.current) setError((err as Error).message);
       } finally {
-        if (mounted.current && !silent) setLoading(false)
+        if (mounted.current && !silent) setLoading(false);
       }
-    }
+    };
 
-    load(false)
-    const timer = setInterval(() => load(true), POLL_MS)
-    return () => clearInterval(timer)
-  }, [stopId])
+    load(false);
+    const timer = setInterval(() => load(true), POLL_MS);
+    return () => clearInterval(timer);
+  }, [stopId]);
 
   useEffect(() => {
-    if (!stopId) return
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [stopId, onClose])
+    if (!stopId) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [stopId, onClose]);
 
-  const stop = stops.find((s) => s.id === stopId)
-  if (!stopId || !stop) return null
+  const stop = stops.find((s) => s.id === stopId);
+  if (!stopId || !stop) return null;
 
-  const monitored = monitoredStopIds.includes(stop.id)
-  const arrivals = data?.arrivals ?? []
+  const monitored = monitoredStopIds.includes(stop.id);
+  const arrivals = data?.arrivals ?? [];
 
   return (
     <motion.aside
@@ -89,14 +92,16 @@ export function StopDetailDrawer({
       transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
       aria-label={`${stop.name} indulásai`}
       className={cn(
-        'absolute inset-x-0 bottom-0 z-drawer flex max-h-[70vh] flex-col overflow-hidden',
-        'border-t border-border bg-card shadow-xl',
-        'md:inset-x-auto md:bottom-4 md:right-4 md:w-[380px] md:rounded-xl md:border'
+        "absolute inset-x-0 bottom-0 z-drawer flex max-h-[70vh] flex-col overflow-hidden",
+        "border-t border-border bg-card shadow-xl",
+        "md:inset-x-auto md:bottom-4 md:right-4 md:w-[380px] md:rounded-xl md:border",
       )}
     >
       <div className="flex shrink-0 items-start justify-between gap-2 border-b border-border px-4 py-3">
         <div className="min-w-0">
-          <h3 className="truncate text-base font-bold tracking-tight">{stop.name}</h3>
+          <h3 className="truncate text-base font-bold tracking-tight">
+            {stop.name}
+          </h3>
           <p className="mt-0.5 flex items-center gap-1.5 font-mono text-[11px] tabular-nums text-muted-foreground">
             <span>{stop.code || stop.id}</span>
             <span aria-hidden>·</span>
@@ -115,7 +120,7 @@ export function StopDetailDrawer({
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
-                variant={monitored ? 'default' : 'outline'}
+                variant={monitored ? "default" : "outline"}
                 size="icon"
                 className="h-8 w-8"
                 onClick={() => onToggleMonitorStop(stop.id)}
@@ -130,7 +135,7 @@ export function StopDetailDrawer({
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              {monitored ? 'Levétel a figyelőről' : 'Felvétel a figyelőre'}
+              {monitored ? "Levétel a figyelőről" : "Felvétel a figyelőre"}
             </TooltipContent>
           </Tooltip>
 
@@ -165,30 +170,38 @@ export function StopDetailDrawer({
         ) : (
           <ul className="divide-y divide-border/60">
             {arrivals.map((arr: ArrivalItem, i) => {
-              const focusable = arr.live && Boolean(arr.tripId)
+              const focusable = arr.live && Boolean(arr.tripId);
               return (
                 <li key={`${arr.tripId}-${i}`}>
                   <div
-                    role={focusable ? 'button' : undefined}
+                    role={focusable ? "button" : undefined}
                     tabIndex={focusable ? 0 : undefined}
-                    onClick={focusable ? () => onFocusTrip(arr.tripId, arr.vehicle?.id) : undefined}
+                    onClick={
+                      focusable
+                        ? () => onFocusTrip(arr.tripId, arr.vehicle?.id)
+                        : undefined
+                    }
                     onKeyDown={
                       focusable
                         ? (e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault()
-                              onFocusTrip(arr.tripId, arr.vehicle?.id)
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              onFocusTrip(arr.tripId, arr.vehicle?.id);
                             }
                           }
                         : undefined
                     }
                     className={cn(
-                      'flex items-center gap-3 px-4 py-2.5 transition-colors duration-fast',
+                      "flex items-center gap-3 px-4 py-2.5 transition-colors duration-fast",
                       focusable &&
-                        'cursor-pointer hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring'
+                        "cursor-pointer hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
                     )}
                   >
-                    <RouteTile short={arr.route} color={arr.color} text={arr.text} />
+                    <RouteTile
+                      short={arr.route}
+                      color={arr.color}
+                      text={arr.text}
+                    />
 
                     <div className="min-w-0 flex-1">
                       <p className="flex items-center gap-1.5 truncate text-xs font-medium">
@@ -197,7 +210,7 @@ export function StopDetailDrawer({
                       </p>
 
                       <div className="mt-1 flex items-center gap-2">
-                        {/* A rendszám olvasható méretben, kiemelve. */}
+                        {}
                         {arr.vehicle ? (
                           <span className="rounded bg-primary/12 px-1.5 py-px font-mono text-[11px] font-bold tabular-nums text-primary">
                             {arr.vehicle.id}
@@ -230,11 +243,11 @@ export function StopDetailDrawer({
                     </span>
                   </div>
                 </li>
-              )
+              );
             })}
           </ul>
         )}
       </div>
     </motion.aside>
-  )
+  );
 }

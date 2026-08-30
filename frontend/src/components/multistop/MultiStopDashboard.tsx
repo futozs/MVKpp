@@ -1,28 +1,27 @@
-import React, { useMemo, useState } from 'react'
-import { ArrowLeftRight, Check, Plus, Radar } from 'lucide-react'
-import type { Stop } from '@/types'
-import { AddStopModal } from './AddStopModal'
-import { StopCard } from './StopCard'
-import { StopCarousel } from './StopCarousel'
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-import { cn } from '@/lib/utils'
+import React, { useMemo, useState } from "react";
+import { ArrowLeftRight, Check, Plus, Radar } from "lucide-react";
+import type { Stop } from "@/types";
+import { AddStopModal } from "./AddStopModal";
+import { StopCard } from "./StopCard";
+import { StopCarousel } from "./StopCarousel";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
-/** Miskolc gyakran figyelt csomópontjai — valós megállók, nem helykitöltők. */
 const QUICK_STOPS = [
-  { label: 'Tiszai pályaudvar', match: 'Tiszai' },
-  { label: 'Búza tér', match: 'Búza' },
-  { label: 'Villanyrendőr', match: 'Villany' },
-  { label: 'Újgyőri főtér', match: 'Újgyőri' },
-  { label: 'Avas kilátó', match: 'Avas kilátó' },
-  { label: 'Miskolctapolca, Barlangfürdő', match: 'Tapolca' },
-]
+  { label: "Tiszai pályaudvar", match: "Tiszai" },
+  { label: "Búza tér", match: "Búza" },
+  { label: "Villanyrendőr", match: "Villany" },
+  { label: "Újgyőri főtér", match: "Újgyőri" },
+  { label: "Avas kilátó", match: "Avas kilátó" },
+  { label: "Miskolctapolca, Barlangfürdő", match: "Tapolca" },
+];
 
 interface MultiStopDashboardProps {
-  stops: Stop[]
-  selectedStopIds: string[]
-  setSelectedStopIds: React.Dispatch<React.SetStateAction<string[]>>
-  onFocusMap: (stop: Stop, vehicleTripId?: string, vehicleId?: string) => void
+  stops: Stop[];
+  selectedStopIds: string[];
+  setSelectedStopIds: React.Dispatch<React.SetStateAction<string[]>>;
+  onFocusMap: (stop: Stop, vehicleTripId?: string, vehicleId?: string) => void;
 }
 
 export function MultiStopDashboard({
@@ -31,49 +30,49 @@ export function MultiStopDashboard({
   setSelectedStopIds,
   onFocusMap,
 }: MultiStopDashboardProps) {
-  const [isPickerOpen, setPickerOpen] = useState(false)
-  /** Sorrend-szerkesztő mód: ilyenkor a kártyák léptethetők. */
-  const [isReordering, setReordering] = useState(false)
+  const [isPickerOpen, setPickerOpen] = useState(false);
+  const [isReordering, setReordering] = useState(false);
 
   const stopById = useMemo(() => {
-    const map = new Map<string, Stop>()
-    stops.forEach((s) => map.set(s.id, s))
-    return map
-  }, [stops])
+    const map = new Map<string, Stop>();
+    stops.forEach((s) => map.set(s.id, s));
+    return map;
+  }, [stops]);
 
   const watched = selectedStopIds
     .map((id) => stopById.get(id))
-    .filter((s): s is Stop => s !== undefined)
+    .filter((s): s is Stop => s !== undefined);
 
   const removeStop = (stopId: string) =>
-    setSelectedStopIds((prev) => prev.filter((id) => id !== stopId))
+    setSelectedStopIds((prev) => prev.filter((id) => id !== stopId));
 
   const toggleStop = (stopId: string) =>
     setSelectedStopIds((prev) =>
-      prev.includes(stopId) ? prev.filter((id) => id !== stopId) : [...prev, stopId]
-    )
+      prev.includes(stopId)
+        ? prev.filter((id) => id !== stopId)
+        : [...prev, stopId],
+    );
 
-  /** Egy megálló léptetése a figyelt sorrendben. */
   const moveStop = (stopId: string, delta: number) =>
     setSelectedStopIds((prev) => {
-      const from = prev.indexOf(stopId)
-      if (from < 0) return prev
-      const to = from + delta
-      if (to < 0 || to >= prev.length) return prev
-      const next = [...prev]
-      const [moved] = next.splice(from, 1)
-      next.splice(to, 0, moved)
-      return next
-    })
+      const from = prev.indexOf(stopId);
+      if (from < 0) return prev;
+      const to = from + delta;
+      if (to < 0 || to >= prev.length) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
 
   const addByName = (needle: string) => {
     const found = stops.find(
       (s) =>
         s.name.toLowerCase().includes(needle.toLowerCase()) ||
-        s.id.toLowerCase().includes(needle.toLowerCase())
-    )
-    if (found) toggleStop(found.id)
-  }
+        s.id.toLowerCase().includes(needle.toLowerCase()),
+    );
+    if (found) toggleStop(found.id);
+  };
 
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
@@ -82,16 +81,17 @@ export function MultiStopDashboard({
           <h2 className="truncate text-sm font-bold tracking-tight sm:text-base">
             Megállófigyelő
           </h2>
-          {/* A magyarázó sor telefonon elvenné a kártyák helyét. */}
+          {}
           <p className="hidden text-xs text-muted-foreground sm:block">
-            Élő indulások négymásodperces frissüléssel, tetszőleges számú megállóból.
+            Élő indulások négymásodperces frissüléssel, tetszőleges számú
+            megállóból.
           </p>
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
           {watched.length > 1 ? (
             <Button
-              variant={isReordering ? 'default' : 'outline'}
+              variant={isReordering ? "default" : "outline"}
               size="sm"
               className="h-10"
               onClick={() => setReordering((v) => !v)}
@@ -99,7 +99,7 @@ export function MultiStopDashboard({
             >
               {isReordering ? <Check /> : <ArrowLeftRight />}
               <span className="hidden sm:inline">
-                {isReordering ? 'Kész' : 'Sorrend'}
+                {isReordering ? "Kész" : "Sorrend"}
               </span>
             </Button>
           ) : null}
@@ -116,7 +116,7 @@ export function MultiStopDashboard({
         </div>
       </div>
 
-      {/* Telefonon a kártyák vízszintesen görgethetők, lapozógombokkal. */}
+      {}
       {watched.length > 0 ? (
         <div className="min-h-0 flex-1 overflow-hidden pt-4 md:hidden">
           <StopCarousel
@@ -131,8 +131,8 @@ export function MultiStopDashboard({
 
       <div
         className={cn(
-          'min-h-0 flex-1 overflow-y-auto p-4',
-          watched.length > 0 && 'hidden md:block'
+          "min-h-0 flex-1 overflow-y-auto p-4",
+          watched.length > 0 && "hidden md:block",
         )}
       >
         {watched.length === 0 ? (
@@ -140,13 +140,20 @@ export function MultiStopDashboard({
             <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-primary/12 text-primary">
               <Radar className="h-7 w-7" />
             </span>
-            <h3 className="mt-4 text-lg font-bold tracking-tight">A figyelő üres</h3>
+            <h3 className="mt-4 text-lg font-bold tracking-tight">
+              A figyelő üres
+            </h3>
             <p className="mx-auto mt-1.5 max-w-md text-sm text-muted-foreground">
-              Vedd fel azokat a megállókat, amiket rendszeresen nézel. Mindegyikről látni fogod a
-              következő járatot, a hozzá tartozó buszt és azt, hogy épp merre jár.
+              Vedd fel azokat a megállókat, amiket rendszeresen nézel.
+              Mindegyikről látni fogod a következő járatot, a hozzá tartozó
+              buszt és azt, hogy épp merre jár.
             </p>
 
-            <Button size="lg" className="mt-5" onClick={() => setPickerOpen(true)}>
+            <Button
+              size="lg"
+              className="mt-5"
+              onClick={() => setPickerOpen(true)}
+            >
               <Plus />
               Megállók böngészése
             </Button>
@@ -173,12 +180,12 @@ export function MultiStopDashboard({
           <div
             className={
               watched.length === 1
-                ? 'mx-auto grid max-w-lg gap-4'
+                ? "mx-auto grid max-w-lg gap-4"
                 : watched.length === 2
-                  ? 'mx-auto grid max-w-5xl gap-4 lg:grid-cols-2'
+                  ? "mx-auto grid max-w-5xl gap-4 lg:grid-cols-2"
                   : watched.length <= 4
-                    ? 'grid gap-4 md:grid-cols-2'
-                    : 'grid gap-4 md:grid-cols-2 xl:grid-cols-3'
+                    ? "grid gap-4 md:grid-cols-2"
+                    : "grid gap-4 md:grid-cols-2 xl:grid-cols-3"
             }
           >
             {watched.map((stop, i) => (
@@ -211,5 +218,5 @@ export function MultiStopDashboard({
         onToggleStop={toggleStop}
       />
     </div>
-  )
+  );
 }

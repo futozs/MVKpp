@@ -1,0 +1,8 @@
+# scripts/strip-comments.mjs saját ignore listája (gitignore-szerű minták).
+# A projekt gyökér .gitignore-ja automatikusan is érvényben van ezen felül.
+# Ide azokat a fájlokat/mappákat írd, amiket a komment-eltávolító
+# semmiképp ne érintsen (generált kód, harmadik féltől vett fájlok, stb.).
+
+src/generated/
+mod/
+.cache/

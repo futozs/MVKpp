@@ -1,39 +1,43 @@
-import { useCallback, useMemo, useState } from 'react'
-import type { Route } from '@/types'
+import { useCallback, useMemo, useState } from "react";
+import type { Route } from "@/types";
 import {
   fmtDelay,
   serviceToday,
   shiftDate,
   statsApi,
   type RouteDay,
-} from '@/services/statsApi'
-import { BarChart, ChartFrame, EmptyChart, LineChart, StatTile } from '@/components/charts/Charts'
-import { QueryBoundary, PillPicker } from './PanelState'
-import { useStatsQuery } from './useStatsQuery'
+} from "@/services/statsApi";
+import {
+  BarChart,
+  ChartFrame,
+  EmptyChart,
+  LineChart,
+  StatTile,
+} from "@/components/charts/Charts";
+import { QueryBoundary, PillPicker } from "./PanelState";
+import { useStatsQuery } from "./useStatsQuery";
 
 const RANGES = [
-  { id: '7', label: '7 nap' },
-  { id: '30', label: '30 nap' },
-  { id: '90', label: '90 nap' },
-] as const
+  { id: "7", label: "7 nap" },
+  { id: "30", label: "30 nap" },
+  { id: "90", label: "90 nap" },
+] as const;
 
-/** Egy nap két iránya egy sorba vonva — a napi mutató a kettő együtt. */
 function mergeDirections(days: RouteDay[]) {
-  const byDate = new Map<string, RouteDay[]>()
+  const byDate = new Map<string, RouteDay[]>();
   for (const d of days) {
-    const a = byDate.get(d.service_date) ?? []
-    a.push(d)
-    byDate.set(d.service_date, a)
+    const a = byDate.get(d.service_date) ?? [];
+    a.push(d);
+    byDate.set(d.service_date, a);
   }
   return [...byDate.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, rows]) => {
-      const events = rows.reduce((a, r) => a + r.events_n, 0)
-      // Az arányokat esemény-számmal súlyozzuk: két irány eltérő forgalmú.
+      const events = rows.reduce((a, r) => a + r.events_n, 0);
       const weighted = (pick: (r: RouteDay) => number | null) => {
-        const num = rows.reduce((a, r) => a + (pick(r) ?? 0) * r.events_n, 0)
-        return events ? Math.round(num / events) : null
-      }
+        const num = rows.reduce((a, r) => a + (pick(r) ?? 0) * r.events_n, 0);
+        return events ? Math.round(num / events) : null;
+      };
       return {
         date,
         runs: rows.reduce((a, r) => a + r.runs, 0),
@@ -43,27 +47,30 @@ function mergeDirections(days: RouteDay[]) {
         otp: weighted((r) => r.otp_pct),
         avgDelay: weighted((r) => r.avg_delay_s),
         p85: weighted((r) => r.p85_delay_s),
-      }
-    })
+      };
+    });
 }
 
 export function RoutePanel({ routes }: { routes: Route[] }) {
-  const [short, setShort] = useState<string | null>(routes[0]?.short ?? null)
-  const [range, setRange] = useState<(typeof RANGES)[number]['id']>('30')
+  const [short, setShort] = useState<string | null>(routes[0]?.short ?? null);
+  const [range, setRange] = useState<(typeof RANGES)[number]["id"]>("30");
 
-  const to = serviceToday()
-  const from = shiftDate(to, -Number(range) + 1)
+  const to = serviceToday();
+  const from = shiftDate(to, -Number(range) + 1);
 
   const q = useStatsQuery(
     useCallback(() => statsApi.route(short!, from, to), [short, from, to]),
     [short, from, to],
-    Boolean(short)
-  )
+    Boolean(short),
+  );
 
   const sorted = useMemo(
-    () => [...routes].sort((a, b) => a.short.localeCompare(b.short, 'hu', { numeric: true })),
-    [routes]
-  )
+    () =>
+      [...routes].sort((a, b) =>
+        a.short.localeCompare(b.short, "hu", { numeric: true }),
+      ),
+    [routes],
+  );
 
   return (
     <div className="space-y-4">
@@ -73,7 +80,11 @@ export function RoutePanel({ routes }: { routes: Route[] }) {
           ariaLabel="Vonal választása"
           value={short}
           onChange={setShort}
-          items={sorted.map((r) => ({ id: r.short, label: r.short, color: r.color }))}
+          items={sorted.map((r) => ({
+            id: r.short,
+            label: r.short,
+            color: r.color,
+          }))}
         />
         <PillPicker
           ariaLabel="Időszak"
@@ -86,48 +97,56 @@ export function RoutePanel({ routes }: { routes: Route[] }) {
       {short ? (
         <QueryBoundary query={q} empty={(d) => d.days.length === 0}>
           {(d) => {
-            const merged = mergeDirections(d.days)
-            const totalEvents = merged.reduce((a, m) => a + m.events, 0)
-            const totalRuns = merged.reduce((a, m) => a + m.runs, 0)
-            const totalGhosts = merged.reduce((a, m) => a + m.ghosts, 0)
-            const totalBunch = merged.reduce((a, m) => a + m.bunching, 0)
+            const merged = mergeDirections(d.days);
+            const totalEvents = merged.reduce((a, m) => a + m.events, 0);
+            const totalRuns = merged.reduce((a, m) => a + m.runs, 0);
+            const totalGhosts = merged.reduce((a, m) => a + m.ghosts, 0);
+            const totalBunch = merged.reduce((a, m) => a + m.bunching, 0);
             const avgOtp = totalEvents
               ? Math.round(
-                  merged.reduce((a, m) => a + (m.otp ?? 0) * m.events, 0) / totalEvents
+                  merged.reduce((a, m) => a + (m.otp ?? 0) * m.events, 0) /
+                    totalEvents,
                 )
-              : null
+              : null;
             const avgDelay = totalEvents
               ? Math.round(
-                  merged.reduce((a, m) => a + (m.avgDelay ?? 0) * m.events, 0) / totalEvents
+                  merged.reduce((a, m) => a + (m.avgDelay ?? 0) * m.events, 0) /
+                    totalEvents,
                 )
-              : null
+              : null;
 
             return (
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
                   <StatTile
                     label="Menetrendtartás"
-                    value={avgOtp != null ? `${avgOtp}%` : '—'}
+                    value={avgOtp != null ? `${avgOtp}%` : "—"}
                     sub="−1…+5 perc ablakban"
-                    tone={avgOtp == null ? 'default' : avgOtp >= 80 ? 'ontime' : 'late'}
+                    tone={
+                      avgOtp == null
+                        ? "default"
+                        : avgOtp >= 80
+                          ? "ontime"
+                          : "late"
+                    }
                   />
                   <StatTile
                     label="Átlagos késés"
                     value={fmtDelay(avgDelay)}
-                    sub={`${totalEvents.toLocaleString('hu-HU')} megálló-esemény`}
-                    tone={avgDelay != null && avgDelay > 60 ? 'late' : 'ontime'}
+                    sub={`${totalEvents.toLocaleString("hu-HU")} megálló-esemény`}
+                    tone={avgDelay != null && avgDelay > 60 ? "late" : "ontime"}
                   />
                   <StatTile
                     label="Kiesett menet"
                     value={totalGhosts}
                     sub={`${totalRuns} teljesítettből`}
-                    tone={totalGhosts > 0 ? 'late' : 'ontime'}
+                    tone={totalGhosts > 0 ? "late" : "ontime"}
                   />
                   <StatTile
                     label="Torlódás"
                     value={totalBunch}
                     sub="két jármű 2 percen belül"
-                    tone={totalBunch > 0 ? 'late' : 'ontime'}
+                    tone={totalBunch > 0 ? "late" : "ontime"}
                   />
                 </div>
 
@@ -137,7 +156,10 @@ export function RoutePanel({ routes }: { routes: Route[] }) {
                 >
                   <LineChart
                     unit="%"
-                    data={merged.map((m) => ({ label: m.date.slice(5), value: m.otp }))}
+                    data={merged.map((m) => ({
+                      label: m.date.slice(5),
+                      value: m.otp,
+                    }))}
                   />
                 </ChartFrame>
 
@@ -148,18 +170,24 @@ export function RoutePanel({ routes }: { routes: Route[] }) {
                   <LineChart
                     zeroLine
                     unit=" mp"
-                    data={merged.map((m) => ({ label: m.date.slice(5), value: m.avgDelay }))}
+                    data={merged.map((m) => ({
+                      label: m.date.slice(5),
+                      value: m.avgDelay,
+                    }))}
                   />
                 </ChartFrame>
 
-                <ChartFrame title="Teljesített és kiesett menetek" hint="Naponta.">
+                <ChartFrame
+                  title="Teljesített és kiesett menetek"
+                  hint="Naponta."
+                >
                   {merged.length ? (
                     <BarChart
                       labelEvery={Math.max(1, Math.ceil(merged.length / 8))}
                       data={merged.map((m) => ({
                         label: m.date.slice(5),
                         value: m.runs,
-                        tone: m.ghosts > 0 ? 'fill-late' : 'fill-primary',
+                        tone: m.ghosts > 0 ? "fill-late" : "fill-primary",
                         title: `${m.date}: ${m.runs} menet, ${m.ghosts} kiesett`,
                       }))}
                     />
@@ -168,10 +196,10 @@ export function RoutePanel({ routes }: { routes: Route[] }) {
                   )}
                 </ChartFrame>
               </div>
-            )
+            );
           }}
         </QueryBoundary>
       ) : null}
     </div>
-  )
+  );
 }

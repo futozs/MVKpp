@@ -1,102 +1,118 @@
-import { useEffect, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, Crosshair, RefreshCw, Trash2 } from 'lucide-react'
-import type { ArrivalItem, Stop, StopArrivalsResponse } from '@/types'
-import { api } from '@/services/api'
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { Countdown } from '@/components/transit/Countdown'
-import { DelayBar } from '@/components/transit/DelayBar'
-import { LiveTag } from '@/components/transit/LiveDot'
-import { RouteTile } from '@/components/transit/RouteTile'
-import { VehicleTrack } from '@/components/transit/VehicleTrack'
-import { cn } from '@/lib/utils'
+import { useEffect, useRef, useState } from "react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Crosshair,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
+import type { ArrivalItem, Stop, StopArrivalsResponse } from "@/types";
+import { api } from "@/services/api";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Countdown } from "@/components/transit/Countdown";
+import { DelayBar } from "@/components/transit/DelayBar";
+import { LiveTag } from "@/components/transit/LiveDot";
+import { RouteTile } from "@/components/transit/RouteTile";
+import { VehicleTrack } from "@/components/transit/VehicleTrack";
+import { cn } from "@/lib/utils";
 
-const POLL_MS = 4000
+const POLL_MS = 4000;
 
-/** Sorrend-léptetés, ha a figyelő szerkesztő módban van. */
 export type StopCardReorder = {
-  onMoveEarlier: () => void
-  onMoveLater: () => void
-  canMoveEarlier: boolean
-  canMoveLater: boolean
-}
+  onMoveEarlier: () => void;
+  onMoveLater: () => void;
+  canMoveEarlier: boolean;
+  canMoveLater: boolean;
+};
 
 type StopCardProps = {
-  stop: Stop
-  onRemove: (stopId: string) => void
-  onFocusMap: (stop: Stop, vehicleTripId?: string, vehicleId?: string) => void
-  className?: string
-  reorder?: StopCardReorder
-}
+  stop: Stop;
+  onRemove: (stopId: string) => void;
+  onFocusMap: (stop: Stop, vehicleTripId?: string, vehicleId?: string) => void;
+  className?: string;
+  reorder?: StopCardReorder;
+};
 
-/**
- * Egy megálló indulási táblája.
- *
- * A hangsúly sorrendje: mikor jön → melyik busz jön → hol tart most.
- * A rendszám és a pozíció saját kiemelt felületet kap (VehicleTrack),
- * mert a figyelőnél ez a két legfontosabb adat.
- */
-export function StopCard({ stop, onRemove, onFocusMap, className, reorder }: StopCardProps) {
-  const [data, setData] = useState<StopArrivalsResponse | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [lastFetch, setLastFetch] = useState<Date | null>(null)
-  const mounted = useRef(true)
+export function StopCard({
+  stop,
+  onRemove,
+  onFocusMap,
+  className,
+  reorder,
+}: StopCardProps) {
+  const [data, setData] = useState<StopArrivalsResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [lastFetch, setLastFetch] = useState<Date | null>(null);
+  const mounted = useRef(true);
 
   useEffect(() => {
-    mounted.current = true
+    mounted.current = true;
     return () => {
-      mounted.current = false
-    }
-  }, [])
+      mounted.current = false;
+    };
+  }, []);
 
   const load = async (silent: boolean) => {
-    if (!silent) setLoading(true)
+    if (!silent) setLoading(true);
     try {
-      const res = await api.getArrivals(stop.id, 8)
-      if (!mounted.current) return
-      setData(res)
-      setError(null)
-      setLastFetch(new Date())
+      const res = await api.getArrivals(stop.id, 8);
+      if (!mounted.current) return;
+      setData(res);
+      setError(null);
+      setLastFetch(new Date());
     } catch (err) {
-      if (mounted.current) setError((err as Error).message)
+      if (mounted.current) setError((err as Error).message);
     } finally {
-      if (mounted.current && !silent) setLoading(false)
+      if (mounted.current && !silent) setLoading(false);
     }
-  }
+  };
 
   useEffect(() => {
-    load(false)
-    const timer = setInterval(() => load(true), POLL_MS)
-    return () => clearInterval(timer)
-  }, [stop.id])
+    load(false);
+    const timer = setInterval(() => load(true), POLL_MS);
+    return () => clearInterval(timer);
+  }, [stop.id]);
 
-  const arrivals = data?.arrivals ?? []
-  const next: ArrivalItem | undefined = arrivals[0]
-  const rest = arrivals.slice(1, 6)
+  const arrivals = data?.arrivals ?? [];
+  const next: ArrivalItem | undefined = arrivals[0];
+  const rest = arrivals.slice(1, 6);
 
   return (
-    <Card className={cn('flex min-w-0 flex-col overflow-hidden shadow-lg', className)}>
-      {/* Fejléc */}
+    <Card
+      className={cn(
+        "flex min-w-0 flex-col overflow-hidden shadow-lg",
+        className,
+      )}
+    >
+      {}
       <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
         <div className="min-w-0">
-          <h3 className="truncate text-base font-bold tracking-tight" title={stop.name}>
+          <h3
+            className="truncate text-base font-bold tracking-tight"
+            title={stop.name}
+          >
             {stop.name}
           </h3>
           <p className="mt-0.5 font-mono text-[11px] tabular-nums text-muted-foreground">
             {stop.code || stop.id}
             {lastFetch
-              ? ` · ${lastFetch.toLocaleTimeString('hu-HU', {
-                  minute: '2-digit',
-                  second: '2-digit',
+              ? ` · ${lastFetch.toLocaleTimeString("hu-HU", {
+                  minute: "2-digit",
+                  second: "2-digit",
                 })}`
-              : ''}
+              : ""}
           </p>
         </div>
 
         <div className="flex shrink-0 items-center gap-0.5">
-          {/* Sorrend-szerkesztő módban a többi akció helyett léptetés. */}
+          {}
           {reorder ? (
             <>
               <Button
@@ -132,7 +148,9 @@ export function StopCard({ stop, onRemove, onFocusMap, className, reorder }: Sto
                 disabled={loading}
                 aria-label={`${stop.name} indulásainak újralekérése`}
               >
-                <RefreshCw className={cn(loading && 'animate-spin text-primary')} />
+                <RefreshCw
+                  className={cn(loading && "animate-spin text-primary")}
+                />
               </Button>
             </TooltipTrigger>
             <TooltipContent>Indulások újralekérése</TooltipContent>
@@ -170,7 +188,7 @@ export function StopCard({ stop, onRemove, onFocusMap, className, reorder }: Sto
         </div>
       </div>
 
-      {/* Következő indulás — a kártya súlypontja */}
+      {}
       <div className="border-b border-border bg-muted/30 px-4 py-3.5">
         {error ? (
           <p
@@ -198,9 +216,17 @@ export function StopCard({ stop, onRemove, onFocusMap, className, reorder }: Sto
 
             <div className="flex items-start justify-between gap-3">
               <div className="flex min-w-0 items-start gap-3">
-                <RouteTile short={next.route} color={next.color} text={next.text} size="lg" />
+                <RouteTile
+                  short={next.route}
+                  color={next.color}
+                  text={next.text}
+                  size="lg"
+                />
                 <div className="min-w-0 pt-0.5">
-                  <p className="truncate text-sm font-semibold" title={next.headsign}>
+                  <p
+                    className="truncate text-sm font-semibold"
+                    title={next.headsign}
+                  >
                     {next.headsign}
                   </p>
                   <div className="mt-1.5 flex items-center gap-2">
@@ -215,7 +241,7 @@ export function StopCard({ stop, onRemove, onFocusMap, className, reorder }: Sto
               <Countdown etaMin={next.etaMin} />
             </div>
 
-            {/* Melyik busz és hol jár — kiemelt felületen. */}
+            {}
             <VehicleTrack
               className="mt-3"
               vehicle={next.vehicle}
@@ -230,44 +256,53 @@ export function StopCard({ stop, onRemove, onFocusMap, className, reorder }: Sto
         )}
       </div>
 
-      {/* További indulások */}
+      {}
       <div className="min-h-0 flex-1 overflow-y-auto">
         {rest.length > 0 ? (
           <ul className="divide-y divide-border/60">
             {rest.map((bus, i) => {
-              const focusable = bus.live && Boolean(bus.tripId)
+              const focusable = bus.live && Boolean(bus.tripId);
               return (
                 <li key={`${bus.tripId}-${i}`}>
                   <div
-                    role={focusable ? 'button' : undefined}
+                    role={focusable ? "button" : undefined}
                     tabIndex={focusable ? 0 : undefined}
                     onClick={
-                      focusable ? () => onFocusMap(stop, bus.tripId, bus.vehicle?.id) : undefined
+                      focusable
+                        ? () => onFocusMap(stop, bus.tripId, bus.vehicle?.id)
+                        : undefined
                     }
                     onKeyDown={
                       focusable
                         ? (e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault()
-                              onFocusMap(stop, bus.tripId, bus.vehicle?.id)
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              onFocusMap(stop, bus.tripId, bus.vehicle?.id);
                             }
                           }
                         : undefined
                     }
                     className={cn(
-                      'flex items-center gap-3 px-4 py-2.5 transition-colors duration-fast',
+                      "flex items-center gap-3 px-4 py-2.5 transition-colors duration-fast",
                       focusable &&
-                        'cursor-pointer hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring'
+                        "cursor-pointer hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
                     )}
                   >
-                    <RouteTile short={bus.route} color={bus.color} text={bus.text} />
+                    <RouteTile
+                      short={bus.route}
+                      color={bus.color}
+                      text={bus.text}
+                    />
 
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-xs font-medium" title={bus.headsign}>
+                      <p
+                        className="truncate text-xs font-medium"
+                        title={bus.headsign}
+                      >
                         {bus.headsign}
                       </p>
                       <div className="mt-1 flex items-center gap-2">
-                        {/* A rendszám itt is olvasható méretben. */}
+                        {}
                         {bus.vehicle ? (
                           <span className="rounded bg-primary/12 px-1.5 py-px font-mono text-[11px] font-bold tabular-nums text-primary">
                             {bus.vehicle.id}
@@ -299,7 +334,7 @@ export function StopCard({ stop, onRemove, onFocusMap, className, reorder }: Sto
                     </span>
                   </div>
                 </li>
-              )
+              );
             })}
           </ul>
         ) : data && next ? (
@@ -309,5 +344,5 @@ export function StopCard({ stop, onRemove, onFocusMap, className, reorder }: Sto
         ) : null}
       </div>
     </Card>
-  )
+  );
 }
