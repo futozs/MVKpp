@@ -1,9 +1,11 @@
-import { ExternalLink, LayoutDashboard, Layers, RefreshCw } from 'lucide-react'
+import { ExternalLink, LayoutDashboard, Layers, RefreshCw, Thermometer } from 'lucide-react'
 import type { ActiveTab } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { LiveDot } from '@/components/transit/LiveDot'
+import { useWeather } from '@/hooks/useWeather'
+import { hubUrl } from '@/lib/links'
 import { cn } from '@/lib/utils'
 
 interface HeaderProps {
@@ -33,6 +35,8 @@ export function Header({
   monitoredStopsCount,
   onOpenMapPicker,
 }: HeaderProps) {
+  const weather = useWeather()
+
   return (
     <header className="relative z-bar hidden shrink-0 border-b border-border bg-card/80 backdrop-blur-xl md:block">
       <div className="flex h-14 items-center gap-2 px-2 sm:gap-3 sm:px-3 md:px-4">
@@ -93,6 +97,20 @@ export function Header({
               })}
             </span>
           ) : null}
+
+          {/* Miskolci hőmérséklet. Ha nem érhető el, egyszerűen nem jelenik meg. */}
+          {weather?.tempC != null ? (
+            <span
+              className="flex items-center gap-1.5 text-[11px] text-muted-foreground"
+              title={`${weather.text}${weather.feelsLikeC != null ? ` · hőérzet ${Math.round(weather.feelsLikeC)} °C` : ''}`}
+            >
+              <Thermometer aria-hidden className="h-3.5 w-3.5 text-primary" />
+              <span className="font-mono font-semibold tabular-nums text-foreground">
+                {Math.round(weather.tempC)} °C
+              </span>
+              <span className="hidden xl:inline">{weather.text}</span>
+            </span>
+          ) : null}
         </div>
 
         {/* Eszközök */}
@@ -112,14 +130,14 @@ export function Header({
           <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="ghost" size="sm" asChild>
-                <a href="http://localhost:5174" target="_blank" rel="noreferrer">
+                <a href={hubUrl()} target="_blank" rel="noreferrer">
                   <LayoutDashboard />
                   <span className="hidden md:inline">Rendszerpult</span>
                   <ExternalLink className="opacity-60" />
                 </a>
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Rendszerpult megnyitása (:5174)</TooltipContent>
+            <TooltipContent>Rendszerpult megnyitása ugyanezen a gépen</TooltipContent>
           </Tooltip>
 
           <Tooltip>

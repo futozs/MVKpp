@@ -490,6 +490,123 @@ app.get('/gtfs/route-geo', (c) => {
 })
 app.get('/gtfs/meta.json', (c) => c.json({ feedVersion, stops: stops.size, routes: routes.size, trips: trips.size }))
 
+/**
+ * Egy menet haladása a saját megállósorán.
+ *
+ * A busz pozícióját a járat vonalgeometriájára vetítjük, és ugyanígy a
+ * megállókat is — így megmondható, MELYIK két megálló között jár éppen, és
+ * a szakaszon belül hol tart. A pillanatnyi GPS-irány megbízhatatlan, ezért
+ * kizárólag a vonal menti távolságra hagyatkozunk.
+ *
+ * Ha nincs használható geometria, a legközelebbi megállóra esünk vissza.
+ */
+app.get('/live/trip-progress', async (c) => {
+  const tripId = (c.req.query('trip') || '').trim()
+  const vehicleQuery = (c.req.query('vehicle') || '').trim().toLowerCase()
+  if (!tripId) return c.json({ error: 'hiányzó ?trip=' }, 400)
+
+  const trip = trips.get(tripId)
+  const seq = tripStops.get(tripId)
+  if (!trip || !seq?.length) return c.json({ error: 'Ismeretlen menet' }, 404)
+
+  const vehicles = await activeVehicles()
+  const vehicle =
+    vehicles.find((v) => v.tripId === tripId) ??
+    (vehicleQuery ? vehicles.find((v) => v.id.toLowerCase() === vehicleQuery) : undefined) ??
+    null
+
+  const stopList = seq.map((x) => {
+    const s = stops.get(x.stopId)
+    return {
+      id: x.stopId,
+      name: s?.name || x.stopId,
+      lat: s?.lat ?? null,
+      lon: s?.lon ?? null,
+      /** Menetrendi indulás másodpercben éjfél óta. */
+      dep: x.dep,
+    }
+  })
+
+  if (!vehicle) {
+    return c.json({ tripId, live: false, stops: stopList, segmentIndex: null, progress: null })
+  }
+
+  const shape = trip.shapeId ? shapes.get(trip.shapeId) : undefined
+  let segmentIndex: number | null = null
+  let segmentFraction = 0
+
+  if (shape && shape.length >= 2) {
+    const busProjection = projectOntoShapeKm(shape, vehicle.lat, vehicle.lon)
+    const stopAlong = stopList.map((s) =>
+      s.lat != null && s.lon != null ? projectOntoShapeKm(shape, s.lat, s.lon)?.alongKm ?? null : null
+    )
+
+    // A busz túl messze van a vonaltól: a vetített érték félrevezető lenne.
+    if (busProjection && busProjection.distKm <= 1.5) {
+      const along = busProjection.alongKm
+      for (let i = 0; i < stopAlong.length - 1; i++) {
+        const a = stopAlong[i]
+        const b = stopAlong[i + 1]
+        if (a == null || b == null || b <= a) continue
+        if (along >= a && along < b) {
+          segmentIndex = i
+          segmentFraction = (along - a) / (b - a)
+          break
+        }
+      }
+      if (segmentIndex == null) {
+        const first = stopAlong.find((x) => x != null)
+        const last = [...stopAlong].reverse().find((x) => x != null)
+        if (first != null && along < first) {
+          segmentIndex = 0
+          segmentFraction = 0
+        } else if (last != null && along >= last) {
+          segmentIndex = stopList.length - 1
+          segmentFraction = 0
+        }
+      }
+    }
+  }
+
+  // Geometria nélkül: a legközelebbi megálló.
+  if (segmentIndex == null) {
+    let best = 0
+    let bestDist = Infinity
+    stopList.forEach((s, i) => {
+      if (s.lat == null || s.lon == null) return
+      const d = haversineKm(vehicle.lat, vehicle.lon, s.lat, s.lon)
+      if (d < bestDist) {
+        bestDist = d
+        best = i
+      }
+    })
+    segmentIndex = best
+    segmentFraction = 0
+  }
+
+  const denominator = Math.max(1, stopList.length - 1)
+  const progress = Math.min(1, Math.max(0, (segmentIndex + segmentFraction) / denominator))
+
+  return c.json({
+    tripId,
+    live: true,
+    vehicle: {
+      id: vehicle.id,
+      lat: vehicle.lat,
+      lon: vehicle.lon,
+      speed: vehicle.speed,
+    },
+    stops: stopList,
+    /** Hányadik megálló UTÁN jár (0 = az első és második között). */
+    segmentIndex,
+    /** 0..1 a szakaszon belül. */
+    segmentFraction,
+    /** 0..1 a teljes menetre. */
+    progress,
+    nextStop: stopList[Math.min(stopList.length - 1, segmentIndex + 1)] ?? null,
+  })
+})
+
 // ── Menetrendkönyv ───────────────────────────────────────────────────────────
 /** Másodperc a nap kezdetétől -> HH:MM (a 24h fölötti éjszakai menetek is jók). */
 function secToHm(sec: number): string {
@@ -840,6 +957,63 @@ app.post('/_ingest', async (c) => {
 app.post('/_renew', async (c) => { const r = await renew('kézi'); return c.json({ triggered: true, result: r, jwt: jwtStatus(readJwt()) }, r?.ok ? 200 : 502) })
 
 // Token kényszerített frissítése a Mac-natív MVK app újraindításával és kiolvasásával
+/**
+ * A gateway újraindítása.
+ *
+ * A folyamat kilép, a manager.mjs pedig újraindítja. Ha a backend kézzel,
+ * manager nélkül fut, a kilépés után magától nem jön vissza — ezt a válasz
+ * `managed` mezője jelzi előre, hogy a hub ne ígérjen olyat, ami nem történik meg.
+ */
+app.post('/system/restart', (c) => {
+  const managed = process.env.MVK_MANAGED === '1'
+  console.log('[system] ⟳ újraindítási kérés a hubról')
+  // A válasz még kimegy, csak utána lépünk ki.
+  setTimeout(() => process.exit(0), 150)
+  return c.json({
+    ok: true,
+    managed,
+    message: managed
+      ? 'A gateway újraindul, néhány másodperc múlva elérhető.'
+      : 'A gateway leáll. Manager nélkül indítva magától nem indul újra.',
+  })
+})
+
+/** GTFS menetrend újratöltése a forrásból, a szerver leállítása nélkül. */
+app.post('/system/reload-gtfs', async (c) => {
+  try {
+    await refreshGtfs()
+    return c.json({
+      ok: true,
+      feedVersion,
+      stops: stops.size,
+      routes: routes.size,
+      trips: trips.size,
+    })
+  } catch (e) {
+    return c.json({ ok: false, error: (e as Error).message }, 502)
+  }
+})
+
+/** A valós idejű feed-gyorsítótár állapota — ebből látszik, él-e a háttérhurok. */
+app.get('/system/cache', (c) => {
+  const now = Date.now()
+  const feeds = [...feedCache.entries()].map(([path, e]) => ({
+    path,
+    ageMs: e.at ? now - e.at : null,
+    status: e.status,
+    bytes: e.buf.length,
+    inflight: e.inflight !== null,
+  }))
+  return c.json({
+    ttlMs: FEED_TTL_MS,
+    feeds,
+    vehicles: vehiclesCache
+      ? { ageMs: now - vehiclesCache.at, count: vehiclesCache.list.length }
+      : null,
+    weather: weatherCache ? { ageMs: now - weatherCache.at } : null,
+  })
+})
+
 app.post('/system/refresh-app-token', async (c) => {
   const BUNDLE = 'com.hclinear.metaccazeMiskolc'
   const APPNAME = 'MVK MobilON+'

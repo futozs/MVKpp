@@ -9,9 +9,7 @@ export default defineConfig({
     // két React-példány kerülhetne a bundle-be, és a hookok elszállnának.
     dedupe: ['react', 'react-dom'],
     alias: {
-      // Design rendszer primitívek. A színek/tipográfia/ritmus a
-      // megosztott theme/tokens.css-ből jön, nem innen.
-      '@ui': fileURLToPath(new URL('./src/components/ui', import.meta.url)),
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
   server: {
@@ -48,6 +46,10 @@ export default defineConfig({
         changeOrigin: true,
       },
       '/_renew': {
+        target: 'http://localhost:8088',
+        changeOrigin: true,
+      },
+      '/weather': {
         target: 'http://localhost:8088',
         changeOrigin: true,
       },

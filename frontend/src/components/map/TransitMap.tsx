@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import L from 'leaflet'
-import { Crosshair, Plus, Search, SlidersHorizontal, X } from 'lucide-react'
+import { Crosshair, LocateFixed, Plus, Search, SlidersHorizontal, X } from 'lucide-react'
 import type { FilterState, LiveVehicle, Route, Stop } from '@/types'
 import { api } from '@/services/api'
 import { RouteChips } from '@/components/fleet/RouteChips'
@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { RouteTile } from '@/components/transit/RouteTile'
 import { LiveDot } from '@/components/transit/LiveDot'
+import { useGeolocation, distanceKm } from '@/hooks/useGeolocation'
 import { token } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 
@@ -144,6 +145,8 @@ export function TransitMap({
 
   /** Mobilon az oldalsáv rácsúszik a térképre; asztali nézetben mindig látszik. */
   const [isPanelOpen, setPanelOpen] = useState(false)
+  const geo = useGeolocation()
+  const geoLayerRef = useRef<L.LayerGroup | null>(null)
   const [stopQuery, setStopQuery] = useState('')
   const [typedId, setTypedId] = useState('')
 
@@ -186,9 +189,30 @@ export function TransitMap({
     stopLayerRef.current = L.layerGroup().addTo(map)
     busLayerRef.current = L.layerGroup().addTo(map)
     focusLayerRef.current = L.layerGroup().addTo(map)
+    geoLayerRef.current = L.layerGroup().addTo(map)
     mapRef.current = map
 
+    /*
+     * Böngésző-visszaállítás után (bfcache, háttérből előhozás, elforgatás)
+     * a Leaflet a régi konténerméretet hiszi, és szürke sávokkal vagy
+     * hiányzó csempékkel jön vissza. Az újraméretezés helyrerakja anélkül,
+     * hogy az egész oldalt újra kellene tölteni.
+     */
+    const revalidateSize = () => {
+      if (document.visibilityState === 'visible') map.invalidateSize()
+    }
+    document.addEventListener('visibilitychange', revalidateSize)
+    window.addEventListener('pageshow', revalidateSize)
+    window.addEventListener('orientationchange', revalidateSize)
+
+    const observer = new ResizeObserver(() => map.invalidateSize())
+    observer.observe(mapContainerRef.current)
+
     return () => {
+      document.removeEventListener('visibilitychange', revalidateSize)
+      window.removeEventListener('pageshow', revalidateSize)
+      window.removeEventListener('orientationchange', revalidateSize)
+      observer.disconnect()
       map.remove()
       mapRef.current = null
     }
@@ -275,9 +299,91 @@ export function TransitMap({
       list = list.filter((v) => routeSet.has(v.routeId))
     }
 
-    if (filters.moving) list = list.filter((v) => (v.speed || 0) > 0.5)
+    // Mozgásállapot. A 0,5 m/s küszöb kiszűri a GPS-remegést álló járműnél.
+    if (filters.speed === 'moving') list = list.filter((v) => (v.speed || 0) > 0.5)
+    else if (filters.speed === 'idle') list = list.filter((v) => (v.speed || 0) <= 0.5)
+
+    // Elavult jelentés: a régen frissült pozíció félrevezető.
+    if (filters.maxAgeSec != null) {
+      const now = Date.now() / 1000
+      list = list.filter((v) => v.timestamp != null && now - v.timestamp <= filters.maxAgeSec!)
+    }
+
+    // Csak a közelemben — a GPS-helyzet köré húzott sugár.
+    if (filters.nearMeKm != null && geo.position) {
+      const { lat, lon } = geo.position
+      list = list.filter(
+        (v) =>
+          v.lat != null &&
+          v.lon != null &&
+          distanceKm(lat, lon, v.lat, v.lon) <= filters.nearMeKm!
+      )
+    }
 
     return list
+  }
+
+  // Saját pozíció: pont + pontossági kör. Kék, hogy sose keveredjen össze a
+  // járatszínekkel vagy az „élő adat” zölddel.
+  useEffect(() => {
+    const layer = geoLayerRef.current
+    if (!layer) return
+    layer.clearLayers()
+    if (!geo.position) return
+
+    const { lat, lon, accuracyM } = geo.position
+    const mine = token('--early')
+
+    L.circle([lat, lon], {
+      radius: Math.max(accuracyM, 12),
+      color: mine,
+      weight: 1,
+      opacity: 0.5,
+      fillColor: mine,
+      fillOpacity: 0.12,
+    }).addTo(layer)
+
+    L.circleMarker([lat, lon], {
+      radius: 7,
+      color: token('--background'),
+      weight: 3,
+      fillColor: mine,
+      fillOpacity: 1,
+    })
+      .bindTooltip('Itt vagy', { direction: 'top', offset: [0, -8] })
+      .addTo(layer)
+  }, [geo.position])
+
+  /**
+   * GPS gomb. Első koppintásra engedélyt kér, utána a helyzetedre és a
+   * körülötted lévő megállókra közelít — hogy egy mozdulattal rá lehessen
+   * koppintani a legközelebbire.
+   */
+  const handleLocate = () => {
+    if (!geo.position) {
+      geo.start()
+      return
+    }
+    const map = mapRef.current
+    if (!map) return
+
+    const { lat, lon } = geo.position
+    const nearby = stops
+      .map((s) => ({ s, d: distanceKm(lat, lon, s.lat, s.lon) }))
+      .filter((x) => x.d <= 0.6)
+      .sort((a, b) => a.d - b.d)
+      .slice(0, 8)
+
+    if (nearby.length > 0) {
+      // A saját pozíció és a legközelebbi megállók együtt férjenek a képbe.
+      const points: [number, number][] = [
+        [lat, lon],
+        ...nearby.map((x) => [x.s.lat, x.s.lon] as [number, number]),
+      ]
+      map.fitBounds(points, { padding: [70, 70], maxZoom: 17 })
+    } else {
+      map.flyTo([lat, lon], 16, { duration: 0.6 })
+    }
   }
 
   // Járatnyomvonalak
@@ -526,14 +632,14 @@ export function TransitMap({
       .slice(0, 80)
   }, [stops, stopQuery])
 
-  const vehicleResults = useMemo(
-    () =>
-      getVisibleVehicles().sort(
-        (a, b) =>
-          a.routeShort.localeCompare(b.routeShort, 'hu') || a.id.localeCompare(b.id, 'hu')
-      ),
-    [vehicles, filters]
-  )
+  const vehicleResults = useMemo(() => {
+    const list = getVisibleVehicles()
+    if (filters.sort === 'id') return list.sort((a, b) => a.id.localeCompare(b.id, 'hu'))
+    if (filters.sort === 'speed') return list.sort((a, b) => (b.speed || 0) - (a.speed || 0))
+    return list.sort(
+      (a, b) => a.routeShort.localeCompare(b.routeShort, 'hu') || a.id.localeCompare(b.id, 'hu')
+    )
+  }, [vehicles, filters, geo.position])
 
   const flyToVehicle = (v: LiveVehicle) => {
     if (v.lat != null && v.lon != null && mapRef.current) {
@@ -546,23 +652,46 @@ export function TransitMap({
     filters.watch.length > 0 ||
     filters.routes.length > 0 ||
     filters.type !== 'all' ||
-    filters.moving ||
+    filters.speed !== 'all' ||
+    filters.maxAgeSec != null ||
+    filters.nearMeKm != null ||
     !filters.stops
 
   const filterSummary = filters.watch.length
     ? `${filters.watch.join(', ')} követése`
     : filters.routes.length
-      ? `${filters.routes.length} járat kiválasztva`
-      : filters.moving
-        ? 'Csak mozgó járművek'
-        : 'Szűrés aktív'
+      ? `${filters.routes.length} járat · ${vehicleResults.length} jármű`
+      : filters.nearMeKm != null
+        ? `${filters.nearMeKm < 1 ? `${filters.nearMeKm * 1000} m` : `${filters.nearMeKm} km`} sugarú körben`
+        : filters.speed === 'moving'
+          ? 'Csak mozgó járművek'
+          : filters.speed === 'idle'
+            ? 'Csak álló járművek'
+            : filters.maxAgeSec != null
+              ? `Friss jelentés (${filters.maxAgeSec / 60} perc)`
+              : `Szűrés aktív · ${vehicleResults.length} jármű`
 
   const LAYER_TOGGLES = [
     { key: 'stops', label: 'Megállók', description: 'Minden GTFS megállópont' },
     { key: 'shape', label: 'Járatnyomvonal', description: 'A kiválasztott járatok útvonala' },
-    { key: 'moving', label: 'Csak mozgó járművek', description: '0,5 km/h fölött' },
     { key: 'labels', label: 'Rendszámok', description: 'Azonosító minden csempe alatt' },
   ] as const
+
+  /** Meddig számít frissnek egy jármű-jelentés. */
+  const AGE_OPTIONS: { value: number | null; label: string }[] = [
+    { value: null, label: 'Mindegy' },
+    { value: 60, label: '1 perc' },
+    { value: 180, label: '3 perc' },
+    { value: 600, label: '10 perc' },
+  ]
+
+  /** Sugár a saját helyzetem körül. */
+  const RADIUS_OPTIONS: { value: number | null; label: string }[] = [
+    { value: null, label: 'Nincs' },
+    { value: 0.5, label: '500 m' },
+    { value: 1.5, label: '1,5 km' },
+    { value: 5, label: '5 km' },
+  ]
 
   return (
     <div className="relative flex h-full w-full min-w-0 flex-1 overflow-hidden">
@@ -713,6 +842,104 @@ export function TransitMap({
           </section>
 
           <section className="space-y-2.5 border-b border-border px-4 py-4">
+            <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Mozgásállapot
+            </Label>
+            <div className="grid grid-cols-3 gap-1 rounded-lg border border-border bg-muted/60 p-1">
+              {(
+                [
+                  { id: 'all', label: 'Mind' },
+                  { id: 'moving', label: 'Mozgó' },
+                  { id: 'idle', label: 'Álló' },
+                ] as const
+              ).map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => setFilters((prev) => ({ ...prev, speed: option.id }))}
+                  aria-pressed={filters.speed === option.id}
+                  className={cn(
+                    'rounded-md py-1.5 text-xs font-semibold transition-all duration-fast',
+                    'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
+                    filters.speed === option.id
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section className="space-y-2.5 border-b border-border px-4 py-4">
+            <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Jelentés frissessége
+            </Label>
+            <p className="text-[11px] text-muted-foreground">
+              A régen frissült pozíció félrevezető — itt elrejthető.
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {AGE_OPTIONS.map((option) => (
+                <button
+                  key={String(option.value)}
+                  type="button"
+                  onClick={() => setFilters((prev) => ({ ...prev, maxAgeSec: option.value }))}
+                  aria-pressed={filters.maxAgeSec === option.value}
+                  className={cn(
+                    'rounded-md border px-2.5 py-1 text-xs font-semibold transition-all duration-fast',
+                    'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
+                    filters.maxAgeSec === option.value
+                      ? 'border-primary bg-primary text-primary-foreground'
+                      : 'border-border bg-secondary text-muted-foreground hover:bg-accent hover:text-foreground'
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </section>
+
+          {/* Csak a közelemben — a GPS-helyzet köré húzott sugár. */}
+          <section className="space-y-2.5 border-b border-border px-4 py-4">
+            <div className="flex items-baseline justify-between gap-2">
+              <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                A közelemben
+              </Label>
+              {!geo.position ? (
+                <button
+                  type="button"
+                  onClick={geo.start}
+                  className="text-[11px] font-semibold text-primary underline underline-offset-4"
+                >
+                  GPS bekapcsolása
+                </button>
+              ) : null}
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {RADIUS_OPTIONS.map((option) => (
+                <button
+                  key={String(option.value)}
+                  type="button"
+                  disabled={!geo.position && option.value !== null}
+                  onClick={() => setFilters((prev) => ({ ...prev, nearMeKm: option.value }))}
+                  aria-pressed={filters.nearMeKm === option.value}
+                  className={cn(
+                    'rounded-md border px-2.5 py-1 text-xs font-semibold transition-all duration-fast',
+                    'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
+                    'disabled:cursor-not-allowed disabled:opacity-40',
+                    filters.nearMeKm === option.value
+                      ? 'border-primary bg-primary text-primary-foreground'
+                      : 'border-border bg-secondary text-muted-foreground hover:bg-accent hover:text-foreground'
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section className="space-y-2.5 border-b border-border px-4 py-4">
             <div className="flex items-baseline justify-between gap-2">
               <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 Járatok
@@ -762,6 +989,38 @@ export function TransitMap({
           value="fleet"
           className="mt-0 min-h-0 flex-1 overflow-y-auto data-[state=inactive]:hidden focus-visible:outline-none"
         >
+          {/* Rendezés — a lista tetején marad görgetés közben is. */}
+          <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-card px-4 py-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Rendezés
+            </span>
+            <div className="flex gap-1">
+              {(
+                [
+                  { id: 'route', label: 'Járat' },
+                  { id: 'id', label: 'Rendszám' },
+                  { id: 'speed', label: 'Sebesség' },
+                ] as const
+              ).map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => setFilters((prev) => ({ ...prev, sort: option.id }))}
+                  aria-pressed={filters.sort === option.id}
+                  className={cn(
+                    'rounded-md px-2 py-1 text-[11px] font-semibold transition-colors duration-fast',
+                    'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
+                    filters.sort === option.id
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {vehicleResults.length === 0 ? (
             <p className="px-4 py-8 text-center text-sm text-muted-foreground">
               A jelenlegi szűrésnek egy jármű sem felel meg.
@@ -900,6 +1159,38 @@ export function TransitMap({
           <SlidersHorizontal />
           Szűrés
         </Button>
+
+        {/* GPS: a zoom-vezérlő fölött, hüvelykujjal elérhető helyen. */}
+        <div className="absolute bottom-[92px] right-3 z-overlay flex flex-col items-end gap-2">
+          {geo.error ? (
+            <p
+              role="status"
+              className="max-w-[220px] rounded-lg border border-border bg-card/95 px-2.5 py-1.5 text-[11px] text-muted-foreground shadow-lg backdrop-blur-sm"
+            >
+              {geo.error}
+            </p>
+          ) : null}
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={geo.isActive ? 'default' : 'secondary'}
+                size="icon"
+                className="h-11 w-11 shadow-lg"
+                onClick={handleLocate}
+                disabled={geo.status === 'requesting'}
+                aria-label={
+                  geo.position ? 'Ugrás a helyzetemre' : 'Helymeghatározás bekapcsolása'
+                }
+              >
+                <LocateFixed className={cn(geo.status === 'requesting' && 'animate-pulse')} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="left">
+              {geo.position ? 'Helyzetem és a közeli megállók' : 'Helymeghatározás bekapcsolása'}
+            </TooltipContent>
+          </Tooltip>
+        </div>
 
         {focusTripId ? (
           <div className="absolute left-3 top-3 z-overlay md:left-4 md:top-4">

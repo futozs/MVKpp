@@ -13,6 +13,7 @@ import { Card } from '@/components/ui/card'
 import { RouteTile } from '@/components/transit/RouteTile'
 import { LiveDot } from '@/components/transit/LiveDot'
 import { TimetableGrid } from './TimetableGrid'
+import { TripProgressRail } from './TripProgressRail'
 import { favoriteKey, useFavorites } from '@/hooks/useFavorites'
 import { cn } from '@/lib/utils'
 
@@ -466,23 +467,33 @@ function TripDetail({
         </Button>
       </div>
 
-      {/* Többhasábos elrendezés: az útvonal fentről lefelé olvasható, majd
-          a következő hasábon folytatódik — nem soronként ugrál. */}
-      <ol className="columns-1 gap-x-8 px-3 py-2 sm:columns-2 sm:px-4 lg:columns-3">
-        {stops.map((stop, i) => {
-          const time = trip.times[i]
-          if (!time) return null
-          return (
-            <li
-              key={stop.id}
-              className="flex break-inside-avoid items-baseline justify-between gap-3 border-b border-border/40 py-1.5"
-            >
-              <span className="min-w-0 truncate text-xs text-muted-foreground">{stop.name}</span>
-              <span className="shrink-0 font-mono text-xs font-semibold tabular-nums">{time}</span>
-            </li>
-          )
-        })}
-      </ol>
+      {/* Elindult menetnél a haladás-sín mutatja, hol tart a busz; állónál a
+          tömör, többhasábos menetrend a hasznosabb. */}
+      {vehicle ? (
+        <TripProgressRail
+          trip={trip}
+          vehicleId={vehicle.id}
+          stopNames={stops.map((s) => s.name)}
+        />
+      ) : (
+        <ol className="columns-1 gap-x-8 px-3 py-2 sm:columns-2 sm:px-4 lg:columns-3">
+          {stops.map((stop, i) => {
+            const time = trip.times[i]
+            if (!time) return null
+            return (
+              <li
+                key={stop.id}
+                className="flex break-inside-avoid items-baseline justify-between gap-3 border-b border-border/40 py-1.5"
+              >
+                <span className="min-w-0 truncate text-xs text-muted-foreground">{stop.name}</span>
+                <span className="shrink-0 font-mono text-xs font-semibold tabular-nums">
+                  {time}
+                </span>
+              </li>
+            )
+          })}
+        </ol>
+      )}
     </div>
   )
 }

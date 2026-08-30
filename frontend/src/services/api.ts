@@ -11,6 +11,7 @@ import type {
   SystemInfoResponse,
   TimetableResponse,
   TimetableRoutesResponse,
+  TripProgressResponse,
   WeatherResponse,
 } from '../types'
 
@@ -55,6 +56,16 @@ export const api = {
     return handleResponse<{ routes: RouteGeo[] }>(
       await fetch(`${API_BASE}/gtfs/route-geo?route=${encodeURIComponent(routeIds.join(','))}`),
       '/gtfs/route-geo'
+    )
+  },
+
+  /** Egy menet haladása a saját megállósorán (hol tart most a busz). */
+  async getTripProgress(tripId: string, vehicleId?: string): Promise<TripProgressResponse> {
+    const params = new URLSearchParams({ trip: tripId })
+    if (vehicleId) params.set('vehicle', vehicleId)
+    return handleResponse<TripProgressResponse>(
+      await fetch(`${API_BASE}/live/trip-progress?${params.toString()}`),
+      '/live/trip-progress'
     )
   },
 

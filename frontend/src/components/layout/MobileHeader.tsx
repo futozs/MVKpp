@@ -2,6 +2,8 @@ import { ExternalLink, Layers, LayoutDashboard, RefreshCw } from 'lucide-react'
 import type { ActiveTab } from '@/types'
 import { Button } from '@/components/ui/button'
 import { LiveDot } from '@/components/transit/LiveDot'
+import { useWeather } from '@/hooks/useWeather'
+import { hubUrl } from '@/lib/links'
 import { cn } from '@/lib/utils'
 
 interface MobileHeaderProps {
@@ -38,6 +40,8 @@ export function MobileHeader({
   monitoredStopsCount,
   onOpenMapPicker,
 }: MobileHeaderProps) {
+  const weather = useWeather()
+
   return (
     <header className="relative z-bar shrink-0 border-b border-border bg-card md:hidden">
       {/* Állapot + eszközök */}
@@ -49,12 +53,21 @@ export function MobileHeader({
         </span>
 
         {lastUpdated ? (
-          <span className="min-w-0 truncate font-mono text-[11px] tabular-nums text-muted-foreground">
+          <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
             {lastUpdated.toLocaleTimeString('hu-HU', {
               hour: '2-digit',
               minute: '2-digit',
-              second: '2-digit',
             })}
+          </span>
+        ) : null}
+
+        {/* Hőmérséklet — telefonon csak a szám fér ki. */}
+        {weather?.tempC != null ? (
+          <span
+            className="shrink-0 font-mono text-[11px] font-semibold tabular-nums text-foreground"
+            title={weather.text}
+          >
+            {Math.round(weather.tempC)}°
           </span>
         ) : null}
 
@@ -74,7 +87,7 @@ export function MobileHeader({
 
         <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" asChild>
           <a
-            href="http://localhost:5174"
+            href={hubUrl()}
             target="_blank"
             rel="noreferrer"
             aria-label="Rendszerpult megnyitása"

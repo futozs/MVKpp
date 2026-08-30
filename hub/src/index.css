@@ -5,75 +5,44 @@
 @tailwind utilities;
 
 @layer base {
+  * {
+    @apply border-border;
+  }
+
   html {
     -webkit-text-size-adjust: 100%;
   }
 
   body {
-    background-color: var(--bg-app);
-    color: var(--text);
-    font-family: var(--font-ui);
-    font-size: var(--t-base);
-    line-height: var(--lh-normal);
-    -webkit-font-smoothing: antialiased;
-  }
-
-  :focus-visible {
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 2px;
-    border-radius: var(--r-sm);
-  }
-
-  :focus:not(:focus-visible) {
-    outline: none;
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-sans);
+    font-feature-settings: 'ss01' 1;
   }
 
   .tnum,
-  [class*='font-data'] {
+  .font-mono {
     font-variant-numeric: tabular-nums;
   }
 
   ::selection {
-    background: var(--sg-800);
-    color: var(--n-100);
-  }
-}
-
-@layer components {
-  .section-label {
-    display: flex;
-    align-items: center;
-    gap: var(--s-2);
-    font-size: var(--t-2xs);
-    font-weight: 600;
-    letter-spacing: var(--tracking-label);
-    text-transform: uppercase;
-    color: var(--text-faint);
-  }
-
-  .section-label::before {
-    content: '';
-    width: 10px;
-    height: 1px;
-    background: var(--line-strong);
-    flex-shrink: 0;
+    @apply bg-primary/30 text-foreground;
   }
 }
 
 ::-webkit-scrollbar {
-  width: 9px;
-  height: 9px;
+  width: 10px;
+  height: 10px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--bg-sunken);
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--n-700);
-  border: 2px solid var(--bg-sunken);
+  background: hsl(var(--accent));
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--n-600);
-}
-::-webkit-scrollbar-corner {
-  background: var(--bg-sunken);
+  background: hsl(var(--muted-foreground) / 0.5);
+  background-clip: content-box;
 }

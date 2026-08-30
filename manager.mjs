@@ -68,16 +68,43 @@ function logLine(prefix, color, text) {
 }
 
 // 1. Start Backend Process
-console.log(`${C.green}*${C.reset} ${C.bold}Backend API Gateway inditasa (:8088)...${C.reset}`)
-const backendProc = spawn('node', ['src/index.ts'], {
-  cwd: BACKEND_DIR,
-  env: { ...process.env, PORT: '8088', AUTO_RENEW: '0' },
-  stdio: ['ignore', 'pipe', 'pipe'],
-})
-processes.push({ name: 'backend', proc: backendProc })
+//
+// A backend magától is kiléphet (a hub „Újraindítás" gombja ezt használja),
+// ezért felügyeljük: ha nem leállás közben esik ki, újraindítjuk.
+let shuttingDown = false
+let backendEntry = null
 
-backendProc.stdout.on('data', (d) => logLine('BACKEND', C.green, d))
-backendProc.stderr.on('data', (d) => logLine('BACKEND', C.red, d))
+console.log(`${C.green}*${C.reset} ${C.bold}Backend API Gateway inditasa (:8088)...${C.reset}`)
+
+function startBackend(reason) {
+  if (reason) logLine('MANAGER', C.green, `Backend ujrainditasa (${reason})...`)
+
+  const proc = spawn('node', ['src/index.ts'], {
+    cwd: BACKEND_DIR,
+    // MVK_MANAGED: a backend ebbol tudja, hogy kilepes utan van, aki visszahozza.
+    env: { ...process.env, PORT: '8088', AUTO_RENEW: '0', MVK_MANAGED: '1' },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+
+  proc.stdout.on('data', (d) => logLine('BACKEND', C.green, d))
+  proc.stderr.on('data', (d) => logLine('BACKEND', C.red, d))
+
+  proc.on('exit', (code) => {
+    if (shuttingDown) return
+    logLine('BACKEND', C.yellow, `Kilepett (kod: ${code}). Ujrainditas 800 ms mulva.`)
+    setTimeout(() => {
+      const next = startBackend(`elozo kod: ${code}`)
+      // A processzlistaban a friss peldany szerepeljen, hogy Ctrl+C leallitsa.
+      if (backendEntry) backendEntry.proc = next
+    }, 800)
+  })
+
+  return proc
+}
+
+const backendProc = startBackend()
+backendEntry = { name: 'backend', proc: backendProc }
+processes.push(backendEntry)
 
 // 2. Start Main Frontend Server
 console.log(`${C.cyan}*${C.reset} ${C.bold}Fő Frontend Dashboard inditasa (:5173)...${C.reset}`)
@@ -143,6 +170,8 @@ let isShuttingDown = false
 function shutdown() {
   if (isShuttingDown) return
   isShuttingDown = true
+  // Leallas kozben a backend kilepese nem hiba: ne inditsuk ujra.
+  shuttingDown = true
   console.log(`\n${C.yellow}[Manager] Leallitas folyamatban...${C.reset}`)
 
   processes.forEach(({ name, proc }) => {

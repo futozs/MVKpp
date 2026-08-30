@@ -50,6 +50,10 @@ export default defineConfig({
         target: 'http://localhost:8088',
         changeOrigin: true,
       },
+      '/weather': {
+        target: 'http://localhost:8088',
+        changeOrigin: true,
+      },
       '/system': {
         target: 'http://localhost:8088',
         changeOrigin: true,

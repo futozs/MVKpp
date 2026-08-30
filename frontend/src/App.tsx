@@ -15,6 +15,7 @@ import { MultiStopDashboard } from '@/components/multistop/MultiStopDashboard'
 import { StopDetailDrawer } from '@/components/stops/StopDetailDrawer'
 import { TimetableView } from '@/components/timetable/TimetableView'
 import { MapSettingsModal } from '@/components/map/MapSettingsModal'
+import { VehicleFocusCard } from '@/components/map/VehicleFocusCard'
 import { TooltipProvider } from '@/components/ui/tooltip'
 
 const DEFAULT_FILTERS: FilterState = {
@@ -22,7 +23,10 @@ const DEFAULT_FILTERS: FilterState = {
   watch: [],
   routes: [],
   type: 'all',
-  moving: false,
+  speed: 'all',
+  maxAgeSec: null,
+  nearMeKm: null,
+  sort: 'route',
   stops: true,
   shape: true,
   rstops: false,
@@ -137,6 +141,32 @@ export function App() {
     return () => clearInterval(posInterval)
   }, [fetchLivePositions])
 
+  /*
+   * Visszatérés a lapra.
+   *
+   * Böngésző-bezárás utáni helyreállításkor (és háttérből előhozáskor) a lap
+   * a bfcache-ből jöhet vissza: az időzítők addig állnak, a kijelzett adat
+   * pedig percekkel korábbi. Ilyenkor azonnal frissítünk, hogy ne kelljen
+   * kézzel újratölteni az oldalt.
+   */
+  useEffect(() => {
+    const refreshIfVisible = () => {
+      if (document.visibilityState === 'visible') fetchLivePositions()
+    }
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) refreshIfVisible()
+    }
+
+    document.addEventListener('visibilitychange', refreshIfVisible)
+    window.addEventListener('pageshow', onPageShow)
+    window.addEventListener('online', refreshIfVisible)
+    return () => {
+      document.removeEventListener('visibilitychange', refreshIfVisible)
+      window.removeEventListener('pageshow', onPageShow)
+      window.removeEventListener('online', refreshIfVisible)
+    }
+  }, [fetchLivePositions])
+
   const handleClearFilters = () => {
     setFilters(DEFAULT_FILTERS)
   }
@@ -221,9 +251,19 @@ export function App() {
                 onToggleMonitorStop={handleToggleMonitorStop}
               />
 
+              {/* Menetkövetés közben a követett jármű kártyája veszi át az
+                  alsó panelt: azt nézed, ami mozog, nem a menetrendet. */}
+              {focusTripId ? (
+                <VehicleFocusCard
+                  tripId={focusTripId}
+                  vehicleId={focusVehicleId}
+                  onClose={handleExitFocus}
+                />
+              ) : null}
+
               {/* A térképen kiválasztott megálló indulásai */}
               <StopDetailDrawer
-                stopId={selectedStopId}
+                stopId={focusTripId ? null : selectedStopId}
                 stops={stops}
                 onClose={() => setSelectedStopId(null)}
                 onFocusTrip={handleFocusTrip}

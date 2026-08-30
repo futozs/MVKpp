@@ -5,6 +5,9 @@ import { StopCard } from './StopCard'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
+/** A sáv vízszintes belső margója (px-4) — a kártya ehhez igazodik. */
+const TRACK_PADDING = 16
+
 type StopCarouselProps = {
   stops: Stop[]
   onRemove: (stopId: string) => void
@@ -31,13 +34,13 @@ export function StopCarousel({
   const [index, setIndex] = useState(0)
 
   /**
-   * A látható kártya sorszáma: az, amelyiknek a közepe legközelebb esik a
-   * sáv közepéhez. Mért pozícióból dolgozik, nem feltételezett lépésközből —
-   * így eltérő kártyaszélességnél és belső margóknál is pontos marad.
+   * A látható kártya sorszáma a MÉRT pozícióból: az, amelyiknek a közepe
+   * legközelebb esik a sáv közepéhez. Se lépésköz-feltételezés, se
+   * késleltetett React-állapot nem játszik bele.
    */
-  const syncIndex = useCallback(() => {
+  const nearestIndex = useCallback(() => {
     const track = trackRef.current
-    if (!track) return
+    if (!track) return 0
     const viewportCenter = track.getBoundingClientRect().left + track.clientWidth / 2
 
     let nearest = 0
@@ -50,27 +53,21 @@ export function StopCarousel({
         nearest = i
       }
     })
-    setIndex(nearest)
+    return nearest
   }, [])
 
   useEffect(() => {
     const track = trackRef.current
     if (!track) return
-    track.addEventListener('scroll', syncIndex, { passive: true })
-    return () => track.removeEventListener('scroll', syncIndex)
-  }, [syncIndex])
+    const onScroll = () => setIndex(nearestIndex())
+    track.addEventListener('scroll', onScroll, { passive: true })
+    return () => track.removeEventListener('scroll', onScroll)
+  }, [nearestIndex])
 
   // Ha kikerül egy megálló, ne ragadjon bent egy nem létező sorszám.
   useEffect(() => {
-    if (index > stops.length - 1) setIndex(Math.max(0, stops.length - 1))
-  }, [stops.length, index])
-
-  /**
-   * Lapozás a kártya tényleges pozíciójára. Egymás után gyorsan érkező
-   * kattintásoknál a még futó sima görgetés miatt az `index` elavult lenne,
-   * ezért a célt külön ref tartja számon.
-   */
-  const pendingIndex = useRef(0)
+    setIndex((prev) => Math.min(prev, Math.max(0, stops.length - 1)))
+  }, [stops.length])
 
   const scrollToCard = (target: number) => {
     const track = trackRef.current
@@ -79,16 +76,20 @@ export function StopCarousel({
     const child = track.children[clamped] as HTMLElement | undefined
     if (!child) return
 
-    pendingIndex.current = clamped
     const left =
       child.getBoundingClientRect().left -
       track.getBoundingClientRect().left +
       track.scrollLeft -
-      track.clientLeft
-    track.scrollTo({ left: Math.max(0, left - 16), behavior: 'smooth' })
+      TRACK_PADDING
+
+    track.scrollLeft = Math.max(0, Math.min(track.scrollWidth - track.clientWidth, left))
+    // A görgetési esemény aszinkron; a sorszámot rögtön frissítjük, hogy a
+    // pontsor és a gombok tiltása azonnal helyes legyen.
+    setIndex(clamped)
   }
 
-  const step = (delta: number) => scrollToCard(pendingIndex.current + delta)
+  /** Mindig a jelenlegi, mért kártyához képest lépünk. */
+  const step = (delta: number) => scrollToCard(nearestIndex() + delta)
 
   const atStart = index <= 0
   const atEnd = index >= stops.length - 1
@@ -99,6 +100,10 @@ export function StopCarousel({
         ref={trackRef}
         className={cn(
           'flex min-h-0 flex-1 snap-x snap-mandatory gap-4 overflow-x-auto overflow-y-hidden',
+          // Szándékosan NINCS `scroll-smooth`: a lágy görgetés több
+          // környezetben (csökkentett mozgás, háttérbe került lap) egyszerűen
+          // nem fut le, és a lapozógomb némán elnyeli a koppintást. Az
+          // azonnali ugrás mindenhol működik.
           'px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'
         )}
       >
@@ -131,7 +136,7 @@ export function StopCarousel({
             variant="outline"
             size="icon"
             className="h-10 w-10"
-            onClick={() => scrollToCard(index - 1)}
+            onClick={() => step(-1)}
             disabled={atStart}
             aria-label="Előző megálló"
           >
@@ -160,7 +165,7 @@ export function StopCarousel({
             variant="outline"
             size="icon"
             className="h-10 w-10"
-            onClick={() => scrollToCard(index + 1)}
+            onClick={() => step(1)}
             disabled={atEnd}
             aria-label="Következő megálló"
           >

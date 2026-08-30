@@ -118,12 +118,24 @@ export interface TripPathResponse {
 // View and Filter State
 export type ActiveTab = 'map' | 'multistop' | 'timetable'
 
+/** Mozgásállapot szerinti szűrés. */
+export type SpeedFilter = 'all' | 'moving' | 'idle'
+
+/** A járműlista rendezése. */
+export type VehicleSort = 'route' | 'id' | 'speed'
+
 export interface FilterState {
   vq: string
   watch: string[]
   routes: string[]
   type: 'all' | 'bus' | 'tram'
-  moving: boolean
+  /** Mind / csak mozgó / csak álló jármű. */
+  speed: SpeedFilter
+  /** Csak ennyi másodpercnél frissebb jelentés; `null` = mindegy. */
+  maxAgeSec: number | null
+  /** Csak ennyi kilométeren belül a saját helyzetemtől; `null` = mindegy. */
+  nearMeKm: number | null
+  sort: VehicleSort
   stops: boolean
   shape: boolean
   rstops: boolean
@@ -186,6 +198,35 @@ export interface WeatherResponse {
   code: number
   text: string
   at: string
+}
+
+// ── Menet haladása ───────────────────────────────────────────────────────────
+export interface TripProgressStop {
+  id: string
+  name: string
+  lat: number | null
+  lon: number | null
+  /** Menetrendi indulás másodpercben éjfél óta. */
+  dep: number
+}
+
+export interface TripProgressResponse {
+  tripId: string
+  live: boolean
+  vehicle?: {
+    id: string
+    lat: number
+    lon: number
+    speed: number | null
+  }
+  stops: TripProgressStop[]
+  /** Hányadik megálló UTÁN jár (0 = az első és második között). */
+  segmentIndex: number | null
+  /** 0..1 a szakaszon belül. */
+  segmentFraction?: number
+  /** 0..1 a teljes menetre. */
+  progress: number | null
+  nextStop?: TripProgressStop | null
 }
 
 // ── Menetrendkönyv ───────────────────────────────────────────────────────────

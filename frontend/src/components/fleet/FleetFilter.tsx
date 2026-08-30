@@ -105,8 +105,10 @@ export const FleetFilter: React.FC<FleetFilterProps> = ({
       list = list.filter((v) => set.has(v.routeId))
     }
 
-    if (filters.moving) {
+    if (filters.speed === 'moving') {
       list = list.filter((v) => (v.speed || 0) > 0.5)
+    } else if (filters.speed === 'idle') {
+      list = list.filter((v) => (v.speed || 0) <= 0.5)
     }
 
     return list.sort((a, b) => {

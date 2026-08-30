@@ -18,7 +18,7 @@
 
     /* Megosztott design rendszer: theme/ui */
     "baseUrl": ".",
-    "paths": { "@ui/*": ["./src/components/ui/*"] }
+    "paths": { "@/*": ["./src/*"] }
   },
   "include": ["src"]
 }

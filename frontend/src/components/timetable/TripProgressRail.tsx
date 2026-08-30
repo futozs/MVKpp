@@ -1,0 +1,187 @@
+import { useEffect, useRef, useState } from 'react'
+import { Bus } from 'lucide-react'
+import type { TimetableTrip, TripProgressResponse } from '@/types'
+import { api } from '@/services/api'
+import { cn } from '@/lib/utils'
+
+const POLL_MS = 5000
+/** Egy megállósor magassága a sínen — ebből számoljuk a busz helyét. */
+const ROW_HEIGHT = 34
+
+type TripProgressRailProps = {
+  trip: TimetableTrip
+  vehicleId?: string | null
+  /** A menetrendből ismert megállónevek és idők (oszloprendben). */
+  stopNames: string[]
+}
+
+/**
+ * Egy elindult menet haladása.
+ *
+ * A megállók mellett végigfut egy függőleges sín: a már elhagyott szakasz
+ * tömör zöld, az előttünk lévő halvány, a busz pedig azon a ponton ül, ahol
+ * a jármű valós pozíciója a vonalra vetítve tart. Így egy pillantással
+ * látszik, hol jár — nem csak az, hogy „élő".
+ */
+export function TripProgressRail({ trip, vehicleId, stopNames }: TripProgressRailProps) {
+  const [data, setData] = useState<TripProgressResponse | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const mounted = useRef(true)
+
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await api.getTripProgress(trip.tripId, vehicleId ?? undefined)
+        if (!mounted.current) return
+        setData(res)
+        setError(null)
+      } catch (err) {
+        if (mounted.current) setError((err as Error).message)
+      }
+    }
+
+    load()
+    const timer = setInterval(load, POLL_MS)
+    return () => clearInterval(timer)
+  }, [trip.tripId, vehicleId])
+
+  if (error) {
+    return (
+      <p role="alert" className="px-4 py-3 text-xs text-destructive">
+        {error}
+      </p>
+    )
+  }
+
+  if (!data) {
+    return (
+      <p className="px-4 py-6 text-center font-mono text-xs text-muted-foreground">
+        Haladás lekérése…
+      </p>
+    )
+  }
+
+  // A megállósor a haladás-végpontból jön; ha az valamiért üres, a
+  // menetrendből ismert neveket használjuk, hogy ne maradjon üres a panel.
+  const stops = data.stops.length
+    ? data.stops.map((s, i) => ({ id: s.id, name: s.name, time: trip.times[i] ?? null }))
+    : stopNames.map((name, i) => ({ id: `${i}`, name, time: trip.times[i] ?? null }))
+
+  const segment = data.segmentIndex
+  const fraction = data.segmentFraction ?? 0
+
+  /** A busz függőleges helye pixelben, a sorok közepéhez igazítva. */
+  const busTop =
+    segment == null ? null : (segment + fraction) * ROW_HEIGHT + ROW_HEIGHT / 2
+
+  return (
+    <div className="px-4 py-3">
+      {data.live && data.vehicle ? (
+        <p className="mb-2 flex items-center gap-2 text-xs">
+          <span className="rounded bg-primary/12 px-1.5 py-0.5 font-mono text-xs font-bold tabular-nums text-primary">
+            {data.vehicle.id}
+          </span>
+          <span className="text-muted-foreground">
+            {data.nextStop ? `következő: ${data.nextStop.name}` : 'útközben'}
+            {data.vehicle.speed != null
+              ? ` · ${Math.round(data.vehicle.speed * 3.6)} km/h`
+              : ''}
+          </span>
+        </p>
+      ) : (
+        <p className="mb-2 text-xs text-muted-foreground">
+          Erre a menetre még nem jelentkezett be jármű.
+        </p>
+      )}
+
+      <div className="relative">
+        {/* Sín: a megállósor mellett végigfutó függőleges vonal. */}
+        <span
+          aria-hidden
+          className="absolute left-[70px] top-0 w-0.5 rounded-full bg-border"
+          style={{ height: stops.length * ROW_HEIGHT }}
+        />
+
+        {/* A már megtett szakasz. */}
+        {busTop != null ? (
+          <span
+            aria-hidden
+            className="absolute left-[70px] top-0 w-0.5 rounded-full bg-primary"
+            style={{ height: busTop }}
+          />
+        ) : null}
+
+        {/* A busz a sínen — pontosan ott, ahol a jármű valós pozíciója tart. */}
+        {busTop != null && data.live ? (
+          <span
+            className="absolute z-10 flex h-7 w-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-background bg-primary text-primary-foreground shadow-md"
+            style={{ left: 71, top: busTop }}
+            title={
+              data.nextStop ? `Következő megálló: ${data.nextStop.name}` : 'A jármű útközben'
+            }
+          >
+            <Bus className="h-4 w-4" />
+          </span>
+        ) : null}
+
+        <ol>
+          {stops.map((stop, i) => {
+            const passed = segment != null && i <= segment
+            const isNext = segment != null && i === segment + 1
+
+            return (
+              <li
+                key={`${stop.id}-${i}`}
+                className="relative flex items-center gap-3"
+                style={{ height: ROW_HEIGHT }}
+              >
+                <span
+                  className={cn(
+                    'w-[52px] shrink-0 text-right font-mono text-xs tabular-nums',
+                    passed ? 'text-muted-foreground/60' : 'text-muted-foreground'
+                  )}
+                >
+                  {stop.time ?? '—'}
+                </span>
+
+                {/* Megállópont a sínen. */}
+                <span
+                  aria-hidden
+                  className={cn(
+                    'absolute h-2.5 w-2.5 -translate-x-1/2 rounded-full border-2',
+                    passed
+                      ? 'border-primary bg-primary'
+                      : isNext
+                        ? 'border-primary bg-background'
+                        : 'border-border bg-background'
+                  )}
+                  style={{ left: 71 }}
+                />
+
+                <span
+                  className={cn(
+                    'ml-[26px] min-w-0 flex-1 truncate text-xs',
+                    isNext
+                      ? 'font-semibold text-foreground'
+                      : passed
+                        ? 'text-muted-foreground/60'
+                        : 'text-muted-foreground'
+                  )}
+                >
+                  {stop.name}
+                </span>
+              </li>
+            )
+          })}
+        </ol>
+      </div>
+    </div>
+  )
+}
