@@ -113,10 +113,14 @@ export interface TripPathResponse {
   headsign: string
   shape: [number, number][]
   vehicle: ArrivalVehicle | null
+  /** A menet soron következő megállója. */
+  nextStop?: TripProgressStop | null
+  /** Menetrendi eltérés a busz pillanatnyi helyén: + késik, − siet. */
+  scheduleDeviationSec?: number | null
 }
 
 // View and Filter State
-export type ActiveTab = 'map' | 'multistop' | 'timetable'
+export type ActiveTab = 'map' | 'multistop' | 'timetable' | 'stats'
 
 /** Mozgásállapot szerinti szűrés. */
 export type SpeedFilter = 'all' | 'moving' | 'idle'
@@ -227,6 +231,8 @@ export interface TripProgressResponse {
   /** 0..1 a teljes menetre. */
   progress: number | null
   nextStop?: TripProgressStop | null
+  /** Menetrendi eltérés a busz pillanatnyi helyén: + késik, − siet. */
+  scheduleDeviationSec?: number | null
 }
 
 // ── Menetrendkönyv ───────────────────────────────────────────────────────────

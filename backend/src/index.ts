@@ -5,12 +5,21 @@
  *  - Token: state/jwt.txt; GTFS indításkor frissül.
  */
 import { serve } from '@hono/node-server'
+import { networkInterfaces } from 'node:os'
 import { Hono, type Context } from 'hono'
 import GtfsRealtimeBindings from 'gtfs-realtime-bindings'
 import { mkdirSync, readFileSync, writeFileSync, existsSync, unlinkSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import {
+  stops, routes, trips, schedByTripStop, stopSched, shapes,
+  routeStops, routeShapeIds, tripStops,
+  activeServices, haversineKm, projectOntoShapeKm,
+  getFeedVersion, loadGtfs as loadGtfsFrom, type Trip,
+} from './lib/gtfs.ts'
+import { stats } from './api/stats.ts'
+import { ops, adminToken } from './api/ops.ts'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(HERE, '..')
@@ -24,7 +33,9 @@ mkdirSync(STATE_DIR, { recursive: true })
 const API_ORIGIN = 'https://mccaze.mvkzrt.hu:8443'
 const GTFS_ORIGIN = 'http://84.206.68.21:8080'
 const PORT = Number(process.env.PORT ?? 8088)
-const HOST = process.env.HOST ?? '127.0.0.1'
+// Halozaton is elerheto: a hub es a dashboard mas gepekrol/telefonrol is nyithato.
+// Szukitheto a HOST env-vel (pl. HOST=127.0.0.1) ha csak helyi eleres kell.
+const HOST = process.env.HOST ?? '0.0.0.0'
 const AUTO_RENEW = (process.env.AUTO_RENEW ?? '1') !== '0'
 const RENEW_PATH = process.env.RENEW_PATH ?? '/api/v1/installation/generate-jwt'
 const RENEW_MARGIN_SEC = Number(process.env.RENEW_MARGIN_SEC ?? 900)
@@ -51,84 +62,11 @@ function jwtStatus(tok: string): JwtStatus {
 }
 
 // ── GTFS statikus ──
-type Stop = { id: string; code: string; name: string; lat: number; lon: number }
-type Route = { id: string; short: string; long: string; type: string; color: string; text: string }
-type Trip = { routeId: string; headsign: string; dir: string; serviceId: string; shapeId: string }
-const stops = new Map<string, Stop>()
-const routes = new Map<string, Route>()
-const trips = new Map<string, Trip>()
-const schedByTripStop = new Map<string, number>()
-const stopSched = new Map<string, { trip: string; dep: number }[]>()
-const serviceByDate = new Map<string, { add: Set<string>; rem: Set<string> }>()
-const shapes = new Map<string, [number, number][]>()
-// Járatszűrőhöz épített indexek (loadGtfs tölti):
-const routeStops = new Map<string, Set<string>>()     // routeId -> érintett megállók
-const routeShapeIds = new Map<string, Set<string>>()  // routeId -> irányonként a leghosszabb shape
-// Menetrend nézethez: trip -> a menet megállói indulási idő szerint rendezve.
-const tripStops = new Map<string, { stopId: string; dep: number }[]>()
-let feedVersion = ''
-
-function parseCsv(name: string): Record<string, string>[] {
-  const path = join(GTFS_DIR, name); if (!existsSync(path)) return []
-  const text = readFileSync(path, 'utf8').replace(/^﻿/, '')
-  const lines = text.split(/\r?\n/).filter((l) => l.length); if (!lines.length) return []
-  const head = lines[0].split(','); const out: Record<string, string>[] = []
-  for (let i = 1; i < lines.length; i++) { const cols = lines[i].split(','); const row: Record<string, string> = {}; head.forEach((h, j) => (row[h] = cols[j] ?? '')); out.push(row) }
-  return out
-}
-function hhmmssToSec(t: string): number | null {
-  const p = (t || '').trim().split(':'); if (p.length < 2) return null
-  const n = +p[0] * 3600 + +p[1] * 60 + (p[2] ? +p[2] : 0); return Number.isFinite(n) ? n : null
-}
-/**
- * Járatonkénti index: melyik megállókat érinti, és irányonként melyik a leghosszabb
- * (legteljesebb) vonalgeometria. A dashboard járatszűrője ebből rajzolja a vonalat
- * és ebből tudja, mely megállók tartoznak a kiválasztott járatokhoz.
- */
-function buildRouteIndex() {
-  const bestByDir = new Map<string, { shapeId: string; len: number }>()
-  for (const t of trips.values()) {
-    if (!t.shapeId) continue
-    const len = shapes.get(t.shapeId)?.length ?? 0; if (!len) continue
-    const key = t.routeId + '|' + t.dir; const cur = bestByDir.get(key)
-    if (!cur || len > cur.len) bestByDir.set(key, { shapeId: t.shapeId, len })
-  }
-  for (const [key, v] of bestByDir) {
-    const rid = key.slice(0, key.lastIndexOf('|'))
-    let set = routeShapeIds.get(rid); if (!set) routeShapeIds.set(rid, (set = new Set()))
-    set.add(v.shapeId)
-  }
-  for (const [stopId, arr] of stopSched) {
-    for (const x of arr) {
-      const rid = trips.get(x.trip)?.routeId; if (!rid) continue
-      let set = routeStops.get(rid); if (!set) routeStops.set(rid, (set = new Set()))
-      set.add(stopId)
-    }
-  }
-}
-
+// A betöltő, az indexek és a geometria a megosztott modulban él, hogy a
+// statisztikai worker pontosan ugyanazt használja: src/lib/gtfs.ts
 function loadGtfs() {
-  stops.clear(); routes.clear(); trips.clear(); schedByTripStop.clear(); stopSched.clear(); serviceByDate.clear(); shapes.clear(); routeStops.clear(); routeShapeIds.clear(); tripStops.clear()
-  for (const s of parseCsv('stops.txt')) { const lat = parseFloat(s.stop_lat), lon = parseFloat(s.stop_lon); if (Number.isFinite(lat) && Number.isFinite(lon)) stops.set(s.stop_id, { id: s.stop_id, code: s.stop_code || '', name: s.stop_name || '', lat, lon }) }
-  for (const r of parseCsv('routes.txt')) routes.set(r.route_id, { id: r.route_id, short: r.route_short_name || '', long: r.route_long_name || '', type: r.route_type || '', color: r.route_color || '888888', text: r.route_text_color || 'FFFFFF' })
-  for (const t of parseCsv('trips.txt')) trips.set(t.trip_id, { routeId: t.route_id, headsign: (t.trip_headsign || '').trim(), dir: t.direction_id || '', serviceId: t.service_id, shapeId: t.shape_id || '' })
-  for (const st of parseCsv('stop_times.txt')) {
-    const dep = hhmmssToSec(st.departure_time || st.arrival_time); if (dep == null) continue
-    schedByTripStop.set(st.trip_id + ' ' + st.stop_id, dep)
-    let arr = stopSched.get(st.stop_id); if (!arr) stopSched.set(st.stop_id, (arr = []))
-    if (!arr.some((x) => x.trip === st.trip_id && x.dep === dep)) arr.push({ trip: st.trip_id, dep })
-    let ts = tripStops.get(st.trip_id); if (!ts) tripStops.set(st.trip_id, (ts = []))
-    ts.push({ stopId: st.stop_id, dep })
-  }
-  for (const arr of stopSched.values()) arr.sort((a, b) => a.dep - b.dep)
-  for (const arr of tripStops.values()) arr.sort((a, b) => a.dep - b.dep)
-  for (const c of parseCsv('calendar_dates.txt')) { let e = serviceByDate.get(c.date); if (!e) serviceByDate.set(c.date, (e = { add: new Set(), rem: new Set() })); (c.exception_type === '1' ? e.add : e.rem).add(c.service_id) }
-  const shp = new Map<string, { seq: number; lat: number; lon: number }[]>()
-  for (const r of parseCsv('shapes.txt')) { const lat = parseFloat(r.shape_pt_lat), lon = parseFloat(r.shape_pt_lon), seq = parseInt(r.shape_pt_sequence); if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue; let a = shp.get(r.shape_id); if (!a) shp.set(r.shape_id, (a = [])); a.push({ seq, lat, lon }) }
-  for (const [id, a] of shp) { a.sort((x, y) => x.seq - y.seq); shapes.set(id, a.map((p) => [p.lat, p.lon] as [number, number])) }
-  buildRouteIndex()
-  feedVersion = parseCsv('feed_info.txt')[0]?.feed_version || ''
-  console.log(`[GTFS] stops=${stops.size} routes=${routes.size} trips=${trips.size} stopTimes=${schedByTripStop.size} shapes=${shapes.size} feed=${feedVersion}`)
+  const r = loadGtfsFrom(GTFS_DIR)
+  console.log(`[GTFS] stops=${r.stops} routes=${r.routes} trips=${r.trips} stopTimes=${r.stopTimes} shapes=${r.shapes} feed=${r.feedVersion}`)
 }
 // A gép SAJÁT helyi offsetjét használjuk (nem a hibás Intl Europe/Budapest-et).
 // TZ_OFFSET_SEC env-vel felülírható (nyáron 7200 = +2h).
@@ -144,46 +82,6 @@ function budapestNow() {
   const d = new Date((unix + offset) * 1000)
   const ymd = `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, '0')}${String(d.getUTCDate()).padStart(2, '0')}`
   return { ymd, secOfDay, unix, midnightUnix: unix - secOfDay, offset }
-}
-function activeServices(ymd: string): Set<string> {
-  const e = serviceByDate.get(ymd); const s = new Set<string>()
-  if (e) { e.add.forEach((x) => s.add(x)); e.rem.forEach((x) => s.delete(x)) }
-  return s
-}
-function haversineKm(aLat: number, aLon: number, bLat: number, bLon: number): number {
-  const R = 6371, dLat = ((bLat - aLat) * Math.PI) / 180, dLon = ((bLon - aLon) * Math.PI) / 180
-  const s = Math.sin(dLat / 2) ** 2 + Math.cos((aLat * Math.PI) / 180) * Math.cos((bLat * Math.PI) / 180) * Math.sin(dLon / 2) ** 2
-  return 2 * R * Math.asin(Math.sqrt(s))
-}
-/**
- * Egy pont (lat/lon) vetítése egy shape (útvonal-polyline) mentén: visszaadja, hány km-re
- * van a vetített pont a shape KEZDETÉTŐL ("alongKm" — mennyire "haladt előre" valami az
- * útvonalon, irányfüggetlenül, csak a geometriára hagyatkozva, mert a pillanatnyi GPS
- * bearing megbízhatatlan), ÉS hogy a pont ténylegesen milyen messze esik magától az
- * útvonaltól ("distKm" — ha ez nagy, a pont valójában NINCS ezen az útvonalon, az "along"
- * érték ilyenkor félrevezető és nem szabad rá támaszkodni).
- */
-function projectOntoShapeKm(shape: [number, number][], lat: number, lon: number): { alongKm: number; distKm: number } | null {
-  if (shape.length < 2) return null
-  const refLat = shape[0][0]
-  const kx = 111.32 * Math.cos((refLat * Math.PI) / 180), ky = 111.32
-  const toXY = (la: number, lo: number): [number, number] => [lo * kx, la * ky]
-  const [px, py] = toXY(lat, lon)
-  let cumKm = 0, bestDistKm = Infinity, bestAlongKm = 0
-  for (let i = 0; i < shape.length - 1; i++) {
-    const [ax, ay] = toXY(shape[i][0], shape[i][1])
-    const [bx, by] = toXY(shape[i + 1][0], shape[i + 1][1])
-    const dx = bx - ax, dy = by - ay
-    const segLen2 = dx * dx + dy * dy
-    let t = segLen2 > 0 ? ((px - ax) * dx + (py - ay) * dy) / segLen2 : 0
-    t = Math.max(0, Math.min(1, t))
-    const projX = ax + t * dx, projY = ay + t * dy
-    const distKm = Math.hypot(px - projX, py - projY)
-    const segLenKm = Math.hypot(dx, dy)
-    if (distKm < bestDistKm) { bestDistKm = distKm; bestAlongKm = cumKm + t * segLenKm }
-    cumKm += segLenKm
-  }
-  return { alongKm: bestAlongKm, distKm: bestDistKm }
 }
 
 // ── MVK fetch + GTFS-RT ──
@@ -440,6 +338,47 @@ app.use('*', async (c, next) => {
   await next()
 })
 
+// Statisztikai adatraktár (külön adatbázis; ha nem elérhető, 503-at ad és
+// a valós idejű funkciók érintetlenek maradnak).
+app.route('/stats', stats)
+
+// Uzemeltetes: ujratelepites es naplok. A rombolo muveletek admin tokent kernek.
+app.route('/system', ops)
+
+// A Hub kiszolgalasa a gateway-rol, /hub alatt.
+//
+// Igy tavoli elereshez (VPN) EGYETLEN port eleg: a dashboard a gyokeren, a hub
+// a /hub-on, az API pedig ugyanitt — nem kell harom portot atengedni a tunelen,
+// es nem kell a Vite dev szervert kitenni a halozatra.
+const HUB_DIST = join(ROOT, '..', 'hub', 'dist')
+
+function serveStatic(baseDir: string, rel: string) {
+  const filePath = join(baseDir, rel)
+  // Kilepes a konyvtarbol nem megengedett (pl. ../../etc/passwd).
+  if (!filePath.startsWith(baseDir) || !existsSync(filePath)) return null
+  const ext = rel.split('.').pop()?.toLowerCase() ?? ''
+  const mime: Record<string, string> = {
+    js: 'application/javascript', css: 'text/css', svg: 'image/svg+xml',
+    png: 'image/png', jpg: 'image/jpeg', json: 'application/json',
+    woff2: 'font/woff2', woff: 'font/woff', ico: 'image/x-icon',
+  }
+  return new Response(readFileSync(filePath), {
+    headers: { 'Content-Type': mime[ext] || 'application/octet-stream' },
+  })
+}
+
+app.get('/hub', (c) => c.redirect('/hub/'))
+app.get('/hub/*', (c) => {
+  const rel = c.req.path.replace(/^\/hub\/?/, '')
+  if (rel) {
+    const asset = serveStatic(HUB_DIST, rel)
+    if (asset) return asset
+  }
+  const index = join(HUB_DIST, 'index.html')
+  if (existsSync(index)) return c.html(readFileSync(index, 'utf8'))
+  return c.text('A hub meg nincs buildelve. Futtasd: cd hub && npm run build', 404)
+})
+
 // Static frontend serving (dist fallback or dashboard.html)
 app.get('/', (c) => {
   try {
@@ -488,34 +427,15 @@ app.get('/gtfs/route-geo', (c) => {
   }).filter(Boolean)
   return c.json({ routes: out })
 })
-app.get('/gtfs/meta.json', (c) => c.json({ feedVersion, stops: stops.size, routes: routes.size, trips: trips.size }))
+app.get('/gtfs/meta.json', (c) => c.json({ feedVersion: getFeedVersion(), stops: stops.size, routes: routes.size, trips: trips.size }))
 
-/**
- * Egy menet haladása a saját megállósorán.
- *
- * A busz pozícióját a járat vonalgeometriájára vetítjük, és ugyanígy a
- * megállókat is — így megmondható, MELYIK két megálló között jár éppen, és
- * a szakaszon belül hol tart. A pillanatnyi GPS-irány megbízhatatlan, ezért
- * kizárólag a vonal menti távolságra hagyatkozunk.
- *
- * Ha nincs használható geometria, a legközelebbi megállóra esünk vissza.
- */
-app.get('/live/trip-progress', async (c) => {
-  const tripId = (c.req.query('trip') || '').trim()
-  const vehicleQuery = (c.req.query('vehicle') || '').trim().toLowerCase()
-  if (!tripId) return c.json({ error: 'hiányzó ?trip=' }, 400)
+type TripStopRow = { id: string; name: string; lat: number | null; lon: number | null; dep: number }
 
-  const trip = trips.get(tripId)
+/** Egy menet megállósora névvel, koordinátával és menetrendi indulással. */
+function tripStopRows(tripId: string): TripStopRow[] | null {
   const seq = tripStops.get(tripId)
-  if (!trip || !seq?.length) return c.json({ error: 'Ismeretlen menet' }, 404)
-
-  const vehicles = await activeVehicles()
-  const vehicle =
-    vehicles.find((v) => v.tripId === tripId) ??
-    (vehicleQuery ? vehicles.find((v) => v.id.toLowerCase() === vehicleQuery) : undefined) ??
-    null
-
-  const stopList = seq.map((x) => {
+  if (!seq?.length) return null
+  return seq.map((x) => {
     const s = stops.get(x.stopId)
     return {
       id: x.stopId,
@@ -526,10 +446,47 @@ app.get('/live/trip-progress', async (c) => {
       dep: x.dep,
     }
   })
+}
 
-  if (!vehicle) {
-    return c.json({ tripId, live: false, stops: stopList, segmentIndex: null, progress: null })
-  }
+/**
+ * Menetrendi eltérés a busz PILLANATNYI helyén: + késik, − siet.
+ *
+ * A két szomszédos megálló menetrendi ideje között ott interpolálunk, ahol a
+ * busz a szakaszon tart — így nem kell megvárni a következő megállót ahhoz,
+ * hogy látszódjon a csúszás.
+ */
+function deviationSec(stopList: TripStopRow[], segmentIndex: number, fraction: number): number | null {
+  const from = stopList[segmentIndex]
+  if (!from) return null
+  const to = stopList[segmentIndex + 1] ?? from
+  const sched = from.dep + (to.dep - from.dep) * fraction
+
+  // Az éjfél utáni menetek menetrendi ideje 86400 fölött van, a mostani
+  // másodperc viszont a nap elejéről számol: fél napnál nagyobb különbség
+  // mindig napváltás, nem késés.
+  let dev = budapestNow().secOfDay - sched
+  if (dev > 43200) dev -= 86400
+  if (dev < -43200) dev += 86400
+
+  // Háromnegyed órán túl már nem menetrendi csúszásról van szó, hanem rossz
+  // jármű-hozzárendelésről — ilyet inkább nem állítunk.
+  return Math.abs(dev) > 2700 ? null : Math.round(dev)
+}
+
+/**
+ * Hol tart a busz a menet megállósorán.
+ *
+ * A busz pozícióját a járat vonalgeometriájára vetítjük, és ugyanígy a
+ * megállókat is — így megmondható, MELYIK két megálló között jár éppen, és
+ * a szakaszon belül hol tart. A pillanatnyi GPS-irány megbízhatatlan, ezért
+ * kizárólag a vonal menti távolságra hagyatkozunk.
+ *
+ * Ha nincs használható geometria, a legközelebbi megállóra esünk vissza.
+ */
+function progressOnTrip(tripId: string, vehicle: LiveVeh) {
+  const trip = trips.get(tripId)
+  const stopList = tripStopRows(tripId)
+  if (!trip || !stopList?.length) return null
 
   const shape = trip.shapeId ? shapes.get(trip.shapeId) : undefined
   let segmentIndex: number | null = null
@@ -587,6 +544,48 @@ app.get('/live/trip-progress', async (c) => {
   const denominator = Math.max(1, stopList.length - 1)
   const progress = Math.min(1, Math.max(0, (segmentIndex + segmentFraction) / denominator))
 
+  return {
+    stops: stopList,
+    /** Hányadik megálló UTÁN jár (0 = az első és második között). */
+    segmentIndex,
+    /** 0..1 a szakaszon belül. */
+    segmentFraction,
+    /** 0..1 a teljes menetre. */
+    progress,
+    nextStop: stopList[Math.min(stopList.length - 1, segmentIndex + 1)] ?? null,
+    /** + = késik, − = siet. */
+    scheduleDeviationSec: deviationSec(stopList, segmentIndex, segmentFraction),
+  }
+}
+
+app.get('/live/trip-progress', async (c) => {
+  const tripId = (c.req.query('trip') || '').trim()
+  const vehicleQuery = (c.req.query('vehicle') || '').trim().toLowerCase()
+  if (!tripId) return c.json({ error: 'hiányzó ?trip=' }, 400)
+
+  const stopList = tripStopRows(tripId)
+  if (!trips.get(tripId) || !stopList?.length) return c.json({ error: 'Ismeretlen menet' }, 404)
+
+  const vehicles = await activeVehicles()
+  const vehicle =
+    vehicles.find((v) => v.tripId === tripId) ??
+    (vehicleQuery ? vehicles.find((v) => v.id.toLowerCase() === vehicleQuery) : undefined) ??
+    null
+
+  if (!vehicle) {
+    return c.json({
+      tripId,
+      live: false,
+      stops: stopList,
+      segmentIndex: null,
+      progress: null,
+      scheduleDeviationSec: null,
+    })
+  }
+
+  const prog = progressOnTrip(tripId, vehicle)
+  if (!prog) return c.json({ error: 'Ismeretlen menet' }, 404)
+
   return c.json({
     tripId,
     live: true,
@@ -596,14 +595,7 @@ app.get('/live/trip-progress', async (c) => {
       lon: vehicle.lon,
       speed: vehicle.speed,
     },
-    stops: stopList,
-    /** Hányadik megálló UTÁN jár (0 = az első és második között). */
-    segmentIndex,
-    /** 0..1 a szakaszon belül. */
-    segmentFraction,
-    /** 0..1 a teljes menetre. */
-    progress,
-    nextStop: stopList[Math.min(stopList.length - 1, segmentIndex + 1)] ?? null,
+    ...prog,
   })
 })
 
@@ -864,7 +856,10 @@ app.get('/live/trip-path', async (c) => {
   const effectiveTripId = veh?.tripId || trip
   const tr = trips.get(effectiveTripId); const r = routes.get(tr?.routeId || '')
   const shape = tr?.shapeId ? shapes.get(tr.shapeId) || [] : []
-  return c.json({ trip: effectiveTripId, route: r?.short || tr?.routeId || '', color: r?.color || '2f6df6', text: r?.text || 'FFFFFF', headsign: tr?.headsign || '', shape, vehicle: veh })
+  // A menetkövetés alsó sávja ugyanazt a menetrendi eltérést mutatja, mint a
+  // menetrendkönyv haladás-síne — ezért itt is a közös számítás adja.
+  const prog = veh ? progressOnTrip(effectiveTripId, veh) : null
+  return c.json({ trip: effectiveTripId, route: r?.short || tr?.routeId || '', color: r?.color || '2f6df6', text: r?.text || 'FFFFFF', headsign: tr?.headsign || '', shape, vehicle: veh, nextStop: prog?.nextStop ?? null, scheduleDeviationSec: prog?.scheduleDeviationSec ?? null })
 })
 app.get('/system/info', (c) => {
   const mem = process.memoryUsage()
@@ -877,7 +872,7 @@ app.get('/system/info', (c) => {
       heapTotalMb: Math.round(mem.heapTotal / 1024 / 1024),
     },
     gtfs: {
-      feedVersion,
+      feedVersion: getFeedVersion(),
       stops: stops.size,
       routes: routes.size,
       trips: trips.size,
@@ -937,7 +932,7 @@ app.get('/live/debug', async (c) => {
   return c.json(result)
 })
 
-app.get('/_health', (c) => c.json({ jwt: jwtStatus(readJwt()), autoRenew: AUTO_RENEW, lastRenew, tokenRejected: Math.floor(Date.now() / 1000) - tokenRejectedAt < 180, gtfs: { feedVersion, stops: stops.size }, installationIdKnown: readInstallationId().length > 0 }))
+app.get('/_health', (c) => c.json({ jwt: jwtStatus(readJwt()), autoRenew: AUTO_RENEW, lastRenew, tokenRejected: Math.floor(Date.now() / 1000) - tokenRejectedAt < 180, gtfs: { feedVersion: getFeedVersion(), stops: stops.size }, installationIdKnown: readInstallationId().length > 0 }))
 app.get('/_jwt', (c) => c.text(readJwt() || '(nincs)'))
 app.get('/_export', (c) => c.json({ jwt: readJwt(), installationId: readInstallationId() || undefined, status: jwtStatus(readJwt()), exportedAt: new Date().toISOString() }))
 app.post('/_ingest', async (c) => {
@@ -965,6 +960,10 @@ app.post('/_renew', async (c) => { const r = await renew('kézi'); return c.json
  * `managed` mezője jelzi előre, hogy a hub ne ígérjen olyat, ami nem történik meg.
  */
 app.post('/system/restart', (c) => {
+  // A gateway halozaton is elerheto, ezert az ujrainditas admin tokent ker.
+  if ((c.req.header('x-admin-token') ?? '') !== adminToken()) {
+    return c.json({ error: 'Ervenytelen vagy hianyzo admin token.' }, 401)
+  }
   const managed = process.env.MVK_MANAGED === '1'
   console.log('[system] ⟳ újraindítási kérés a hubról')
   // A válasz még kimegy, csak utána lépünk ki.
@@ -984,7 +983,7 @@ app.post('/system/reload-gtfs', async (c) => {
     await refreshGtfs()
     return c.json({
       ok: true,
-      feedVersion,
+      feedVersion: getFeedVersion(),
       stops: stops.size,
       routes: routes.size,
       trips: trips.size,
@@ -1128,5 +1127,19 @@ serve({ fetch: app.fetch, port: PORT, hostname: HOST }, (info) => {
   console.log(`== MVK backend ==  http://${HOST}:${info.port}   (dashboard a /-on)`)
   console.log(`   élő hozzárendelés: ≤${LIVE_MAX_KM} km, ≤${LIVE_MAX_ETA} perc   auto-renew: ${AUTO_RENEW ? 'BE' : 'KI'}`)
   console.log(`   JWT:`, jwtStatus(readJwt()))
+  // Minden cim, amin a gateway elerheto. VPN ujracsatlakozas utan a tunnel
+  // cime valtozhat, ezert hasznos, ha a naplobol mindig kiolvashato.
+  if (HOST === '0.0.0.0') {
+    const addrs = Object.entries(networkInterfaces()).flatMap(([name, list]) =>
+      (list ?? []).filter((a) => a.family === 'IPv4' && !a.internal).map((a) => `${name}=${a.address}`)
+    )
+    console.log(`   elerheto cimek: ${addrs.join('  ') || '(csak localhost)'}`)
+    console.log(`   dashboard: http://<cim>:${info.port}/    hub: http://<cim>:${info.port}/hub/`)
+  }
+  // Az admin token elso hivasra generalodik; kiirjuk, hogy a hubba be lehessen masolni.
+  console.log(`   admin token (hub → Ujratelepites): ${adminToken()}`)
+  if (HOST === '0.0.0.0') {
+    console.log('   FIGYELEM: a gateway minden halozati interfeszen hallgat. Ha az internet fele is nyitva van, tedd tuzfal moge.')
+  }
 })
 if (AUTO_RENEW) setInterval(() => { const st = jwtStatus(readJwt()); if (st.present && (st.expiresInSec ?? Infinity) <= RENEW_MARGIN_SEC) renew('ütemezett').catch(() => {}) }, CHECK_INTERVAL_SEC * 1000)

@@ -10,20 +10,57 @@ export interface GeoPosition {
   at: number
 }
 
-const STORAGE_KEY = 'mvk_geo_enabled'
+export interface GeoState {
+  status: GeoStatus
+  position: GeoPosition | null
+  error: string | null
+  start: () => void
+  stop: () => void
+  isActive: boolean
+  /** A helyzet még a korábbi munkamenetből való, friss mérés nem érkezett. */
+  isStale: boolean
+}
+
+const ENABLED_KEY = 'mvk_geo_enabled'
+const LAST_FIX_KEY = 'mvk_geo_last_fix'
 
 /**
- * Helymeghatározás a térképhez.
+ * Ennél régebbi mentett helyzetet nem veszünk elő.
  *
- * Szándékosan nem indul magától: a böngésző engedélykérése csak
- * felhasználói gesztusra tisztességes, ezért a `start()` a GPS gombhoz
- * kötött. Ha korábban már engedélyezve volt, a következő megnyitáskor
- * magától folytatja a követést.
+ * Az app újranyitásakor a GPS első mérése másodpercekig tart; addig a legutóbbi
+ * ismert helyzettel dolgozunk, hogy a térkép azonnal ott legyen, ahol te. Fél
+ * óránál régebbi pozíció viszont már inkább félrevezet, mint segít.
  */
-export function useGeolocation() {
+const LAST_FIX_MAX_AGE_MS = 30 * 60_000
+
+function readLastFix(): GeoPosition | null {
+  try {
+    const raw = localStorage.getItem(LAST_FIX_KEY)
+    if (!raw) return null
+    const fix = JSON.parse(raw) as GeoPosition
+    if (typeof fix?.lat !== 'number' || typeof fix?.lon !== 'number') return null
+    if (Date.now() - fix.at > LAST_FIX_MAX_AGE_MS) return null
+    return fix
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Helymeghatározás.
+ *
+ * Egyetlen példányban fut az egész alkalmazásra (lásd `GeoProvider`), mert a
+ * térkép, a menetkövetés és a menetrend ugyanazt a helyzetet mutatja — két
+ * párhuzamos `watchPosition` csak az akkumulátort enné.
+ *
+ * Ha korábban engedélyezve volt, a következő megnyitáskor magától folytatja a
+ * követést: az azonnali „hol vagyok” ennek a feltétele.
+ */
+export function useGeolocation(): GeoState {
   const [status, setStatus] = useState<GeoStatus>('idle')
   const [position, setPosition] = useState<GeoPosition | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [isStale, setStale] = useState(false)
   const watchIdRef = useRef<number | null>(null)
 
   const stop = useCallback(() => {
@@ -33,8 +70,10 @@ export function useGeolocation() {
     }
     setStatus('idle')
     setPosition(null)
+    setStale(false)
     try {
-      localStorage.removeItem(STORAGE_KEY)
+      localStorage.removeItem(ENABLED_KEY)
+      localStorage.removeItem(LAST_FIX_KEY)
     } catch {
       /* privát mód — a beállítás csak a munkamenetre marad */
     }
@@ -51,18 +90,30 @@ export function useGeolocation() {
     setStatus('requesting')
     setError(null)
 
+    // Amíg az első valódi mérés meg nem jön, a legutóbbi ismert helyzet a
+    // kiindulás — így a térkép nem a városközpontból indul, hogy aztán
+    // odaugorjon hozzád.
+    const cached = readLastFix()
+    if (cached) {
+      setPosition(cached)
+      setStale(true)
+    }
+
     watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => {
-        setPosition({
+        const fix: GeoPosition = {
           lat: pos.coords.latitude,
           lon: pos.coords.longitude,
           accuracyM: pos.coords.accuracy,
           at: pos.timestamp,
-        })
+        }
+        setPosition(fix)
+        setStale(false)
         setStatus('watching')
         setError(null)
         try {
-          localStorage.setItem(STORAGE_KEY, '1')
+          localStorage.setItem(ENABLED_KEY, '1')
+          localStorage.setItem(LAST_FIX_KEY, JSON.stringify(fix))
         } catch {
           /* nem kritikus */
         }
@@ -70,9 +121,12 @@ export function useGeolocation() {
       (err) => {
         if (err.code === err.PERMISSION_DENIED) {
           setStatus('denied')
+          setPosition(null)
+          setStale(false)
           setError('A helymeghatározás le van tiltva ehhez az oldalhoz.')
           try {
-            localStorage.removeItem(STORAGE_KEY)
+            localStorage.removeItem(ENABLED_KEY)
+            localStorage.removeItem(LAST_FIX_KEY)
           } catch {
             /* nem kritikus */
           }
@@ -89,25 +143,34 @@ export function useGeolocation() {
     )
   }, [])
 
-  // Korábban engedélyezett követés folytatása — csak ha az engedély él,
-  // hogy ne dobjunk fel kéretlen rendszerablakot induláskor.
+  /*
+   * Korábban engedélyezett követés folytatása.
+   *
+   * Ahol van Permissions API, ott előbb megnézzük, hogy él-e még az engedély —
+   * így biztosan nem ugrik fel kéretlen rendszerablak. Ahol nincs (iOS), ott
+   * a mentett kapcsoló a jel: a felhasználó egyszer már igent mondott, és az
+   * azonnali helyzetjelzés enélkül nem tudna elindulni.
+   */
   useEffect(() => {
     let enabled = false
     try {
-      enabled = localStorage.getItem(STORAGE_KEY) === '1'
+      enabled = localStorage.getItem(ENABLED_KEY) === '1'
     } catch {
       enabled = false
     }
-    if (!enabled || !('permissions' in navigator)) return
+    if (!enabled) return
+
+    if (!('permissions' in navigator)) {
+      start()
+      return
+    }
 
     navigator.permissions
       .query({ name: 'geolocation' as PermissionName })
       .then((res) => {
-        if (res.state === 'granted') start()
+        if (res.state !== 'denied') start()
       })
-      .catch(() => {
-        /* a Permissions API hiánya nem hiba, csak nem folytatjuk magától */
-      })
+      .catch(() => start())
   }, [start])
 
   useEffect(() => {
@@ -116,16 +179,5 @@ export function useGeolocation() {
     }
   }, [])
 
-  return { status, position, error, start, stop, isActive: status === 'watching' }
-}
-
-/** Két pont távolsága kilométerben. Közeli megállók kereséséhez. */
-export function distanceKm(aLat: number, aLon: number, bLat: number, bLon: number): number {
-  const R = 6371
-  const dLat = ((bLat - aLat) * Math.PI) / 180
-  const dLon = ((bLon - aLon) * Math.PI) / 180
-  const s =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((aLat * Math.PI) / 180) * Math.cos((bLat * Math.PI) / 180) * Math.sin(dLon / 2) ** 2
-  return 2 * R * Math.asin(Math.sqrt(s))
+  return { status, position, error, start, stop, isActive: status === 'watching', isStale }
 }

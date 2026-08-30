@@ -4,6 +4,8 @@ import type { CacheResponse, HealthResponse, SystemInfoResponse } from '@/types'
 import { StatusCards } from '@/components/StatusCards'
 import { SystemActions } from '@/components/SystemActions'
 import { ApiInspector } from '@/components/ApiInspector'
+import { RedeployPanel } from '@/components/RedeployPanel'
+import { LogViewer } from '@/components/LogViewer'
 import { Button } from '@/components/ui/button'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { dashboardUrl } from '@/lib/links'
@@ -63,7 +65,10 @@ export function App() {
 
           <div className="min-w-0">
             <p className="truncate text-sm font-bold tracking-tight">Rendszerpult</p>
-            <p className="text-[11px] text-muted-foreground">MVK MobilON+ gateway · :8088</p>
+            <p className="text-[11px] text-muted-foreground">
+              MVK MobilON+ gateway ·{' '}
+              {typeof window === 'undefined' ? ':8088' : `${window.location.hostname}:8088`}
+            </p>
           </div>
 
           {offline ? (
@@ -95,6 +100,8 @@ export function App() {
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-6">
           <StatusCards health={health} sysInfo={sysInfo} cache={cache} />
           <SystemActions onRefreshed={load} />
+          <RedeployPanel onFinished={load} />
+          <LogViewer />
           <ApiInspector />
         </div>
       </div>

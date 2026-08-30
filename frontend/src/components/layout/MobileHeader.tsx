@@ -21,6 +21,7 @@ const TABS: { id: ActiveTab; label: string }[] = [
   { id: 'map', label: 'Térkép' },
   { id: 'multistop', label: 'Figyelő' },
   { id: 'timetable', label: 'Menetrend' },
+  { id: 'stats', label: 'Statisztika' },
 ]
 
 /**

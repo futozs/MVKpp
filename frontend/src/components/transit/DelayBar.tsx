@@ -21,6 +21,24 @@ export function delayLabel(sec: number | null | undefined): string {
   return state === 'late' ? `+${min} perc` : `−${min} perc`
 }
 
+/** Egész mondat a késésről — ott, ahol a rövid „+3 perc” túl szűkszavú. */
+export function delaySentence(sec: number | null | undefined): string {
+  const state = delayState(sec)
+  if (state === 'unknown') return 'Nincs menetrendi adat'
+  if (state === 'ontime') return 'Menetrend szerint jár'
+  const min = Math.max(1, Math.round(Math.abs(sec as number) / 60))
+  return state === 'late' ? `${min} percet késik` : `${min} perccel siet`
+}
+
+/** A késésállapot szövegszíne — ugyanaz a jelentés minden felületen. */
+export function delayTone(sec: number | null | undefined): string {
+  const state = delayState(sec)
+  if (state === 'late') return 'text-late'
+  if (state === 'early') return 'text-early'
+  if (state === 'ontime') return 'text-ontime'
+  return 'text-muted-foreground'
+}
+
 /**
  * Előjeles késés-sáv: a középvonaltól jobbra a lemaradás, balra a sietés.
  * Több sor egymás alatt egy pillantással összehasonlítható, mielőtt bárki
@@ -43,14 +61,7 @@ export function DelayBar({
 
   const fill =
     state === 'late' ? 'bg-late' : state === 'early' ? 'bg-early' : 'bg-ontime'
-  const tone =
-    state === 'late'
-      ? 'text-late'
-      : state === 'early'
-        ? 'text-early'
-        : state === 'ontime'
-          ? 'text-ontime'
-          : 'text-muted-foreground'
+  const tone = delayTone(delaySec)
 
   return (
     <span

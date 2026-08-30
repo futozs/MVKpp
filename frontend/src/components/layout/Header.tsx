@@ -23,6 +23,7 @@ const TABS: { id: ActiveTab; label: string }[] = [
   { id: 'map', label: 'Forgalmi térkép' },
   { id: 'multistop', label: 'Megállófigyelő' },
   { id: 'timetable', label: 'Menetrend' },
+  { id: 'stats', label: 'Statisztika' },
 ]
 
 export function Header({

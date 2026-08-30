@@ -4,21 +4,26 @@
   "private": true,
   "type": "module",
   "description": "MVK MobilON+ backend: auth-injektalo proxy + GTFS-RT dekod + valos erkezesek + token-mentes + auto-renew (Hono + TypeScript).",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start:ts": "node src/index.ts",
     "dev": "node --watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "db:migrate": "node src/db/migrate.ts",
+    "worker": "node src/worker/main.ts"
   },
   "dependencies": {
-    "hono": "^4.9.0",
     "@hono/node-server": "^1.14.0",
-    "gtfs-realtime-bindings": "^1.1.1"
+    "gtfs-realtime-bindings": "^1.1.1",
+    "hono": "^4.9.0",
+    "mysql2": "^3.24.2"
   },
   "devDependencies": {
-    "typescript": "^5.7.0",
-    "@types/node": "^24.0.0"
+    "@types/node": "^24.0.0",
+    "typescript": "^5.7.0"
   }
 }

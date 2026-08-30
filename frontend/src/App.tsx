@@ -14,9 +14,12 @@ import { TransitMap } from '@/components/map/TransitMap'
 import { MultiStopDashboard } from '@/components/multistop/MultiStopDashboard'
 import { StopDetailDrawer } from '@/components/stops/StopDetailDrawer'
 import { TimetableView } from '@/components/timetable/TimetableView'
+import { StatsView } from '@/components/stats/StatsView'
 import { MapSettingsModal } from '@/components/map/MapSettingsModal'
 import { VehicleFocusCard } from '@/components/map/VehicleFocusCard'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { GeoProvider } from '@/context/GeoContext'
+import { initialView, saveView } from '@/lib/viewState'
 
 const DEFAULT_FILTERS: FilterState = {
   vq: '',
@@ -35,7 +38,18 @@ const DEFAULT_FILTERS: FilterState = {
 }
 
 export function App() {
-  const [activeTab, setActiveTab] = useState<ActiveTab>('map')
+  /*
+   * Ahol legutóbb abbahagytad.
+   *
+   * A telefon böngészője háttérbe kerülve bármikor eldobhatja a lapot, és
+   * visszatéréskor újratölti. A mentett nézet nélkül ez minden alkalommal a
+   * kezdőképernyőre dobna vissza — a követett busz és a kiválasztott megálló
+   * nélkül. A pillanatkép egyszer olvasódik ki, hogy minden mező ugyanabból
+   * az állapotból jöjjön.
+   */
+  const restored = initialView()
+
+  const [activeTab, setActiveTab] = useState<ActiveTab>(restored?.tab ?? 'map')
   const [stops, setStops] = useState<Stop[]>([])
   const [routes, setRoutes] = useState<Record<string, Route>>({})
   const [, setGtfsMeta] = useState<GtfsMeta | null>(null)
@@ -55,11 +69,20 @@ export function App() {
   }
 
   // Selected stop for details drawer
-  const [selectedStopId, setSelectedStopId] = useState<string | null>(null)
+  const [selectedStopId, setSelectedStopId] = useState<string | null>(
+    restored?.selectedStopId ?? null
+  )
 
   // Focus specific bus trip on map
-  const [focusTripId, setFocusTripId] = useState<string | null>(null)
-  const [focusVehicleId, setFocusVehicleId] = useState<string | null>(null)
+  const [focusTripId, setFocusTripId] = useState<string | null>(restored?.focusTripId ?? null)
+  const [focusVehicleId, setFocusVehicleId] = useState<string | null>(
+    restored?.focusVehicleId ?? null
+  )
+
+  // Minden váltás után mentjük, hova jutottál.
+  useEffect(() => {
+    saveView({ tab: activeTab, selectedStopId, focusTripId, focusVehicleId })
+  }, [activeTab, selectedStopId, focusTripId, focusVehicleId])
 
   // Persistent Monitored Stops for MultiStop Dashboard (max 6)
   const [monitoredStopIds, setMonitoredStopIds] = useState<string[]>(() => {
@@ -204,6 +227,7 @@ export function App() {
   }
 
   return (
+    <GeoProvider>
     <TooltipProvider delayDuration={300}>
       <div className="flex h-screen w-screen flex-col overflow-hidden bg-background text-foreground">
         {/* Státuszsín: navigáció, telemetria, eszközök */}
@@ -257,6 +281,7 @@ export function App() {
                 <VehicleFocusCard
                   tripId={focusTripId}
                   vehicleId={focusVehicleId}
+                  stops={stops}
                   onClose={handleExitFocus}
                 />
               ) : null}
@@ -284,8 +309,21 @@ export function App() {
           )}
 
           {/* Menetrendkönyv */}
+          {/* Statisztika: az adatraktarbol epitkezo elemzo felulet */}
+          {activeTab === 'stats' && (
+            <StatsView
+              stops={stops}
+              routes={Object.values(routes)}
+              onFocusVehicle={(id) => {
+                setFocusVehicleId(id)
+                setActiveTab('map')
+              }}
+            />
+          )}
+
           {activeTab === 'timetable' && (
             <TimetableView
+              stops={stops}
               liveVehicles={liveVehicles}
               onFocusTrip={handleFocusTripOnMap}
             />
@@ -301,6 +339,7 @@ export function App() {
         />
       </div>
     </TooltipProvider>
+    </GeoProvider>
   )
 }
 export default App

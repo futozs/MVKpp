@@ -12,13 +12,38 @@
 import { spawn, execSync } from 'node:child_process'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { existsSync } from 'node:fs'
+import { existsSync, mkdirSync, appendFileSync, readFileSync, writeFileSync, statSync, rmSync } from 'node:fs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const BACKEND_DIR = join(__dirname, 'backend')
 const FRONTEND_DIR = join(__dirname, 'frontend')
 const HUB_DIR = join(__dirname, 'hub')
 const WORKER_SCRIPT = join(BACKEND_DIR, 'tools', 'token_worker.sh')
+const LOGS_DIR = join(__dirname, 'logs')
+const STATE_DIR = join(BACKEND_DIR, 'state')
+const PID_FILE = join(STATE_DIR, 'manager.pid')
+
+mkdirSync(LOGS_DIR, { recursive: true })
+mkdirSync(STATE_DIR, { recursive: true })
+
+// A hub innen olvassa a naplokat, es az ujratelepito innen tudja, kit kell
+// leallitania. A pid-fajlt kilepeskor takaritjuk.
+writeFileSync(PID_FILE, String(process.pid))
+
+/** Naplofajl felso merethatara; efolott a regi felet eldobjuk. */
+const MAX_LOG_BYTES = 5 * 1024 * 1024
+
+function appendLog(name, text) {
+  const file = join(LOGS_DIR, `${name}.log`)
+  try {
+    if (existsSync(file) && statSync(file).size > MAX_LOG_BYTES) {
+      writeFileSync(file, readFileSync(file, 'utf8').slice(-Math.floor(MAX_LOG_BYTES / 2)))
+    }
+    appendFileSync(file, text)
+  } catch {
+    // A naplozas hibaja soha nem allithatja meg a folyamatkezelest.
+  }
+}
 
 // ANSI Color Helpers
 const C = {
@@ -62,9 +87,13 @@ function logLine(prefix, color, text) {
   const time = new Date().toLocaleTimeString('hu-HU', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
   const clean = text.toString().trim()
   if (!clean) return
-  clean.split(/\r?\n/).forEach((line) => {
+  const lines = clean.split(/\r?\n/)
+  lines.forEach((line) => {
     console.log(`${C.gray}[${time}]${C.reset} ${color}${C.bold}[${prefix}]${C.reset} ${line}`)
   })
+  // Ugyanaz szinkodok nelkul a fajlba, hogy a hub olvashassa.
+  appendLog(prefix.toLowerCase(), lines.map((l) => `[${time}] ${l}
+`).join(''))
 }
 
 // 1. Start Backend Process
@@ -142,7 +171,27 @@ if (existsSync(HUB_DIR)) {
   hubProc.stderr.on('data', (d) => logLine('HUB', C.red, d))
 }
 
-// 4. Start Background Token Worker
+// 4. Start Statistics Worker (MySQL adatraktar: gyujtes -> tenyek -> aggregatumok)
+//
+// Kulon folyamat, nem a backend resze: igy egy ejszakai aggregalas soha nem
+// lassitja a valos ideju vegpontokat. Ha nincs eleheto MySQL, a worker kilep,
+// es a rendszer tobbi resze valtozatlanul mukodik tovabb.
+console.log(`${C.cyan}*${C.reset} ${C.bold}Statisztikai Worker inditasa (MySQL adatraktar)...${C.reset}`)
+const statsProc = spawn('node', ['src/worker/main.ts'], {
+  cwd: BACKEND_DIR,
+  env: { ...process.env },
+  stdio: ['ignore', 'pipe', 'pipe'],
+})
+processes.push({ name: 'stats', proc: statsProc })
+statsProc.stdout.on('data', (d) => logLine('STATS', C.cyan, d))
+statsProc.stderr.on('data', (d) => logLine('STATS', C.red, d))
+statsProc.on('exit', (code) => {
+  if (!shuttingDown && code !== 0) {
+    logLine('STATS', C.yellow, `Kilepett (kod: ${code}) - fut a MySQL? Probald: cd backend && npm run db:migrate`)
+  }
+})
+
+// 5. Start Background Token Worker
 if (existsSync(WORKER_SCRIPT)) {
   console.log(`${C.yellow}*${C.reset} ${C.bold}Token Worker inditasa (Mac MVK hitelesites)...${C.reset}`)
   const workerProc = spawn('bash', [WORKER_SCRIPT], {
@@ -161,6 +210,7 @@ ${C.bold}${C.white}>> Rendszer elindult! Elerhetosegek:${C.reset}
    ${C.cyan}>> Fo Tranzit Dashboard:${C.reset}  ${C.bold}http://localhost:5173${C.reset}
    ${C.magenta}>> SaaS Rendszer Hub:${C.reset}     ${C.bold}http://localhost:5174${C.reset}
    ${C.green}>> Backend API Gateway:${C.reset}   ${C.bold}http://localhost:8088${C.reset}
+   ${C.cyan}>> Statisztikai API:${C.reset}      ${C.bold}http://localhost:8088/stats/health${C.reset}
 
 ${C.dim}Kilepeshez es az osszes folyamat leallitasahoz nyomj Ctrl+C billentyut.${C.reset}
 `)
@@ -173,6 +223,7 @@ function shutdown() {
   // Leallas kozben a backend kilepese nem hiba: ne inditsuk ujra.
   shuttingDown = true
   console.log(`\n${C.yellow}[Manager] Leallitas folyamatban...${C.reset}`)
+  try { rmSync(PID_FILE, { force: true }) } catch { /* mar nincs ott */ }
 
   processes.forEach(({ name, proc }) => {
     try {

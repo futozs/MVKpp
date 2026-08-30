@@ -1,8 +1,13 @@
 import { defineConfig } from 'vite'
+// @ts-expect-error — megosztott .mjs konfig a projekt gyokereben
+import { serverConfig } from '../vite.shared.mjs'
 import react from '@vitejs/plugin-react'
 import { fileURLToPath, URL } from 'node:url'
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
+  // Buildkor a gateway a /hub utvonalon szolgalja ki, ezert az eszkoz-hivatkozasoknak
+  // is oda kell mutatniuk. Dev modban a sajat portjan (5174) a gyokeren marad.
+  base: command === 'build' ? '/hub/' : '/',
   plugins: [react()],
   resolve: {
     // A megosztott primitívek az app gyökerén kívül élnek; enélkül
@@ -12,51 +17,5 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
-  server: {
-    fs: { allow: ['..'] },
-    port: 5174,
-    host: '0.0.0.0',
-    proxy: {
-      '/api': {
-        target: 'http://localhost:8088',
-        changeOrigin: true,
-      },
-      '/live': {
-        target: 'http://localhost:8088',
-        changeOrigin: true,
-      },
-      '/gtfs': {
-        target: 'http://localhost:8088',
-        changeOrigin: true,
-      },
-      '/_health': {
-        target: 'http://localhost:8088',
-        changeOrigin: true,
-      },
-      '/_jwt': {
-        target: 'http://localhost:8088',
-        changeOrigin: true,
-      },
-      '/_export': {
-        target: 'http://localhost:8088',
-        changeOrigin: true,
-      },
-      '/_ingest': {
-        target: 'http://localhost:8088',
-        changeOrigin: true,
-      },
-      '/_renew': {
-        target: 'http://localhost:8088',
-        changeOrigin: true,
-      },
-      '/weather': {
-        target: 'http://localhost:8088',
-        changeOrigin: true,
-      },
-      '/system': {
-        target: 'http://localhost:8088',
-        changeOrigin: true,
-      },
-    },
-  },
-})
+  server: serverConfig(5174),
+}))

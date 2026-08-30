@@ -7,6 +7,8 @@ Professzionális, modern, valós idejű közösségi közlekedési platform Misk
 - **SaaS Rendszer Hub & API Inspector**: Élő telemetria, memóriahasználat, token-érvényesség, beépített interaktív REST API playground és token-kezelő modal.
 - **Egységes Instance Manager (`manager.mjs` / `start.sh`)**: Egyetlen parancs indítja a backend gateway-t (:8088), a Vite frontendet (:5173) és a csendes Mac token-workert.
 
+- **Statisztikai Adatraktár (MySQL)**: Folyamatos telemetria-gyűjtés, megálló-események és szakaszmenetidők levezetése, éjszakai aggregálás, valamint A→B menetidő-előrejelzés. Részletek: [backend/src/db/README.md](backend/src/db/README.md).
+
 ---
 
 ## 🚀 Gyors Indítás
@@ -17,7 +19,10 @@ cd backend && npm install
 cd ../frontend && npm install
 cd ..
 
-# 2. Rendszer indítása (Backend + Frontend + Worker egyben)
+# 2. Statisztikai adatbázis előkészítése (egyszer, MySQL szükséges)
+cd backend && npm run db:migrate && cd ..
+
+# 3. Rendszer indítása (Backend + Frontend + Workerek egyben)
 ./start.sh
 # vagy:
 npm start

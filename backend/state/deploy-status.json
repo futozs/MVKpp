@@ -1,0 +1,38 @@
+{
+  "running": false,
+  "ok": true,
+  "startedAt": "2026-08-30T19:25:56.774Z",
+  "finishedAt": "2026-08-30T19:26:19.826Z",
+  "currentStep": null,
+  "error": null,
+  "steps": [
+    {
+      "id": "stop",
+      "label": "Folyamatok leállítása",
+      "state": "done",
+      "ms": 2193,
+      "note": null
+    },
+    {
+      "id": "install",
+      "label": "Függőségek telepítése",
+      "state": "done",
+      "ms": 1632,
+      "note": "4 csomag könyvtár"
+    },
+    {
+      "id": "build",
+      "label": "Build (backend, frontend, hub)",
+      "state": "done",
+      "ms": 11302,
+      "note": "backend + frontend + hub"
+    },
+    {
+      "id": "start",
+      "label": "Rendszer indítása",
+      "state": "done",
+      "ms": 7895,
+      "note": "A gateway válaszol (pid 34857)"
+    }
+  ]
+}

@@ -1,2 +1,5 @@
 /.DS_Store
 /.claude
+logs
+node_modules
+.next
