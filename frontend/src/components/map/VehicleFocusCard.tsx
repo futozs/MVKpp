@@ -1,54 +1,29 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Gauge, Navigation, X } from "lucide-react";
-import type { TripPathResponse } from "@/types";
-import { api } from "@/services/api";
+import type { Stop } from "@/types";
+import { useTripPath } from "@/hooks/useTripPath";
 import { Button } from "@/components/ui/button";
 import { RouteTile } from "@/components/transit/RouteTile";
 import { LiveDot } from "@/components/transit/LiveDot";
+import { ApproachStrip } from "@/components/transit/ApproachStrip";
 import { cn } from "@/lib/utils";
-
-const POLL_MS = 4000;
 
 type VehicleFocusCardProps = {
   tripId: string;
   vehicleId: string | null;
+  stops: Stop[];
   onClose: () => void;
 };
 
 export function VehicleFocusCard({
   tripId,
   vehicleId,
+  stops,
   onClose,
 }: VehicleFocusCardProps) {
-  const [data, setData] = useState<TripPathResponse | null>(null);
-  const [lost, setLost] = useState(false);
+  const { data, lost } = useTripPath(tripId, vehicleId);
   const reduce = useReducedMotion();
-  const mounted = useRef(true);
-
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const res = await api.getTripPath(tripId, vehicleId ?? undefined);
-        if (!mounted.current) return;
-        setData(res);
-        setLost(!res.vehicle);
-      } catch {
-        if (mounted.current) setLost(true);
-      }
-    };
-
-    load();
-    const timer = setInterval(load, POLL_MS);
-    return () => clearInterval(timer);
-  }, [tripId, vehicleId]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -126,6 +101,14 @@ export function VehicleFocusCard({
           <X />
         </Button>
       </div>
+
+      <ApproachStrip
+        tripId={data?.trip ?? tripId}
+        shape={data?.shape}
+        vehicle={vehicle}
+        stops={stops}
+        deviationSec={data?.scheduleDeviationSec}
+      />
     </motion.aside>
   );
 }

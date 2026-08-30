@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 import { Bus, Timer } from "lucide-react";
-import type { Stop } from "@/types";
 import { useGeo } from "@/context/GeoContext";
 import { useApproach } from "@/hooks/useApproach";
+import type { LocatableStop } from "@/lib/geo";
 import { formatDistance } from "@/lib/geo";
 import {
   delaySentence,
@@ -16,7 +16,7 @@ interface ApproachStripProps {
   tripId: string | null;
   shape: [number, number][] | undefined;
   vehicle: { lat: number; lon: number; speed: number | null } | null;
-  stops: Stop[];
+  stops: readonly LocatableStop[];
   deviationSec?: number | null;
   className?: string;
 }

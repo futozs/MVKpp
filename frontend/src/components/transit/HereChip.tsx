@@ -1,6 +1,6 @@
 import { LocateFixed, MapPin } from "lucide-react";
-import type { Stop } from "@/types";
 import { useGeo } from "@/context/GeoContext";
+import type { LocatableStop } from "@/lib/geo";
 import { formatDistance, nearest } from "@/lib/geo";
 import { cn } from "@/lib/utils";
 
@@ -8,7 +8,7 @@ export function HereChip({
   stops,
   className,
 }: {
-  stops: Stop[];
+  stops: readonly LocatableStop[];
   className?: string;
 }) {
   const geo = useGeo();

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarDays,
   ChevronLeft,
@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import type {
   LiveVehicle,
+  Stop,
   TimetableResponse,
   TimetableRoute,
   TimetableTrip,
@@ -20,12 +21,17 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { RouteTile } from "@/components/transit/RouteTile";
 import { LiveDot } from "@/components/transit/LiveDot";
+import { HereChip } from "@/components/transit/HereChip";
+import { ApproachStrip } from "@/components/transit/ApproachStrip";
 import { TimetableGrid } from "./TimetableGrid";
 import { TripProgressRail } from "./TripProgressRail";
 import { favoriteKey, useFavorites } from "@/hooks/useFavorites";
+import { useTripPath } from "@/hooks/useTripPath";
+import { initialTimetableView, saveTimetableView } from "@/lib/viewState";
 import { cn } from "@/lib/utils";
 
 interface TimetableViewProps {
+  stops: Stop[];
   liveVehicles: LiveVehicle[];
   onFocusTrip: (tripId: string, vehicleId?: string) => void;
 }
@@ -35,18 +41,23 @@ function secondsSinceMidnight(d: Date) {
 }
 
 export function TimetableView({
+  stops,
   liveVehicles,
   onFocusTrip,
 }: TimetableViewProps) {
+  const restored = initialTimetableView();
   const [routes, setRoutes] = useState<TimetableRoute[]>([]);
   const [routesError, setRoutesError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
 
-  const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
-  const [selectedDir, setSelectedDir] = useState<string>("");
+  const [selectedRouteId, setSelectedRouteId] = useState<string | null>(
+    restored?.routeId ?? null,
+  );
+  const [selectedDir, setSelectedDir] = useState<string>(restored?.dir ?? "");
   const [table, setTable] = useState<TimetableResponse | null>(null);
   const [tableLoading, setTableLoading] = useState(false);
   const [selectedTrip, setSelectedTrip] = useState<TimetableTrip | null>(null);
+  const pendingTripRef = useRef<string | null>(restored?.tripId ?? null);
   const { favorites, isFavorite, toggleFavorite } = useFavorites();
 
   const [nowSec, setNowSec] = useState(() => secondsSinceMidnight(new Date()));
@@ -68,6 +79,14 @@ export function TimetableView({
       .catch((err) => setRoutesError((err as Error).message));
   }, []);
 
+  useEffect(() => {
+    saveTimetableView({
+      routeId: selectedRouteId,
+      dir: selectedDir,
+      tripId: selectedTrip?.tripId ?? null,
+    });
+  }, [selectedRouteId, selectedDir, selectedTrip]);
+
   const selectedRoute = routes.find((r) => r.id === selectedRouteId) ?? null;
 
   useEffect(() => {
@@ -80,7 +99,15 @@ export function TimetableView({
     setSelectedTrip(null);
     api
       .getTimetable(selectedRouteId, selectedDir)
-      .then((res) => alive && setTable(res))
+      .then((res) => {
+        if (!alive) return;
+        setTable(res);
+        const pending = pendingTripRef.current;
+        if (!pending) return;
+        pendingTripRef.current = null;
+        const hit = res.trips.find((t) => t.tripId === pending);
+        if (hit) setSelectedTrip(hit);
+      })
       .catch(() => alive && setTable(null))
       .finally(() => alive && setTableLoading(false));
     return () => {
@@ -169,9 +196,12 @@ export function TimetableView({
               className="pl-9"
             />
           </div>
-          <p className="mt-2 text-[11px] text-muted-foreground">
-            {visibleRoutes.length} járat · {todayLabel}
-          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+            <p className="text-[11px] text-muted-foreground">
+              {visibleRoutes.length} járat · {todayLabel}
+            </p>
+            <HereChip stops={stops} />
+          </div>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
@@ -415,6 +445,10 @@ export function TimetableView({
                   );
                 })}
               </div>
+
+              {!selectedTrip ? (
+                <HereChip stops={stops} className="mt-2.5 md:hidden" />
+              ) : null}
             </div>
 
             {}
@@ -447,6 +481,7 @@ export function TimetableView({
               <TripDetail
                 trip={selectedTrip}
                 stops={table.stops}
+                allStops={stops}
                 vehicle={selectedVehicle}
                 onClose={() => setSelectedTrip(null)}
                 onFocusTrip={onFocusTrip}
@@ -462,61 +497,76 @@ export function TimetableView({
 function TripDetail({
   trip,
   stops,
+  allStops,
   vehicle,
   onClose,
   onFocusTrip,
 }: {
   trip: TimetableTrip;
   stops: TimetableResponse["stops"];
+  allStops: Stop[];
   vehicle: LiveVehicle | null;
   onClose: () => void;
   onFocusTrip: (tripId: string, vehicleId?: string) => void;
 }) {
+  const { data } = useTripPath(vehicle ? trip.tripId : null, vehicle?.id, 5000);
+
   return (
     <div className="max-h-[42vh] shrink-0 overflow-y-auto border-t border-border bg-card shadow-xl">
-      <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-border bg-card px-3 py-2.5 sm:px-4">
-        <span className="font-mono text-xl font-bold tabular-nums">
-          {trip.departure}
-        </span>
+      <div className="sticky top-0 z-10 bg-card">
+        <div className="flex items-center gap-3 border-b border-border px-3 py-2.5 sm:px-4">
+          <span className="font-mono text-xl font-bold tabular-nums">
+            {trip.departure}
+          </span>
 
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-xs font-semibold">
-            {trip.destinationName}
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-xs font-semibold">
+              {trip.destinationName}
+            </span>
+            <span className="block font-mono text-[11px] tabular-nums text-muted-foreground">
+              érkezés {trip.arrival} · {trip.stopCount} megálló
+              {trip.deviates ? " · betérő" : ""}
+            </span>
           </span>
-          <span className="block font-mono text-[11px] tabular-nums text-muted-foreground">
-            érkezés {trip.arrival} · {trip.stopCount} megálló
-            {trip.deviates ? " · betérő" : ""}
-          </span>
-        </span>
+
+          {vehicle ? (
+            <Button
+              size="sm"
+              className="h-8 shrink-0"
+              onClick={() => onFocusTrip(trip.tripId, vehicle.id)}
+            >
+              <Crosshair />
+              <span className="font-mono tabular-nums">{vehicle.id}</span>
+              <span className="hidden sm:inline">a térképen</span>
+            </Button>
+          ) : (
+            <span className="shrink-0 text-[11px] text-muted-foreground">
+              nem indult el
+            </span>
+          )}
+
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0"
+            onClick={onClose}
+            aria-label="Menet részleteinek bezárása"
+          >
+            <X />
+          </Button>
+        </div>
 
         {vehicle ? (
-          <Button
-            size="sm"
-            className="h-8 shrink-0"
-            onClick={() => onFocusTrip(trip.tripId, vehicle.id)}
-          >
-            <Crosshair />
-            <span className="font-mono tabular-nums">{vehicle.id}</span>
-            <span className="hidden sm:inline">a térképen</span>
-          </Button>
-        ) : (
-          <span className="shrink-0 text-[11px] text-muted-foreground">
-            nem indult el
-          </span>
-        )}
-
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 shrink-0"
-          onClick={onClose}
-          aria-label="Menet részleteinek bezárása"
-        >
-          <X />
-        </Button>
+          <ApproachStrip
+            tripId={trip.tripId}
+            shape={data?.shape}
+            vehicle={data?.vehicle ?? null}
+            stops={allStops}
+            deviationSec={data?.scheduleDeviationSec}
+          />
+        ) : null}
       </div>
 
-      {}
       {vehicle ? (
         <TripProgressRail
           trip={trip}

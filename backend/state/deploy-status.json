@@ -1,8 +1,8 @@
 {
   "running": false,
   "ok": true,
-  "startedAt": "2026-08-30T19:25:56.774Z",
-  "finishedAt": "2026-08-30T19:26:19.826Z",
+  "startedAt": "2026-08-30T22:25:35.254Z",
+  "finishedAt": "2026-08-30T22:26:53.959Z",
   "currentStep": null,
   "error": null,
   "steps": [
@@ -10,29 +10,29 @@
       "id": "stop",
       "label": "Folyamatok leállítása",
       "state": "done",
-      "ms": 2193,
+      "ms": 1509,
       "note": null
     },
     {
       "id": "install",
       "label": "Függőségek telepítése",
       "state": "done",
-      "ms": 1632,
+      "ms": 27179,
       "note": "4 csomag könyvtár"
     },
     {
       "id": "build",
       "label": "Build (backend, frontend, hub)",
       "state": "done",
-      "ms": 11302,
+      "ms": 37120,
       "note": "backend + frontend + hub"
     },
     {
       "id": "start",
       "label": "Rendszer indítása",
       "state": "done",
-      "ms": 7895,
-      "note": "A gateway válaszol (pid 34857)"
+      "ms": 12836,
+      "note": "A gateway válaszol (pid 76825)"
     }
   ]
 }

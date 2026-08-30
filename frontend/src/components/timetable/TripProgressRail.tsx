@@ -2,6 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { Bus } from "lucide-react";
 import type { TimetableTrip, TripProgressResponse } from "@/types";
 import { api } from "@/services/api";
+import {
+  DelayBar,
+  delaySentence,
+  delayState,
+  delayTone,
+} from "@/components/transit/DelayBar";
 import { cn } from "@/lib/utils";
 
 const POLL_MS = 5000;
@@ -86,7 +92,7 @@ export function TripProgressRail({
   return (
     <div className="px-4 py-3">
       {data.live && data.vehicle ? (
-        <p className="mb-2 flex items-center gap-2 text-xs">
+        <div className="mb-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs">
           <span className="rounded bg-primary/12 px-1.5 py-0.5 font-mono text-xs font-bold tabular-nums text-primary">
             {data.vehicle.id}
           </span>
@@ -96,7 +102,23 @@ export function TripProgressRail({
               ? ` · ${Math.round(data.vehicle.speed * 3.6)} km/h`
               : ""}
           </span>
-        </p>
+          {delayState(data.scheduleDeviationSec) !== "unknown" ? (
+            <span className="flex items-center gap-1.5">
+              <DelayBar
+                delaySec={data.scheduleDeviationSec}
+                showLabel={false}
+              />
+              <span
+                className={cn(
+                  "font-semibold",
+                  delayTone(data.scheduleDeviationSec),
+                )}
+              >
+                {delaySentence(data.scheduleDeviationSec)}
+              </span>
+            </span>
+          ) : null}
+        </div>
       ) : (
         <p className="mb-2 text-xs text-muted-foreground">
           Erre a menetre még nem jelentkezett be jármű.

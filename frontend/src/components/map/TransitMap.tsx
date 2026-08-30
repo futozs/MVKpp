@@ -1,4 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import L from "leaflet";
 import {
   Crosshair,
@@ -23,8 +29,9 @@ import {
 } from "@/components/ui/tooltip";
 import { RouteTile } from "@/components/transit/RouteTile";
 import { LiveDot } from "@/components/transit/LiveDot";
-import { useGeolocation } from "@/hooks/useGeolocation";
-import { distanceKm } from "@/lib/geo";
+import { useGeo } from "@/context/GeoContext";
+import { distanceKm, nearest } from "@/lib/geo";
+import { initialMapView, saveMapView } from "@/lib/viewState";
 import { token } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
@@ -100,6 +107,10 @@ export const TILE_LAYERS: TileLayerOption[] = [
 
 const MAX_WATCHED = 12;
 
+const NEAR_STOP_KM = 0.4;
+const CLOSE_ZOOM = 18;
+const ME_ZOOM = 17;
+
 interface TransitMapProps {
   stops: Stop[];
   routes: Record<string, Route>;
@@ -147,7 +158,8 @@ export function TransitMap({
   const lastFocusKeyRef = useRef<string>("");
 
   const [isPanelOpen, setPanelOpen] = useState(false);
-  const geo = useGeolocation();
+  const geo = useGeo();
+  const autoZoomRef = useRef<"none" | "stale" | "done">("none");
   const geoLayerRef = useRef<L.LayerGroup | null>(null);
   const [stopQuery, setStopQuery] = useState("");
   const [typedId, setTypedId] = useState("");
@@ -155,12 +167,15 @@ export function TransitMap({
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
 
+    const saved = initialMapView();
+    if (saved) autoZoomRef.current = "done";
+
     const map = L.map(mapContainerRef.current, {
       zoomControl: false,
       attributionControl: false,
       preferCanvas: true,
-      center: [48.104, 20.79],
-      zoom: 13,
+      center: saved ? [saved.lat, saved.lon] : [48.104, 20.79],
+      zoom: saved ? saved.zoom : 13,
     });
     L.control.zoom({ position: "bottomright" }).addTo(map);
 
@@ -188,6 +203,12 @@ export function TransitMap({
     geoLayerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
 
+    const rememberView = () => {
+      const c = map.getCenter();
+      saveMapView({ lat: c.lat, lon: c.lng, zoom: map.getZoom() });
+    };
+    map.on("moveend", rememberView);
+
     const revalidateSize = () => {
       if (document.visibilityState === "visible") map.invalidateSize();
     };
@@ -203,6 +224,7 @@ export function TransitMap({
       window.removeEventListener("pageshow", revalidateSize);
       window.removeEventListener("orientationchange", revalidateSize);
       observer.disconnect();
+      map.off("moveend", rememberView);
       map.remove();
       mapRef.current = null;
     };
@@ -339,31 +361,64 @@ export function TransitMap({
       .addTo(layer);
   }, [geo.position]);
 
+  const focusOnMe = useCallback(
+    (animate: boolean) => {
+      const map = mapRef.current;
+      if (!map || !geo.position) return;
+
+      const { lat, lon } = geo.position;
+      const hit = nearest(stops, lat, lon);
+
+      if (
+        hit &&
+        hit.km <= NEAR_STOP_KM &&
+        hit.item.lat != null &&
+        hit.item.lon != null
+      ) {
+        map.fitBounds(
+          [
+            [lat, lon],
+            [hit.item.lat, hit.item.lon],
+          ],
+          { padding: [80, 80], maxZoom: CLOSE_ZOOM, animate },
+        );
+        return;
+      }
+
+      if (animate) map.flyTo([lat, lon], ME_ZOOM, { duration: 0.6 });
+      else map.setView([lat, lon], ME_ZOOM);
+    },
+    [geo.position, stops],
+  );
+
   const handleLocate = () => {
     if (!geo.position) {
       geo.start();
       return;
     }
-    const map = mapRef.current;
-    if (!map) return;
-
-    const { lat, lon } = geo.position;
-    const nearby = stops
-      .map((s) => ({ s, d: distanceKm(lat, lon, s.lat, s.lon) }))
-      .filter((x) => x.d <= 0.6)
-      .sort((a, b) => a.d - b.d)
-      .slice(0, 8);
-
-    if (nearby.length > 0) {
-      const points: [number, number][] = [
-        [lat, lon],
-        ...nearby.map((x) => [x.s.lat, x.s.lon] as [number, number]),
-      ];
-      map.fitBounds(points, { padding: [70, 70], maxZoom: 17 });
-    } else {
-      map.flyTo([lat, lon], 16, { duration: 0.6 });
-    }
+    focusOnMe(true);
   };
+
+  useEffect(() => {
+    if (autoZoomRef.current === "done") return;
+    if (!mapRef.current || !geo.position || stops.length === 0) return;
+
+    if (focusTripId) {
+      autoZoomRef.current = "done";
+      return;
+    }
+
+    if (geo.isStale) {
+      if (autoZoomRef.current === "none") {
+        focusOnMe(false);
+        autoZoomRef.current = "stale";
+      }
+      return;
+    }
+
+    focusOnMe(autoZoomRef.current === "stale");
+    autoZoomRef.current = "done";
+  }, [geo.position, geo.isStale, stops, focusTripId, focusOnMe]);
 
   useEffect(() => {
     if (!mapRef.current || !routeLayerRef.current) return;

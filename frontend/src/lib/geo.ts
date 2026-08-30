@@ -69,6 +69,13 @@ export function projectOntoPath(
   return { alongKm: bestAlongKm, distKm: bestDistKm };
 }
 
+export interface LocatableStop {
+  id: string;
+  name: string;
+  lat: number | null;
+  lon: number | null;
+}
+
 export interface NearestHit<T> {
   item: T;
   km: number;
