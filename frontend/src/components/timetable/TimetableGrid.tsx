@@ -116,7 +116,7 @@ export function TimetableGrid({
                       'font-mono text-sm font-semibold tabular-nums transition-all duration-fast',
                       'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
                       isLive
-                        ? 'border-primary bg-primary text-primary-foreground shadow-glow'
+                        ? 'border-primary bg-primary text-primary-foreground'
                         : isSelected
                           ? 'border-primary bg-primary/15 text-foreground'
                           : isNext
@@ -127,14 +127,6 @@ export function TimetableGrid({
                     )}
                   >
                     {String(minute).padStart(2, '0')}
-
-                    {/* Elindult busz: pulzáló pont a sarokban. */}
-                    {isLive ? (
-                      <span
-                        aria-hidden
-                        className="absolute -right-1 -top-1 h-2.5 w-2.5 animate-live-pulse rounded-full bg-primary-foreground ring-2 ring-primary"
-                      />
-                    ) : null}
 
                     {/* Betérő menet: apró jelölés, hogy más útvonalon megy. */}
                     {trip.deviates && !isLive ? (

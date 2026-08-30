@@ -98,7 +98,6 @@ export default {
         md: 'var(--shadow-md)',
         lg: 'var(--shadow-lg)',
         xl: 'var(--shadow-xl)',
-        glow: 'var(--shadow-glow)',
       },
 
       transitionDuration: {

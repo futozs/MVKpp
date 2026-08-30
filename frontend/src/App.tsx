@@ -9,6 +9,7 @@ import type {
 } from '@/types'
 import { api } from '@/services/api'
 import { Header } from '@/components/layout/Header'
+import { MobileHeader } from '@/components/layout/MobileHeader'
 import { TransitMap } from '@/components/map/TransitMap'
 import { MultiStopDashboard } from '@/components/multistop/MultiStopDashboard'
 import { StopDetailDrawer } from '@/components/stops/StopDetailDrawer'
@@ -60,7 +61,7 @@ export function App() {
   const [monitoredStopIds, setMonitoredStopIds] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem('mvk_monitored_stops')
-      return saved ? JSON.parse(saved).slice(0, 6) : ['SP1']
+      return saved ? JSON.parse(saved) : ['SP1']
     } catch {
       return ['SP1']
     }
@@ -167,13 +168,9 @@ export function App() {
   }
 
   const handleToggleMonitorStop = (stopId: string) => {
-    setMonitoredStopIds((prev) => {
-      if (prev.includes(stopId)) {
-        return prev.filter((id) => id !== stopId)
-      }
-      if (prev.length >= 6) return prev
-      return [...prev, stopId]
-    })
+    setMonitoredStopIds((prev) =>
+      prev.includes(stopId) ? prev.filter((id) => id !== stopId) : [...prev, stopId]
+    )
   }
 
   return (
@@ -181,6 +178,16 @@ export function App() {
       <div className="flex h-screen w-screen flex-col overflow-hidden bg-background text-foreground">
         {/* Státuszsín: navigáció, telemetria, eszközök */}
         <Header
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          vehicleCount={liveVehicles.length}
+          lastUpdated={lastUpdated}
+          isRefreshing={isRefreshing}
+          onManualRefresh={fetchLivePositions}
+          monitoredStopsCount={monitoredStopIds.length}
+          onOpenMapPicker={() => setMapPickerOpen(true)}
+        />
+        <MobileHeader
           activeTab={activeTab}
           setActiveTab={setActiveTab}
           vehicleCount={liveVehicles.length}

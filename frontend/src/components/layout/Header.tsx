@@ -34,12 +34,12 @@ export function Header({
   onOpenMapPicker,
 }: HeaderProps) {
   return (
-    <header className="relative z-bar shrink-0 border-b border-border bg-card/80 backdrop-blur-xl">
-      <div className="flex h-14 items-center gap-3 px-3 md:px-4">
+    <header className="relative z-bar hidden shrink-0 border-b border-border bg-card/80 backdrop-blur-xl md:block">
+      <div className="flex h-14 items-center gap-2 px-2 sm:gap-3 sm:px-3 md:px-4">
         {/* Nézetváltó */}
         <nav
           aria-label="Fő nézetek"
-          className="flex items-center gap-1 rounded-lg border border-border bg-muted/60 p-1"
+          className="flex min-w-0 items-center gap-1 overflow-x-auto rounded-lg border border-border bg-muted/60 p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           {TABS.map((tab) => {
             const isActive = activeTab === tab.id
@@ -50,7 +50,7 @@ export function Header({
                 onClick={() => setActiveTab(tab.id)}
                 aria-current={isActive ? 'page' : undefined}
                 className={cn(
-                  'flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold transition-all duration-fast',
+                  'flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 py-1.5 text-xs font-semibold transition-all duration-fast sm:gap-2 sm:px-3',
                   'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
                   isActive
                     ? 'bg-primary text-primary-foreground shadow-sm'

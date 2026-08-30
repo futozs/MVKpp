@@ -11,6 +11,7 @@ import type {
   SystemInfoResponse,
   TimetableResponse,
   TimetableRoutesResponse,
+  WeatherResponse,
 } from '../types'
 
 // Automatically detect API host: in dev with proxy, use empty base (origin), or fallback to localhost:8088
@@ -55,6 +56,11 @@ export const api = {
       await fetch(`${API_BASE}/gtfs/route-geo?route=${encodeURIComponent(routeIds.join(','))}`),
       '/gtfs/route-geo'
     )
+  },
+
+  // Időjárás (a backend gyorsítótárazza, kulcs nélküli Open-Meteo)
+  async getWeather(): Promise<WeatherResponse> {
+    return handleResponse<WeatherResponse>(await fetch(`${API_BASE}/weather`), '/weather')
   },
 
   // Menetrendkönyv

@@ -20,7 +20,7 @@ export function Countdown({
 
   return (
     <span
-      className={cn('block text-right leading-none', className)}
+      className={cn('block shrink-0 text-right leading-none', className)}
       aria-label={arriving ? 'Beérkezik' : `${etaMin} perc múlva`}
     >
       <motion.span
@@ -31,18 +31,23 @@ export function Countdown({
         className="inline-block"
       >
         {arriving ? (
+          /* Rövid szó, kis doboz: telefonon a hosszú „Beérkezik” felirat
+             kiszorította a célállomás nevét. */
           <span
             className={cn(
-              'inline-flex items-center rounded-lg bg-primary px-3 py-1.5 font-extrabold uppercase tracking-wide text-primary-foreground shadow-glow',
-              size === 'lg' ? 'text-base' : 'text-sm'
+              'inline-flex items-center rounded-md bg-primary px-2 py-1 font-extrabold uppercase tracking-wide text-primary-foreground',
+              size === 'lg' ? 'text-sm sm:text-base' : 'text-xs sm:text-sm'
             )}
           >
-            Beérkezik
+            Most
           </span>
         ) : (
           <span className="font-mono font-bold tabular-nums text-foreground">
-            <span className={size === 'lg' ? 'text-[42px]' : 'text-2xl'}>{etaMin}</span>
-            <span className="ml-1.5 font-sans text-sm font-semibold text-muted-foreground">
+            {/* Telefonon kisebb, hogy ne szorítsa ki a célállomás nevét. */}
+            <span className={size === 'lg' ? 'text-[32px] sm:text-[42px]' : 'text-xl sm:text-2xl'}>
+              {etaMin}
+            </span>
+            <span className="ml-1 font-sans text-xs font-semibold text-muted-foreground sm:ml-1.5 sm:text-sm">
               perc
             </span>
           </span>

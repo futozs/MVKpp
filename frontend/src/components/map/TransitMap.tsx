@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import L from 'leaflet'
-import { Crosshair, Plus, Search, X } from 'lucide-react'
+import { Crosshair, Plus, Search, SlidersHorizontal, X } from 'lucide-react'
 import type { FilterState, LiveVehicle, Route, Stop } from '@/types'
 import { api } from '@/services/api'
 import { RouteChips } from '@/components/fleet/RouteChips'
@@ -142,6 +142,8 @@ export function TransitMap({
   const geoCacheRef = useRef<Record<string, [number, number][][]>>({})
   const lastFocusKeyRef = useRef<string>('')
 
+  /** Mobilon az oldalsáv rácsúszik a térképre; asztali nézetben mindig látszik. */
+  const [isPanelOpen, setPanelOpen] = useState(false)
   const [stopQuery, setStopQuery] = useState('')
   const [typedId, setTypedId] = useState('')
 
@@ -151,22 +153,31 @@ export function TransitMap({
     if (!mapContainerRef.current || mapRef.current) return
 
     const map = L.map(mapContainerRef.current, {
-      zoomControl: true,
+      // A saját helyén a bal felső sarokban ütközne a mobil „Szűrés” gombbal.
+      zoomControl: false,
+      // Saját, nem publikus használatra készül, ezért a csempeszolgáltatók
+      // forráshivatkozó sávja nincs kirakva.
+      attributionControl: false,
       preferCanvas: true,
       center: [48.104, 20.79],
       zoom: 13,
     })
+    L.control.zoom({ position: 'bottomright' }).addTo(map)
 
     const initial = TILE_LAYERS.find((l) => l.id === tileLayerId) || TILE_LAYERS[0]
     tileLayerRef.current = L.tileLayer(initial.url, {
       maxZoom: 19,
       maxNativeZoom: initial.maxNativeZoom,
+      // Retina kijelzőn (telefon) negyed méretű csempéket kér eggyel nagyobb
+      // zoomról — enélkül a térkép felnagyított, pixeles képként látszik.
+      detectRetina: true,
       attribution: initial.attribution,
     }).addTo(map)
     if (initial.labelsUrl) {
       labelLayerRef.current = L.tileLayer(initial.labelsUrl, {
         maxZoom: 19,
         maxNativeZoom: initial.maxNativeZoom,
+        detectRetina: true,
         pane: 'shadowPane',
       }).addTo(map)
     }
@@ -198,6 +209,7 @@ export function TransitMap({
     tileLayerRef.current = L.tileLayer(conf.url, {
       maxZoom: 19,
       maxNativeZoom: conf.maxNativeZoom,
+      detectRetina: true,
       attribution: conf.attribution,
     }).addTo(map)
 
@@ -205,6 +217,7 @@ export function TransitMap({
       labelLayerRef.current = L.tileLayer(conf.labelsUrl, {
         maxZoom: 19,
         maxNativeZoom: conf.maxNativeZoom,
+        detectRetina: true,
         pane: 'shadowPane',
       }).addTo(map)
     }
@@ -552,11 +565,26 @@ export function TransitMap({
   ] as const
 
   return (
-    <div className="relative flex h-full w-full min-w-0 flex-1 flex-col overflow-hidden md:flex-row">
+    <div className="relative flex h-full w-full min-w-0 flex-1 overflow-hidden">
+      {/* Mobil háttér: a nyitott panel mögé kattintva bezárul. */}
+      {isPanelOpen ? (
+        <button
+          type="button"
+          aria-label="Vezérlőpanel bezárása"
+          onClick={() => setPanelOpen(false)}
+          className="absolute inset-0 z-drawer bg-background/70 backdrop-blur-sm md:hidden"
+        />
+      ) : null}
+
       {/* Oldalsáv */}
       <Tabs
         defaultValue="filter"
-        className="z-overlay flex h-full w-full shrink-0 flex-col overflow-hidden border-border bg-card md:w-[340px] md:border-r lg:w-[380px]"
+        className={cn(
+          'absolute inset-y-0 left-0 z-drawer flex w-[86%] max-w-[340px] flex-col overflow-hidden',
+          'border-r border-border bg-card shadow-xl transition-transform duration-normal ease-out',
+          'md:static md:z-overlay md:w-[340px] md:max-w-none md:shrink-0 md:translate-x-0 md:shadow-none lg:w-[380px]',
+          isPanelOpen ? 'translate-x-0' : '-translate-x-full'
+        )}
       >
         <div className="shrink-0 border-b border-border p-2">
           <TabsList className="grid w-full grid-cols-3">
@@ -744,7 +772,10 @@ export function TransitMap({
                 <li key={v.id}>
                   <button
                     type="button"
-                    onClick={() => flyToVehicle(v)}
+                    onClick={() => {
+                      flyToVehicle(v)
+                      setPanelOpen(false)
+                    }}
                     className={cn(
                       'flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-fast hover:bg-accent',
                       'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring'
@@ -813,7 +844,10 @@ export function TransitMap({
                     >
                       <button
                         type="button"
-                        onClick={() => onSelectStop(s.id)}
+                        onClick={() => {
+                          onSelectStop(s.id)
+                          setPanelOpen(false)
+                        }}
                         className="min-w-0 flex-1 px-4 py-2.5 text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
                       >
                         <span className="block truncate text-xs font-medium">{s.name}</span>
@@ -853,11 +887,22 @@ export function TransitMap({
       </Tabs>
 
       {/* Térkép */}
-      <div className="relative h-full w-full flex-1 bg-background">
+      <div className="relative h-full w-full min-w-0 flex-1 bg-background">
         <div ref={mapContainerRef} className="z-map h-full w-full" />
 
+        {/* Vezérlőpanel nyitása mobilon. */}
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => setPanelOpen(true)}
+          className="absolute left-3 top-3 z-overlay shadow-lg md:hidden"
+        >
+          <SlidersHorizontal />
+          Szűrés
+        </Button>
+
         {focusTripId ? (
-          <div className="absolute left-4 top-4 z-drawer">
+          <div className="absolute left-3 top-3 z-overlay md:left-4 md:top-4">
             <Button onClick={onExitFocus} className="shadow-xl">
               Menetkövetés vége
             </Button>
@@ -865,7 +910,7 @@ export function TransitMap({
         ) : null}
 
         {filterActive && !focusTripId ? (
-          <div className="absolute right-4 top-4 z-drawer flex max-w-sm items-center gap-3 rounded-xl border border-border bg-card/95 px-3.5 py-2.5 shadow-xl backdrop-blur-sm">
+          <div className="absolute right-3 top-3 z-overlay flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-xl border border-border bg-card/95 px-3 py-2 shadow-xl backdrop-blur-sm sm:max-w-sm sm:gap-3 sm:px-3.5 sm:py-2.5 md:right-4 md:top-4">
             <Crosshair aria-hidden className="h-4 w-4 shrink-0 text-primary" />
             <span className="min-w-0 truncate text-xs font-medium">{filterSummary}</span>
             <Button variant="ghost" size="sm" className="h-7 shrink-0 px-2 text-xs" onClick={onClearFilters}>

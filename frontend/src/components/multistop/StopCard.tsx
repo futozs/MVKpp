@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Crosshair, RefreshCw, Trash2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Crosshair, RefreshCw, Trash2 } from 'lucide-react'
 import type { ArrivalItem, Stop, StopArrivalsResponse } from '@/types'
 import { api } from '@/services/api'
 import { Button } from '@/components/ui/button'
@@ -14,10 +14,20 @@ import { cn } from '@/lib/utils'
 
 const POLL_MS = 4000
 
-interface StopCardProps {
+/** Sorrend-léptetés, ha a figyelő szerkesztő módban van. */
+export type StopCardReorder = {
+  onMoveEarlier: () => void
+  onMoveLater: () => void
+  canMoveEarlier: boolean
+  canMoveLater: boolean
+}
+
+type StopCardProps = {
   stop: Stop
   onRemove: (stopId: string) => void
   onFocusMap: (stop: Stop, vehicleTripId?: string, vehicleId?: string) => void
+  className?: string
+  reorder?: StopCardReorder
 }
 
 /**
@@ -27,7 +37,7 @@ interface StopCardProps {
  * A rendszám és a pozíció saját kiemelt felületet kap (VehicleTrack),
  * mert a figyelőnél ez a két legfontosabb adat.
  */
-export function StopCard({ stop, onRemove, onFocusMap }: StopCardProps) {
+export function StopCard({ stop, onRemove, onFocusMap, className, reorder }: StopCardProps) {
   const [data, setData] = useState<StopArrivalsResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -67,7 +77,7 @@ export function StopCard({ stop, onRemove, onFocusMap }: StopCardProps) {
   const rest = arrivals.slice(1, 6)
 
   return (
-    <Card className="flex min-w-0 flex-col overflow-hidden shadow-lg">
+    <Card className={cn('flex min-w-0 flex-col overflow-hidden shadow-lg', className)}>
       {/* Fejléc */}
       <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
         <div className="min-w-0">
@@ -86,6 +96,32 @@ export function StopCard({ stop, onRemove, onFocusMap }: StopCardProps) {
         </div>
 
         <div className="flex shrink-0 items-center gap-0.5">
+          {/* Sorrend-szerkesztő módban a többi akció helyett léptetés. */}
+          {reorder ? (
+            <>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                onClick={reorder.onMoveEarlier}
+                disabled={!reorder.canMoveEarlier}
+                aria-label={`${stop.name} előrébb helyezése`}
+              >
+                <ChevronLeft />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                onClick={reorder.onMoveLater}
+                disabled={!reorder.canMoveLater}
+                aria-label={`${stop.name} hátrébb helyezése`}
+              >
+                <ChevronRight />
+              </Button>
+            </>
+          ) : null}
+
           <Tooltip>
             <TooltipTrigger asChild>
               <Button

@@ -177,6 +177,17 @@ export interface SystemInfoResponse {
 }
 
 
+// ── Időjárás ─────────────────────────────────────────────────────────────────
+export interface WeatherResponse {
+  tempC: number | null
+  feelsLikeC: number | null
+  windKmh: number | null
+  /** WMO időjárás-kód. */
+  code: number
+  text: string
+  at: string
+}
+
 // ── Menetrendkönyv ───────────────────────────────────────────────────────────
 export interface TimetableDirection {
   /** GTFS direction_id. Önmagában semmit nem mond — a headsign a beszédes név. */

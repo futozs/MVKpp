@@ -1,12 +1,12 @@
 import React, { useMemo, useState } from 'react'
-import { Plus, Radar } from 'lucide-react'
+import { ArrowLeftRight, Check, Plus, Radar } from 'lucide-react'
 import type { Stop } from '@/types'
 import { AddStopModal } from './AddStopModal'
 import { StopCard } from './StopCard'
+import { StopCarousel } from './StopCarousel'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-
-const MAX_STOPS = 6
+import { cn } from '@/lib/utils'
 
 /** Miskolc gyakran figyelt csomópontjai — valós megállók, nem helykitöltők. */
 const QUICK_STOPS = [
@@ -32,6 +32,8 @@ export function MultiStopDashboard({
   onFocusMap,
 }: MultiStopDashboardProps) {
   const [isPickerOpen, setPickerOpen] = useState(false)
+  /** Sorrend-szerkesztő mód: ilyenkor a kártyák léptethetők. */
+  const [isReordering, setReordering] = useState(false)
 
   const stopById = useMemo(() => {
     const map = new Map<string, Stop>()
@@ -47,10 +49,21 @@ export function MultiStopDashboard({
     setSelectedStopIds((prev) => prev.filter((id) => id !== stopId))
 
   const toggleStop = (stopId: string) =>
+    setSelectedStopIds((prev) =>
+      prev.includes(stopId) ? prev.filter((id) => id !== stopId) : [...prev, stopId]
+    )
+
+  /** Egy megálló léptetése a figyelt sorrendben. */
+  const moveStop = (stopId: string, delta: number) =>
     setSelectedStopIds((prev) => {
-      if (prev.includes(stopId)) return prev.filter((id) => id !== stopId)
-      if (prev.length >= MAX_STOPS) return prev
-      return [...prev, stopId]
+      const from = prev.indexOf(stopId)
+      if (from < 0) return prev
+      const to = from + delta
+      if (to < 0 || to >= prev.length) return prev
+      const next = [...prev]
+      const [moved] = next.splice(from, 1)
+      next.splice(to, 0, moved)
+      return next
     })
 
   const addByName = (needle: string) => {
@@ -64,30 +77,66 @@ export function MultiStopDashboard({
 
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border bg-card/60 px-4 py-3">
-        <div>
-          <h2 className="text-base font-bold tracking-tight">Megállófigyelő</h2>
-          <p className="text-xs text-muted-foreground">
-            Élő indulások legfeljebb {MAX_STOPS} megállóból, négymásodperces frissüléssel.
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-card/60 px-3 py-2.5 sm:px-4 sm:py-3">
+        <div className="min-w-0">
+          <h2 className="truncate text-sm font-bold tracking-tight sm:text-base">
+            Megállófigyelő
+          </h2>
+          {/* A magyarázó sor telefonon elvenné a kártyák helyét. */}
+          <p className="hidden text-xs text-muted-foreground sm:block">
+            Élő indulások négymásodperces frissüléssel, tetszőleges számú megállóból.
           </p>
         </div>
 
-        <Button
-          onClick={() => setPickerOpen(true)}
-          disabled={selectedStopIds.length >= MAX_STOPS}
-          className="shadow-glow"
-        >
-          <Plus />
-          Megálló felvétele
-          <span className="ml-0.5 rounded bg-primary-foreground/20 px-1.5 py-px font-mono text-[10px] font-bold tabular-nums">
-            {selectedStopIds.length}/{MAX_STOPS}
-          </span>
-        </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          {watched.length > 1 ? (
+            <Button
+              variant={isReordering ? 'default' : 'outline'}
+              size="sm"
+              className="h-10"
+              onClick={() => setReordering((v) => !v)}
+              aria-pressed={isReordering}
+            >
+              {isReordering ? <Check /> : <ArrowLeftRight />}
+              <span className="hidden sm:inline">
+                {isReordering ? 'Kész' : 'Sorrend'}
+              </span>
+            </Button>
+          ) : null}
+
+          <Button onClick={() => setPickerOpen(true)} className="h-10">
+            <Plus />
+            <span className="hidden sm:inline">Megálló felvétele</span>
+            {selectedStopIds.length > 0 ? (
+              <span className="rounded bg-primary-foreground/20 px-1.5 py-px font-mono text-[10px] font-bold tabular-nums">
+                {selectedStopIds.length}
+              </span>
+            ) : null}
+          </Button>
+        </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-4">
+      {/* Telefonon a kártyák vízszintesen görgethetők, lapozógombokkal. */}
+      {watched.length > 0 ? (
+        <div className="min-h-0 flex-1 overflow-hidden pt-4 md:hidden">
+          <StopCarousel
+            stops={watched}
+            onRemove={removeStop}
+            onFocusMap={onFocusMap}
+            isReordering={isReordering}
+            onMove={moveStop}
+          />
+        </div>
+      ) : null}
+
+      <div
+        className={cn(
+          'min-h-0 flex-1 overflow-y-auto p-4',
+          watched.length > 0 && 'hidden md:block'
+        )}
+      >
         {watched.length === 0 ? (
-          <Card className="mx-auto max-w-xl p-8 text-center shadow-lg">
+          <Card className="mx-auto max-w-xl p-6 text-center shadow-lg sm:p-8">
             <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-primary/12 text-primary">
               <Radar className="h-7 w-7" />
             </span>
@@ -97,7 +146,7 @@ export function MultiStopDashboard({
               következő járatot, a hozzá tartozó buszt és azt, hogy épp merre jár.
             </p>
 
-            <Button size="lg" className="mt-5 shadow-glow" onClick={() => setPickerOpen(true)}>
+            <Button size="lg" className="mt-5" onClick={() => setPickerOpen(true)}>
               <Plus />
               Megállók böngészése
             </Button>
@@ -132,12 +181,22 @@ export function MultiStopDashboard({
                     : 'grid gap-4 md:grid-cols-2 xl:grid-cols-3'
             }
           >
-            {watched.map((stop) => (
+            {watched.map((stop, i) => (
               <StopCard
                 key={stop.id}
                 stop={stop}
                 onRemove={removeStop}
                 onFocusMap={onFocusMap}
+                reorder={
+                  isReordering
+                    ? {
+                        onMoveEarlier: () => moveStop(stop.id, -1),
+                        onMoveLater: () => moveStop(stop.id, 1),
+                        canMoveEarlier: i > 0,
+                        canMoveLater: i < watched.length - 1,
+                      }
+                    : undefined
+                }
               />
             ))}
           </div>
@@ -150,7 +209,6 @@ export function MultiStopDashboard({
         stops={stops}
         selectedStopIds={selectedStopIds}
         onToggleStop={toggleStop}
-        maxStops={MAX_STOPS}
       />
     </div>
   )

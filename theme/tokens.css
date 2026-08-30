@@ -83,8 +83,6 @@
     --shadow-md: 0 4px 12px -2px hsl(160 40% 2% / 0.55), 0 2px 4px -2px hsl(160 40% 2% / 0.4);
     --shadow-lg: 0 12px 28px -6px hsl(160 40% 2% / 0.65), 0 4px 10px -4px hsl(160 40% 2% / 0.45);
     --shadow-xl: 0 24px 56px -12px hsl(160 40% 2% / 0.75), 0 8px 20px -8px hsl(160 40% 2% / 0.5);
-    /* Zöld izzás — kizárólag az elsődleges akción és az élő jelölőn. */
-    --shadow-glow: 0 6px 20px -6px hsl(154 71% 41.6% / 0.55);
 
     /* ------------------------------------------------------------------
        Tipográfia.

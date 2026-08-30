@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowRight, Clock, Crosshair, Search } from 'lucide-react'
+import { CalendarDays, ChevronLeft, Clock, Crosshair, Search, Star, X } from 'lucide-react'
 import type {
   LiveVehicle,
   TimetableResponse,
@@ -12,6 +12,8 @@ import { Input } from '@/components/ui/input'
 import { Card } from '@/components/ui/card'
 import { RouteTile } from '@/components/transit/RouteTile'
 import { LiveDot } from '@/components/transit/LiveDot'
+import { TimetableGrid } from './TimetableGrid'
+import { favoriteKey, useFavorites } from '@/hooks/useFavorites'
 import { cn } from '@/lib/utils'
 
 interface TimetableViewProps {
@@ -20,12 +22,18 @@ interface TimetableViewProps {
   onFocusTrip: (tripId: string, vehicleId?: string) => void
 }
 
+/** Másodperc éjfél óta, helyi idő szerint. */
+function secondsSinceMidnight(d: Date) {
+  return d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds()
+}
+
 /**
  * Menetrendkönyv.
  *
  * Bal oldalt a teljes GTFS járatlista, jobb oldalt a kiválasztott járat egy
- * irányának napi menetrendje. Zöld jel jelöli azokat a meneteket, amelyekre
- * már bejelentkezett egy jármű — azok egy kattintással követhetők a térképen.
+ * irányának napi menetrendje óra/perc rácsban. Zöld kitöltés jelöli azokat a
+ * meneteket, amelyekre már bejelentkezett jármű — azok egy kattintással
+ * követhetők a térképen.
  */
 export function TimetableView({ liveVehicles, onFocusTrip }: TimetableViewProps) {
   const [routes, setRoutes] = useState<TimetableRoute[]>([])
@@ -36,7 +44,15 @@ export function TimetableView({ liveVehicles, onFocusTrip }: TimetableViewProps)
   const [selectedDir, setSelectedDir] = useState<string>('')
   const [table, setTable] = useState<TimetableResponse | null>(null)
   const [tableLoading, setTableLoading] = useState(false)
-  const [openTripId, setOpenTripId] = useState<string | null>(null)
+  const [selectedTrip, setSelectedTrip] = useState<TimetableTrip | null>(null)
+  const { favorites, isFavorite, toggleFavorite } = useFavorites()
+
+  /* Percenként lépő óra: ettől mozdul a „következő indulás” keret. */
+  const [nowSec, setNowSec] = useState(() => secondsSinceMidnight(new Date()))
+  useEffect(() => {
+    const timer = setInterval(() => setNowSec(secondsSinceMidnight(new Date())), 15000)
+    return () => clearInterval(timer)
+  }, [])
 
   /* A teljes járatkatalógus egyszer töltődik be. */
   useEffect(() => {
@@ -51,7 +67,6 @@ export function TimetableView({ liveVehicles, onFocusTrip }: TimetableViewProps)
 
   const selectedRoute = routes.find((r) => r.id === selectedRouteId) ?? null
 
-  /* Járat vagy irány váltásakor újratöltjük a menetrendet. */
   useEffect(() => {
     if (!selectedRouteId) {
       setTable(null)
@@ -59,7 +74,7 @@ export function TimetableView({ liveVehicles, onFocusTrip }: TimetableViewProps)
     }
     let alive = true
     setTableLoading(true)
-    setOpenTripId(null)
+    setSelectedTrip(null)
     api
       .getTimetable(selectedRouteId, selectedDir)
       .then((res) => alive && setTable(res))
@@ -79,6 +94,23 @@ export function TimetableView({ liveVehicles, onFocusTrip }: TimetableViewProps)
     return map
   }, [liveVehicles])
 
+  /** Kedvencek feloldva a katalógusból, hogy nevük és színük is meglegyen. */
+  const favoriteLines = useMemo(() => {
+    const out: { route: TimetableRoute; dir: string; headsign: string; tripsToday: number }[] = []
+    for (const fav of favorites) {
+      const route = routes.find((r) => r.id === fav.routeId)
+      const direction = route?.directions.find((d) => d.dir === fav.dir)
+      if (!route || !direction) continue
+      out.push({
+        route,
+        dir: direction.dir,
+        headsign: direction.headsign,
+        tripsToday: direction.tripsToday,
+      })
+    }
+    return out
+  }, [favorites, routes])
+
   const visibleRoutes = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return routes
@@ -92,17 +124,24 @@ export function TimetableView({ liveVehicles, onFocusTrip }: TimetableViewProps)
 
   const selectRoute = (route: TimetableRoute) => {
     setSelectedRouteId(route.id)
-    // Az az irány nyíljon meg, amelyiken ma tényleg jár busz.
     const withService = route.directions.find((d) => d.tripsToday > 0) ?? route.directions[0]
     setSelectedDir(withService?.dir ?? '')
   }
 
   const liveTripCount = table?.trips.filter((t) => vehicleByTrip.has(t.tripId)).length ?? 0
+  const selectedVehicle = selectedTrip ? (vehicleByTrip.get(selectedTrip.tripId) ?? null) : null
+  const todayLabel = new Date().toLocaleDateString('hu-HU', { month: 'short', day: 'numeric' })
 
   return (
     <div className="flex h-full min-w-0 flex-1 overflow-hidden">
-      {/* Járatlista */}
-      <aside className="flex w-[240px] shrink-0 flex-col overflow-hidden border-r border-border bg-card lg:w-[280px]">
+      {/* Járatlista — mobilon csak addig látszik, amíg nincs kiválasztott járat. */}
+      <aside
+        className={cn(
+          'flex min-w-0 flex-col overflow-hidden border-border bg-card',
+          'md:w-[260px] md:shrink-0 md:border-r lg:w-[300px]',
+          selectedRoute ? 'hidden md:flex' : 'flex w-full'
+        )}
+      >
         <div className="shrink-0 border-b border-border px-3 py-3">
           <div className="relative">
             <Search
@@ -118,7 +157,7 @@ export function TimetableView({ liveVehicles, onFocusTrip }: TimetableViewProps)
             />
           </div>
           <p className="mt-2 text-[11px] text-muted-foreground">
-            {visibleRoutes.length} járat a menetrendben
+            {visibleRoutes.length} járat · {todayLabel}
           </p>
         </div>
 
@@ -135,10 +174,59 @@ export function TimetableView({ liveVehicles, onFocusTrip }: TimetableViewProps)
               Nincs „{query}” jelzésű járat.
             </p>
           ) : (
-            <ul className="divide-y divide-border/60">
-              {visibleRoutes.map((route) => {
+            <>
+              {/* Kedvencek — konkrét járat + irány, egy koppintásra. */}
+              {favoriteLines.length > 0 && !query.trim() ? (
+                <section className="border-b border-border bg-muted/25 py-1">
+                  <p className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    <Star aria-hidden className="h-3 w-3 fill-primary text-primary" />
+                    Kedvencek
+                  </p>
+                  <ul>
+                    {favoriteLines.map((fav) => {
+                      const isActive = fav.route.id === selectedRouteId && fav.dir === selectedDir
+                      return (
+                        <li key={favoriteKey(fav.route.id, fav.dir)}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedRouteId(fav.route.id)
+                              setSelectedDir(fav.dir)
+                            }}
+                            aria-pressed={isActive}
+                            className={cn(
+                              'flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors duration-fast',
+                              'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring',
+                              isActive ? 'bg-primary/10' : 'hover:bg-accent'
+                            )}
+                          >
+                            <RouteTile
+                              short={fav.route.short}
+                              color={fav.route.color}
+                              text={fav.route.text}
+                            />
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-xs font-medium">
+                                {fav.headsign || fav.route.long}
+                              </span>
+                              <span className="block text-[11px] text-muted-foreground">
+                                {fav.tripsToday > 0
+                                  ? `${fav.tripsToday} menet ma`
+                                  : 'Ma nem közlekedik'}
+                              </span>
+                            </span>
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </section>
+              ) : null}
+
+              <ul className="divide-y divide-border/60">
+                {visibleRoutes.map((route) => {
                 const isActive = route.id === selectedRouteId
-                const runsToday = route.directions.some((d) => d.tripsToday > 0)
+                const tripsToday = route.directions.reduce((n, d) => n + d.tripsToday, 0)
                 return (
                   <li key={route.id}>
                     <button
@@ -149,29 +237,33 @@ export function TimetableView({ liveVehicles, onFocusTrip }: TimetableViewProps)
                         'flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors duration-fast',
                         'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring',
                         isActive ? 'bg-primary/10' : 'hover:bg-accent',
-                        !runsToday && !isActive && 'opacity-55'
+                        tripsToday === 0 && !isActive && 'opacity-55'
                       )}
                     >
                       <RouteTile short={route.short} color={route.color} text={route.text} />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-xs font-medium">{route.long}</span>
                         <span className="block text-[11px] text-muted-foreground">
-                          {runsToday
-                            ? `${route.directions.reduce((n, d) => n + d.tripsToday, 0)} menet ma`
-                            : 'Ma nem közlekedik'}
+                          {tripsToday > 0 ? `${tripsToday} menet ma` : 'Ma nem közlekedik'}
                         </span>
                       </span>
-                    </button>
-                  </li>
-                )
-              })}
-            </ul>
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            </>
           )}
         </div>
       </aside>
 
       {/* Menetrend */}
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      <div
+        className={cn(
+          'min-w-0 flex-1 flex-col overflow-hidden',
+          selectedRoute ? 'flex' : 'hidden md:flex'
+        )}
+      >
         {!selectedRoute ? (
           <div className="flex flex-1 items-center justify-center p-6">
             <Card className="max-w-md p-8 text-center shadow-lg">
@@ -180,36 +272,71 @@ export function TimetableView({ liveVehicles, onFocusTrip }: TimetableViewProps)
               </span>
               <h3 className="mt-4 text-lg font-bold tracking-tight">Válassz járatot</h3>
               <p className="mt-1.5 text-sm text-muted-foreground">
-                A bal oldali listából kiválasztott járat teljes napi menetrendje jelenik meg,
-                irányonként. Zöld jel mutatja, melyik menetre jelentkezett már be busz.
+                A kiválasztott járat teljes napi menetrendje óránkénti bontásban jelenik meg.
+                Zöld jelöli azokat a meneteket, amelyekre már bejelentkezett busz.
               </p>
             </Card>
           </div>
         ) : (
           <>
-            {/* Járatfej + iránykapcsoló */}
-            <div className="shrink-0 border-b border-border bg-card/60 px-4 py-3">
-              <div className="flex flex-wrap items-center gap-3">
+            {/* Járatfej: vissza (mobilon), járat, dátum */}
+            <div className="shrink-0 border-b border-border bg-card/70 px-3 py-3 sm:px-4">
+              <div className="flex items-center gap-2.5">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 shrink-0 md:hidden"
+                  onClick={() => setSelectedRouteId(null)}
+                  aria-label="Vissza a járatlistához"
+                >
+                  <ChevronLeft />
+                </Button>
+
                 <RouteTile
                   short={selectedRoute.short}
                   color={selectedRoute.color}
                   text={selectedRoute.text}
                   size="lg"
                 />
-                <div className="min-w-0">
-                  <h2 className="truncate text-base font-bold tracking-tight">
+
+                <div className="min-w-0 flex-1">
+                  <h2 className="truncate text-sm font-bold tracking-tight sm:text-base">
                     {selectedRoute.long}
                   </h2>
-                  <p className="text-xs text-muted-foreground">
-                    {table ? `${table.trips.length} menet ma` : 'Menetrend betöltése…'}
+                  <p className="flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
+                    <span>{table ? `${table.trips.length} menet` : 'betöltés…'}</span>
                     {liveTripCount > 0 ? (
-                      <span className="ml-2 inline-flex items-center gap-1.5 font-semibold text-live">
+                      <span className="inline-flex items-center gap-1.5 font-semibold text-live">
                         <LiveDot />
                         {liveTripCount} elindult
                       </span>
                     ) : null}
                   </p>
                 </div>
+
+                {/* Kedvencelés: konkrét járat + irány, mert a két irány
+                    menetrendje külön él. */}
+                <Button
+                  variant={isFavorite(selectedRoute.id, selectedDir) ? 'default' : 'outline'}
+                  size="icon"
+                  className="h-9 w-9 shrink-0"
+                  onClick={() => toggleFavorite(selectedRoute.id, selectedDir)}
+                  aria-pressed={isFavorite(selectedRoute.id, selectedDir)}
+                  aria-label={
+                    isFavorite(selectedRoute.id, selectedDir)
+                      ? 'Levétel a kedvencekről'
+                      : 'Hozzáadás a kedvencekhez'
+                  }
+                >
+                  <Star
+                    className={cn(isFavorite(selectedRoute.id, selectedDir) && 'fill-current')}
+                  />
+                </Button>
+
+                <span className="hidden shrink-0 items-center gap-1.5 rounded-lg border border-border bg-muted/60 px-2.5 py-1.5 text-xs font-medium sm:flex">
+                  <CalendarDays aria-hidden className="h-3.5 w-3.5 text-primary" />
+                  {todayLabel}
+                </span>
               </div>
 
               {/* Irány — a GTFS direction_id helyett a végállomás nevével. */}
@@ -223,18 +350,19 @@ export function TimetableView({ liveVehicles, onFocusTrip }: TimetableViewProps)
                       onClick={() => setSelectedDir(d.dir)}
                       aria-pressed={isOn}
                       className={cn(
-                        'inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-fast',
+                        'inline-flex min-w-0 items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-fast',
                         'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
                         isOn
                           ? 'border-primary bg-primary text-primary-foreground shadow-sm'
                           : 'border-border bg-secondary text-muted-foreground hover:bg-accent hover:text-foreground'
                       )}
                     >
-                      <ArrowRight className="h-3.5 w-3.5" />
-                      <span className="max-w-[260px] truncate">{d.headsign || `Irány ${d.dir}`}</span>
+                      <span className="max-w-[220px] truncate sm:max-w-[320px]">
+                        {d.headsign || `Irány ${d.dir}`}
+                      </span>
                       <span
                         className={cn(
-                          'rounded px-1 font-mono text-[10px] font-bold tabular-nums',
+                          'shrink-0 rounded px-1 font-mono text-[10px] font-bold tabular-nums',
                           isOn ? 'bg-primary-foreground/20' : 'bg-muted'
                         )}
                       >
@@ -246,7 +374,7 @@ export function TimetableView({ liveVehicles, onFocusTrip }: TimetableViewProps)
               </div>
             </div>
 
-            {/* Indulások */}
+            {/* Óra/perc rács */}
             <div className="min-h-0 flex-1 overflow-y-auto">
               {tableLoading ? (
                 <p className="px-4 py-10 text-center font-mono text-xs text-muted-foreground">
@@ -257,23 +385,28 @@ export function TimetableView({ liveVehicles, onFocusTrip }: TimetableViewProps)
                   {table?.note ?? 'Ezen az irányon ma nem közlekedik járat.'}
                 </p>
               ) : (
-                <ul className="divide-y divide-border/60">
-                  {table.trips.map((trip) => (
-                    <TripRow
-                      key={trip.tripId}
-                      trip={trip}
-                      stops={table.stops}
-                      vehicle={vehicleByTrip.get(trip.tripId) ?? null}
-                      isOpen={openTripId === trip.tripId}
-                      onToggle={() =>
-                        setOpenTripId((prev) => (prev === trip.tripId ? null : trip.tripId))
-                      }
-                      onFocusTrip={onFocusTrip}
-                    />
-                  ))}
-                </ul>
+                <TimetableGrid
+                  trips={table.trips}
+                  vehicleByTrip={vehicleByTrip}
+                  selectedTripId={selectedTrip?.tripId ?? null}
+                  onSelectTrip={(t) =>
+                    setSelectedTrip((prev) => (prev?.tripId === t.tripId ? null : t))
+                  }
+                  nowSec={nowSec}
+                />
               )}
             </div>
+
+            {/* Kiválasztott menet részletei */}
+            {selectedTrip && table ? (
+              <TripDetail
+                trip={selectedTrip}
+                stops={table.stops}
+                vehicle={selectedVehicle}
+                onClose={() => setSelectedTrip(null)}
+                onFocusTrip={onFocusTrip}
+              />
+            ) : null}
           </>
         )}
       </div>
@@ -281,112 +414,75 @@ export function TimetableView({ liveVehicles, onFocusTrip }: TimetableViewProps)
   )
 }
 
-/** Egy menet sora: indulás, végállomás, élő jelzés, kinyitva a megállónkénti idők. */
-function TripRow({
+/** A kiválasztott menet megállónkénti idői, alsó panelben. */
+function TripDetail({
   trip,
   stops,
   vehicle,
-  isOpen,
-  onToggle,
+  onClose,
   onFocusTrip,
 }: {
   trip: TimetableTrip
   stops: TimetableResponse['stops']
   vehicle: LiveVehicle | null
-  isOpen: boolean
-  onToggle: () => void
+  onClose: () => void
   onFocusTrip: (tripId: string, vehicleId?: string) => void
 }) {
-  const isLive = vehicle !== null
-
   return (
-    <li className={cn(isLive && 'bg-primary/[0.06]')}>
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={onToggle}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault()
-            onToggle()
-          }
-        }}
-        aria-expanded={isOpen}
-        className={cn(
-          'flex cursor-pointer items-center gap-3 px-4 py-2.5 transition-colors duration-fast hover:bg-accent',
-          'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring'
-        )}
-      >
-        {/* Zöld sáv jelzi, hogy erre a menetre már bejelentkezett busz. */}
-        <span
-          aria-hidden
-          className={cn(
-            'h-9 w-1 shrink-0 rounded-full',
-            isLive ? 'bg-primary' : 'bg-transparent'
-          )}
-        />
-
-        <span className="w-14 shrink-0 font-mono text-lg font-bold tabular-nums">
-          {trip.departure}
-        </span>
+    <div className="max-h-[42vh] shrink-0 overflow-y-auto border-t border-border bg-card shadow-xl">
+      <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-border bg-card px-3 py-2.5 sm:px-4">
+        <span className="font-mono text-xl font-bold tabular-nums">{trip.departure}</span>
 
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-xs font-medium">{trip.destinationName}</span>
+          <span className="block truncate text-xs font-semibold">{trip.destinationName}</span>
           <span className="block font-mono text-[11px] tabular-nums text-muted-foreground">
             érkezés {trip.arrival} · {trip.stopCount} megálló
             {trip.deviates ? ' · betérő' : ''}
           </span>
         </span>
 
-        {isLive ? (
-          <span className="flex shrink-0 items-center gap-2">
-            <span className="flex items-center gap-1.5 rounded-md bg-primary/15 px-2 py-1">
-              <LiveDot />
-              <span className="font-mono text-xs font-bold tabular-nums text-primary">
-                {vehicle.id}
-              </span>
-            </span>
-            <Button
-              size="sm"
-              className="h-7 px-2.5 text-xs"
-              onClick={(e) => {
-                e.stopPropagation()
-                onFocusTrip(trip.tripId, vehicle.id)
-              }}
-            >
-              <Crosshair />
-              Térképen
-            </Button>
-          </span>
+        {vehicle ? (
+          <Button
+            size="sm"
+            className="h-8 shrink-0"
+            onClick={() => onFocusTrip(trip.tripId, vehicle.id)}
+          >
+            <Crosshair />
+            <span className="font-mono tabular-nums">{vehicle.id}</span>
+            <span className="hidden sm:inline">a térképen</span>
+          </Button>
         ) : (
           <span className="shrink-0 text-[11px] text-muted-foreground">nem indult el</span>
         )}
+
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 shrink-0"
+          onClick={onClose}
+          aria-label="Menet részleteinek bezárása"
+        >
+          <X />
+        </Button>
       </div>
 
-      {/* Megállónkénti idők */}
-      {isOpen ? (
-        <div className="border-t border-border/60 bg-muted/25 px-4 py-3">
-          <ol className="grid gap-x-6 gap-y-1 sm:grid-cols-2 lg:grid-cols-3">
-            {stops.map((stop, i) => {
-              const time = trip.times[i]
-              if (!time) return null
-              return (
-                <li
-                  key={stop.id}
-                  className="flex items-baseline justify-between gap-3 border-b border-border/40 py-1"
-                >
-                  <span className="min-w-0 truncate text-xs text-muted-foreground">
-                    {stop.name}
-                  </span>
-                  <span className="shrink-0 font-mono text-xs font-semibold tabular-nums">
-                    {time}
-                  </span>
-                </li>
-              )
-            })}
-          </ol>
-        </div>
-      ) : null}
-    </li>
+      {/* Többhasábos elrendezés: az útvonal fentről lefelé olvasható, majd
+          a következő hasábon folytatódik — nem soronként ugrál. */}
+      <ol className="columns-1 gap-x-8 px-3 py-2 sm:columns-2 sm:px-4 lg:columns-3">
+        {stops.map((stop, i) => {
+          const time = trip.times[i]
+          if (!time) return null
+          return (
+            <li
+              key={stop.id}
+              className="flex break-inside-avoid items-baseline justify-between gap-3 border-b border-border/40 py-1.5"
+            >
+              <span className="min-w-0 truncate text-xs text-muted-foreground">{stop.name}</span>
+              <span className="shrink-0 font-mono text-xs font-semibold tabular-nums">{time}</span>
+            </li>
+          )
+        })}
+      </ol>
+    </div>
   )
 }

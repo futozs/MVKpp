@@ -195,6 +195,49 @@ async function mvkFetch(path: string): Promise<{ status: number; buf: Buffer }> 
   if (res.status === 401 || res.status === 403) { const st = jwtStatus(tok); if (st.present && !st.expired) { tokenRejectedAt = Math.floor(Date.now() / 1000); console.log(`[api] ⚠️ ${res.status} érvényes tokenre → app-refresh jelzés`) } }
   return { status: res.status, buf: Buffer.from(await res.arrayBuffer()) }
 }
+/**
+ * Valós idejű feed-gyorsítótár.
+ *
+ * Az MVK API-hívás ~150 ms. Korábban minden kliens-kérés külön felment
+ * upstream-re: hat megállókártya négymásodpercenként tizenkét hívást
+ * indított ugyanazért a két feedért. Itt egy háttérhurok tartja frissen a
+ * két feedet, a végpontok pedig a memóriából szolgálnak ki (~1 ms).
+ */
+const FEED_TTL_MS = 2000
+type FeedEntry = { at: number; status: number; buf: Buffer; inflight: Promise<{ status: number; buf: Buffer }> | null }
+const feedCache = new Map<string, FeedEntry>()
+
+async function cachedFeed(path: string): Promise<{ status: number; buf: Buffer }> {
+  const entry = feedCache.get(path)
+  if (entry && Date.now() - entry.at < FEED_TTL_MS) return { status: entry.status, buf: entry.buf }
+  // Egyszerre érkező kérések ugyanarra a feedre egyetlen upstream hívást kapnak.
+  if (entry?.inflight) return entry.inflight
+
+  const inflight = mvkFetch(path)
+    .then((res) => {
+      feedCache.set(path, { at: Date.now(), status: res.status, buf: res.buf, inflight: null })
+      return res
+    })
+    .catch((err) => {
+      // Hiba esetén az előző (elavult) válasz jobb, mint a semmi.
+      const prev = feedCache.get(path)
+      if (prev) feedCache.set(path, { ...prev, inflight: null })
+      else feedCache.delete(path)
+      throw err
+    })
+
+  feedCache.set(path, {
+    at: entry?.at ?? 0,
+    status: entry?.status ?? 0,
+    buf: entry?.buf ?? Buffer.alloc(0),
+    inflight,
+  })
+  return inflight
+}
+
+/** A dekódolt járműlista is gyorsítótárazva: kártyánként újradekódolni pazarlás. */
+let vehiclesCache: { at: number; list: LiveVeh[] } | null = null
+
 function decodeVehicles(buf: Buffer) {
   const feed = transit_realtime.FeedMessage.decode(new Uint8Array(buf)); const out: unknown[] = []
   for (const e of feed.entity) {
@@ -207,15 +250,17 @@ function decodeVehicles(buf: Buffer) {
 
 type LiveVeh = { id: string; lat: number; lon: number; bearing: number | null; speed: number | null; routeId: string; tripId: string }
 async function activeVehicles(): Promise<LiveVeh[]> {
+  if (vehiclesCache && Date.now() - vehiclesCache.at < FEED_TTL_MS) return vehiclesCache.list
   const out: LiveVeh[] = []
   try {
-    const { status, buf } = await mvkFetch('/api/v1/gtfs/get-positions'); if (status !== 200) return out
+    const { status, buf } = await cachedFeed('/api/v1/gtfs/get-positions'); if (status !== 200) return out
     const feed = transit_realtime.FeedMessage.decode(new Uint8Array(buf))
     for (const e of feed.entity) {
       const v = e.vehicle; if (v?.position?.latitude == null) continue
       const tripId = v.trip?.tripId || ''; const routeId = v.trip?.routeId || trips.get(tripId)?.routeId || ''
       out.push({ id: v.vehicle?.id || e.id, lat: v.position.latitude, lon: v.position.longitude, bearing: v.position.bearing ?? null, speed: v.position.speed ?? null, routeId, tripId })
     }
+    vehiclesCache = { at: Date.now(), list: out }
   } catch { /* üres */ }
   return out
 }
@@ -234,7 +279,7 @@ async function arrivalsForStop(stopId: string, limit: number) {
   const pred = new Map<string, { unix: number; delay: number | null }>()
   let rtErr: string | null = null
   try {
-    const { status, buf } = await mvkFetch('/api/v1/gtfs/get-updates')
+    const { status, buf } = await cachedFeed('/api/v1/gtfs/get-updates')
     if (status === 200) {
       const feed = transit_realtime.FeedMessage.decode(new Uint8Array(buf))
       for (const e of feed.entity) {
@@ -584,20 +629,86 @@ app.get('/gtfs/timetable', (c) => {
   return c.json({ route, dir, date: ymd, headsign, stops: stopList, trips: tripRows })
 })
 
+// ── Időjárás ─────────────────────────────────────────────────────────────────
+/** WMO időjárás-kódok rövid magyar leírása (a fejléc egysoros kiírásához). */
+const WMO_TEXT: Record<number, string> = {
+  0: 'Derült', 1: 'Túlnyomóan derült', 2: 'Részben felhős', 3: 'Borult',
+  45: 'Köd', 48: 'Zúzmarás köd',
+  51: 'Gyenge szitálás', 53: 'Szitálás', 55: 'Erős szitálás',
+  56: 'Ónos szitálás', 57: 'Erős ónos szitálás',
+  61: 'Gyenge eső', 63: 'Eső', 65: 'Erős eső',
+  66: 'Ónos eső', 67: 'Erős ónos eső',
+  71: 'Gyenge havazás', 73: 'Havazás', 75: 'Erős havazás', 77: 'Hószemcsék',
+  80: 'Záporok', 81: 'Erős záporok', 82: 'Felhőszakadás',
+  85: 'Hózáporok', 86: 'Erős hózáporok',
+  95: 'Zivatar', 96: 'Zivatar jégesővel', 99: 'Heves zivatar jégesővel',
+}
+
+/** Miskolc belvárosa — a pult egyetlen városra szól. */
+const WEATHER_LAT = 48.104
+const WEATHER_LON = 20.79
+const WEATHER_TTL_MS = 10 * 60 * 1000
+
+let weatherCache: { at: number; data: Record<string, unknown> } | null = null
+
+/**
+ * Aktuális hőmérséklet a fejlécbe. Open-Meteo: ingyenes, API-kulcs nélkül.
+ * Tíz percig gyorsítótárazva — a hőmérséklet nem változik gyakrabban, és
+ * így a fejléc nem terheli feleslegesen a külső szolgáltatót.
+ */
+app.get('/weather', async (c) => {
+  if (weatherCache && Date.now() - weatherCache.at < WEATHER_TTL_MS) {
+    return c.json(weatherCache.data)
+  }
+
+  try {
+    const url =
+      `https://api.open-meteo.com/v1/forecast?latitude=${WEATHER_LAT}&longitude=${WEATHER_LON}` +
+      `&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m&timezone=auto`
+    const res = await fetch(url)
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+
+    const raw = (await res.json()) as {
+      current?: {
+        temperature_2m?: number
+        apparent_temperature?: number
+        weather_code?: number
+        wind_speed_10m?: number
+      }
+    }
+
+    const code = raw.current?.weather_code ?? -1
+    const data = {
+      tempC: raw.current?.temperature_2m ?? null,
+      feelsLikeC: raw.current?.apparent_temperature ?? null,
+      windKmh: raw.current?.wind_speed_10m ?? null,
+      code,
+      text: WMO_TEXT[code] ?? 'Ismeretlen',
+      at: new Date().toISOString(),
+    }
+    weatherCache = { at: Date.now(), data }
+    return c.json(data)
+  } catch (e) {
+    // Elavult adat is jobb, mint üres fejléc.
+    if (weatherCache) return c.json(weatherCache.data)
+    return c.json({ error: (e as Error).message }, 502)
+  }
+})
+
 app.get('/live/positions', async (c) => {
-  const { status, buf } = await mvkFetch('/api/v1/gtfs/get-positions')
+  const { status, buf } = await cachedFeed('/api/v1/gtfs/get-positions')
   if (status !== 200) return c.json({ error: `get-positions HTTP ${status}` }, 502)
   try { return c.json(decodeVehicles(buf)) } catch (e) { return c.json({ error: 'dekód hiba', detail: (e as Error).message }, 500) }
 })
 app.get('/live/updates', async (c) => {
-  const { status, buf } = await mvkFetch('/api/v1/gtfs/get-updates')
+  const { status, buf } = await cachedFeed('/api/v1/gtfs/get-updates')
   if (status !== 200) return c.json({ error: `get-updates HTTP ${status}` }, 502)
   try { const feed = transit_realtime.FeedMessage.decode(new Uint8Array(buf)); return c.json({ header: { timestamp: Number(feed.header.timestamp || 0) }, count: feed.entity.length }) } catch (e) { return c.json({ error: 'dekód hiba', detail: (e as Error).message }, 500) }
 })
 // Egy konkrét jármű (busz/villamos) élő állapota: bevetésen van-e és hol.
 app.get('/live/vehicle', async (c) => {
   const q = (c.req.query('id') || '').trim().toLowerCase(); if (!q) return c.json({ error: 'hiányzó ?id=' }, 400)
-  const { status, buf } = await mvkFetch('/api/v1/gtfs/get-positions')
+  const { status, buf } = await cachedFeed('/api/v1/gtfs/get-positions')
   if (status !== 200) return c.json({ error: `get-positions HTTP ${status}` }, 502)
   const all = (decodeVehicles(buf).vehicles as Record<string, unknown>[]).filter((v) => v.lat != null)
   const idOf = (v: Record<string, unknown>) => String(v.id ?? '').toLowerCase()
@@ -825,6 +936,20 @@ async function refreshGtfs() {
 loadGtfs()
 refreshGtfs()
 setInterval(() => refreshGtfs(), 6 * 3600 * 1000)
+
+/**
+ * A valós idejű feedeket háttérben tartjuk melegen, hogy a kliens-kérések
+ * a memóriából szolgálódjanak ki (~1 ms) az upstream ~150 ms helyett.
+ * Csak érvényes token mellett indul, különben feleslegesen hívnánk 401-et.
+ */
+function warmFeeds() {
+  const st = jwtStatus(readJwt())
+  if (!st.present || st.expired) return
+  cachedFeed('/api/v1/gtfs/get-positions').catch(() => {})
+  cachedFeed('/api/v1/gtfs/get-updates').catch(() => {})
+}
+warmFeeds()
+setInterval(warmFeeds, FEED_TTL_MS)
 serve({ fetch: app.fetch, port: PORT, hostname: HOST }, (info) => {
   console.log(`== MVK backend ==  http://${HOST}:${info.port}   (dashboard a /-on)`)
   console.log(`   élő hozzárendelés: ≤${LIVE_MAX_KM} km, ≤${LIVE_MAX_ETA} perc   auto-renew: ${AUTO_RENEW ? 'BE' : 'KI'}`)

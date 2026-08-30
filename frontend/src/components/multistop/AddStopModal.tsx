@@ -13,13 +13,12 @@ import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
 
-interface AddStopModalProps {
+type AddStopModalProps = {
   isOpen: boolean
   onClose: () => void
   stops: Stop[]
   selectedStopIds: string[]
   onToggleStop: (stopId: string) => void
-  maxStops?: number
 }
 
 /** shadcn Dialog: fókuszcsapda, Escape, háttérkattintás és aria készen jön. */
@@ -29,7 +28,6 @@ export function AddStopModal({
   stops,
   selectedStopIds,
   onToggleStop,
-  maxStops = 6,
 }: AddStopModalProps) {
   const [query, setQuery] = useState('')
 
@@ -46,7 +44,6 @@ export function AddStopModal({
       .slice(0, 80)
   }, [stops, query])
 
-  const atCapacity = selectedStopIds.length >= maxStops
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -54,8 +51,10 @@ export function AddStopModal({
         <DialogHeader className="space-y-1 border-b border-border px-5 py-4 text-left">
           <DialogTitle>Megálló felvétele a figyelőre</DialogTitle>
           <DialogDescription>
-            {selectedStopIds.length} / {maxStops} hely foglalt. A figyelő minden megállóról a
-            következő indulásokat mutatja.
+            {selectedStopIds.length > 0
+              ? `${selectedStopIds.length} megálló a figyelőn. `
+              : ''}
+            A figyelő minden kiválasztott megállóról a következő indulásokat mutatja.
           </DialogDescription>
         </DialogHeader>
 
@@ -85,19 +84,16 @@ export function AddStopModal({
             <ul className="divide-y divide-border/60">
               {results.map((stop) => {
                 const selected = selectedStopIds.includes(stop.id)
-                const blocked = !selected && atCapacity
 
                 return (
                   <li key={stop.id}>
                     <button
                       type="button"
-                      disabled={blocked}
                       onClick={() => onToggleStop(stop.id)}
                       aria-pressed={selected}
                       className={cn(
                         'flex w-full items-center gap-3 px-5 py-2.5 text-left transition-colors duration-fast',
                         'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring',
-                        'disabled:cursor-not-allowed disabled:opacity-40',
                         selected ? 'bg-primary/10' : 'hover:bg-accent'
                       )}
                     >
@@ -143,9 +139,9 @@ export function AddStopModal({
 
         <div className="flex items-center justify-between gap-3 border-t border-border px-5 py-3">
           <span className="text-xs text-muted-foreground">
-            {atCapacity
-              ? `Betelt — vegyél le egyet a ${maxStops} közül`
-              : `${maxStops - selectedStopIds.length} hely szabad`}
+            {selectedStopIds.length === 0
+              ? 'Még nincs kiválasztott megálló'
+              : `${selectedStopIds.length} megálló kiválasztva`}
           </span>
           <Button size="sm" onClick={onClose}>
             Kész
