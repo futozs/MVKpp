@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url'
 import {
   stops, routes, trips, schedByTripStop, stopSched, shapes,
   routeStops, routeShapeIds, tripStops,
-  activeServices, haversineKm, projectOntoShapeKm,
+  activeServices, serviceRange, haversineKm, projectOntoShapeKm,
   getFeedVersion, loadGtfs as loadGtfsFrom, type Trip,
 } from './lib/gtfs.ts'
 import { stats } from './api/stats.ts'
@@ -443,7 +443,7 @@ app.get('/gtfs/route-geo', (c) => {
   }).filter(Boolean)
   return c.json({ routes: out })
 })
-app.get('/gtfs/meta.json', (c) => c.json({ feedVersion: getFeedVersion(), stops: stops.size, routes: routes.size, trips: trips.size }))
+app.get('/gtfs/meta.json', (c) => c.json({ feedVersion: getFeedVersion(), stops: stops.size, routes: routes.size, trips: trips.size, serviceRange: serviceRange() }))
 
 type TripStopRow = { id: string; name: string; lat: number | null; lon: number | null; dep: number }
 

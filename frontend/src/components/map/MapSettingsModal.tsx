@@ -24,7 +24,7 @@ export function MapSettingsModal({
 }: MapSettingsModalProps) {
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="gap-0 p-0 sm:max-w-md">
+      <DialogContent className="gap-0 overflow-hidden rounded-t-2xl p-0 sm:max-w-md sm:rounded-lg">
         <DialogHeader className="space-y-1 border-b border-border px-5 py-4 text-left">
           <DialogTitle>Alaptérkép</DialogTitle>
           <DialogDescription>
@@ -33,7 +33,7 @@ export function MapSettingsModal({
           </DialogDescription>
         </DialogHeader>
 
-        <ul className="max-h-[60vh] overflow-y-auto divide-y divide-border/60">
+        <ul className="max-h-[55dvh] divide-y divide-border/60 overflow-y-auto pb-[env(safe-area-inset-bottom)] sm:max-h-[60vh] sm:pb-0">
           {TILE_LAYERS.map((layer) => {
             const selected = currentLayerId === layer.id;
             return (

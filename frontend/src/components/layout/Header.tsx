@@ -1,10 +1,4 @@
-import {
-  ExternalLink,
-  LayoutDashboard,
-  Layers,
-  RefreshCw,
-  Thermometer,
-} from "lucide-react";
+import { Layers, RefreshCw, Thermometer } from "lucide-react";
 import type { ActiveTab } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +9,6 @@ import {
 } from "@/components/ui/tooltip";
 import { LiveDot } from "@/components/transit/LiveDot";
 import { useWeather } from "@/hooks/useWeather";
-import { hubUrl } from "@/lib/links";
 import { cn } from "@/lib/utils";
 
 interface HeaderProps {
@@ -139,21 +132,6 @@ export function Header({
               <TooltipContent>Alaptérkép választása</TooltipContent>
             </Tooltip>
           ) : null}
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="sm" asChild>
-                <a href={hubUrl()} target="_blank" rel="noreferrer">
-                  <LayoutDashboard />
-                  <span className="hidden md:inline">Rendszerpult</span>
-                  <ExternalLink className="opacity-60" />
-                </a>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              Rendszerpult megnyitása ugyanezen a gépen
-            </TooltipContent>
-          </Tooltip>
 
           <Tooltip>
             <TooltipTrigger asChild>

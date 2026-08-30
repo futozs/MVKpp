@@ -32,6 +32,8 @@ export interface GtfsMeta {
   routes: number;
   trips: number;
   shapes?: number;
+  /** A feed naptári érvényessége, YYYYMMDD alakban. */
+  serviceRange?: { from: string; to: string } | null;
 }
 
 export interface LiveVehicle {
@@ -129,6 +131,8 @@ export interface FilterState {
   nearMeKm: number | null;
   sort: VehicleSort;
   stops: boolean;
+  /** Csak a figyelőre felvett megállók látszanak a térképen. */
+  onlyWatched: boolean;
   shape: boolean;
   rstops: boolean;
   labels: boolean;

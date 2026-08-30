@@ -1,9 +1,8 @@
-import { ExternalLink, Layers, LayoutDashboard, RefreshCw } from "lucide-react";
+import { Layers, RefreshCw } from "lucide-react";
 import type { ActiveTab } from "@/types";
 import { Button } from "@/components/ui/button";
 import { LiveDot } from "@/components/transit/LiveDot";
 import { useWeather } from "@/hooks/useWeather";
-import { hubUrl } from "@/lib/links";
 import { cn } from "@/lib/utils";
 
 interface MobileHeaderProps {
@@ -82,23 +81,6 @@ export function MobileHeader({
         ) : null}
 
         <Button
-          variant="ghost"
-          size="icon"
-          className="h-9 w-9 shrink-0"
-          asChild
-        >
-          <a
-            href={hubUrl()}
-            target="_blank"
-            rel="noreferrer"
-            aria-label="Rendszerpult megnyitása"
-          >
-            <LayoutDashboard />
-            <ExternalLink className="sr-only" />
-          </a>
-        </Button>
-
-        <Button
           variant="outline"
           size="icon"
           className="h-9 w-9 shrink-0"
@@ -115,7 +97,11 @@ export function MobileHeader({
       {}
       <nav
         aria-label="Fő nézetek"
-        className="grid grid-cols-3 gap-1 border-t border-border p-1.5"
+        className={cn(
+          "flex gap-1 overflow-x-auto border-t border-border p-1.5",
+          "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+          "snap-x snap-mandatory scroll-px-1.5",
+        )}
       >
         {TABS.map((tab) => {
           const isActive = activeTab === tab.id;
@@ -126,7 +112,7 @@ export function MobileHeader({
               onClick={() => setActiveTab(tab.id)}
               aria-current={isActive ? "page" : undefined}
               className={cn(
-                "flex h-10 items-center justify-center gap-1.5 rounded-lg text-sm font-semibold transition-all duration-fast",
+                "flex h-10 shrink-0 snap-start items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-4 text-sm font-semibold transition-all duration-fast",
                 "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
                 isActive
                   ? "bg-primary text-primary-foreground shadow-sm"

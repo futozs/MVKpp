@@ -137,6 +137,22 @@ export const ymdToIso = (ymd: string) =>
   `${ymd.slice(0, 4)}-${ymd.slice(4, 6)}-${ymd.slice(6, 8)}`;
 export const isoToYmd = (iso: string) => iso.replace(/-/g, "");
 
+/**
+ * A feed naptári érvényessége: az első és utolsó olyan nap, amelyre a
+ * calendar_dates.txt egyáltalán ad szolgáltatást. Ezen kívülre nincs értelme
+ * menetrendet kérni — a felület a dátumválasztót ehhez igazítja.
+ */
+export function serviceRange(): { from: string; to: string } | null {
+  let from: string | null = null;
+  let to: string | null = null;
+  for (const [ymd, e] of serviceByDate) {
+    if (e.add.size === 0) continue;
+    if (from == null || ymd < from) from = ymd;
+    if (to == null || ymd > to) to = ymd;
+  }
+  return from && to ? { from, to } : null;
+}
+
 export function activeServices(ymd: string): Set<string> {
   const e = serviceByDate.get(ymd);
   const s = new Set<string>();

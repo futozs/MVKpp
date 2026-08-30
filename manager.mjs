@@ -162,7 +162,7 @@ backendEntry = { name: 'backend', proc: backendProc }
 processes.push(backendEntry)
 
 // ── Static file server for prod mode ────────────────────────────────────────
-function startStaticServer(distDir, port, name) {
+function startStaticServer(distDir, port, name, basePath = '') {
   const server = createServer((req, res) => {
     const urlPath = req.url.split('?')[0] // remove query string
 
@@ -190,7 +190,17 @@ function startStaticServer(distDir, port, name) {
       return
     }
 
-    let filePath = join(distDir, urlPath === '/' ? 'index.html' : urlPath)
+    // A hub `/hub/` base-szel epul, mert a gateway ott szolgalja ki — a sajat
+    // portjan viszont a gyokeren fut. A prefixet itt vagjuk le, kulonben a
+    // /hub/assets/*.js keresek nem talalnanak fajlt, az SPA-fallback az
+    // index.html-t adna vissza, es a bongeszo "Failed to load module script:
+    // ... MIME type text/html" hibaval eldobna a modult.
+    let assetPath = urlPath
+    if (basePath && (assetPath === basePath || assetPath.startsWith(`${basePath}/`))) {
+      assetPath = assetPath.slice(basePath.length) || '/'
+    }
+
+    let filePath = join(distDir, assetPath === '/' ? 'index.html' : assetPath)
     
     // Security: no path traversal
     if (!filePath.startsWith(distDir)) {
@@ -226,7 +236,7 @@ function startStaticServer(distDir, port, name) {
     }
     
     // NEVER fallback /assets/ to index.html — return 404
-    if (urlPath.startsWith('/assets/') || urlPath.startsWith('/public/')) {
+    if (assetPath.startsWith('/assets/') || assetPath.startsWith('/public/')) {
       res.writeHead(404, { 'Content-Type': 'text/plain' })
       res.end('404 Not Found')
       return
@@ -287,7 +297,7 @@ if (existsSync(HUB_DIR)) {
     if (!existsSync(hubDist)) {
       logLine('HUB', C.red, `HIBA: hub dist nem található (${hubDist}) — futtasd: npm run build`)
     } else {
-      startStaticServer(hubDist, 5174, 'HUB')
+      startStaticServer(hubDist, 5174, 'HUB', '/hub')
     }
   } else {
     const hubProc = spawn('npx', ['vite', '--host', '0.0.0.0', '--port', '5174'], {
