@@ -8,8 +8,8 @@ import { fileURLToPath, URL } from 'node:url'
 export default defineConfig({
   plugins: [react()],
   server: {
-    allowedHosts: ['localhost', '127.0.0.1', 'mvk.futozs.hu'],
     ...serverConfig(5173),
+    allowedHosts: ['localhost', '127.0.0.1', 'mvk.futozs.hu'],
   },
   resolve: {
     // A megosztott primitívek az app gyökerén kívül élnek; enélkül
