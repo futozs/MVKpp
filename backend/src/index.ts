@@ -338,6 +338,10 @@ app.use('*', async (c, next) => {
   await next()
 })
 
+function isAdminRequest(c: Context): boolean {
+  return (c.req.header('x-admin-token') ?? '') === adminToken()
+}
+
 // Statisztikai adatraktár (külön adatbázis; ha nem elérhető, 503-at ad és
 // a valós idejű funkciók érintetlenek maradnak).
 app.route('/stats', stats)
@@ -991,6 +995,7 @@ app.post('/system/restart', (c) => {
 
 /** GTFS menetrend újratöltése a forrásból, a szerver leállítása nélkül. */
 app.post('/system/reload-gtfs', async (c) => {
+  if (!isAdminRequest(c)) return c.json({ error: 'Érvénytelen vagy hiányzó admin token.' }, 401)
   try {
     await refreshGtfs()
     return c.json({
@@ -1026,6 +1031,7 @@ app.get('/system/cache', (c) => {
 })
 
 app.post('/system/refresh-app-token', async (c) => {
+  if (!isAdminRequest(c)) return c.json({ error: 'Érvénytelen vagy hiányzó admin token.' }, 401)
   const BUNDLE = 'com.hclinear.metaccazeMiskolc'
   const APPNAME = 'MVK MobilON+'
   const home = process.env.HOME || '/Users/' + (process.env.USER || '')
