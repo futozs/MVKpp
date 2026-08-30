@@ -1473,9 +1473,7 @@ export function TransitMap({
                 <p role="alert" className="mt-2 text-[11px] text-destructive">
                   {codeError}
                 </p>
-              ) : (
-                
-              )}
+              ) : null}
             </form>
           </div>
         ) : null}
