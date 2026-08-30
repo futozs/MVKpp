@@ -159,37 +159,59 @@ processes.push(backendEntry)
 // ── Static file server for prod mode ────────────────────────────────────────
 function startStaticServer(distDir, port, name) {
   const server = createServer((req, res) => {
-    let filePath = join(distDir, req.url === '/' ? 'index.html' : req.url)
+    const urlPath = req.url.split('?')[0] // remove query string
+    let filePath = join(distDir, urlPath === '/' ? 'index.html' : urlPath)
     
-    // Try exact file, then index.html (for SPA routing)
-    if (!existsSync(filePath) || !filePath.startsWith(distDir)) {
-      filePath = join(distDir, 'index.html')
-    }
-    
-    if (!existsSync(filePath)) {
-      res.writeHead(404, { 'Content-Type': 'text/plain' })
-      res.end('404 Not Found')
+    // Security: no path traversal
+    if (!filePath.startsWith(distDir)) {
+      res.writeHead(400, { 'Content-Type': 'text/plain' })
+      res.end('400 Bad Request')
       return
     }
-
+    
     const mimeTypes = {
       '.html': 'text/html; charset=utf-8',
       '.js': 'application/javascript',
+      '.mjs': 'application/javascript',
       '.css': 'text/css',
       '.json': 'application/json',
       '.svg': 'image/svg+xml',
       '.png': 'image/png',
       '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
       '.gif': 'image/gif',
+      '.webp': 'image/webp',
       '.woff': 'font/woff',
       '.woff2': 'font/woff2',
+      '.ttf': 'font/ttf',
     }
     
-    const ext = filePath.substring(filePath.lastIndexOf('.')).toLowerCase()
-    const contentType = mimeTypes[ext] || 'application/octet-stream'
+    // If file exists, serve it
+    if (existsSync(filePath) && !filePath.endsWith('/')) {
+      const ext = filePath.substring(filePath.lastIndexOf('.')).toLowerCase()
+      const contentType = mimeTypes[ext] || 'application/octet-stream'
+      res.writeHead(200, { 'Content-Type': contentType, 'Cache-Control': 'public, max-age=3600' })
+      createReadStream(filePath).pipe(res)
+      return
+    }
     
-    res.writeHead(200, { 'Content-Type': contentType, 'Cache-Control': 'no-cache' })
-    createReadStream(filePath).pipe(res)
+    // NEVER fallback /assets/ to index.html — return 404
+    if (urlPath.startsWith('/assets/') || urlPath.startsWith('/public/')) {
+      res.writeHead(404, { 'Content-Type': 'text/plain' })
+      res.end('404 Not Found')
+      return
+    }
+    
+    // SPA routing: all other routes fallback to index.html
+    const indexPath = join(distDir, 'index.html')
+    if (!existsSync(indexPath)) {
+      res.writeHead(500, { 'Content-Type': 'text/plain' })
+      res.end('500 index.html not found')
+      return
+    }
+    
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' })
+    createReadStream(indexPath).pipe(res)
   })
 
   server.listen(port, '0.0.0.0', () => {
