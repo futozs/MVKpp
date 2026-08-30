@@ -18,12 +18,19 @@ import type {
 // Automatically detect API host:
 // - Env override: VITE_API_URL
 // - Dev mode with Vite proxy: empty string (relative URLs use Vite proxy)
-// - Prod mode: explicit http://hostname:8088 (different port)
+// - Prod mode over HTTPS (Cloudflare): no port (Cloudflare routes to backend)
+// - Prod mode over HTTP: explicit :8088 port
 let API_BASE = import.meta.env.VITE_API_URL ?? ''
 if (!API_BASE && typeof window !== 'undefined' && import.meta.env.PROD) {
-  // Prod mode: backend on port 8088, frontend on port 5173
   const { protocol, hostname } = window.location
-  API_BASE = `${protocol}//${hostname}:8088`
+  
+  // HTTPS (Cloudflare Tunnel, production): no explicit port
+  if (protocol === 'https:') {
+    API_BASE = `https://${hostname}`
+  } else {
+    // HTTP (local dev prod mode): explicit port 8088
+    API_BASE = `http://${hostname}:8088`
+  }
 }
 
 async function handleResponse<T>(res: Response, endpoint: string): Promise<T> {

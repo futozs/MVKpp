@@ -9,18 +9,23 @@ const TOKEN_KEY = 'mvk.adminToken'
 /** A telepítő mini állapotszerverének portja (lásd tools/redeploy.mjs). */
 const DEPLOY_STATUS_PORT = '8089'
 
-/** Rendszer API alapcíme (prod módban explicit port, dev módban proxy). */
+/** Rendszer API alapcíme (Cloudflare Tunnel vs. local). */
 export function getSystemUrl(path: string): string {
   if (typeof window === 'undefined') return `http://localhost:8088${path}`
   
   // Dev módban: relatív URL (Vite proxy)
-  // Prod módban: explicit 8088-as port
   if (import.meta.env.DEV) {
     return path
   }
   
+  // Prod módban:
+  // - HTTPS (Cloudflare Tunnel): no port
+  // - HTTP (local): explicit :8088
   const { protocol, hostname } = window.location
-  return `${protocol}//${hostname}:8088${path}`
+  if (protocol === 'https:') {
+    return `https://${hostname}${path}`
+  }
+  return `http://${hostname}:8088${path}`
 }
 
 export function getAdminToken(): string {

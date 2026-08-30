@@ -8,9 +8,15 @@
  */
 let API_BASE = import.meta.env.VITE_API_URL ?? ''
 if (!API_BASE && typeof window !== 'undefined' && import.meta.env.PROD) {
-  // Prod mode: backend on port 8088, frontend on port 5173
   const { protocol, hostname } = window.location
-  API_BASE = `${protocol}//${hostname}:8088`
+  
+  // HTTPS (Cloudflare Tunnel): no port
+  if (protocol === 'https:') {
+    API_BASE = `https://${hostname}`
+  } else {
+    // HTTP (local): explicit port
+    API_BASE = `http://${hostname}:8088`
+  }
 }
 
 /** Az adatraktár nem érhető el — külön típus, hogy a UI megkülönböztethesse. */
