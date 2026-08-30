@@ -1,0 +1,30 @@
+[Unit]
+Description=MVK API Gateway (auto-renewing JWT proxy)
+Documentation=file:/home/pi/mvk-api-gateway/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Igazítsd a felhasználóhoz/útvonalhoz, ha nem 'pi':
+User=pi
+WorkingDirectory=/home/pi/mvk-api-gateway
+ExecStart=/usr/bin/node dist/index.js
+Restart=always
+RestartSec=5
+
+# --- konfig ---
+Environment=PORT=8088
+# LAN-on is elérhető legyen (a Pi IP-jén). Csak megbízható otthoni hálón!
+Environment=HOST=0.0.0.0
+Environment=AUTO_RENEW=1
+Environment=RENEW_MARGIN_SEC=900
+Environment=CHECK_INTERVAL_SEC=120
+
+# enyhe hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

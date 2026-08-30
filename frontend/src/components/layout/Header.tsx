@@ -1,0 +1,150 @@
+import { ExternalLink, LayoutDashboard, Layers, RefreshCw } from 'lucide-react'
+import type { ActiveTab } from '@/types'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { LiveDot } from '@/components/transit/LiveDot'
+import { cn } from '@/lib/utils'
+
+interface HeaderProps {
+  activeTab: ActiveTab
+  setActiveTab: (tab: ActiveTab) => void
+  vehicleCount: number
+  lastUpdated: Date | null
+  isRefreshing: boolean
+  onManualRefresh: () => void
+  monitoredStopsCount: number
+  onOpenMapPicker: () => void
+}
+
+const TABS: { id: ActiveTab; label: string }[] = [
+  { id: 'map', label: 'Forgalmi térkép' },
+  { id: 'multistop', label: 'Megállófigyelő' },
+  { id: 'timetable', label: 'Menetrend' },
+]
+
+export function Header({
+  activeTab,
+  setActiveTab,
+  vehicleCount,
+  lastUpdated,
+  isRefreshing,
+  onManualRefresh,
+  monitoredStopsCount,
+  onOpenMapPicker,
+}: HeaderProps) {
+  return (
+    <header className="relative z-bar shrink-0 border-b border-border bg-card/80 backdrop-blur-xl">
+      <div className="flex h-14 items-center gap-3 px-3 md:px-4">
+        {/* Nézetváltó */}
+        <nav
+          aria-label="Fő nézetek"
+          className="flex items-center gap-1 rounded-lg border border-border bg-muted/60 p-1"
+        >
+          {TABS.map((tab) => {
+            const isActive = activeTab === tab.id
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                aria-current={isActive ? 'page' : undefined}
+                className={cn(
+                  'flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold transition-all duration-fast',
+                  'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
+                  isActive
+                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                )}
+              >
+                {tab.label}
+                {tab.id === 'multistop' && monitoredStopsCount > 0 ? (
+                  <span
+                    className={cn(
+                      'rounded px-1 font-mono text-[10px] font-bold tabular-nums',
+                      isActive ? 'bg-primary-foreground/20' : 'bg-primary/15 text-primary'
+                    )}
+                  >
+                    {monitoredStopsCount}
+                  </span>
+                ) : null}
+              </button>
+            )
+          })}
+        </nav>
+
+        <div className="flex-1" />
+
+        {/* Telemetria — valós számok, nem kitalált „uptime” sáv. */}
+        <div className="hidden items-center gap-3 lg:flex">
+          <Badge
+            variant="outline"
+            className="gap-1.5 border-primary/25 bg-primary/10 py-1 font-mono text-[11px] tabular-nums text-foreground"
+          >
+            <LiveDot />
+            {vehicleCount} jármű
+          </Badge>
+          {lastUpdated ? (
+            <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+              {lastUpdated.toLocaleTimeString('hu-HU', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+              })}
+            </span>
+          ) : null}
+        </div>
+
+        {/* Eszközök */}
+        <div className="flex items-center gap-1">
+          {activeTab === 'map' ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="sm" onClick={onOpenMapPicker}>
+                  <Layers />
+                  <span className="hidden sm:inline">Alaptérkép</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Alaptérkép választása</TooltipContent>
+            </Tooltip>
+          ) : null}
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="sm" asChild>
+                <a href="http://localhost:5174" target="_blank" rel="noreferrer">
+                  <LayoutDashboard />
+                  <span className="hidden md:inline">Rendszerpult</span>
+                  <ExternalLink className="opacity-60" />
+                </a>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Rendszerpult megnyitása (:5174)</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={onManualRefresh}
+                disabled={isRefreshing}
+                aria-label="Járműpozíciók azonnali lekérése"
+              >
+                <RefreshCw className={cn(isRefreshing && 'animate-spin text-primary')} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Azonnali frissítés</TooltipContent>
+          </Tooltip>
+        </div>
+      </div>
+
+      {/* Frissítési ütem: zöld jel fut végig a fejléc alatt, amíg adat érkezik. */}
+      <div aria-hidden className="absolute inset-x-0 -bottom-px h-0.5 overflow-hidden">
+        {isRefreshing ? (
+          <span className="block h-full w-1/4 animate-tick-sweep rounded-full bg-gradient-to-r from-transparent via-primary to-transparent" />
+        ) : null}
+      </div>
+    </header>
+  )
+}

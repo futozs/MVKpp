@@ -1,0 +1,585 @@
+<!doctype html>
+<html lang="hu"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MVK MobilON+ — élő</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+:root{--bg:#0e1116;--panel:#161b22;--panel2:#1c232d;--line:#283040;--txt:#e7edf3;
+--muted:#8b98a8;--accent:#FDCC00;--live:#3ddc84;--delay:#ff6b6b;--early:#5ac8fa;}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+#app{display:grid;grid-template-columns:390px 1fr;height:100%}
+@media(max-width:820px){#app{grid-template-columns:1fr;grid-template-rows:46vh 1fr}}
+#side{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+header{padding:14px 16px;border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.brand h1{margin:0;font-size:16px}
+.pulse{width:8px;height:8px;border-radius:50%;background:var(--live);animation:p 1.8s infinite;display:inline-block}
+@keyframes p{0%{box-shadow:0 0 0 0 rgba(61,220,132,.5)}70%{box-shadow:0 0 0 7px rgba(61,220,132,0)}100%{box-shadow:0 0 0 0 rgba(61,220,132,0)}}
+.stat{display:flex;gap:14px;margin-top:8px;font-size:12px;color:var(--muted);flex-wrap:wrap}.stat b{color:var(--txt)}
+.tokpill{font-size:11px;padding:2px 8px;border-radius:999px;background:var(--panel2);border:1px solid var(--line)}
+.tokpill.ok{color:var(--live)}.tokpill.bad{color:var(--delay)}
+.searchwrap{padding:11px 14px;border-bottom:1px solid var(--line)}
+#q{width:100%;padding:11px 13px;border-radius:11px;border:1px solid var(--line);background:var(--panel2);color:var(--txt);font-size:15px;outline:none}
+#q:focus{border-color:var(--accent)}
+#list{overflow:auto;flex:1;min-height:0}
+.item{padding:11px 14px;border-bottom:1px solid var(--line);cursor:pointer;display:flex;justify-content:space-between;gap:10px;align-items:center}
+.item:hover{background:var(--panel2)}.item .nm{font-weight:600}.item .cd{color:var(--muted);font-size:12px}
+
+/* ── fülek ── */
+#tabs{display:flex;border-bottom:1px solid var(--line);background:var(--panel)}
+#tabs button{flex:1;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);
+  font:600 13px/1 inherit;padding:12px 8px;cursor:pointer;letter-spacing:.2px;display:flex;align-items:center;justify-content:center;gap:6px}
+#tabs button:hover{color:var(--txt);background:var(--panel2)}
+#tabs button.on{color:var(--accent);border-bottom-color:var(--accent)}
+.fdot{width:7px;height:7px;border-radius:50%;background:var(--accent);opacity:0;transition:opacity .2s}
+.fdot.on{opacity:1}
+.pane{display:none;flex:1;min-height:0;flex-direction:column}
+.pane.on{display:flex}
+#pane-filter{overflow:auto;padding:0 0 26px}
+
+/* ── szűrő blokkok ── */
+.fbox{padding:13px 14px;border-bottom:1px solid var(--line)}
+.flabel{font-size:11px;text-transform:uppercase;letter-spacing:.9px;color:var(--muted);font-weight:700;margin-bottom:9px;display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.flabel .muted{text-transform:none;letter-spacing:0;font-weight:500;color:var(--muted)}
+.idrow{display:flex;gap:8px}
+.idrow input{flex:1;padding:12px 13px;border-radius:11px;border:1px solid var(--line);background:var(--panel2);color:var(--txt);font-size:17px;font-weight:700;letter-spacing:1.5px;outline:none;font-variant-numeric:tabular-nums}
+.idrow input:focus{border-color:var(--accent)}
+.xbtn{background:var(--panel2);border:1px solid var(--line);color:var(--muted);border-radius:11px;width:44px;cursor:pointer;font-size:15px}
+.xbtn:hover{color:var(--txt);border-color:var(--accent)}
+.xbtn.add{color:var(--accent);font-size:20px;font-weight:700;line-height:1}
+.xbtn.add:disabled{opacity:.35;cursor:default;color:var(--muted);border-color:var(--line)}
+.pinbtn{background:none;border:1px solid var(--line);color:var(--muted);border-radius:8px;width:28px;height:28px;flex:none;cursor:pointer;font-size:14px;line-height:1}
+.pinbtn:hover{color:var(--accent);border-color:var(--accent)}
+.pinbtn.rm:hover{color:var(--delay);border-color:var(--delay)}
+.vqcard+.vqcard{margin-top:7px}
+.vqcard.pin{border-left:3px solid var(--accent)}
+.vqres{margin-top:9px}
+.vqcard{border-radius:12px;padding:11px 12px;background:var(--panel2);border:1px solid var(--line);display:flex;gap:11px;align-items:center;cursor:pointer}
+.vqcard:hover{border-color:var(--accent)}
+.vqcard.miss{border-style:dashed;color:var(--muted);cursor:default}
+.vqcard.miss:hover{border-color:var(--line)}
+.vqcard .who{flex:1;min-width:0}
+.vqcard .who b{font-size:15px}
+.vqcard .who div{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vqcard .kmh{font-weight:800;font-variant-numeric:tabular-nums;text-align:right;font-size:13px}
+.vqcard .kmh small{display:block;font-weight:500;color:var(--muted);font-size:10px}
+.hintline{font-size:11px;color:var(--muted);margin-top:8px}
+
+.seg{display:flex;gap:6px}
+.seg button{flex:1;background:var(--panel2);border:1px solid var(--line);color:var(--muted);border-radius:10px;padding:9px 6px;font:600 12px/1 inherit;cursor:pointer}
+.seg button:hover{color:var(--txt)}
+.seg button.on{background:var(--accent);border-color:var(--accent);color:#111}
+.qrow{display:flex;gap:6px;margin-bottom:9px;flex-wrap:wrap}
+.mini{background:var(--panel2);border:1px solid var(--line);color:var(--muted);border-radius:999px;padding:6px 11px;font:600 11px/1 inherit;cursor:pointer}
+.mini:hover{color:var(--txt);border-color:var(--accent)}
+.minisearch{width:100%;padding:8px 11px;border-radius:9px;border:1px solid var(--line);background:var(--panel2);color:var(--txt);font-size:13px;outline:none;margin-bottom:9px}
+.minisearch:focus{border-color:var(--accent)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;max-height:214px;overflow:auto}
+.chip{display:flex;align-items:center;gap:6px;background:var(--panel2);border:1px solid var(--line);border-radius:9px;
+  padding:6px 9px;font:800 12px/1 inherit;color:var(--muted);cursor:pointer;user-select:none;transition:transform .08s}
+.chip:hover{color:var(--txt);transform:translateY(-1px)}
+.chip .dot{width:9px;height:9px;border-radius:3px;flex:none;box-shadow:0 0 0 1px #0006 inset}
+.chip .lv{font-size:9px;font-weight:800;padding:1px 5px;border-radius:999px;background:rgba(61,220,132,.16);color:var(--live)}
+.chip.live{color:var(--txt)}
+.chip.on{border-color:transparent;color:#111}
+.chip.on .lv{background:rgba(0,0,0,.22);color:inherit}
+.chip.dim{opacity:.42}
+.sw{display:flex;align-items:center;gap:10px;padding:7px 0;cursor:pointer;font-size:13.5px}
+.sw input{appearance:none;width:38px;height:22px;border-radius:999px;background:var(--panel2);border:1px solid var(--line);position:relative;cursor:pointer;flex:none;transition:background .15s}
+.sw input::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--muted);transition:transform .15s,background .15s}
+.sw input:checked{background:rgba(253,204,0,.2);border-color:var(--accent)}
+.sw input:checked::after{transform:translateX(16px);background:var(--accent)}
+.vlist{max-height:340px;overflow:auto;margin:0 -14px -13px;border-top:1px solid var(--line)}
+.vrow{display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--line);cursor:pointer}
+.vrow:hover{background:var(--panel2)}
+.vrow .rb{min-width:36px;text-align:center;font-weight:800;border-radius:8px;padding:5px 4px;font-size:12px}
+.vrow .vi{flex:1;min-width:0}
+.vrow .vi b{font-size:13.5px;font-variant-numeric:tabular-nums}
+.vrow .vi div{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vrow .sp{font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums;text-align:right}
+
+#map{height:100%;background:#0b0e12}
+#detail{position:absolute;inset:auto 0 0 0;background:var(--panel);border-top:1px solid var(--line);max-height:66%;overflow:auto;display:none;z-index:1000;box-shadow:0 -12px 34px rgba(0,0,0,.45)}
+#detail.open{display:block}
+.dhead{position:sticky;top:0;background:var(--panel);padding:14px 16px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.dhead h2{margin:0;font-size:18px}.dhead .meta{color:var(--muted);font-size:12px;margin-top:3px}
+.close{background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:9px;padding:7px 11px;cursor:pointer}
+.dep{display:flex;align-items:center;gap:12px;padding:11px 16px;border-bottom:1px solid var(--line)}
+.dep.liverow{cursor:pointer}.dep.liverow:hover{background:var(--panel2)}
+.badge{min-width:46px;text-align:center;font-weight:800;border-radius:9px;padding:6px;font-size:13px}
+.dep .to{flex:1;min-width:0}.dep .to .h{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dep .to .t{color:var(--muted);font-size:12px;margin-top:1px}
+.tag{font-size:10px;padding:1px 7px;border-radius:999px;margin-left:6px;font-weight:600}
+.tag.live{background:rgba(61,220,132,.16);color:var(--live)}
+.tag.live::before{content:"● ";animation:blink 1.4s infinite}
+@keyframes blink{50%{opacity:.35}}
+.tag.sched{background:rgba(139,152,168,.16);color:var(--muted)}
+.tag.delay{background:rgba(255,107,107,.16);color:var(--delay)}
+.tag.early{background:rgba(90,200,250,.16);color:var(--early)}
+.tag.go{background:rgba(253,204,0,.16);color:var(--accent)}
+.eta{font-weight:800;text-align:right;min-width:70px;font-variant-numeric:tabular-nums}
+.eta small{display:block;font-weight:500;color:var(--muted);font-size:11px}
+.empty{padding:26px 16px;color:var(--muted);text-align:center}
+.bus{position:relative;width:26px;height:20px}
+.bus .lbl{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:10px;border-radius:6px;border:2px solid #0007;box-shadow:0 1px 4px #000a}
+.bus .arr{position:absolute;top:-7px;left:50%;width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-bottom:7px solid #fff;transform-origin:50% 13px}
+.bus .idl{position:absolute;top:20px;left:50%;transform:translateX(-50%);font:700 9px/1.4 inherit;color:#fff;background:#000a;border-radius:4px;padding:1px 4px;white-space:nowrap}
+.bigbus .lbl{font-size:13px;border-width:3px}.bigbus{width:38px;height:28px}.bigbus .idl{top:28px;font-size:10px}
+.bus.hit .lbl{animation:hit 1.4s infinite}
+@keyframes hit{0%,100%{box-shadow:0 0 0 0 rgba(253,204,0,.9)}70%{box-shadow:0 0 0 12px rgba(253,204,0,0)}}
+#backbtn{position:absolute;top:12px;left:52px;z-index:1100;display:none;background:var(--accent);color:#111;border:none;font-weight:700;padding:9px 14px;border-radius:10px;cursor:pointer;box-shadow:0 3px 12px #0007}
+#backbtn.show{display:block}
+#fbanner{position:absolute;top:12px;right:12px;z-index:1100;display:none;gap:8px;align-items:center;background:var(--panel);
+  border:1px solid var(--accent);color:var(--txt);padding:8px 12px;border-radius:11px;font-size:12.5px;box-shadow:0 4px 18px #0008;max-width:60%}
+#fbanner.show{display:flex}
+#fbanner b{color:var(--accent)}
+#fbanner button{background:var(--panel2);border:1px solid var(--line);color:var(--muted);border-radius:8px;padding:4px 9px;cursor:pointer;font:600 11px/1 inherit}
+#fbanner button:hover{color:var(--txt);border-color:var(--accent)}
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--panel2);color:var(--txt)}
+.leaflet-popup-content a{color:var(--accent)}
+</style></head>
+<body>
+<div id="app">
+  <div id="side">
+    <header>
+      <div class="brand"><h1>MVK MobilON+ <span class="pulse" title="élő"></span></h1><span class="tokpill" id="tok">token…</span></div>
+      <div class="stat"><span><b id="nstops">–</b> megálló</span><span><b id="nbus">–</b>/<span id="nall">–</span> élő jármű</span><span id="upd">frissítés…</span></div>
+    </header>
+    <nav id="tabs">
+      <button class="on" data-tab="stops">Megállók</button>
+      <button data-tab="filter">Járatok &amp; szűrés <span class="fdot" id="fdot"></span></button>
+    </nav>
+
+    <section class="pane on" id="pane-stops">
+      <div class="searchwrap"><input id="q" placeholder="Megálló keresése (név vagy kód)…" autocomplete="off"></div>
+      <div id="list"></div>
+    </section>
+
+    <section class="pane" id="pane-filter">
+      <div class="fbox">
+        <div class="flabel">Jármű / busz ID</div>
+        <div class="idrow">
+          <input id="vq" placeholder="pl. 1641" autocomplete="off" spellcheck="false">
+          <button class="xbtn add" id="vqadd" title="Hozzáadás a követéshez (Enter)">＋</button>
+          <button class="xbtn" id="vqclear" title="Beírt keresés törlése">✕</button>
+        </div>
+        <div class="vqres" id="vqres"></div>
+        <div class="qrow" id="wtools" style="display:none"><button class="mini" id="w-clear">Követés ürítése</button></div>
+        <label class="sw"><input type="checkbox" id="f-follow"><span>Térkép kövesse a járműveket</span></label>
+        <div class="hintline">Enter vagy ＋ = a jármű felkerül a követési listára, több is egyszerre.
+        Csak a követett/keresett járműveket mutatja a térkép; ami nincs bevetésen, az nem jelenik meg.</div>
+      </div>
+
+      <div class="fbox">
+        <div class="flabel">Járműtípus</div>
+        <div class="seg" id="f-type">
+          <button data-v="all" class="on">Mind</button>
+          <button data-v="bus">🚌 Busz</button>
+          <button data-v="tram">🚋 Villamos</button>
+        </div>
+      </div>
+
+      <div class="fbox">
+        <div class="flabel">Járatok <span class="muted" id="rsel">— mind</span></div>
+        <div class="qrow">
+          <button class="mini" id="r-live">Csak az élők</button>
+          <button class="mini" id="r-all">Mind</button>
+          <button class="mini" id="r-none">Egy sem</button>
+          <button class="mini" id="r-inv">Invertál</button>
+        </div>
+        <input class="minisearch" id="rq" placeholder="Járat keresése… (pl. 20, Tapolca)" autocomplete="off">
+        <div class="chips" id="chips"></div>
+      </div>
+
+      <div class="fbox">
+        <div class="flabel">Megjelenítés</div>
+        <label class="sw"><input type="checkbox" id="f-stops" checked><span>Megállók a térképen</span></label>
+        <label class="sw"><input type="checkbox" id="f-shape" checked><span>Kijelölt járatok vonala</span></label>
+        <label class="sw"><input type="checkbox" id="f-rstops"><span>Csak a kijelölt járatok megállói</span></label>
+        <label class="sw"><input type="checkbox" id="f-moving"><span>Csak a mozgó járművek</span></label>
+        <label class="sw"><input type="checkbox" id="f-labels"><span>Jármű ID a térképen</span></label>
+      </div>
+
+      <div class="fbox">
+        <div class="flabel">Élő járművek <span class="muted" id="vcount"></span></div>
+        <div class="vlist" id="vlist"></div>
+      </div>
+    </section>
+  </div>
+
+  <div style="position:relative">
+    <div id="map"></div>
+    <button id="backbtn" onclick="exitFocus()">◀ vissza a térképhez</button>
+    <div id="fbanner"><span id="fbtext"></span><button onclick="clearFilters()">Szűrő törlése</button></div>
+    <div id="detail"></div>
+  </div>
+</div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const API=location.origin;
+const MAX_WATCH=12;          // ennyi járművet lehet egyszerre követni
+let STOPS=[],stopById={},ROUTES={},map,stopLayer,busLayer,routeLayer,focusLayer,marker=null,openStop=null;
+let focusTrip=null,focusTimer=null,busTimer=null;
+let LIVE=[];                 // legutóbbi /live/positions
+const geoCache={};           // routeId -> {shapes,stops,color,…}
+let lastFocusKey='';         // ID-keresés: melyik keresésre ugrottunk már rá
+
+const FILTER={vq:'',watch:[],routes:new Set(),type:'all',moving:false,stops:true,shape:true,rstops:false,labels:false,follow:false};
+
+const esc=x=>(x==null?'':String(x)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const nowHM=()=>new Date().toLocaleTimeString('hu-HU',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+const $=id=>document.getElementById(id);
+const natKey=s=>{const m=String(s).match(/^(\d+)(.*)$/);return m?[1,+m[1],m[2]]:[2,0,String(s)];};
+const natCmp=(a,b)=>{const A=natKey(a),B=natKey(b);return A[0]-B[0]||A[1]-B[1]||A[2].localeCompare(B[2],'hu');};
+const vehType=v=>{const t=(ROUTES[v.routeId]||{}).type;if(t==='900')return 'tram';if(t)return 'bus';return v.label==='TRAM'?'tram':'bus';};
+const kmh=v=>v.speed==null?null:Math.round(v.speed*3.6);
+
+function busIcon(routeShort,col,fg,bearing,big,idText,hit){
+  const arr=bearing!=null?`<div class="arr" style="transform:translateX(-50%) rotate(${bearing}deg)"></div>`:'';
+  const idl=idText?`<div class="idl">${esc(idText)}</div>`:'';
+  const cls='bus'+(big?' bigbus':'')+(hit?' hit':'');
+  return L.divIcon({html:`<div class="${cls}">${arr}<div class="lbl" style="background:${col};color:${fg}">${esc(routeShort||'')}</div>${idl}</div>`,
+    className:'',iconSize:big?[38,28]:[26,20],iconAnchor:big?[19,14]:[13,10]});
+}
+
+/* ── szűrő állapot mentése / betöltése ── */
+function saveFilter(){try{localStorage.setItem('mvkFilter',JSON.stringify({...FILTER,routes:[...FILTER.routes]}));}catch(e){}}
+function loadFilter(){try{const o=JSON.parse(localStorage.getItem('mvkFilter')||'null');if(!o)return;
+  Object.assign(FILTER,o,{routes:new Set(o.routes||[]),watch:Array.isArray(o.watch)?o.watch.slice(0,MAX_WATCH):[]});}catch(e){}}
+function syncControls(){
+  $('vq').value=FILTER.vq;
+  [...$('f-type').children].forEach(b=>b.classList.toggle('on',b.dataset.v===FILTER.type));
+  $('f-stops').checked=FILTER.stops; $('f-shape').checked=FILTER.shape; $('f-rstops').checked=FILTER.rstops;
+  $('f-moving').checked=FILTER.moving; $('f-labels').checked=FILTER.labels; $('f-follow').checked=FILTER.follow;
+}
+function filterActive(){return !!(FILTER.vq.trim()||FILTER.watch.length||FILTER.routes.size||FILTER.type!=='all'||FILTER.moving||FILTER.rstops||!FILTER.stops);}
+function filterText(){
+  const qs=activeQueries();
+  if(qs.length)return (FILTER.watch.length>1?'Követve: ':'ID keresés: ')+`<b>${qs.map(esc).join(', ')}</b>`;
+  const bits=[];
+  if(FILTER.routes.size)bits.push(`<b>${[...FILTER.routes].sort(natCmp).slice(0,6).map(esc).join(', ')}${FILTER.routes.size>6?' +'+(FILTER.routes.size-6):''}</b>`);
+  if(FILTER.type!=='all')bits.push(FILTER.type==='bus'?'csak busz':'csak villamos');
+  if(FILTER.moving)bits.push('csak mozgó');
+  if(FILTER.rstops)bits.push('járat megállói');
+  if(!FILTER.stops)bits.push('megállók rejtve');
+  return bits.length?('Szűrve: '+bits.join(' · ')):'';
+}
+function clearFilters(){
+  FILTER.vq='';FILTER.watch=[];FILTER.routes.clear();FILTER.type='all';FILTER.moving=false;FILTER.stops=true;FILTER.rstops=false;
+  syncControls();buildChips();renderRouteGeo();
+}
+
+async function boot(){
+  loadFilter();
+  map=L.map('map',{zoomControl:true,preferCanvas:true}).setView([48.104,20.79],13);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+  routeLayer=L.layerGroup().addTo(map); stopLayer=L.layerGroup().addTo(map);
+  busLayer=L.layerGroup().addTo(map); focusLayer=L.layerGroup().addTo(map);
+  const [stops,routes]=await Promise.all([fetch(API+'/gtfs/stops.json').then(r=>r.json()),fetch(API+'/gtfs/routes.json').then(r=>r.json())]);
+  STOPS=stops; stops.forEach(s=>stopById[s[0]]=s);
+  routes.forEach(r=>ROUTES[r[0]]={id:r[0],short:r[1],long:r[2],type:r[3],color:r[4],text:r[5]});
+  $('nstops').textContent=STOPS.length;
+  buildChips(); syncControls(); wireFilterUI();
+  renderStops(); renderStopList();
+  await renderRouteGeo();
+  refreshBuses(); busTimer=setInterval(refreshBuses,12000);
+  refreshHealth(); setInterval(refreshHealth,30000);
+  setInterval(()=>{if(openStop&&!focusTrip)renderDetail(openStop,true);},20000);
+}
+
+async function refreshHealth(){try{const h=await fetch(API+'/_health').then(r=>r.json());
+  const ok=h.jwt&&h.jwt.present&&!h.jwt.expired,t=$('tok');
+  t.className='tokpill '+(ok?'ok':'bad');
+  t.textContent=ok?('token · '+Math.round((h.jwt.expiresInSec||0)/60)+' perc'):(h.jwt&&h.jwt.expired?'token LEJÁRT':'nincs token');
+}catch{$('tok').textContent='backend?';}}
+
+async function refreshBuses(){ if(focusTrip)return;
+  try{const d=await fetch(API+'/live/positions').then(r=>r.json());
+    LIVE=(d.vehicles||[]).filter(v=>v.lat!=null&&v.lon!=null);
+    $('nall').textContent=LIVE.length; $('upd').textContent='frissítve '+nowHM();
+    applyFilter();
+  }catch(e){$('upd').textContent='élő adat? (token/backend)';}
+}
+
+/* ── szűrés ── */
+function idMatches(q){
+  const n=String(q||'').trim().toLowerCase(); if(!n)return [];
+  const ex=LIVE.filter(v=>String(v.id||'').toLowerCase()===n);
+  if(ex.length)return ex;
+  return LIVE.filter(v=>String(v.id||'').toLowerCase().includes(n)||String(v.label||'').toLowerCase().includes(n));
+}
+/** Követett ID-k + az épp beírt keresés (ez utóbbi még nincs rögzítve). */
+function activeQueries(){
+  const q=FILTER.vq.trim(), out=FILTER.watch.slice();
+  if(q&&!out.some(x=>x.toLowerCase()===q.toLowerCase()))out.push(q);
+  return out;
+}
+function watchedVehicles(){
+  const seen=new Set(),out=[];
+  activeQueries().forEach(q=>idMatches(q).forEach(v=>{if(!seen.has(v.id)){seen.add(v.id);out.push(v);}}));
+  return out;
+}
+function addWatch(id){
+  const q=String(id||'').trim(); if(!q)return;
+  if(FILTER.watch.length>=MAX_WATCH)return;
+  if(!FILTER.watch.some(x=>x.toLowerCase()===q.toLowerCase()))FILTER.watch.push(q);
+  FILTER.vq=''; $('vq').value=''; lastFocusKey=''; applyFilter();
+}
+function removeWatch(id){
+  FILTER.watch=FILTER.watch.filter(x=>x.toLowerCase()!==String(id).toLowerCase());
+  lastFocusKey=''; applyFilter();
+}
+function visibleVehicles(){
+  if(activeQueries().length)return watchedVehicles();   // az ID-követés felülírja a többi szűrőt
+  let v=LIVE.slice();
+  if(FILTER.type!=='all')v=v.filter(x=>vehType(x)===FILTER.type);
+  if(FILTER.routes.size)v=v.filter(x=>FILTER.routes.has(x.routeId));
+  if(FILTER.moving)v=v.filter(x=>(x.speed||0)>0.5);
+  return v;
+}
+function allowedStopIds(){
+  if(!FILTER.rstops||!FILTER.routes.size)return null;
+  const s=new Set(); FILTER.routes.forEach(r=>{const g=geoCache[r]; if(g)(g.stops||[]).forEach(id=>s.add(id));});
+  return s;
+}
+
+function applyFilter(){
+  renderBuses(); renderStops(); renderStopList(); updateChipLive();
+  const on=filterActive(); $('fdot').classList.toggle('on',on);
+  const txt=filterText(); const b=$('fbanner');
+  b.classList.toggle('show',!!txt&&!focusTrip); $('fbtext').innerHTML=txt;
+  $('rsel').textContent=FILTER.routes.size?`— ${FILTER.routes.size} kijelölve`:'— mind';
+  saveFilter();
+}
+
+function renderBuses(){
+  if(focusTrip)return;
+  busLayer.clearLayers();
+  const qs=activeQueries(), vis=visibleVehicles();
+  vis.forEach(v=>{
+    const col='#'+(v.routeColor||'2f6df6'),fg='#'+(v.routeText||'ffffff'),hit=qs.length>0;
+    const m=L.marker([v.lat,v.lon],{icon:busIcon(v.routeShort,col,fg,v.bearing,hit,FILTER.labels||hit?v.id:null,hit),zIndexOffset:hit?900:500});
+    m.bindPopup(vehPopup(v)); m.addTo(busLayer);
+  });
+  $('nbus').textContent=vis.length;
+  renderVehList(vis);
+  renderWatch(qs,vis);
+  const key=qs.join('|').toLowerCase();
+  if(qs.length&&vis.length&&(FILTER.follow||key!==lastFocusKey))fitOn(vis);
+  lastFocusKey=key;
+}
+/** Egy találatra ráugrik, többre ráilleszti a nézetet. */
+function fitOn(vis){
+  const pts=vis.filter(v=>v.lat!=null).map(v=>[v.lat,v.lon]); if(!pts.length)return;
+  if(pts.length===1)map.flyTo(pts[0],Math.max(map.getZoom(),15),{duration:.6});
+  else map.fitBounds(pts,{padding:[70,70],maxZoom:16});
+}
+function vehPopup(v){
+  const sp=kmh(v);
+  return `<b>${esc(v.routeShort||'')}</b> ${esc(v.headsign||'')}<br>jármű: <b>${esc(v.id||'')}</b>${sp!=null?` · ${sp} km/h`:''}`+
+    (v.tripId?`<br><a href="#" data-trip="${esc(v.tripId)}" onclick="focusBus(this.dataset.trip);return false">🛣️ útvonal a térképen</a>`:'');
+}
+/** Keresésenként egy blokk: a rögzített (követett) ID-k leszedhetők, a beírt hozzáadható. */
+function renderWatch(qs,vis){
+  const box=$('vqres');
+  $('wtools').style.display=FILTER.watch.length?'flex':'none';
+  $('vqadd').disabled=!FILTER.vq.trim()||FILTER.watch.length>=MAX_WATCH;
+  if(!qs.length){box.innerHTML='';return;}
+  const typed=FILTER.vq.trim().toLowerCase();
+  box.innerHTML=qs.map(q=>{
+    const pinned=q.toLowerCase()!==typed||FILTER.watch.some(x=>x.toLowerCase()===q.toLowerCase());
+    const hits=idMatches(q);
+    if(!hits.length)return `<div class="vqcard miss${pinned?' pin':''}">
+      <div class="who"><b>${esc(q)}</b><div>nincs bevetésen — nem ad élő pozíciót</div></div>
+      <button class="pinbtn ${pinned?'rm':''}" data-act="${pinned?'rm':'add'}" data-q="${esc(q)}" title="${pinned?'Levétel a követésről':'Követéshez ad'}">${pinned?'✕':'＋'}</button></div>`;
+    return hits.slice(0,4).map((v,i)=>{
+      const col='#'+(v.routeColor||'2f6df6'),fg='#'+(v.routeText||'ffffff'),sp=kmh(v);
+      const age=v.timestamp?Math.max(0,Math.round(Date.now()/1000-v.timestamp)):null;
+      return `<div class="vqcard${pinned?' pin':''}" data-lat="${v.lat}" data-lon="${v.lon}">
+        <div class="badge" style="background:${col};color:${fg}">${esc(v.routeShort||'')}</div>
+        <div class="who"><b>${esc(v.id)}</b> <span class="tag live">bevetésen</span><div>${esc(v.headsign||'')}</div></div>
+        <div class="kmh">${sp!=null?sp+'<small>km/h</small>':'—'}${age!=null?`<small>${age} mp</small>`:''}</div>
+        ${i===0?`<button class="pinbtn ${pinned?'rm':''}" data-act="${pinned?'rm':'add'}" data-q="${esc(q)}" title="${pinned?'Levétel a követésről':'Követéshez ad'}">${pinned?'✕':'＋'}</button>`:''}</div>`;
+    }).join('');
+  }).join('');
+  box.querySelectorAll('.pinbtn').forEach(b=>b.addEventListener('click',e=>{
+    e.stopPropagation(); b.dataset.act==='rm'?removeWatch(b.dataset.q):addWatch(b.dataset.q);}));
+  box.querySelectorAll('.vqcard[data-lat]').forEach(el=>el.addEventListener('click',()=>{
+    map.flyTo([+el.dataset.lat,+el.dataset.lon],16,{duration:.5});}));
+}
+function renderVehList(vis){
+  $('vcount').textContent=`— ${vis.length} db`;
+  const rows=vis.slice().sort((a,b)=>natCmp(a.routeShort,b.routeShort)||natCmp(a.id,b.id));
+  $('vlist').innerHTML=rows.length?rows.map(v=>{
+    const col='#'+(v.routeColor||'2f6df6'),fg='#'+(v.routeText||'ffffff'),sp=kmh(v);
+    return `<div class="vrow" data-lat="${v.lat}" data-lon="${v.lon}" data-trip="${esc(v.tripId||'')}">
+      <div class="rb" style="background:${col};color:${fg}">${esc(v.routeShort||'')}</div>
+      <div class="vi"><b>${esc(v.id||'')}</b><div>${esc(v.headsign||'')}</div></div>
+      <div class="sp">${sp!=null?sp+' km/h':''}</div></div>`;
+  }).join(''):`<div class="empty">Nincs a szűrőnek megfelelő élő jármű.</div>`;
+  $('vlist').querySelectorAll('.vrow').forEach(el=>el.addEventListener('click',()=>{
+    map.flyTo([+el.dataset.lat,+el.dataset.lon],16,{duration:.5});
+  }));
+}
+
+function renderStops(){
+  stopLayer.clearLayers(); if(!FILTER.stops)return;
+  const allow=allowedStopIds();
+  STOPS.forEach(s=>{ if(allow&&!allow.has(s[0]))return;
+    const c=L.circleMarker([s[3],s[4]],{radius:4,color:'#FDCC00',weight:1,fillColor:'#FDCC00',fillOpacity:.6});
+    c.on('click',()=>selectStop(s[0])); c.bindTooltip(s[2],{direction:'top'}); c.addTo(stopLayer);});
+}
+async function renderRouteGeo(){
+  routeLayer.clearLayers();
+  if(FILTER.routes.size){
+    const want=[...FILTER.routes], miss=want.filter(r=>!geoCache[r]);
+    if(miss.length){
+      try{const d=await fetch(API+'/gtfs/route-geo?route='+encodeURIComponent(miss.join(','))).then(r=>r.json());
+        (d.routes||[]).forEach(r=>geoCache[r.id]=r);}catch(e){}
+    }
+    if(FILTER.shape){
+      want.forEach(rid=>{const g=geoCache[rid]; if(!g)return; const col='#'+(g.color||'2f6df6');
+        (g.shapes||[]).forEach(line=>{
+          L.polyline(line,{color:'#000',weight:8,opacity:.3}).addTo(routeLayer);
+          L.polyline(line,{color:col,weight:4,opacity:.9}).addTo(routeLayer);});});
+    }
+  }
+  applyFilter();
+}
+
+/* ── járat-chipek ── */
+function buildChips(){
+  const q=($('rq').value||'').trim().toLowerCase();
+  const list=Object.values(ROUTES).filter(r=>!q||r.short.toLowerCase().includes(q)||(r.long||'').toLowerCase().includes(q))
+    .sort((a,b)=>natCmp(a.short,b.short));
+  $('chips').innerHTML=list.map(r=>{
+    const on=FILTER.routes.has(r.id);
+    return `<div class="chip${on?' on':''}" data-r="${esc(r.id)}" title="${esc(r.long||r.short)}"
+      style="${on?`background:#${esc(r.color)};color:#${esc(r.text)}`:''}">
+      <span class="dot" style="background:#${esc(r.color)}"></span>${esc(r.short)}<span class="lv" style="display:none"></span></div>`;
+  }).join('')||`<div class="hintline">Nincs találat.</div>`;
+  $('chips').querySelectorAll('.chip').forEach(el=>el.addEventListener('click',()=>toggleRoute(el.dataset.r)));
+  updateChipLive();
+}
+function updateChipLive(){
+  const cnt={}; LIVE.forEach(v=>cnt[v.routeId]=(cnt[v.routeId]||0)+1);
+  $('chips').querySelectorAll('.chip').forEach(el=>{
+    const n=cnt[el.dataset.r]||0, lv=el.querySelector('.lv');
+    if(lv){lv.style.display=n?'':'none'; lv.textContent=n;}
+    el.classList.toggle('live',n>0); el.classList.toggle('dim',!n);
+  });
+}
+function toggleRoute(rid){
+  if(FILTER.routes.has(rid))FILTER.routes.delete(rid);else FILTER.routes.add(rid);
+  const el=$('chips').querySelector(`.chip[data-r="${CSS.escape(rid)}"]`);
+  if(el){const r=ROUTES[rid],on=FILTER.routes.has(rid);
+    el.classList.toggle('on',on); el.style.cssText=on?`background:#${r.color};color:#${r.text}`:'';}
+  renderRouteGeo();
+}
+function setRoutes(ids){FILTER.routes=new Set(ids);buildChips();renderRouteGeo();}
+
+function wireFilterUI(){
+  document.querySelectorAll('#tabs button').forEach(b=>b.addEventListener('click',()=>{
+    document.querySelectorAll('#tabs button').forEach(x=>x.classList.toggle('on',x===b));
+    document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('on',p.id==='pane-'+b.dataset.tab));
+  }));
+  let t=null;
+  $('vq').addEventListener('input',e=>{FILTER.vq=e.target.value;clearTimeout(t);t=setTimeout(()=>{applyFilter();refreshBuses();},220);});
+  $('vq').addEventListener('keydown',e=>{if(e.key==='Enter'){clearTimeout(t);addWatch($('vq').value);refreshBuses();}});
+  $('vqadd').addEventListener('click',()=>{addWatch($('vq').value);refreshBuses();});
+  $('vqclear').addEventListener('click',()=>{FILTER.vq='';$('vq').value='';lastFocusKey='';applyFilter();});
+  $('w-clear').addEventListener('click',()=>{FILTER.watch=[];lastFocusKey='';applyFilter();});
+  [...$('f-type').children].forEach(b=>b.addEventListener('click',()=>{
+    FILTER.type=b.dataset.v;[...$('f-type').children].forEach(x=>x.classList.toggle('on',x===b));applyFilter();}));
+  $('r-all').addEventListener('click',()=>setRoutes(Object.keys(ROUTES)));
+  $('r-none').addEventListener('click',()=>setRoutes([]));
+  $('r-live').addEventListener('click',()=>setRoutes([...new Set(LIVE.map(v=>v.routeId))].filter(r=>ROUTES[r])));
+  $('r-inv').addEventListener('click',()=>setRoutes(Object.keys(ROUTES).filter(r=>!FILTER.routes.has(r))));
+  $('rq').addEventListener('input',buildChips);
+  const bind=(id,key,after)=>$(id).addEventListener('change',e=>{FILTER[key]=e.target.checked;(after||applyFilter)();});
+  bind('f-stops','stops'); bind('f-moving','moving'); bind('f-labels','labels'); bind('f-follow','follow');
+  bind('f-shape','shape',renderRouteGeo); bind('f-rstops','rstops',renderRouteGeo);
+}
+
+/* ── megállólista ── */
+const listEl=$('list');
+function renderStopList(){
+  const q=($('q').value||'').trim().toLowerCase(), allow=allowedStopIds();
+  let f=STOPS.filter(s=>!allow||allow.has(s[0]));
+  if(q)f=f.filter(s=>s[2].toLowerCase().includes(q)||(s[1]||'').toLowerCase().includes(q));
+  f.sort((a,b)=>a[2].localeCompare(b[2],'hu'));
+  listEl.innerHTML=f.length?f.slice(0,400).map(s=>`<div class="item" data-id="${esc(s[0])}"><span class="nm">${esc(s[2])}</span><span class="cd">${esc(s[1]||'')}</span></div>`).join('')
+    :`<div class="empty">Nincs a szűrőnek megfelelő megálló.</div>`;
+}
+listEl.addEventListener('click',e=>{const it=e.target.closest('.item');if(it)selectStop(it.getAttribute('data-id'));});
+$('q').addEventListener('input',renderStopList);
+
+function selectStop(id){const s=stopById[id];if(!s)return; if(focusTrip)exitFocus(); openStop=id;
+  if(marker)map.removeLayer(marker);
+  marker=L.marker([s[3],s[4]]).addTo(map).bindPopup(`<b>${esc(s[2])}</b>`).openPopup();
+  map.flyTo([s[3],s[4]],16,{duration:.5}); renderDetail(id);}
+function delayTag(sec){if(sec==null||Math.abs(sec)<45)return ''; const m=Math.max(1,Math.round(Math.abs(sec)/60)); return sec>0?`<span class="tag delay">+${m}p késés</span>`:`<span class="tag early">${m}p sietés</span>`;}
+
+async function renderDetail(id,quiet){const s=stopById[id];if(!s)return;const det=$('detail');det.classList.add('open');
+  if(!quiet)det.innerHTML=`<div class="dhead"><div><h2>${esc(s[2])}</h2><div class="meta">kód: ${esc(s[1]||'—')} · élő adat lekérése…</div></div><button class="close" onclick="closeDetail()">Bezár ✕</button></div><div class="empty">⏳ Valós idejű érkezések…</div>`;
+  try{const d=await fetch(API+`/live/arrivals?stop=${encodeURIComponent(id)}&limit=14`).then(r=>r.json());
+    if(openStop!==id)return;
+    window._arr={}; // tripId -> vehicle
+    let html=`<div class="dhead"><div><h2>${esc(s[2])}</h2><div class="meta">kód: ${esc(s[1]||'—')} · ${d.rtError?'menetrend':'valós idejű'} · ${nowHM()}</div></div><button class="close" onclick="closeDetail()">Bezár ✕</button></div>`;
+    if(!d.arrivals||!d.arrivals.length){html+=`<div class="empty">Nincs közelgő járat.</div>`;}
+    else for(const a of d.arrivals){
+      const bg='#'+(a.color||'888'),fg='#'+(a.text||'fff');
+      const clickable=a.live&&a.vehicle&&a.vehicle.tripId;
+      const tag=a.live?`<span class="tag live">élő</span>`:`<span class="tag sched">menetrend</span>`;
+      const go=clickable?`<span class="tag go">📍 mutasd a térképen</span>`:'';
+      const eta=a.etaMin<=0?'most':`${a.etaMin}<small>perc</small>`;
+      const ftrip=clickable?a.vehicle.tripId:a.tripId;
+      if(clickable)window._arr[ftrip]=a.vehicle;
+      html+=`<div class="dep${clickable?' liverow':''}" ${clickable?`data-trip="${esc(ftrip)}"`:''}>
+        <div class="badge" style="background:${bg};color:${fg}">${esc(a.route)}</div>
+        <div class="to"><div class="h">${esc(a.headsign)} ${tag}${delayTag(a.delaySec)}${go}</div>
+        <div class="t">érkezik: ${esc(a.time)}</div></div><div class="eta">${eta}</div></div>`;
+    }
+    if(openStop===id){det.innerHTML=html;
+      det.querySelectorAll('.liverow').forEach(el=>el.addEventListener('click',()=>focusBus(el.getAttribute('data-trip'))));
+    }
+  }catch(e){if(openStop===id&&!quiet){const el=det.querySelector('.empty');if(el)el.textContent='Hiba a lekérésnél.';}}
+}
+function closeDetail(){openStop=null;$('detail').classList.remove('open');}
+
+async function focusBus(tripId){
+  focusTrip=tripId;
+  $('detail').classList.remove('open'); $('fbanner').classList.remove('show');
+  map.removeLayer(stopLayer); map.removeLayer(busLayer); map.removeLayer(routeLayer); if(marker)map.removeLayer(marker);
+  focusLayer.clearLayers();
+  $('backbtn').classList.add('show');
+  await drawFocus(true);
+  if(focusTimer)clearInterval(focusTimer);
+  focusTimer=setInterval(()=>drawFocus(false),8000);
+}
+async function drawFocus(fit){
+  try{
+    const d=await fetch(API+`/live/trip-path?trip=${encodeURIComponent(focusTrip)}`).then(r=>r.json());
+    focusLayer.clearLayers();
+    const col='#'+(d.color||'2f6df6'),fg='#'+(d.text||'ffffff');
+    let bounds=[];
+    if(d.shape&&d.shape.length){L.polyline(d.shape,{color:col,weight:5,opacity:.85}).addTo(focusLayer);
+      L.polyline(d.shape,{color:'#000',weight:8,opacity:.25}).addTo(focusLayer).bringToBack(); bounds=d.shape.slice();}
+    const v=d.vehicle||(window._arr&&window._arr[focusTrip]);
+    if(v&&v.lat!=null){const m=L.marker([v.lat,v.lon],{icon:busIcon(d.route,col,fg,v.bearing,true,v.id,false),zIndexOffset:900});
+      m.bindPopup(`<b>${esc(d.route)}</b> ${esc(d.headsign||'')}<br>jármű: <b>${esc(v.id||'')}</b>`+(v.speed!=null?` · ${Math.round(v.speed*3.6)} km/h`:'')).addTo(focusLayer).openPopup();
+      bounds.push([v.lat,v.lon]);}
+    if(fit&&bounds.length)map.fitBounds(bounds,{padding:[60,60],maxZoom:16});
+    else if(fit&&v)map.flyTo([v.lat,v.lon],15);
+  }catch(e){}
+}
+function exitFocus(){
+  focusTrip=null; if(focusTimer){clearInterval(focusTimer);focusTimer=null;}
+  focusLayer.clearLayers(); $('backbtn').classList.remove('show');
+  map.addLayer(routeLayer); map.addLayer(stopLayer); map.addLayer(busLayer); refreshBuses();
+  if(openStop){const s=stopById[openStop];if(s)map.flyTo([s[3],s[4]],15,{duration:.4}); $('detail').classList.add('open');}
+}
+boot();
+</script>
+</body></html>

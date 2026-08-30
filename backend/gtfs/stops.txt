@@ -1,0 +1,576 @@
+﻿stop_id,stop_code,stop_name,stop_desc,stop_lat,stop_lon
+SP1,1,Debreczeni Márton tér,,48.1287,20.6821
+SP10,2,Alsó-Majláth,,48.105,20.6821
+SP100,1,Dayka Gábor utca,,48.1055,20.7753
+SP101,1,Damjanich utca,,48.0989,20.7619
+SP102,2,Damjanich utca,,48.0992,20.7629
+SP103,1,Derkovits utca,,48.0903,20.7815
+SP104,2,Derkovits utca,,48.0902,20.7808
+SP105,1,Csermőkei út,,48.0768,20.7707
+SP106,2,Csermőkei út,,48.0764,20.7727
+SP107,1,Mohostó utca,,48.0715,20.8285
+SP108,2,Mohostó utca,,48.0718,20.8281
+SP11,1,Sajórajáró út,,48.1131,20.7994
+SP110,1,Diósgyőr városközpont,,48.1018,20.6886
+SP111,2,Diósgyőr városközpont,,48.1016,20.6885
+SP116,1,Újmassai őskohó,,48.1141,20.5881
+SP117,2,Újmassai őskohó,,48.1143,20.5878
+SP118,1,Dózsa György út,,48.1069,20.7789
+SP119,1,Dózsa György út (7),,48.1045,20.8575
+SP12,2,Sajórajáró út,,48.1128,20.7997
+SP121,3,Dózsa György út,,48.1068,20.7775
+SP122,1,Egyetem,,48.0791,20.772
+SP123,2,Egyetem,,48.0792,20.7721
+SP124,1,Egyetemi kollégiumok,,48.0784,20.771
+SP125,2,Egyetemi kollégiumok,,48.0788,20.7696
+SP126,1,Egyetemváros,,48.0808,20.7644
+SP127,1,Endrődi Sándor utca,,48.1025,20.676
+SP128,1,Erdő utca,,48.1039,20.6741
+SP129,1,Erdőgazdaság,,48.142,20.6989
+SP13,1,Annabánya,,48.1122,20.7181
+SP130,2,Erdőgazdaság,,48.1415,20.6993
+SP131,1,Erkel Ferenc utca,,48.0686,20.8241
+SP132,1,Erzsébet tér,,48.102,20.7772
+SP133,2,Erzsébet tér,,48.102,20.7781
+SP134,1,Szent Anna tér,,48.1055,20.7636
+SP135,2,Szent Anna tér,,48.1055,20.7649
+SP136,1,Miskolctapolca parkoló,,48.0679,20.7541
+SP137,2,Miskolctapolca parkoló,,48.0667,20.7531
+SP138,1,Északi iparterület,,48.1253,20.7933
+SP139,2,Északi iparterület,,48.1246,20.7935
+SP14,2,Annabánya,,48.112,20.7181
+SP140,1,Farkas Antal utca,,48.0637,20.7863
+SP141,1,Felsőhámor,,48.1072,20.6358
+SP142,2,Felsőhámor,,48.1067,20.6351
+SP143,1,Felső-Majláth,,48.1087,20.6763
+SP144,2,Felső-Majláth,,48.1078,20.6765
+SP145,1,Felsőzsolca,,48.0956,20.865
+SP146,1,Berekalja,,48.0987,20.6768
+SP147,1,Fonoda utca,,48.1069,20.819
+SP148,2,Fonoda utca,,48.107,20.8176
+SP149,1,Futó utca,,48.0664,20.787
+SP15,1,Selyemrét,,48.1025,20.8051
+SP150,2,Futó utca,,48.0668,20.7872
+SP151,1,Tímár malom utca,,48.1007,20.7486
+SP152,2,Tímár malom utca,,48.1005,20.7482
+SP153,1,Garadna vasút,,48.1167,20.5586
+SP154,2,Garadna vasút,,48.1167,20.559
+SP155,1,Gömöri pályaudvar,,48.1054,20.8018
+SP156,2,Gömöri pályaudvar,,48.1057,20.8018
+SP159,3,Gömöri pályaudvar,,48.1067,20.8
+SP160,1,Görömböly,,48.052,20.7717
+SP161,1,Gulyakút,,48.1297,20.7093
+SP162,2,Gulyakút,,48.1294,20.7095
+SP163,1,Kemény Dénes Uszoda,,48.0761,20.7655
+SP164,2,Kemény Dénes Uszoda,,48.0757,20.7651
+SP165,1,Erdő sor,,48.1335,20.6703
+SP166,2,Erdő sor,,48.133,20.6706
+SP167,1,Hajós Alfréd utca,,48.0899,20.7735
+SP168,2,Hajós Alfréd utca,,48.0913,20.7736
+SP169,1,Lavotta utca,,48.0557,20.7896
+SP17,3,Selyemrét,,48.1024,20.8057
+SP170,2,Lavotta utca,,48.0563,20.7891
+SP171,1,Harsányi utca,,48.0541,20.798
+SP172,1,Hatvanötösök útja,,48.1077,20.7954
+SP173,1,Majális park,,48.1153,20.6585
+SP174,1,Hejőcsabai gyógyszertár,,48.0735,20.7881
+SP175,2,Hejőcsabai gyógyszertár,,48.0726,20.7893
+SP176,1,Hejőcsabai városrész,,48.0756,20.7855
+SP177,2,Hejőcsabai városrész,,48.0765,20.7851
+SP178,1,Vasgyári út,,48.0985,20.7315
+SP179,2,Vasgyári út,,48.0994,20.7326
+SP180,1,Homokbánya,,48.1114,20.7069
+SP181,2,Homokbánya,,48.111,20.7073
+SP182,1,Hóvirág utca,,48.1121,20.6683
+SP183,2,Hóvirág utca,,48.1115,20.6696
+SP184,1,Hősök tere (7),,48.106,20.8512
+SP185,2,Hősök tere (7),,48.1058,20.8506
+SP186,1,Hűtőház,,48.0967,20.8407
+SP187,1,Vörösmarty Mihály utca,,48.101,20.7883
+SP188,1,Ifjúság útja,,48.0849,20.7771
+SP189,2,Ifjúság útja,,48.0847,20.7755
+SP19,2,Avas kilátó,,48.0967,20.7706
+SP190,3,Ifjúság útja,,48.0837,20.7772
+SP191,1,Szent István-barlang,,48.0991,20.6211
+SP192,2,Szent István-barlang,,48.0986,20.6212
+SP194,1,Üteg utca,,48.1038,20.8082
+SP195,1,Baross Gábor utca,,48.1057,20.8083
+SP196,2,Üteg utca,,48.1047,20.8077
+SP197,2,Baross Gábor utca,,48.1056,20.8066
+SP198,1,Kandó Kálmán utca,,48.0972,20.7054
+SP199,1,Fényesvölgyi utca,,48.1003,20.6788
+SP2,2,Debreczeni Márton tér,,48.1285,20.6832
+SP20,3,Avas kilátó,,48.0967,20.7708
+SP200,1,Kassai utca,,48.1141,20.7945
+SP201,2,Kassai utca,,48.1149,20.7935
+SP202,1,Kassai út,,48.1083,20.8557
+SP203,2,Kassai út,,48.1085,20.855
+SP204,1,Kazinczy Ferenc utca,,48.1064,20.7853
+SP205,2,Kazinczy Ferenc utca,,48.1052,20.7843
+SP206,1,Kelet utca,,48.0652,20.8283
+SP207,1,Kenyérgyár,,48.092,20.7114
+SP208,2,Kenyérgyár,,48.091,20.7113
+SP209,1,LÁEV (kisvasút),,48.1001,20.7048
+SP210,1,Diósgyőri Gimnázium,,48.1001,20.7086
+SP211,1,Kis-Erenyő,,48.1222,20.6959
+SP212,2,Kis-Erenyő,,48.1223,20.6956
+SP213,1,Komlóstető,,48.0769,20.7338
+SP214,1,Komlóstetői elágazás,,48.0836,20.7266
+SP216,1,Kossuth Lajos utca,,48.1001,20.8599
+SP218,1,Könyves Kálmán utca,,48.0971,20.7109
+SP219,2,Könyves Kálmán utca,,48.0973,20.7097
+SP22,5,Avas kilátó,,48.0967,20.7713
+SP220,1,Középgaradna,,48.1174,20.5696
+SP221,2,Középgaradna,,48.1174,20.5693
+SP222,1,Laczkó-tanya,,48.1247,20.7135
+SP223,2,Laczkó-tanya,,48.1239,20.7138
+SP224,1,Berzsenyi Dániel utca,,48.0869,20.8159
+SP225,2,Berzsenyi Dániel utca,,48.0871,20.8158
+SP227,1,Ládi fűrésztelep,,48.0871,20.7261
+SP229,3,Ládi fűrésztelep,,48.0859,20.7249
+SP230,1,Ládi utca,,48.0838,20.7241
+SP231,1,Lehár utca,,48.0532,20.7953
+SP232,1,Leszih Andor utca,,48.0935,20.7717
+SP233,2,Leszih Andor utca,,48.094,20.7717
+SP234,1,Levente vezér utca,,48.114,20.7893
+SP235,2,Levente vezér utca,,48.115,20.7899
+SP236,1,Lévay József utca,,48.0932,20.7962
+SP237,2,Lévay József utca,,48.0939,20.7962
+SP238,3,Lévay József utca,,48.0935,20.7956
+SP239,1,Lévay József utca (32),,48.0929,20.7922
+SP240,2,Lévay József utca (32),,48.0924,20.7924
+SP241,1,Lillafüred,,48.0941,20.6196
+SP242,1,Lomb utca,,48.0782,20.7232
+SP244,3,Lomb utca,,48.0785,20.7234
+SP245,1,Lorántffy Zsuzsanna utca,,48.0906,20.7105
+SP246,2,Lorántffy Zsuzsanna utca,,48.0907,20.7102
+SP247,1,Lyukóvölgy,,48.1154,20.7175
+SP248,2,Lyukóvölgy,,48.1151,20.7175
+SP249,1,Lyukóbánya,,48.1471,20.6792
+SP250,1,Magas-hegy,,48.088,20.7468
+SP251,2,Magas-hegy,,48.088,20.7475
+SP252,1,Magyar-tanya,,48.1385,20.7035
+SP253,2,Magyar-tanya,,48.1378,20.7038
+SP254,2,Majális park,,48.1156,20.6584
+SP255,3,Majális park,,48.1157,20.6582
+SP256,4,Majális park,,48.1156,20.6593
+SP257,1,Marjalaki utca,,48.1122,20.7667
+SP258,2,Marjalaki utca,,48.112,20.7671
+SP259,1,Martinkertváros központ,,48.0921,20.8068
+SP260,2,Martinkertváros központ,,48.0923,20.8067
+SP261,1,Csokonai Vitéz Mihály utca,,48.0957,20.8114
+SP262,1,Mednyánszky utca,,48.0865,20.774
+SP263,2,Mednyánszky utca,,48.088,20.7741
+SP264,1,Megyei Kórház,,48.1196,20.7882
+SP265,2,Megyei Kórház,,48.1209,20.7877
+SP266,1,Mészkőbánya,,48.0777,20.6943
+SP267,2,Mészkőbánya,,48.0771,20.6936
+SP268,1,Szinva utca,,48.104,20.8211
+SP269,2,Szinva utca,,48.1043,20.8212
+SP27,5,Avas városközpont,,48.082,20.7778
+SP270,1,MIK,,48.1143,20.7036
+SP271,2,MIK,,48.1138,20.7039
+SP272,1,Erzsébet királyné útja,,48.0609,20.7951
+SP273,2,Erzsébet királyné útja,,48.061,20.7945
+SP274,1,Móra Ferenc utca,,48.1043,20.6774
+SP275,2,Móra Ferenc utca,,48.1046,20.6773
+SP276,1,MVSC Sportpálya,,48.096,20.8042
+SP277,1,Nagy-Erenyő,,48.1252,20.693
+SP278,2,Nagy-Erenyő,,48.1251,20.693
+SP279,1,Nagyváthy utca,,48.103,20.7657
+SP281,3,Nagyváthy utca,,48.1013,20.7656
+SP282,1,Népkert,,48.096,20.7856
+SP283,2,Népkert,,48.0969,20.7858
+SP284,1,Nimród utca,,48.1131,20.765
+SP285,1,Nyárfa utca,,48.0814,20.7232
+SP286,1,Olajkutató,,48.0788,20.7644
+SP287,1,Olvasztár utca,,48.0805,20.7266
+SP289,1,Orvosi rendelő,,48.0939,20.8148
+SP29,7,Avas városközpont,,48.082,20.7782
+SP290,1,Önkormányzat,,48.078,20.6711
+SP291,2,Önkormányzat,,48.0779,20.6711
+SP292,1,Örs utca,,48.1028,20.7419
+SP293,2,Örs utca,,48.1027,20.7429
+SP294,1,Palotaszálló (5),,48.1033,20.6223
+SP295,2,Palotaszálló (5),,48.1031,20.6223
+SP296,1,Palotaszálló (15),,48.1056,20.6223
+SP297,2,Palotaszálló (15),,48.1056,20.6224
+SP298,1,Papírgyár,,48.1143,20.6628
+SP299,2,Papírgyár,,48.1139,20.6635
+SP3,1,Kazinczy Ferenc Általános Iskola,,48.0852,20.7836
+SP300,1,Pereces,,48.1354,20.6667
+SP301,1,Petneházy-bérházak,,48.0851,20.7853
+SP302,2,Petneházy-bérházak,,48.0862,20.7856
+SP303,1,Petneházy utca,,48.0869,20.7908
+SP304,2,Petneházy utca,,48.0866,20.7907
+SP305,1,Napsugár Otthon,,48.125,20.7853
+SP306,2,Napsugár Otthon,,48.1258,20.7852
+SP307,1,Petőfi tér,,48.1076,20.7853
+SP308,2,Petőfi tér,,48.1075,20.7848
+SP309,3,Petőfi tér,,48.1071,20.786
+SP31,1,Álmos utca,,48.111,20.7882
+SP310,4,Petőfi tér,,48.1071,20.7873
+SP311,1,Pisztrángkeltető,,48.1166,20.5789
+SP312,2,Pisztrángkeltető,,48.1166,20.5788
+SP313,1,Pünkösd-hegy,,48.1182,20.6999
+SP314,2,Pünkösd-hegy,,48.1176,20.7001
+SP315,1,Repülőtér / Bosch,,48.1288,20.7836
+SP317,3,Repülőtér / Bosch,,48.1287,20.785
+SP318,4,Repülőtér / Bosch,,48.1284,20.7849
+SP319,5,Repülőtér / Bosch,,48.1283,20.7843
+SP32,2,Álmos utca,,48.112,20.7888
+SP320,1,Repülőtér megállóhely,,48.1291,20.7916
+SP321,2,Repülőtér megállóhely,,48.1296,20.7913
+SP322,1,Ruzsinszőlő,,48.0887,20.7677
+SP323,2,Ruzsinszőlő,,48.0895,20.7668
+SP324,1,Sajó utca,,48.1062,20.8284
+SP325,2,Sajó utca,,48.1065,20.8276
+SP3271,1,Mendikás,,48.0944,20.7653
+SP3272,1,Hideg sor,,48.0981,20.7649
+SP3273,1,Avasalja u.,,48.1004,20.7652
+SP3275,3,Malomszög u.,,48.104,20.7706
+SP3276,2,Mendikás,,48.0945,20.7657
+SP3277,2,Hideg sor,,48.0973,20.7638
+SP3278,2,Avasalja u.,,48.1006,20.7651
+SP328,1,Sajószigeti út,,48.1161,20.7978
+SP3281,9,Felső-Majláth,,48.1087,20.6759
+SP3284,1,Mechatronikai Park. főkapu,,48.133,20.7992
+SP329,2,Sajószigeti út,,48.1172,20.7974
+SP33,1,Bacsinszky András utca,,48.0553,20.7774
+SP330,1,Salakbánya,,48.0833,20.7017
+SP331,2,Salakbánya,,48.083,20.7013
+SP332,1,Zoltán utca,,48.1032,20.7468
+SP333,2,Zoltán utca,,48.1032,20.7479
+SP334,1,Sályi István utca,,48.0787,20.7787
+SP335,2,Sályi István utca,,48.0784,20.7784
+SP336,1,Sütő-tanya,,48.1211,20.7154
+SP337,2,Sütő-tanya,,48.1207,20.7155
+SP3370,7,Avas kilátó,,48.0969,20.771
+SP3372,12,Búza tér,,48.1053,20.7917
+SP338,1,Szarka-hegy (6),,48.1055,20.7097
+SP339,2,Szarka-hegy (6),,48.1052,20.7098
+SP34,2,Bacsinszky András utca,,48.055,20.7767
+SP340,1,Szarka-hegy (16),,48.107,20.722
+SP341,2,Szarka-hegy (16),,48.1063,20.7226
+SP3413,10,Felső-Majláth,,48.109,20.6764
+SP3416,1,Déli Ipari Park. Joyson,,48.0577,20.8092
+SP342,1,Szeles utca,,48.1075,20.789
+SP343,2,Szeles utca,,48.1065,20.7896
+SP344,3,Szeles utca,,48.1071,20.7883
+SP345,1,Szemere-kert,,48.1053,20.7799
+SP346,2,Szemere-kert,,48.1052,20.7792
+SP3461,2,Déli Ipari Park. Joyson,,48.0575,20.8092
+SP3464,3,Berzsenyi Dániel utca,,48.0871,20.816
+SP3465,1,Szirma Volán,,48.0622,20.8252
+SP3466,4,Sütő János utca,,48.0689,20.7802
+SP3467,1,Mész utca,,48.067,20.7876
+SP347,1,Szemere utca,,48.1007,20.7865
+SP3479,12,Felső-Majláth,,48.1093,20.6756
+SP348,2,Szemere utca,,48.1005,20.7864
+SP3480,13,Felső-Majláth,,48.1088,20.6765
+SP3496,1,Középszer utca / Iskola,,48.0844,20.7826
+SP3497,1,Középszer utca / Szolgáltató ház,,48.0809,20.783
+SP3498,1,Testvérvárosok útja,,48.0782,20.7827
+SP35,1,Bajcsy-Zsilinszky út,,48.1035,20.7977
+SP351,2,Szent László utca,,48.1087,20.7783
+SP3510,1,Bükkszentlászló alvég,,48.0714,20.6758
+SP3511,2,Bükkszentlászló alvég,,48.0714,20.6758
+SP3515,1,Mechatronikai Park. központ,,48.1357,20.7987
+SP3519,1,Galamb József utca,,48.0675,20.8044
+SP352,1,Szervezet utca,,48.0952,20.6953
+SP3520,2,Galamb József utca,,48.0669,20.8021
+SP3528,1,Gábor Dénes utca,,48.0517,20.81
+SP353,2,Szervezet utca,,48.095,20.6956
+SP3534,1,Üllő utca,,48.0898,20.7123
+SP354,1,Villanyrendőr,,48.102,20.7854
+SP3544,2,Kandó Kálmán utca,,48.0973,20.7057
+SP355,1,Szigligeti tér,,48.0938,20.7884
+SP3553,1,Hejőmente,,48.0631,20.7991
+SP3554,2,Hejőmente,,48.0631,20.799
+SP3556,1,Mechatronikai Park. nyugat,,48.1344,20.7935
+SP3557,3,Erzsébet királyné útja,,48.0611,20.7962
+SP3559,4,Repülőtér megállóhely,,48.1295,20.7922
+SP356,2,Szigligeti tér,,48.0939,20.7872
+SP357,1,Szirma,,48.0631,20.8255
+SP3578,7,Vízügyi Igazgatóság,,48.0989,20.7994
+SP358,1,Szirma Általános Iskola,,48.0743,20.8263
+SP3587,9,Szent Anna tér,,48.1041,20.7642
+SP3588,10,Szent Anna tér,,48.1047,20.7632
+SP359,2,Szirma Általános Iskola,,48.074,20.8266
+SP36,2,Bajcsy-Zsilinszky út,,48.1035,20.7979
+SP360,1,Babits Mihály utca,,48.0773,20.8238
+SP3600,1,Mechatronikai Park. észak,,48.1367,20.7973
+SP3603,3,Déli Ipari Park. Joyson,,48.0581,20.8095
+SP3604,1,Homok-dűlő,,48.0641,20.805
+SP361,2,Babits Mihály utca,,48.0771,20.8241
+SP363,1,Szondi György utca (7),,48.1064,20.8141
+SP364,2,Szondi György utca (7),,48.1064,20.813
+SP367,1,SZTK rendelőintézet,,48.09,20.7857
+SP368,2,SZTK rendelőintézet,,48.0911,20.786
+SP369,1,Tanulmányi épületek,,48.0812,20.767
+SP37,1,Szinvapark,,48.1016,20.7918
+SP370,1,Miskolctapolca,,48.0624,20.7464
+SP371,2,Miskolctapolca,,48.0622,20.7466
+SP372,1,Miskolctapolcai Strandfürdő,,48.064,20.7501
+SP373,2,Miskolctapolcai Strandfürdő,,48.064,20.7502
+SP374,1,Tapolcai elágazás,,48.0823,20.7851
+SP375,2,Tapolcai elágazás,,48.0832,20.7854
+SP376,3,Tapolcai elágazás,,48.082,20.7854
+SP377,4,Tapolcai elágazás,,48.0832,20.7861
+SP378,1,Tatárdomb,,48.0882,20.7144
+SP379,2,Tatárdomb,,48.0872,20.7153
+SP38,2,Szinvapark,,48.1027,20.7918
+SP380,1,Táncsics tér,,48.0999,20.6937
+SP381,2,Táncsics tér,,48.0997,20.694
+SP382,1,Teleki utca,,48.1029,20.7726
+SP383,2,Teleki utca,,48.1016,20.7742
+SP384,1,Tégla utca,,48.0559,20.784
+SP385,2,Tégla utca,,48.0557,20.7844
+SP386,1,Tinódi utca,,48.1106,20.7714
+SP387,2,Tinódi utca,,48.1107,20.7709
+SP388,1,Tiszai pályaudvar,,48.0993,20.8103
+SP389,2,Tiszai pályaudvar,,48.1,20.8106
+SP39,1,Balassa utca,,48.0948,20.8046
+SP391,4,Tiszai pályaudvar,,48.0998,20.8101
+SP392,5,Tiszai pályaudvar,,48.1,20.81
+SP393,6,Tiszai pályaudvar,,48.0999,20.8098
+SP396,1,Aba utca,,48.104,20.7551
+SP397,2,Aba utca,,48.1039,20.7553
+SP398,1,Tokaji Ferenc utca,,48.0965,20.6946
+SP399,1,Turistapark,,48.0701,20.7582
+SP4,2,Kazinczy Ferenc Általános Iskola,,48.086,20.7833
+SP40,2,Balassa utca,,48.095,20.8046
+SP400,2,Turistapark,,48.0706,20.7594
+SP401,1,Avar utca,,48.1019,20.7326
+SP403,4,Újgyőri főtér,,48.1016,20.7299
+SP404,5,Újgyőri főtér,,48.1011,20.73
+SP405,6,Újgyőri főtér,,48.1013,20.7297
+SP406,7,Újgyőri főtér,,48.1008,20.7304
+SP407,8,Újgyőri főtér,,48.1012,20.7299
+SP409,10,Újgyőri főtér,,48.1011,20.7296
+SP41,1,Balaton utca,,48.0903,20.81
+SP410,11,Újgyőri főtér,,48.1007,20.73
+SP411,12,Újgyőri főtér,,48.1012,20.7296
+SP412,1,Újgyőri piac,,48.1011,20.7252
+SP413,2,Újgyőri piac,,48.101,20.7263
+SP414,1,Hejőpark,,48.073,20.7742
+SP415,1,Üveggyár,,48.0973,20.751
+SP416,2,Üveggyár,,48.0973,20.7515
+SP417,1,Vargahegy,,48.0862,20.7392
+SP418,2,Vargahegy,,48.0864,20.7387
+SP42,2,Balaton utca,,48.0902,20.8105
+SP421,3,Vasgyár,,48.0945,20.7287
+SP422,4,Vasgyár,,48.0945,20.7288
+SP423,5,Vasgyár,,48.0951,20.728
+SP424,1,Diósgyőri Kórház,,48.0913,20.7233
+SP425,2,Diósgyőri Kórház,,48.0909,20.7247
+SP426,1,Vasgyári temető,,48.0901,20.7279
+SP427,2,Vasgyári temető,,48.0896,20.7275
+SP428,1,Vasúti felüljáró,,48.0774,20.7834
+SP429,2,Vasúti felüljáró,,48.0781,20.7839
+SP43,1,Barátság tér,,48.1302,20.6752
+SP430,1,Y-híd,,48.0978,20.8027
+SP431,2,Y-híd,,48.0978,20.8029
+SP432,1,Vágóhíd utca,,48.1088,20.8007
+SP433,2,Vágóhíd utca,,48.1093,20.8006
+SP435,1,Vízügyi Igazgatóság (8),,48.1003,20.8277
+SP436,2,Vízügyi Igazgatóság (8),,48.1005,20.8272
+SP437,1,Vízügyi Igazgatóság,,48.0995,20.7965
+SP44,2,Barátság tér,,48.1302,20.6751
+SP440,4,Vízügyi Igazgatóság,,48.0986,20.7976
+SP442,6,Vízügyi Igazgatóság,,48.1003,20.7979
+SP443,1,Vologda városrész,,48.1061,20.7698
+SP444,2,Vologda városrész,,48.1061,20.7713
+SP445,3,Vologda városrész,,48.1065,20.7702
+SP446,1,Volán,,48.1013,20.8149
+SP447,2,Volán,,48.1015,20.8155
+SP448,1,Vörösmarty városrész,,48.1001,20.7912
+SP449,2,Vörösmarty városrész,,48.0997,20.7938
+SP450,3,Vörösmarty városrész,,48.0993,20.7922
+SP451,4,Vörösmarty városrész,,48.0989,20.7925
+SP452,1,Wesselényi utca,,48.1014,20.7571
+SP453,2,Wesselényi utca,,48.1015,20.7586
+SP454,1,Szövő utca,,48.0977,20.7592
+SP455,2,Szövő utca,,48.0975,20.7582
+SP456,1,Keleti iparterület,,48.0991,20.8357
+SP457,2,Keleti iparterület,,48.0993,20.8352
+SP458,1,Zsarnai telep,,48.12,20.7958
+SP459,2,Zsarnai telep,,48.1204,20.7957
+SP461,1,Ómassa,,48.1104,20.5329
+SP462,1,Bányaüzem,,48.1474,20.6861
+SP463,2,Bányaüzem,,48.1471,20.6859
+SP466,1,Malom,,48.1044,20.7989
+SP467,1,Bedegvölgy,,48.1081,20.7658
+SP468,1,Bodótető,,48.107,20.7622
+SP469,1,Dóczy József utca,,48.1069,20.7659
+SP47,1,Batthyány sor,,48.087,20.73
+SP471,1,Tampere városrész,,48.093,20.7788
+SP472,1,Arborétum,,48.0951,20.7794
+SP473,1,Mikes Kelemen utca,,48.0949,20.7816
+SP474,1,Knézich Károly utca,,48.0927,20.7812
+SP475,7,Tiszai pályaudvar,,48.0996,20.8099
+SP476,8,Tiszai pályaudvar,,48.0993,20.8097
+SP477,9,Tiszai pályaudvar,,48.0997,20.81
+SP479,4,Selyemrét,,48.1026,20.8066
+SP48,2,Batthyány sor,,48.0875,20.7306
+SP480,5,Selyemrét,,48.1027,20.807
+SP481,1,Soltész Nagy Kálmán utca,,48.1028,20.7969
+SP482,2,Soltész Nagy Kálmán utca,,48.1027,20.7972
+SP483,1,Szinvapark / Centrum,,48.1029,20.7895
+SP484,2,Szinvapark / Centrum,,48.1031,20.7911
+SP485,2,Villanyrendőr,,48.1025,20.7858
+SP486,3,Villanyrendőr,,48.1025,20.7852
+SP487,1,Városház tér,,48.1033,20.779
+SP488,2,Városház tér,,48.1031,20.7794
+SP489,1,Malomszög u.,,48.1045,20.7698
+SP49,1,Bábonyi-bérc,,48.115,20.7633
+SP490,2,Malomszög u.,,48.1044,20.7702
+SP491,3,Szent Anna tér,,48.1046,20.7631
+SP492,4,Szent Anna tér,,48.1046,20.7635
+SP493,1,Thököly utca,,48.1042,20.7579
+SP494,2,Thököly utca,,48.1042,20.7583
+SP495,1,Balázs Győző tér,,48.1037,20.7522
+SP496,2,Balázs Győző tér,,48.1036,20.7512
+SP497,1,Gyula utca,,48.1029,20.7438
+SP498,2,Gyula utca,,48.103,20.7453
+SP499,1,Károly utca,,48.1023,20.738
+SP50,1,Bánát utca,,48.0931,20.7009
+SP500,2,Károly utca,,48.1022,20.7373
+SP501,13,Újgyőri főtér,,48.1014,20.7297
+SP502,14,Újgyőri főtér,,48.1014,20.7301
+SP503,15,Újgyőri főtér,,48.1011,20.7311
+SP504,3,Újgyőri piac,,48.1011,20.7259
+SP505,4,Újgyőri piac,,48.101,20.7255
+SP506,5,Újgyőri piac,,48.1006,20.7262
+SP507,1,DVTK Stadion,,48.101,20.7194
+SP508,2,DVTK Stadion,,48.1009,20.719
+SP509,3,Bulgárföld városrész,,48.1004,20.7132
+SP51,2,Bánát utca,,48.0928,20.7015
+SP510,4,Bulgárföld városrész,,48.1004,20.7136
+SP511,2,Diósgyőri Gimnázium,,48.1002,20.7085
+SP512,3,Diósgyőri Gimnázium,,48.1001,20.7088
+SP513,1,LÁEV,,48.1,20.7028
+SP514,2,LÁEV,,48.0999,20.7032
+SP515,1,Zenta utca,,48.0997,20.6966
+SP516,2,Zenta utca,,48.0997,20.697
+SP519,1,Diósgyőr városkp.,,48.1018,20.6885
+SP52,1,Hengerész utca,,48.0777,20.7291
+SP520,1,Vasgyári Evangélikus templom,,48.0952,20.7273
+SP521,6,Vasgyár,,48.0953,20.7303
+SP523,3,Tatárdomb,,48.0869,20.7157
+SP524,1,Bogáncs utca,,48.0667,20.823
+SP525,1,Felsőzsolcai elágazás,,48.1059,20.8316
+SP526,2,Felsőzsolcai elágazás,,48.1061,20.8316
+SP527,3,Diósgyőr városközpont,,48.1014,20.687
+SP53,2,Hengerész utca,,48.0779,20.7283
+SP531,6,Avas kilátó,,48.0967,20.771
+SP532,1,Verseny utca,,48.0915,20.7047
+SP533,2,Verseny utca,,48.0911,20.706
+SP536,1,Auchan Dél áruház,,48.0573,20.8026
+SP537,1,Szabadságharc u,,48.089,20.7806
+SP538,2,Szabadságharc u,,48.0885,20.7816
+SP539,1,Pesti út,,48.0558,20.7979
+SP54,1,Eper utca,,48.1011,20.6734
+SP540,2,Hejőpark,,48.0735,20.774
+SP541,3,Kemény Dénes Uszoda,,48.0753,20.7635
+SP542,1,DVTK Stadion VP,,48.101,20.7195
+SP543,2,DVTK Stadion VP,,48.1009,20.7191
+SP544,1,Diósgyőri Gimnázium VP,,48.1002,20.7084
+SP546,1,Zenta utca  VP,,48.0998,20.6967
+SP547,2,Zenta utca  VP,,48.0996,20.697
+SP548,1,LÁEV VP,,48.1001,20.703
+SP549,2,LÁEV VP,,48.0999,20.7031
+SP55,1,Berekkert,,48.0676,20.8298
+SP551,1,Diósgyőri Ipari Park,,48.0942,20.7223
+SP553,2,Diósgyőri Ipari Park,,48.0939,20.7222
+SP554,1,Forrásvölgy utca,,48.1102,20.7783
+SP555,1,Pintes utca,,48.1143,20.774
+SP556,1,Sellő utca,,48.1176,20.7706
+SP557,1,Balázsdiák utca,,48.1131,20.7751
+SP558,1,Árok utca,,48.1101,20.7783
+SP559,1,Miskolci Állatkert,,48.123,20.6559
+SP56,1,Bertalan utca,,48.1009,20.7104
+SP561,3,Centrum,,48.103,20.7891
+SP562,4,Villanyrendőr,,48.1023,20.7855
+SP563,2,Hősök tere,,48.1049,20.7855
+SP564,3,Balassa utca,,48.0946,20.8043
+SP565,1,Iskola tér,,48.0898,20.8028
+SP567,1,Velence utca,,48.0856,20.8087
+SP568,3,Balaton utca,,48.0901,20.8102
+SP569,3,Hősök tere,,48.1049,20.7854
+SP57,2,Bertalan utca,,48.1009,20.7103
+SP570,1,Bornemissza utca,,48.086,20.8049
+SP571,2,Vörösmarty Mihály utca,,48.0997,20.7871
+SP572,3,Sütő János utca,,48.0686,20.7809
+SP576,1,Injekcióüzem,,48.1162,20.6504
+SP577,2,Szondi György utca,,48.105,20.8134
+SP578,3,Szondi György utca,,48.1049,20.8136
+SP58,1,Bollóalja,,48.1274,20.689
+SP580,1,Eperjesi utca,,48.108,20.7986
+SP581,1,Lidl áruház,,48.0996,20.7454
+SP582,1,Keleti kapu,,48.1056,20.8377
+SP583,2,Keleti kapu,,48.1057,20.8371
+SP587,1,Auchan Borsod áruház,,48.1079,20.8373
+SP59,2,Bollóalja,,48.1274,20.6887
+SP6,1,Alföldi utca,,48.0895,20.8136
+SP60,1,Bolyai Farkas utca,,48.0885,20.7241
+SP602,1,Ernye bán utca,,48.101,20.7527
+SP607,2,Ernye bán utca,,48.1009,20.7533
+SP61,2,Bolyai Farkas utca,,48.0883,20.7237
+SP611,1,Bartók Béla utca,,48.0975,20.8705
+SP612,1,Kertekalja utca,,48.1016,20.8677
+SP613,1,Toldi utca,,48.1064,20.8645
+SP614,1,Temető,,48.1098,20.8622
+SP619,3,Bölcs utca,,48.1042,20.6836
+SP62,1,Bulcsú utca,,48.1094,20.7931
+SP620,3,Alsó-Majláth,,48.1056,20.6814
+SP621,4,Felső-Majláth,,48.1089,20.6766
+SP622,4,Alsó-Majláth,,48.1054,20.6817
+SP623,4,Bölcs utca,,48.1039,20.6838
+SP624,2,Diósgyőr városkp.,,48.1016,20.6888
+SP625,4,Kemény Dénes Uszoda,,48.0753,20.7635
+SP626,2,Olajkutató,,48.0783,20.763
+SP628,5,Felső-Majláth,,48.109,20.6759
+SP629,6,Felső-Majláth,,48.1089,20.6763
+SP63,2,Bulcsú utca,,48.1089,20.7933
+SP635,1,Diósgyőri vár,,48.0999,20.6912
+SP636,2,Avar utca,,48.1017,20.7328
+SP637,1,Geró János utca,,48.1023,20.7647
+SP64,1,Bulgárföld városrész,,48.1005,20.7131
+SP65,2,Bulgárföld városrész,,48.1006,20.7149
+SP66,1,Búza tér / Zsolcai kapu,,48.1043,20.7926
+SP67,2,Búza tér / Zsolcai kapu,,48.1042,20.7925
+SP68,1,Búza tér,,48.1049,20.7913
+SP69,2,Búza tér,,48.1047,20.7915
+SP7,1,Alsóhámor,,48.1094,20.6409
+SP70,3,Búza tér,,48.1067,20.7914
+SP71,4,Búza tér,,48.107,20.7926
+SP72,5,Búza tér,,48.1049,20.7915
+SP74,7,Búza tér,,48.105,20.7922
+SP75,8,Búza tér,,48.1046,20.7921
+SP76,9,Búza tér,,48.1049,20.7919
+SP77,10,Búza tér,,48.1048,20.7921
+SP78,1,Bükkszentlászló alsó,,48.0741,20.6759
+SP79,2,Bükkszentlászló alsó,,48.0739,20.6759
+SP8,2,Alsóhámor,,48.1093,20.6405
+SP80,1,Bükkszentlászlói elágazás,,48.0683,20.6784
+SP81,2,Bükkszentlászlói elágazás,,48.0681,20.6785
+SP82,1,Bükkszentlászló,,48.0808,20.6641
+SP83,1,Cementgyár,,48.0676,20.7916
+SP84,2,Cementgyár,,48.0676,20.7918
+SP85,3,Cementgyár,,48.0668,20.7914
+SP86,1,Szentgyörgy út,,48.0745,20.7798
+SP87,2,Szentgyörgy út,,48.0744,20.778
+SP88,3,Szentgyörgy út,,48.0751,20.7784
+SP89,1,Centrum,,48.1036,20.7892
+SP9,1,Alsó-Majláth,,48.1047,20.6826
+SP90,1,Kiss Ernő utca,,48.1002,20.7408
+SP91,2,Kiss Ernő utca,,48.1001,20.7418
+SP92,1,Csanyik-völgy,,48.1142,20.6527
+SP93,2,Csanyik-völgy,,48.1137,20.6522
+SP94,1,Cserepes ház,,48.1338,20.7061
+SP95,2,Cserepes ház,,48.1332,20.7065
+SP96,1,Csermőke,,48.0906,20.7621
+SP97,2,Csermőke,,48.0907,20.7611
+SP98,1,Csermőke-Felső,,48.0894,20.7539
+SP99,2,Csermőke-Felső,,48.0892,20.7535

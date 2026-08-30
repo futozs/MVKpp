@@ -1,0 +1,120 @@
+/* ==========================================================================
+   MVK MobilON+ — Design tokenek  (shadcn/ui konvenció)
+   --------------------------------------------------------------------------
+   Ez az EGYETLEN hely, ahol szín, sugár, árnyék és tipográfia definiálva van.
+   Mindkét app (frontend :5173, hub :5174) innen olvas, és a shadcn/ui
+   komponensek is ezekre a változókra épülnek.
+
+   A téma cseréjéhez elég ezt a fájlt átírni.
+   ========================================================================== */
+
+@layer base {
+  :root {
+    /* ------------------------------------------------------------------
+       shadcn/ui alapváltozók — HSL komponensek, hsl() nélkül.
+       Mély, enyhén zöldre hangolt semleges alap: nem a kékbe hajló
+       slate, ami minden generált sötét felület alapértelmezése.
+       ------------------------------------------------------------------ */
+    --background: 165 18% 4.3%;
+    --foreground: 146 18% 92.4%;
+
+    --card: 160 16% 7.5%;
+    --card-foreground: 146 18% 92.4%;
+
+    --popover: 163 15% 9.2%;
+    --popover-foreground: 146 18% 92.4%;
+
+    /* Elsődleges: élénk jáde-zöld. Nem a Tailwind default green-500
+       (#22c55e); ez egy telítettebb, hidegebb árnyalat sötét
+       szöveggel — 5,8:1 kontraszt a gombon. */
+    --primary: 154 71% 41.6%;
+    --primary-foreground: 155 79% 9.4%;
+
+    --secondary: 160 15% 12%;
+    --secondary-foreground: 147 16% 86.5%;
+
+    --muted: 160 15% 12%;
+    --muted-foreground: 153 9% 61.6%;   /* 7,6:1 az alapon */
+
+    --accent: 158 14% 15.9%;
+    --accent-foreground: 146 18% 92.4%;
+
+    --destructive: 9 86% 58.8%;
+    --destructive-foreground: 10 71% 9.6%;
+
+    --border: 158 14% 15.9%;
+    --input: 160 14% 17.3%;
+    --ring: 153 59% 50.2%;
+
+    /* Kerek, modern forma. A shadcn ebből származtatja az
+       sm/md/lg/xl sugarakat. */
+    --radius: 0.75rem;
+
+    /* ------------------------------------------------------------------
+       Teljes zöld skála — ha egy felületnek árnyalatra van szüksége.
+       ------------------------------------------------------------------ */
+    --sg-50: 150 69% 94.9%;
+    --sg-100: 151 69% 87.5%;
+    --sg-200: 152 68% 75.5%;
+    --sg-300: 153 64% 61.8%;
+    --sg-400: 153 59% 50.2%;
+    --sg-500: 154 71% 41.6%;
+    --sg-600: 155 75% 33.5%;
+    --sg-700: 155 74% 27.1%;
+    --sg-800: 156 69% 21.8%;
+    --sg-900: 158 67% 16.7%;
+    --sg-950: 158 75% 9.4%;
+
+    /* ------------------------------------------------------------------
+       Szemantikus jelzések. Ezeknek pontos jelentésük van:
+       a zöld azt mondja, hogy az adat élő, nem azt, hogy „szép”.
+       ------------------------------------------------------------------ */
+    --live: 153 59% 50.2%;
+    --late: 9 86% 58.8%;      /* lemaradás */
+    --early: 208 83% 64.7%;   /* előresietés */
+    --ontime: 153 59% 50.2%;
+
+    /* ------------------------------------------------------------------
+       Mélység. Valódi, rétegzett árnyékok — a felületek tényleg
+       egymás fölött lebegnek, nem hajszálvonalak választják el őket.
+       ------------------------------------------------------------------ */
+    --shadow-xs: 0 1px 2px 0 hsl(160 40% 2% / 0.5);
+    --shadow-sm: 0 1px 3px 0 hsl(160 40% 2% / 0.5), 0 1px 2px -1px hsl(160 40% 2% / 0.5);
+    --shadow-md: 0 4px 12px -2px hsl(160 40% 2% / 0.55), 0 2px 4px -2px hsl(160 40% 2% / 0.4);
+    --shadow-lg: 0 12px 28px -6px hsl(160 40% 2% / 0.65), 0 4px 10px -4px hsl(160 40% 2% / 0.45);
+    --shadow-xl: 0 24px 56px -12px hsl(160 40% 2% / 0.75), 0 8px 20px -8px hsl(160 40% 2% / 0.5);
+    /* Zöld izzás — kizárólag az elsődleges akción és az élő jelölőn. */
+    --shadow-glow: 0 6px 20px -6px hsl(154 71% 41.6% / 0.55);
+
+    /* ------------------------------------------------------------------
+       Tipográfia.
+       Plus Jakarta Sans: geometrikus-humanista, kerek formákkal — a
+       modern, lekerekített felülethez illik, és nem az Inter, ami minden
+       AI-eszköz alapértelmezése. Rejected: Inter (T1), Space Grotesk /
+       Geist (a „második körös” alapértelmezések).
+       JetBrains Mono: minden numerikus kiírás — visszaszámláló, busz-ID,
+       sebesség, késés. Tabuláris számokkal, hogy ne ugráljanak.
+       ------------------------------------------------------------------ */
+    --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+    /* Mozgás */
+    --dur-fast: 150ms;
+    --dur-normal: 240ms;
+    --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+
+    /* Rétegsorrend */
+    --z-map: 0;
+    --z-overlay: 400;
+    --z-bar: 600;
+    --z-drawer: 1000;
+    --z-dialog: 1200;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :root {
+      --dur-fast: 1ms;
+      --dur-normal: 1ms;
+    }
+  }
+}

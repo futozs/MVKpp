@@ -1,0 +1,15 @@
+{
+  "name": "mvk-mobilon-saas",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "MVK MobilON+ valós idejű tranzit SaaS rendszer, multi-megálló figyelő, backend gateway és folyamatkezelő.",
+  "scripts": {
+    "start": "node manager.mjs",
+    "dev": "node manager.mjs",
+    "build:frontend": "cd frontend && npm run build",
+    "build:hub": "cd hub && npm run build",
+    "build:backend": "cd backend && npm run build",
+    "build": "npm run build:frontend && npm run build:hub && npm run build:backend"
+  }
+}
