@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Activity,
   Bus,
@@ -47,11 +47,21 @@ export function StatsView({
   onFocusVehicle?: (vehicleId: string) => void;
 }) {
   const [panel, setPanel] = useState<PanelId>("overview");
+  const navRef = useRef<HTMLElement>(null);
+
+  // A fülsor telefonon oldalra görgethető — a kiválasztott fül különben
+  // kicsúszhat a képből, és nem látszik, hol tartunk.
+  useEffect(() => {
+    navRef.current
+      ?.querySelector('[aria-current="page"]')
+      ?.scrollIntoView({ inline: "center", block: "nearest" });
+  }, [panel]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col">
       {}
       <nav
+        ref={navRef}
         aria-label="Statisztikai nézetek"
         className={cn(
           "shrink-0 overflow-x-auto border-b border-border bg-background/85 px-3 backdrop-blur-sm sm:px-4",

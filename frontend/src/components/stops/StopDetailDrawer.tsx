@@ -103,7 +103,7 @@ export function StopDetailDrawer({
             {stop.name}
           </h3>
           <p className="mt-0.5 flex items-center gap-1.5 font-mono text-[11px] tabular-nums text-muted-foreground">
-            <span>{stop.code || stop.id}</span>
+            <span>{stop.id}</span>
             <span aria-hidden>·</span>
             {data?.rtError ? (
               <span>menetrendi</span>

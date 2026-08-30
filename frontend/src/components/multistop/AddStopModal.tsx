@@ -121,7 +121,7 @@ export function AddStopModal({
                           {stop.name}
                         </span>
                         <span className="block font-mono text-[11px] tabular-nums text-muted-foreground">
-                          {stop.code || stop.id}
+                          {stop.id}
                         </span>
                       </span>
 

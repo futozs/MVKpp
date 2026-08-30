@@ -85,7 +85,7 @@ export const StopSearchList: React.FC<StopSearchListProps> = ({
                       {stop.name}
                     </div>
                     <div className="text-[11px] text-[#94a3b8] font-mono">
-                      kód: {stop.code || stop.id}
+                      kód: {stop.id}
                     </div>
                   </div>
                 </div>

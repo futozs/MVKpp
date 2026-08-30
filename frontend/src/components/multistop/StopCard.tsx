@@ -101,7 +101,7 @@ export function StopCard({
             {stop.name}
           </h3>
           <p className="mt-0.5 font-mono text-[11px] tabular-nums text-muted-foreground">
-            {stop.code || stop.id}
+            {stop.id}
             {lastFetch
               ? ` · ${lastFetch.toLocaleTimeString("hu-HU", {
                   minute: "2-digit",

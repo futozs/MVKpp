@@ -430,7 +430,13 @@ export function TransitMap({
     [geo.position, stops],
   );
 
+  // A helymeghatározás magától indul a betöltéskor; ha a felhasználó
+  // letiltotta, ne köszönjön vissza minden megnyitáskor egy hibasáv. Csak
+  // akkor mondjuk el, ha ő maga kérte a helyzetét.
+  const [geoAsked, setGeoAsked] = useState(false);
+
   const handleLocate = () => {
+    setGeoAsked(true);
     if (!geo.position) {
       geo.start();
       return;
@@ -535,7 +541,7 @@ export function TransitMap({
       // koppintás azonnal ki is vált — ott a részletlap a válasz.
       if (!IS_TOUCH) {
         marker.bindTooltip(
-          `<strong>${s.name}</strong><br><span style="opacity:.65">${s.code || s.id}</span>`,
+          `<strong>${s.name}</strong><br><span style="opacity:.65">${s.id}</span>`,
           { direction: "top", offset: [0, -4] },
         );
       }
@@ -780,7 +786,6 @@ export function TransitMap({
     if (!code) return null;
     const lower = code.toLowerCase();
     return (
-      stops.find((s) => (s.code || "").toLowerCase() === lower) ??
       stops.find((s) => s.id.toLowerCase() === `sp${lower}`) ??
       stops.find((s) => s.id.toLowerCase() === lower) ??
       null
@@ -1349,7 +1354,7 @@ export function TransitMap({
                           {s.name}
                         </span>
                         <span className="block font-mono text-[11px] tabular-nums text-muted-foreground">
-                          {s.code || s.id}
+                          {s.id}
                         </span>
                       </button>
 
@@ -1469,10 +1474,7 @@ export function TransitMap({
                   {codeError}
                 </p>
               ) : (
-                <p className="mt-2 text-[11px] text-muted-foreground">
-                  A megállótáblán lévő szám — a térkép ráugrik, és megnyílik az
-                  adatlapja.
-                </p>
+                
               )}
             </form>
           </div>
@@ -1480,7 +1482,7 @@ export function TransitMap({
 
         {}
         <div className="absolute bottom-[92px] right-3 z-overlay flex flex-col items-end gap-2">
-          {geo.error ? (
+          {geo.error && (geoAsked || geo.status !== "denied") ? (
             <p
               role="status"
               className="max-w-[220px] rounded-lg border border-border bg-card/95 px-2.5 py-1.5 text-[11px] text-muted-foreground shadow-lg backdrop-blur-sm"
@@ -1517,7 +1519,7 @@ export function TransitMap({
         </div>
 
         {focusTripId ? (
-          <div className="absolute left-3 top-3 z-overlay md:left-4 md:top-4">
+          <div className="absolute left-3 top-[3.4rem] z-overlay md:left-4 md:top-4">
             <Button onClick={onExitFocus} className="shadow-xl">
               Menetkövetés vége
             </Button>
@@ -1525,7 +1527,7 @@ export function TransitMap({
         ) : null}
 
         {filterActive && !focusTripId ? (
-          <div className="absolute right-3 top-3 z-overlay flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-xl border border-border bg-card/95 px-3 py-2 shadow-xl backdrop-blur-sm sm:max-w-sm sm:gap-3 sm:px-3.5 sm:py-2.5 md:right-4 md:top-4">
+          <div className="absolute right-3 top-[3.4rem] z-overlay flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-xl border border-border bg-card/95 px-3 py-2 shadow-xl backdrop-blur-sm sm:max-w-sm sm:gap-3 sm:px-3.5 sm:py-2.5 md:right-4 md:top-4">
             <Crosshair aria-hidden className="h-4 w-4 shrink-0 text-primary" />
             <span className="min-w-0 truncate text-xs font-medium">
               {filterSummary}

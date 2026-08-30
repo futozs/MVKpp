@@ -73,7 +73,7 @@ function StopSelect({
           <span className="min-w-0">
             <span className="block truncate">{selected.name}</span>
             <span className="block font-mono text-[11px] font-normal tabular-nums text-muted-foreground">
-              {selected.code || selected.id}
+              {selected.id}
               {twinCount > 1 ? ` · ${twinCount} ilyen nevű megálló van` : ""}
             </span>
           </span>
@@ -103,7 +103,7 @@ function StopSelect({
                   >
                     <span className="min-w-0 truncate">{s.name}</span>
                     <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
-                      {s.code || s.id}
+                      {s.id}
                     </span>
                   </button>
                 </li>
@@ -218,14 +218,10 @@ export function TravelTimePanel({ stops }: { stops: Stop[] }) {
           {}
           <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
             <strong className="text-foreground">{fromStop?.name}</strong>
-            <span className="font-mono tabular-nums">
-              ({fromStop?.code || fromStop?.id})
-            </span>
+            <span className="font-mono tabular-nums">({fromStop?.id})</span>
             <ArrowDown aria-hidden className="h-3 w-3 rotate-[-90deg]" />
             <strong className="text-foreground">{toStop?.name}</strong>
-            <span className="font-mono tabular-nums">
-              ({toStop?.code || toStop?.id})
-            </span>
+            <span className="font-mono tabular-nums">({toStop?.id})</span>
           </p>
 
           <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
