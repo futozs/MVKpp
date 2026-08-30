@@ -7,6 +7,10 @@ import { fileURLToPath, URL } from 'node:url'
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
+  server: {
+    allowedHosts: ['localhost', '127.0.0.1', 'mvk.futozs.hu'],
+    ...serverConfig(5173),
+  },
   resolve: {
     // A megosztott primitívek az app gyökerén kívül élnek; enélkül
     // két React-példány kerülhetne a bundle-be, és a hookok elszállnának.
@@ -15,5 +19,4 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
-  server: serverConfig(5173),
 })
