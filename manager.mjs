@@ -13,7 +13,7 @@ import { spawn, execSync } from 'node:child_process'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { existsSync, mkdirSync, appendFileSync, readFileSync, writeFileSync, statSync, rmSync } from 'node:fs'
-import { createServer } from 'node:http'
+import { createServer, request as httpRequest } from 'node:http'
 import { createReadStream } from 'node:fs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -24,6 +24,11 @@ const WORKER_SCRIPT = join(BACKEND_DIR, 'tools', 'token_worker.sh')
 const LOGS_DIR = join(__dirname, 'logs')
 const STATE_DIR = join(BACKEND_DIR, 'state')
 const PID_FILE = join(STATE_DIR, 'manager.pid')
+const GATEWAY_PORT = 8088
+const GATEWAY_PATHS = [
+  '/api', '/live', '/gtfs', '/stats', '/system',
+  '/_health', '/_jwt', '/_export', '/_ingest', '/_renew', '/weather',
+]
 
 // Check if --prod flag is passed
 const PROD_MODE = process.argv.includes('--prod')
@@ -160,6 +165,31 @@ processes.push(backendEntry)
 function startStaticServer(distDir, port, name) {
   const server = createServer((req, res) => {
     const urlPath = req.url.split('?')[0] // remove query string
+
+    // A Cloudflare Tunnel normally points to the frontend port. Forward API
+    // requests here so the public HTTPS URL still reaches the gateway.
+    if (PROD_MODE && GATEWAY_PATHS.some((path) => urlPath === path || urlPath.startsWith(`${path}/`))) {
+      const gatewayReq = httpRequest({
+        hostname: '127.0.0.1',
+        port: GATEWAY_PORT,
+        path: req.url,
+        method: req.method,
+        headers: { ...req.headers, host: `127.0.0.1:${GATEWAY_PORT}` },
+      }, (gatewayRes) => {
+        res.writeHead(gatewayRes.statusCode || 502, gatewayRes.headers)
+        gatewayRes.pipe(res)
+      })
+
+      gatewayReq.on('error', (error) => {
+        if (!res.headersSent) {
+          res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8' })
+          res.end(JSON.stringify({ error: `Gateway unavailable: ${error.message}` }))
+        }
+      })
+      req.pipe(gatewayReq)
+      return
+    }
+
     let filePath = join(distDir, urlPath === '/' ? 'index.html' : urlPath)
     
     // Security: no path traversal
