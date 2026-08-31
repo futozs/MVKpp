@@ -2,7 +2,7 @@ import { query } from "../db/pool.ts";
 import { pushConfigured, sendPush } from "./push.ts";
 import { withHungarianSuffix } from "./huSuffix.ts";
 
-const CHECK_INTERVAL_MS = Number(process.env.PUSH_CHECK_INTERVAL_MS ?? 20_000);
+const CHECK_INTERVAL_MS = Number(process.env.PUSH_CHECK_INTERVAL_MS ?? 5_000);
 
 type MinimalArrival = { route: string; etaMin: number; tripId: string };
 type ArrivalsForStop = (
@@ -38,9 +38,6 @@ async function checkOnce(arrivalsForStop: ArrivalsForStop): Promise<void> {
        JOIN push_subscription s ON s.sub_id = w.sub_id`,
   );
   if (!watches.length) return;
-  console.log(
-    `[push] ellenőrzés: ${watches.length} figyelés, ${new Set(watches.map((w) => w.stop_id)).size} megálló`,
-  );
 
   const byStop = new Map<string, WatchRow[]>();
   for (const w of watches) {

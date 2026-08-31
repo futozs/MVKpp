@@ -14,6 +14,7 @@ import {
   RankBars,
   StatTile,
 } from "@/components/charts/Charts";
+import { withHungarianSuffix } from "@/lib/utils";
 import { QueryBoundary, SearchablePicker } from "./PanelState";
 import { useStatsQuery } from "./useStatsQuery";
 
@@ -42,7 +43,10 @@ function VehiclePredictionCard({ vehicleId }: { vehicleId: string }) {
                 {c.routeShort}
               </span>
               <div className="min-w-0 flex-1">
-                <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                <p className="text-xs font-semibold">
+                  {withHungarianSuffix(c.routeShort)} busz
+                </p>
+                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
                   <div
                     className="h-full rounded-full bg-primary"
                     style={{ width: `${c.probabilityPct}%` }}

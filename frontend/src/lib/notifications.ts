@@ -1,4 +1,5 @@
 import type { ArrivalItem } from "@/types";
+import { withHungarianSuffix } from "@/lib/utils";
 
 const STORAGE_KEY = "mvk_notify_watches";
 export const DEFAULT_THRESHOLD_MIN = 5;
@@ -72,51 +73,6 @@ function updateNotifiedTripIds(stopId: string, tripIds: string[]): void {
   writeAll(all);
 }
 
-/** A tízesek saját illeszkedése — pl. "húszas", nem "húszes". */
-const TENS_SUFFIX: Record<number, string> = {
-  1: "es",
-  2: "as",
-  3: "as",
-  4: "es",
-  5: "es",
-  6: "as",
-  7: "es",
-  8: "as",
-  9: "es",
-};
-
-/** Az egyesek illeszkedése — pl. "ötös", "hatos", "hármas". */
-const ONES_SUFFIX: Record<number, string> = {
-  1: "es",
-  2: "es",
-  3: "as",
-  4: "es",
-  5: "ös",
-  6: "os",
-  7: "es",
-  8: "as",
-  9: "es",
-};
-
-/**
- * Magyar illeszkedő végződés hozzáfűzése a járatszámhoz (pl. "14" → "14-es",
- * "34" → "34-es"), hogy az értesítés úgy olvasson, ahogy valaki tényleg
- * mondaná ("a 14-es busz"), ne "14 busz". Kerek tízeseknél (10, 20, …, 90) a
- * tízes szó saját illeszkedése számít, nem az utolsó (0) számjegy; nem
- * tisztán numerikus járatjelnél (pl. betűjel) változatlanul hagyjuk.
- */
-export function withHungarianSuffix(routeShort: string): string {
-  const trimmed = routeShort.trim();
-  const n = Number(trimmed);
-  if (!Number.isInteger(n) || String(n) !== trimmed) return routeShort;
-  if (n === 100) return `${routeShort}-as`;
-  const ones = n % 10;
-  if (ones === 0) {
-    const tens = Math.floor(n / 10) % 10;
-    return `${routeShort}-${TENS_SUFFIX[tens] ?? "es"}`;
-  }
-  return `${routeShort}-${ONES_SUFFIX[ones] ?? "es"}`;
-}
 
 /**
  * A StopCard minden sikeres lekérés után meghívja. Ha az adott megállóra van
