@@ -23,6 +23,8 @@ import { buildRouteIndex, buildTable, buildDaySchedule, secToHm, feedDays, type 
 import { saveDaySchedule, loadDaySchedule, archiveRange, saveSightings, dayRuns, storedFeedVersions } from './lib/archive.ts'
 import { stats } from './api/stats.ts'
 import { ops, adminToken } from './api/ops.ts'
+import { push } from './api/push.ts'
+import { startPushLoop } from './lib/pushLoop.ts'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(HERE, '..')
@@ -354,6 +356,10 @@ app.route('/stats', stats)
 
 // Uzemeltetes: ujratelepites es naplok. A rombolo muveletek admin tokent kernek.
 app.route('/system', ops)
+
+// Web Push feliratkozasok es figyelesek. VAPID nelkul 503-at ad, a kliens
+// ilyenkor a helyi (nyitott lapos) ertesitesre esik vissza.
+app.route('/push', push)
 
 // A Hub kiszolgalasa a gateway-rol, /hub alatt.
 //
@@ -1188,6 +1194,7 @@ async function refreshGtfs() {
 loadGtfs()
 refreshGtfs()
 setInterval(() => refreshGtfs(), 6 * 3600 * 1000)
+startPushLoop(arrivalsForStop)
 
 /**
  * A valós idejű feedeket háttérben tartjuk melegen, hogy a kliens-kérések

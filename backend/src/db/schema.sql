@@ -395,6 +395,40 @@ CREATE TABLE IF NOT EXISTS prediction_log (
   KEY ix_open (actual_s, target_ts)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Böngésző push-feliratkozások (Web Push API). Egy eszköz/böngésző egy
+-- sor — ehhez tartozik 0..N figyelt megálló a push_watch táblában. Lezárt
+-- telefonon/bezárt lapnál is ide jut el az értesítés, mert az OS a saját
+-- push-szolgáltatásán (FCM/APNs/stb.) ébreszti fel a service workert.
+CREATE TABLE IF NOT EXISTS push_subscription (
+  sub_id     INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  endpoint   VARCHAR(512) NOT NULL,
+  p256dh     VARCHAR(255) NOT NULL,
+  auth       VARCHAR(255) NOT NULL,
+  created_at INT UNSIGNED NOT NULL,
+  PRIMARY KEY (sub_id),
+  UNIQUE KEY ux_endpoint (endpoint(255))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Egy figyelés: melyik feliratkozás, melyik megállóra, milyen küszöbbel és
+-- (opcionálisan) mely járatszámokra szűkítve. A last_notified a legutóbb
+-- riasztott menetek tripId-jeit tárolja vesszővel elválasztva — ez védi az
+-- ismétlődő riasztást ugyanarra a menetre, amíg az be nem érkezik.
+CREATE TABLE IF NOT EXISTS push_watch (
+  watch_id      INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  sub_id        INT UNSIGNED NOT NULL,
+  stop_id       VARCHAR(32)  NOT NULL,
+  stop_name     VARCHAR(128) NOT NULL,
+  threshold_min TINYINT UNSIGNED NOT NULL DEFAULT 5,
+  route_shorts  VARCHAR(255) NULL,
+  last_notified VARCHAR(512) NULL,
+  updated_at    INT UNSIGNED NOT NULL,
+  PRIMARY KEY (watch_id),
+  UNIQUE KEY ux_sub_stop (sub_id, stop_id),
+  KEY ix_stop (stop_id),
+  CONSTRAINT fk_push_watch_sub FOREIGN KEY (sub_id)
+    REFERENCES push_subscription(sub_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- ═══════════════════════════════════════════════════════════════════════
 -- ÜZEMZAVAROK ÉS FLOTTA-RENDELKEZÉSRE ÁLLÁS
 --

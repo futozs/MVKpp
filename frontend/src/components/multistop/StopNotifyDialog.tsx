@@ -20,6 +20,7 @@ import {
   requestNotificationPermission,
   setWatch,
 } from "@/lib/notifications";
+import { registerPushWatch, unregisterPushWatch } from "@/lib/push";
 
 type StopNotifyDialogProps = {
   open: boolean;
@@ -65,17 +66,22 @@ export function StopNotifyDialog({
       setPermissionDenied(true);
       return;
     }
-    setWatch(stopId, {
-      stopName,
-      thresholdMin: Math.max(1, Math.min(60, threshold || DEFAULT_THRESHOLD_MIN)),
-      routeShorts: routeShorts.length ? routeShorts : undefined,
-    });
+    const thresholdMin = Math.max(1, Math.min(60, threshold || DEFAULT_THRESHOLD_MIN));
+    const finalRouteShorts = routeShorts.length ? routeShorts : undefined;
+    setWatch(stopId, { stopName, thresholdMin, routeShorts: finalRouteShorts });
+    // Ez teszi lehetővé, hogy lezárt telefonon/bezárt lapnál is jöjjön
+    // értesítés — a szerver saját maga figyeli az érkezéseket és push-t
+    // küld. Ha bármi okból nem sikerül (nincs HTTPS, iOS-en nincs
+    // kezdőképernyőre telepítve stb.), a fenti helyi figyelés akkor is
+    // működik, amíg a lap nyitva van.
+    registerPushWatch({ stopId, stopName, thresholdMin, routeShorts: finalRouteShorts });
     onChanged?.(true);
     onOpenChange(false);
   };
 
   const handleRemove = () => {
     setWatch(stopId, null);
+    unregisterPushWatch(stopId);
     onChanged?.(false);
     onOpenChange(false);
   };

@@ -68,3 +68,36 @@ self.addEventListener("fetch", (event) => {
     }),
   );
 });
+
+// Web Push: a szerver a felhasználó telefonjának lezárt állapotában is ide
+// tud üzenetet küldeni (az OS a saját push-szolgáltatásán ébreszti fel ezt a
+// workert) — ez a különbség a lapon belüli Notification API-hoz képest,
+// ami csak addig működik, amíg az oldal ténylegesen fut.
+self.addEventListener("push", (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = {};
+  }
+  const title = data.title || "MVK értesítés";
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body: data.body || "",
+      icon: "/icon-192.png",
+      tag: data.tag,
+    }),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: "window" }).then((clientList) => {
+      for (const client of clientList) {
+        if ("focus" in client) return client.focus();
+      }
+      if (self.clients.openWindow) return self.clients.openWindow("/#multistop");
+    }),
+  );
+});
