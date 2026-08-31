@@ -1,13 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  Bell,
-  BellRing,
-  ChevronLeft,
-  ChevronRight,
-  Crosshair,
-  RefreshCw,
-  Trash2,
-} from "lucide-react";
+import { Bell, BellRing, ChevronLeft, ChevronRight, Crosshair, Trash2 } from "lucide-react";
 import type { ArrivalItem, Stop, StopArrivalsResponse } from "@/types";
 import { api } from "@/services/api";
 import { Button } from "@/components/ui/button";
@@ -58,9 +50,7 @@ export function StopCard({
   isNearest,
 }: StopCardProps) {
   const [data, setData] = useState<StopArrivalsResponse | null>(null);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [lastFetch, setLastFetch] = useState<Date | null>(null);
   const [notifyOpen, setNotifyOpen] = useState(false);
   const [isWatching, setIsWatching] = useState(() => Boolean(getWatch(stop.id)));
   const mounted = useRef(true);
@@ -72,25 +62,21 @@ export function StopCard({
     };
   }, []);
 
-  const load = async (silent: boolean) => {
-    if (!silent) setLoading(true);
+  const load = async () => {
     try {
       const res = await api.getArrivals(stop.id, 8);
       if (!mounted.current) return;
       setData(res);
       setError(null);
-      setLastFetch(new Date());
       checkAndNotify(stop.id, stop.name, res.arrivals);
     } catch (err) {
       if (mounted.current) setError((err as Error).message);
-    } finally {
-      if (mounted.current && !silent) setLoading(false);
     }
   };
 
   useEffect(() => {
-    load(false);
-    const timer = setInterval(() => load(true), POLL_MS);
+    load();
+    const timer = setInterval(load, POLL_MS);
     return () => clearInterval(timer);
   }, [stop.id]);
 
@@ -102,7 +88,7 @@ export function StopCard({
     <Card
       className={cn(
         "flex min-w-0 flex-col overflow-hidden shadow-lg",
-        isNearest && "ring-1 ring-primary/50",
+        isNearest && "border-2 border-primary",
         className,
       )}
     >
@@ -116,23 +102,12 @@ export function StopCard({
             {stop.name}
           </h3>
           <p className="mt-0.5 flex items-center gap-1.5 font-mono text-[11px] tabular-nums text-muted-foreground">
-            {isNearest ? (
-              <span className="rounded bg-primary/15 px-1.5 font-sans font-semibold text-primary">
-                legközelebb
-              </span>
-            ) : null}
             {distanceKm != null ? (
               <span className="font-semibold text-foreground">
                 {formatDistance(distanceKm)}
               </span>
             ) : null}
             {stop.id}
-            {lastFetch
-              ? ` · ${lastFetch.toLocaleTimeString("hu-HU", {
-                  minute: "2-digit",
-                  second: "2-digit",
-                })}`
-              : ""}
           </p>
         </div>
 
@@ -162,24 +137,6 @@ export function StopCard({
               </Button>
             </>
           ) : null}
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => load(false)}
-                disabled={loading}
-                aria-label={`${stop.name} indulásainak újralekérése`}
-              >
-                <RefreshCw
-                  className={cn(loading && "animate-spin text-primary")}
-                />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Indulások újralekérése</TooltipContent>
-          </Tooltip>
 
           <Tooltip>
             <TooltipTrigger asChild>
