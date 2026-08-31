@@ -1,12 +1,41 @@
 import { Hono } from "hono";
 import { query, isReady } from "../db/pool.ts";
-import { pushConfigured, vapidPublicKey } from "../lib/push.ts";
+import { pushConfigured, sendPush, vapidPublicKey } from "../lib/push.ts";
 
 export const push = new Hono();
 
 push.get("/vapid-public-key", (c) => {
   if (!pushConfigured) return c.json({ publicKey: null });
   return c.json({ publicKey: vapidPublicKey });
+});
+
+// Azonnali teszt-push, a küszöb/időzítés-logika megkerülésével — erre való,
+// hogy a "Teszt küldése" gombbal egyből ki lehessen deríteni, hogy a
+// feliratkozás/kézbesítés lánc egyáltalán működik-e, anélkül hogy valós
+// buszra kellene várni.
+push.post("/test", async (c) => {
+  if (!pushConfigured) {
+    return c.json({ error: "A push nincs beállítva a szerveren" }, 503);
+  }
+  const body = await c
+    .req.json<{ subscription?: { endpoint?: string; keys?: { p256dh?: string; auth?: string } } }>()
+    .catch(() => null);
+  const endpoint = body?.subscription?.endpoint;
+  const p256dh = body?.subscription?.keys?.p256dh;
+  const auth = body?.subscription?.keys?.auth;
+  if (!endpoint || !p256dh || !auth) {
+    return c.json({ error: "Hiányzó feliratkozás-adat" }, 400);
+  }
+  console.log(`[push] TESZT küldés kérve — endpoint=...${endpoint.slice(-16)}`);
+  const result = await sendPush(
+    { endpoint, keys: { p256dh, auth } },
+    {
+      title: "Teszt üzenet",
+      body: "Ha ezt látod, a push-értesítés működik! 🎉",
+      tag: "mvk-test",
+    },
+  );
+  return c.json({ result });
 });
 
 push.use("*", async (c, next) => {

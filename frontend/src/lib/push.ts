@@ -5,6 +5,8 @@ if (!API_BASE && typeof window !== "undefined" && import.meta.env.PROD) {
     protocol === "https:" ? `https://${hostname}` : `http://${hostname}:8088`;
 }
 
+const log = (...args: unknown[]) => console.log("[push]", ...args);
+
 export function pushSupported(): boolean {
   return (
     typeof window !== "undefined" &&
@@ -25,29 +27,56 @@ async function getSubscription(): Promise<PushSubscription | null> {
   try {
     const reg = await navigator.serviceWorker.ready;
     return await reg.pushManager.getSubscription();
-  } catch {
+  } catch (e) {
+    log("service worker nem áll készen:", (e as Error).message);
     return null;
   }
 }
 
-async function ensureSubscription(): Promise<PushSubscription | null> {
+export type PushDiagnostic = { ok: boolean; reason?: string };
+
+/**
+ * Minden lépést naplóz, hogy telefonon (ahol nincs kényelmes devtools) is
+ * kideríthető legyen a böngésző konzoljából, pontosan hol akad el a lánc.
+ */
+async function ensureSubscription(): Promise<
+  { sub: PushSubscription } | { sub: null; reason: string }
+> {
+  if (!pushSupported()) {
+    log("ez a böngésző NEM támogatja a Push API-t (nincs serviceWorker vagy PushManager)");
+    return { sub: null, reason: "A böngésző nem támogatja a push-értesítést." };
+  }
+
   const existing = await getSubscription();
-  if (existing) return existing;
-  if (!pushSupported()) return null;
+  if (existing) {
+    log("már van érvényes feliratkozás:", existing.endpoint.slice(-16));
+    return { sub: existing };
+  }
 
   try {
     const res = await fetch(`${API_BASE}/push/vapid-public-key`);
-    if (!res.ok) return null;
+    if (!res.ok) {
+      log(`VAPID kulcs lekérése sikertelen: HTTP ${res.status} (${API_BASE}/push/vapid-public-key)`);
+      return { sub: null, reason: `Nem sikerült elérni a szervert (${API_BASE}).` };
+    }
     const { publicKey } = (await res.json()) as { publicKey: string | null };
-    if (!publicKey) return null; // a szerveren nincs beállítva push
+    if (!publicKey) {
+      log("a szerveren nincs beállítva VAPID kulcs (push kikapcsolva a backenden)");
+      return { sub: null, reason: "A szerveren nincs beállítva a push (VAPID hiányzik)." };
+    }
 
+    log("feliratkozás indul…");
     const reg = await navigator.serviceWorker.ready;
-    return await reg.pushManager.subscribe({
+    const sub = await reg.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: urlBase64ToUint8Array(publicKey) as BufferSource,
     });
-  } catch {
-    return null;
+    log("feliratkozás sikeres:", sub.endpoint.slice(-16));
+    return { sub };
+  } catch (e) {
+    const message = (e as Error).message;
+    log("feliratkozás sikertelen:", message);
+    return { sub: null, reason: `A feliratkozás elutasítva: ${message}` };
   }
 }
 
@@ -62,21 +91,32 @@ export type PushWatchConfig = {
  * Feliratkozik (ha még nincs), és regisztrálja a figyelést a szerveren, hogy
  * a phone lezárt/az app bezárt állapotában is jöhessen push-értesítés. Ha
  * bármi hiányzik (nincs HTTPS, iOS-en nincs kezdőképernyőre telepítve, a
- * szerveren nincs VAPID beállítva), csendben nem csinál semmit — a lapon
- * belüli (nyitott lapos) Notification API akkor is működik tovább.
+ * szerveren nincs VAPID beállítva), a helyi (nyitott lapos) Notification API
+ * akkor is működik tovább — a hiba oka mindig a konzolba íródik.
  */
-export async function registerPushWatch(config: PushWatchConfig): Promise<boolean> {
-  const sub = await ensureSubscription();
-  if (!sub) return false;
+export async function registerPushWatch(
+  config: PushWatchConfig,
+): Promise<PushDiagnostic> {
+  const result = await ensureSubscription();
+  if (!result.sub) return { ok: false, reason: result.reason };
+
   try {
     const res = await fetch(`${API_BASE}/push/watch`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ subscription: sub.toJSON(), ...config }),
+      body: JSON.stringify({ subscription: result.sub.toJSON(), ...config }),
     });
-    return res.ok;
-  } catch {
-    return false;
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      log(`figyelés mentése sikertelen: HTTP ${res.status} — ${text}`);
+      return { ok: false, reason: `A szerver elutasította a mentést (${res.status}).` };
+    }
+    log("figyelés mentve a szerveren:", config.stopId);
+    return { ok: true };
+  } catch (e) {
+    const message = (e as Error).message;
+    log("figyelés mentése sikertelen:", message);
+    return { ok: false, reason: `Nem sikerült elérni a szervert: ${message}` };
   }
 }
 
@@ -91,5 +131,36 @@ export async function unregisterPushWatch(stopId: string): Promise<void> {
     });
   } catch {
     // A helyi figyelés törlése enélkül is megtörténik — ez csak a szerver oldali rész.
+  }
+}
+
+/**
+ * Azonnali teszt-push, a küszöb/időzítés-logika megkerülésével — így nem
+ * kell valós buszra várni ahhoz, hogy kiderüljön, működik-e a teljes lánc.
+ */
+export async function sendTestPush(): Promise<PushDiagnostic> {
+  const result = await ensureSubscription();
+  if (!result.sub) return { ok: false, reason: result.reason };
+  try {
+    const res = await fetch(`${API_BASE}/push/test`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subscription: result.sub.toJSON() }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      log(`teszt küldés sikertelen: HTTP ${res.status} — ${text}`);
+      return { ok: false, reason: `A szerver elutasította (${res.status}).` };
+    }
+    const data = (await res.json()) as { result?: string };
+    log("teszt küldés eredménye:", data.result);
+    if (data.result !== "ok") {
+      return { ok: false, reason: `A szerver válasza: ${data.result}` };
+    }
+    return { ok: true };
+  } catch (e) {
+    const message = (e as Error).message;
+    log("teszt küldés sikertelen:", message);
+    return { ok: false, reason: `Nem sikerült elérni a szervert: ${message}` };
   }
 }

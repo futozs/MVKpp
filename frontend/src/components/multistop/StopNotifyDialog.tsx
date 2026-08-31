@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BellOff } from "lucide-react";
+import { BellOff, CheckCircle2, Loader2, XCircle } from "lucide-react";
 import type { ArrivalItem } from "@/types";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,7 +20,7 @@ import {
   requestNotificationPermission,
   setWatch,
 } from "@/lib/notifications";
-import { registerPushWatch, unregisterPushWatch } from "@/lib/push";
+import { registerPushWatch, sendTestPush, unregisterPushWatch } from "@/lib/push";
 
 type StopNotifyDialogProps = {
   open: boolean;
@@ -30,6 +30,29 @@ type StopNotifyDialogProps = {
   arrivals: ArrivalItem[];
   onChanged?: (active: boolean) => void;
 };
+
+type Status = { state: "idle" | "checking" | "ok" | "fail"; reason?: string };
+
+function StatusLine({ status, okLabel }: { status: Status; okLabel: string }) {
+  if (status.state === "idle") return null;
+  if (status.state === "checking")
+    return (
+      <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Ellenőrzés…
+      </p>
+    );
+  if (status.state === "ok")
+    return (
+      <p className="flex items-center gap-1.5 text-[11px] text-ontime">
+        <CheckCircle2 className="h-3.5 w-3.5" /> {okLabel}
+      </p>
+    );
+  return (
+    <p className="flex items-start gap-1.5 text-[11px] text-destructive">
+      <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {status.reason}
+    </p>
+  );
+}
 
 export function StopNotifyDialog({
   open,
@@ -43,6 +66,8 @@ export function StopNotifyDialog({
   const [routeShorts, setRouteShorts] = useState<string[]>([]);
   const [permissionDenied, setPermissionDenied] = useState(false);
   const [existed, setExisted] = useState(false);
+  const [pushStatus, setPushStatus] = useState<Status>({ state: "idle" });
+  const [testStatus, setTestStatus] = useState<Status>({ state: "idle" });
 
   useEffect(() => {
     if (!open) return;
@@ -51,6 +76,8 @@ export function StopNotifyDialog({
     setThreshold(w?.thresholdMin ?? DEFAULT_THRESHOLD_MIN);
     setRouteShorts(w?.routeShorts ?? []);
     setPermissionDenied(notificationPermission() === "denied");
+    setPushStatus({ state: "idle" });
+    setTestStatus({ state: "idle" });
   }, [open, stopId]);
 
   const nearbyRoutes = [...new Set(arrivals.map((a) => a.route).filter(Boolean))];
@@ -69,14 +96,31 @@ export function StopNotifyDialog({
     const thresholdMin = Math.max(1, Math.min(60, threshold || DEFAULT_THRESHOLD_MIN));
     const finalRouteShorts = routeShorts.length ? routeShorts : undefined;
     setWatch(stopId, { stopName, thresholdMin, routeShorts: finalRouteShorts });
+    onChanged?.(true);
+
     // Ez teszi lehetővé, hogy lezárt telefonon/bezárt lapnál is jöjjön
     // értesítés — a szerver saját maga figyeli az érkezéseket és push-t
-    // küld. Ha bármi okból nem sikerül (nincs HTTPS, iOS-en nincs
-    // kezdőképernyőre telepítve stb.), a fenti helyi figyelés akkor is
-    // működik, amíg a lap nyitva van.
-    registerPushWatch({ stopId, stopName, thresholdMin, routeShorts: finalRouteShorts });
-    onChanged?.(true);
-    onOpenChange(false);
+    // küld. A dialógus szándékosan NEM zárul be azonnal, hogy lásd, sikerült-e
+    // ez a szerver-oldali regisztráció (a helyi, nyitott lapos figyelés
+    // ettől függetlenül mindig működik).
+    setPushStatus({ state: "checking" });
+    const result = await registerPushWatch({
+      stopId,
+      stopName,
+      thresholdMin,
+      routeShorts: finalRouteShorts,
+    });
+    setPushStatus(
+      result.ok ? { state: "ok" } : { state: "fail", reason: result.reason },
+    );
+  };
+
+  const handleTest = async () => {
+    setTestStatus({ state: "checking" });
+    const result = await sendTestPush();
+    setTestStatus(
+      result.ok ? { state: "ok" } : { state: "fail", reason: result.reason },
+    );
   };
 
   const handleRemove = () => {
@@ -93,8 +137,7 @@ export function StopNotifyDialog({
           <DialogTitle>Értesítés — {stopName}</DialogTitle>
           <DialogDescription>
             Szólunk, amikor a busz a beállított időn belülre ér ehhez a
-            megállóhoz. Csak addig működik, amíg ez a lap nyitva van a
-            böngészőben.
+            megállóhoz — lezárt telefonon is, ha a push-regisztráció sikerül.
           </DialogDescription>
         </DialogHeader>
 
@@ -154,6 +197,31 @@ export function StopNotifyDialog({
                 Most nincs élő járat itt, amit ki lehetne választani.
               </p>
             )}
+          </div>
+
+          {pushStatus.state !== "idle" ? (
+            <div className="space-y-1 rounded-lg border border-border px-3 py-2">
+              <p className="text-[11px] font-semibold text-muted-foreground">
+                Lezárt telefonos (push) értesítés
+              </p>
+              <StatusLine status={pushStatus} okLabel="Sikeresen regisztrálva a szerveren." />
+            </div>
+          ) : null}
+
+          <div className="space-y-1.5 border-t border-border pt-3">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleTest}
+              disabled={testStatus.state === "checking"}
+            >
+              {testStatus.state === "checking" ? (
+                <Loader2 className="animate-spin" />
+              ) : null}
+              Teszt értesítés küldése most
+            </Button>
+            <StatusLine status={testStatus} okLabel="Elküldve — nézd meg, megjött-e." />
           </div>
         </div>
 

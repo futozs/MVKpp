@@ -1,4 +1,4 @@
-const SHELL_CACHE = "mvk-shell-v3";
+const SHELL_CACHE = "mvk-shell-v4";
 const SHELL_ASSETS = [
   "/",
   "/index.html",

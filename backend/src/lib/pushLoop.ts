@@ -97,8 +97,46 @@ async function checkOnce(arrivalsForStop: ArrivalsForStop): Promise<void> {
   }
 }
 
+/**
+ * Induláskor egyszer lefutó önteszt — pontosan azért, hogy a log alapján
+ * egyértelmű legyen, hol akad el a lánc, anélkül hogy valós buszra kellene
+ * várni. Ha ez a blokk nem "MINDEN RENDBEN"-nel zár, onnantól tudjuk, melyik
+ * lépésnél van a hiba (VAPID, DB-tábla, vagy egyszerűen nincs feliratkozás).
+ */
+async function selfTest(): Promise<void> {
+  console.log("[push] ── önteszt ──");
+  console.log(`[push] VAPID: ${pushConfigured ? "beállítva" : "HIÁNYZIK"}`);
+  if (!pushConfigured) {
+    console.log("[push] ── önteszt vége: PUSH NEM AKTÍV ──");
+    return;
+  }
+  try {
+    const subs = await query<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM push_subscription`,
+    );
+    const watches = await query<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM push_watch`,
+    );
+    console.log(
+      `[push] adatbázis-táblák OK — ${subs[0]?.n ?? 0} feliratkozás, ${watches[0]?.n ?? 0} figyelés van jelenleg mentve`,
+    );
+    if (!subs[0]?.n) {
+      console.log(
+        "[push] MÉG SENKI NEM IRATKOZOTT FEL — ha az appban már beállítottál értesítést, az a regisztráció nem jutott el ide (nézd a böngésző konzolját a telefonon, vagy próbáld a 'Teszt küldése' gombot).",
+      );
+    }
+    console.log("[push] ── önteszt vége: MINDEN RENDBEN ──");
+  } catch (e) {
+    console.log(
+      `[push] ADATBÁZIS-HIBA az önteszt közben (hiányzik a push_subscription/push_watch tábla? futott a db:migrate?): ${(e as Error).message}`,
+    );
+    console.log("[push] ── önteszt vége: HIBA ──");
+  }
+}
+
 export function startPushLoop(arrivalsForStop: ArrivalsForStop): void {
-  if (!pushConfigured) return; // a lib/push.ts már logolta, miért nem indul
+  selfTest().catch((e) => console.log("[push] önteszt hiba:", (e as Error).message));
+  if (!pushConfigured) return; // a self-test már logolta, miért nem indul
   console.log(`[push] hurok elindult (${CHECK_INTERVAL_MS / 1000} mp-enként)`);
   setInterval(() => {
     checkOnce(arrivalsForStop).catch((e) =>
