@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Ban,
+  Bus,
   CalendarDays,
   ChevronLeft,
   ChevronRight,
@@ -15,6 +17,7 @@ import type {
   TimetableResponse,
   TimetableRoute,
   TimetableTrip,
+  TripJournalEntry,
 } from "@/types";
 import { api } from "@/services/api";
 import { Button } from "@/components/ui/button";
@@ -23,11 +26,18 @@ import { Card } from "@/components/ui/card";
 import { RouteTile } from "@/components/transit/RouteTile";
 import { LiveDot } from "@/components/transit/LiveDot";
 import { HereChip } from "@/components/transit/HereChip";
-import { ApproachStrip } from "@/components/transit/ApproachStrip";
 import { TimetableGrid } from "./TimetableGrid";
 import { TripProgressRail } from "./TripProgressRail";
+import { useCancelledTrips } from "@/hooks/useCancelledTrips";
+import { useTripJournal } from "@/hooks/useTripJournal";
 import { favoriteKey, useFavorites } from "@/hooks/useFavorites";
-import { useTripPath } from "@/hooks/useTripPath";
+import {
+  dayRelation,
+  showsJournalVehicle,
+  tripRunLabel,
+  tripRunState,
+  type DayRelation,
+} from "@/lib/tripStatus";
 import { initialTimetableView, saveTimetableView } from "@/lib/viewState";
 import { cn } from "@/lib/utils";
 
@@ -160,6 +170,14 @@ export function TimetableView({
   }, [minIso, maxIso]);
 
   const isToday = date === todayIso();
+  const day = dayRelation(date, todayIso());
+
+  // A kihúzott menetek listája csak a mai napra értelmezhető: az MVK végpontja
+  // az aznapi törléseket adja, más napra nincs mit jelölni.
+  const cancelled = useCancelledTrips(isToday);
+  // A napló minden naplózott napra elérhető, nem csak a maira — így egy tegnapi
+  // menetnél is látszik, melyik jármű vitte.
+  const journal = useTripJournal(isoToYmd(date));
 
   const [nowSec, setNowSec] = useState(() => secondsSinceMidnight(new Date()));
   useEffect(() => {
@@ -268,11 +286,29 @@ export function TimetableView({
     setSelectedDir(withService?.dir ?? "");
   };
 
+  // Egy kihúzott menethez tartozó jármű már nem ezt a menetet teljesíti, ezért
+  // az „elindult” számból kimarad.
+  const cancelledTripCount =
+    table?.trips.filter((t) => cancelled.ids.has(t.tripId)).length ?? 0;
   const liveTripCount =
-    table?.trips.filter((t) => vehicleByTrip.has(t.tripId)).length ?? 0;
-  const selectedVehicle = selectedTrip
-    ? (vehicleByTrip.get(selectedTrip.tripId) ?? null)
-    : null;
+    table?.trips.filter(
+      (t) => vehicleByTrip.has(t.tripId) && !cancelled.ids.has(t.tripId),
+    ).length ?? 0;
+  const cancelledByRoute = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const t of cancelled.trips) {
+      if (!t.routeId) continue;
+      map.set(t.routeId, (map.get(t.routeId) ?? 0) + 1);
+    }
+    return map;
+  }, [cancelled.trips]);
+  const selectedTripCancelled = selectedTrip
+    ? cancelled.ids.has(selectedTrip.tripId)
+    : false;
+  const selectedVehicle =
+    selectedTrip && !selectedTripCancelled
+      ? (vehicleByTrip.get(selectedTrip.tripId) ?? null)
+      : null;
   const dayLabel = new Date(`${date}T12:00:00`).toLocaleDateString("hu-HU", {
     month: "short",
     day: "numeric",
@@ -396,6 +432,7 @@ export function TimetableView({
                     (n, d) => n + d.tripsToday,
                     0,
                   );
+                  const cancelledOnRoute = cancelledByRoute.get(route.id) ?? 0;
                   return (
                     <li key={route.id}>
                       <button
@@ -426,6 +463,15 @@ export function TimetableView({
                                 : "Ezen a napon nem közlekedik"}
                           </span>
                         </span>
+                        {cancelledOnRoute > 0 ? (
+                          <span
+                            title={`${cancelledOnRoute} kihúzott menet ma ezen a járaton`}
+                            className="inline-flex shrink-0 items-center gap-1 rounded-md border border-destructive/40 bg-destructive/12 px-1.5 py-0.5 font-mono text-[10px] font-bold tabular-nums text-destructive"
+                          >
+                            <Ban aria-hidden className="h-2.5 w-2.5" />
+                            {cancelledOnRoute}
+                          </span>
+                        ) : null}
                       </button>
                     </li>
                   );
@@ -488,6 +534,12 @@ export function TimetableView({
                       <span className="inline-flex items-center gap-1.5 font-semibold text-live">
                         <LiveDot />
                         {liveTripCount} elindult
+                      </span>
+                    ) : null}
+                    {cancelledTripCount > 0 ? (
+                      <span className="inline-flex items-center gap-1 font-semibold text-destructive">
+                        <Ban aria-hidden className="h-3 w-3" />
+                        {cancelledTripCount} törölve
                       </span>
                     ) : null}
                   </p>
@@ -589,13 +641,16 @@ export function TimetableView({
                 <TimetableGrid
                   trips={table.trips}
                   vehicleByTrip={vehicleByTrip}
+                  cancelledTripIds={cancelled.ids}
+                  journal={journal}
                   selectedTripId={selectedTrip?.tripId ?? null}
                   onSelectTrip={(t) =>
                     setSelectedTrip((prev) =>
                       prev?.tripId === t.tripId ? null : t,
                     )
                   }
-                  nowSec={isToday ? nowSec : -1}
+                  nowSec={nowSec}
+                  day={day}
                 />
               )}
             </div>
@@ -605,8 +660,11 @@ export function TimetableView({
               <TripDetail
                 trip={selectedTrip}
                 stops={table.stops}
-                allStops={stops}
                 vehicle={selectedVehicle}
+                cancelled={selectedTripCancelled}
+                journalEntry={journal.get(selectedTrip.tripId) ?? null}
+                nowSec={nowSec}
+                day={day}
                 onClose={() => setSelectedTrip(null)}
                 onFocusTrip={onFocusTrip}
               />
@@ -621,25 +679,52 @@ export function TimetableView({
 function TripDetail({
   trip,
   stops,
-  allStops,
   vehicle,
+  cancelled,
+  journalEntry,
+  nowSec,
+  day,
   onClose,
   onFocusTrip,
 }: {
   trip: TimetableTrip;
   stops: TimetableResponse["stops"];
-  allStops: Stop[];
   vehicle: LiveVehicle | null;
+  /** A menet ki van húzva: nem késik, hanem el sem indul. */
+  cancelled: boolean;
+  /** A gateway naplója szerint melyik jármű teljesítette ezt a menetet. */
+  journalEntry: TripJournalEntry | null;
+  nowSec: number;
+  day: DayRelation;
   onClose: () => void;
   onFocusTrip: (tripId: string, vehicleId?: string) => void;
 }) {
-  const { data } = useTripPath(vehicle ? trip.tripId : null, vehicle?.id, 5000);
+  const state = tripRunState({
+    cancelled,
+    hasLiveVehicle: vehicle !== null,
+    departureSec: trip.departureSec,
+    arrivalSec: trip.arrivalSec,
+    nowSec,
+    day,
+  });
+  // A naplózott jármű a menet UTÁN is megvan — a térképen ilyenkor már máshol
+  // jár, de az utasnak pont az a kérdés, hogy „melyik busz vitte ezt". Egy még
+  // el sem indult menetnél viszont nem mutatjuk: az csak feed-zaj lehetne.
+  const pastVehicleId = showsJournalVehicle(state)
+    ? (journalEntry?.vehicleId ?? null)
+    : null;
+  const statusLabel = tripRunLabel(state, pastVehicleId);
 
   return (
     <div className="max-h-[42vh] shrink-0 overflow-y-auto border-t border-border bg-card shadow-xl">
       <div className="sticky top-0 z-10 bg-card">
         <div className="flex items-center gap-3 border-b border-border px-3 py-2.5 sm:px-4">
-          <span className="font-mono text-xl font-bold tabular-nums">
+          <span
+            className={cn(
+              "font-mono text-xl font-bold tabular-nums",
+              cancelled && "text-destructive line-through decoration-2",
+            )}
+          >
             {trip.departure}
           </span>
 
@@ -651,9 +736,25 @@ function TripDetail({
               érkezés {trip.arrival} · {trip.stopCount} megálló
               {trip.deviates ? " · betérő" : ""}
             </span>
+            {}
+            {!cancelled && statusLabel && (vehicle || pastVehicleId) ? (
+              <span
+                className={cn(
+                  "block text-[11px] font-semibold",
+                  state === "live" ? "text-live" : "text-muted-foreground",
+                )}
+              >
+                {statusLabel}
+              </span>
+            ) : null}
           </span>
 
-          {vehicle ? (
+          {cancelled ? (
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-destructive/50 bg-destructive/12 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-destructive">
+              <Ban aria-hidden className="h-3 w-3" />
+              Törölve
+            </span>
+          ) : vehicle ? (
             <Button
               size="sm"
               className="h-8 shrink-0"
@@ -663,11 +764,25 @@ function TripDetail({
               <span className="font-mono tabular-nums">{vehicle.id}</span>
               <span className="hidden sm:inline">a térképen</span>
             </Button>
-          ) : (
+          ) : pastVehicleId ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 shrink-0"
+              title={`${pastVehicleId} teljesítette ezt a menetet — megnézem, hol jár most`}
+              onClick={() => onFocusTrip(trip.tripId, pastVehicleId)}
+            >
+              <Bus />
+              <span className="font-mono tabular-nums">{pastVehicleId}</span>
+              <span className="hidden sm:inline">
+                {state === "finished" ? "vitte" : "viszi"}
+              </span>
+            </Button>
+          ) : statusLabel ? (
             <span className="shrink-0 text-[11px] text-muted-foreground">
-              nem indult el
+              {statusLabel}
             </span>
-          )}
+          ) : null}
 
           <Button
             variant="ghost"
@@ -680,14 +795,11 @@ function TripDetail({
           </Button>
         </div>
 
-        {vehicle ? (
-          <ApproachStrip
-            tripId={trip.tripId}
-            shape={data?.shape}
-            vehicle={data?.vehicle ?? null}
-            stops={allStops}
-            deviationSec={data?.scheduleDeviationSec}
-          />
+        {cancelled ? (
+          <p className="border-b border-destructive/25 bg-destructive/10 px-3 py-2 text-xs text-destructive sm:px-4">
+            Az MVK kihúzta ezt a menetet — ma nem közlekedik. Válassz másik
+            indulást.
+          </p>
         ) : null}
       </div>
 

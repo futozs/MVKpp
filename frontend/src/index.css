@@ -208,3 +208,17 @@
     transparent 100%
   );
 }
+
+/* Kezdőképernyőről indítva nincs böngészősáv, és a státuszsáv magassága
+   készülékenként eltér — a biztonsági sáv önmagában kevés, a fejléc első sora
+   így is a státuszsáv alá csúszhat. Ez a néhány képpont adja meg a levegőt.
+   Böngészőben (ahol az URL-sáv úgyis eltartja) nem lép életbe. */
+.pwa-inset-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+@media (display-mode: standalone), (display-mode: fullscreen) {
+  .pwa-inset-top {
+    padding-top: calc(env(safe-area-inset-top) + 14px);
+  }
+}

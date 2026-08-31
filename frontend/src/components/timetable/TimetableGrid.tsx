@@ -1,6 +1,12 @@
 import { useMemo } from "react";
 import { Clock } from "lucide-react";
-import type { LiveVehicle, TimetableTrip } from "@/types";
+import type { LiveVehicle, TimetableTrip, TripJournalEntry } from "@/types";
+import {
+  showsJournalVehicle,
+  tripRunLabel,
+  tripRunState,
+  type DayRelation,
+} from "@/lib/tripStatus";
 import { cn } from "@/lib/utils";
 
 export interface HourRow {
@@ -27,30 +33,44 @@ export function groupByHour(trips: TimetableTrip[]): HourRow[] {
 interface TimetableGridProps {
   trips: TimetableTrip[];
   vehicleByTrip: Map<string, LiveVehicle>;
+  /** A mai napra kihúzott menetek — ezek az indulások nem lesznek megtartva. */
+  cancelledTripIds: Set<string>;
+  /** A gateway naplója: melyik jármű teljesítette az adott menetet. */
+  journal: Map<string, TripJournalEntry>;
   selectedTripId: string | null;
   onSelectTrip: (trip: TimetableTrip) => void;
   nowSec: number;
+  /** A nézett nap viszonya a maihoz. */
+  day: DayRelation;
 }
 
 export function TimetableGrid({
   trips,
   vehicleByTrip,
+  cancelledTripIds,
+  journal,
   selectedTripId,
   onSelectTrip,
   nowSec,
+  day,
 }: TimetableGridProps) {
   const rows = useMemo(() => groupByHour(trips), [trips]);
 
+  // A „következő” jelölés a legközelebbi MEGTARTOTT indulásra kerül: egy kihúzott
+  // menet kiemelése azt sugallná, hogy arra még érdemes várni.
   const nextTripId = useMemo(() => {
+    if (day !== "today") return null;
     let best: TimetableTrip | null = null;
     for (const t of trips) {
       if (t.departureSec < nowSec) continue;
+      if (cancelledTripIds.has(t.tripId)) continue;
       if (!best || t.departureSec < best.departureSec) best = t;
     }
     return best?.tripId ?? null;
-  }, [trips, nowSec]);
+  }, [trips, nowSec, cancelledTripIds, day]);
 
-  const currentHour = Math.floor(nowSec / 3600);
+  // Az „aktuális óra" és a halványítás csak a mai napon jelent bármit.
+  const currentHour = day === "today" ? Math.floor(nowSec / 3600) : -1;
 
   return (
     <ul className="divide-y divide-border/60">
@@ -82,11 +102,15 @@ export function TimetableGrid({
             {}
             <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
               {row.trips.map((trip) => {
-                const vehicle = vehicleByTrip.get(trip.tripId) ?? null;
+                const isCancelled = cancelledTripIds.has(trip.tripId);
+                const vehicle = isCancelled
+                  ? null
+                  : (vehicleByTrip.get(trip.tripId) ?? null);
                 const isLive = vehicle !== null;
                 const isNext = trip.tripId === nextTripId;
                 const isSelected = trip.tripId === selectedTripId;
-                const isPast = trip.departureSec < nowSec && !isLive;
+                const isPast =
+                  day === "today" && trip.departureSec < nowSec && !isLive;
                 const minute = Math.floor((trip.departureSec % 3600) / 60);
 
                 return (
@@ -95,30 +119,41 @@ export function TimetableGrid({
                     type="button"
                     onClick={() => onSelectTrip(trip)}
                     aria-pressed={isSelected}
-                    title={
-                      isLive
-                        ? `${trip.destinationName} — ${vehicle.id} elindult`
-                        : `${trip.destinationName} — érkezés ${trip.arrival}`
-                    }
+                    title={buildTitle({
+                      trip,
+                      isCancelled,
+                      liveVehicleId: vehicle?.id ?? null,
+                      journal,
+                      nowSec,
+                      day,
+                    })}
                     className={cn(
                       "relative flex h-9 min-w-[46px] items-center justify-center rounded-lg border px-2.5",
                       "font-mono text-sm font-semibold tabular-nums transition-all duration-fast",
                       "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-                      isLive
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : isSelected
-                          ? "border-primary bg-primary/15 text-foreground"
-                          : isNext
-                            ? "border-primary bg-card text-foreground shadow-sm"
-                            : isPast
-                              ? "border-transparent bg-muted/60 text-muted-foreground"
-                              : "border-border bg-card text-foreground hover:border-primary/50 hover:bg-accent",
+                      isCancelled
+                        ? "border-destructive/60 bg-destructive/12 text-destructive line-through decoration-2"
+                        : isLive
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : isSelected
+                            ? "border-primary bg-primary/15 text-foreground"
+                            : isNext
+                              ? "border-primary bg-card text-foreground shadow-sm"
+                              : isPast
+                                ? "border-transparent bg-muted/60 text-muted-foreground"
+                                : "border-border bg-card text-foreground hover:border-primary/50 hover:bg-accent",
+                      isCancelled && isSelected && "ring-1 ring-destructive",
                     )}
                   >
                     {String(minute).padStart(2, "0")}
 
                     {}
-                    {trip.deviates && !isLive ? (
+                    {isCancelled ? (
+                      <span className="sr-only"> — törölve</span>
+                    ) : null}
+
+                    {}
+                    {trip.deviates && !isLive && !isCancelled ? (
                       <span
                         aria-hidden
                         className="absolute bottom-1 right-1 h-1 w-1 rounded-full bg-muted-foreground"
@@ -133,4 +168,44 @@ export function TimetableGrid({
       })}
     </ul>
   );
+}
+
+/** A gomb tooltipje: cél, érkezés, és hogy hol tart most ez a menet. */
+function buildTitle({
+  trip,
+  isCancelled,
+  liveVehicleId,
+  journal,
+  nowSec,
+  day,
+}: {
+  trip: TimetableTrip;
+  isCancelled: boolean;
+  liveVehicleId: string | null;
+  journal: Map<string, TripJournalEntry>;
+  nowSec: number;
+  day: DayRelation;
+}): string {
+  if (isCancelled) {
+    return `${trip.destinationName} — TÖRÖLVE, ez a menet nem indul el`;
+  }
+  const state = tripRunState({
+    cancelled: false,
+    hasLiveVehicle: liveVehicleId !== null,
+    departureSec: trip.departureSec,
+    arrivalSec: trip.arrivalSec,
+    nowSec,
+    day,
+  });
+  const vehicleId =
+    liveVehicleId ??
+    (showsJournalVehicle(state)
+      ? (journal.get(trip.tripId)?.vehicleId ?? null)
+      : null);
+  return [
+    `${trip.destinationName} — érkezés ${trip.arrival}`,
+    tripRunLabel(state, vehicleId),
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }

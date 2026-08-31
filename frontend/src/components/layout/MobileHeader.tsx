@@ -49,8 +49,9 @@ export function MobileHeader({
       className={cn(
         "relative z-bar shrink-0 border-b border-border bg-card md:hidden",
         // Álló módban (kezdőképernyőről indítva) nincs böngészősáv, a
-        // státuszsáv viszont a lapra ül — ezért kell a felső biztonsági sáv.
-        "pt-[env(safe-area-inset-top)]",
+        // státuszsáv viszont a lapra ül — a biztonsági sáv és a ráadás
+        // térköz az index.css `.pwa-inset-top` szabályában van.
+        "pwa-inset-top",
       )}
     >
       {}

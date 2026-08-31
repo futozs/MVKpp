@@ -1,4 +1,5 @@
 import type {
+  CancelledTripsResponse,
   Stop,
   Route,
   RouteGeo,
@@ -11,6 +12,7 @@ import type {
   SystemInfoResponse,
   TimetableResponse,
   TimetableRoutesResponse,
+  TripJournalResponse,
   TripProgressResponse,
   WeatherResponse,
 } from "../types";
@@ -111,6 +113,23 @@ export const api = {
     return handleResponse<TimetableResponse>(
       await fetch(`${API_BASE}/gtfs/timetable?${params.toString()}`),
       "/gtfs/timetable",
+    );
+  },
+
+  /** A mai napra kihúzott (törölt) menetek — a menetrendkönyv jelöléseihez. */
+  async getCancelledTrips(): Promise<CancelledTripsResponse> {
+    return handleResponse<CancelledTripsResponse>(
+      await fetch(`${API_BASE}/live/cancelled`),
+      "/live/cancelled",
+    );
+  },
+
+  /** Melyik jármű teljesítette az adott nap meneteit (gateway-napló). */
+  async getTripJournal(date?: string): Promise<TripJournalResponse> {
+    const q = date ? `?date=${encodeURIComponent(date)}` : "";
+    return handleResponse<TripJournalResponse>(
+      await fetch(`${API_BASE}/gtfs/trip-journal${q}`),
+      "/gtfs/trip-journal",
     );
   },
 

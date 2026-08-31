@@ -43,8 +43,6 @@
 68,MVK,68,Újgyőri főtér – Bükkszentlászló,704,55A5B2,FFFFFF
 101B,MVK,101B,Szondi Gy. u. – Búza tér – Kandó K. u. – Berekalja,704,A72380,FFFFFF
 240,MVK,240,Repülőtér / Bosch – Mechatronikai Park,704,9972A5,FFFFFF
-AU1,MVK,AU1,AUCHAN Borsod - Centrum,704,CC7371,FFFFFF
-AU2,MVK,AU2,Avas kilátó - Auchan dél (Pesti út),704,256E64,FFFFFF
 ZOO,MVK,ZOO,Felső-Majláth – Miskolci Állatkert,704,8EBC2D,000000
 900,MVK,900,Éjszakai körjárat,704,414040,FFFFFF
 901,MVK,901,Felső-Majláth – Villanyrendőr – Tiszai pu. – Szondi Gy. u.,704,3A530D,FFFFFF

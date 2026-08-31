@@ -100,13 +100,13 @@ export function StopCarousel({
         ref={trackRef}
         className={cn(
           "flex min-h-0 flex-1 snap-x snap-mandatory gap-4 overflow-x-auto overflow-y-hidden",
-          "px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+          "overscroll-x-contain px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
         )}
       >
         {stops.map((stop, i) => (
           <div
             key={stop.id}
-            className="flex h-full w-[86vw] max-w-sm shrink-0 snap-center"
+            className="flex h-full w-full shrink-0 snap-center"
           >
             <StopCard
               stop={stop}
@@ -145,21 +145,31 @@ export function StopCarousel({
           </Button>
 
           {}
-          <div className="flex items-center gap-1.5">
-            {stops.map((stop, i) => (
-              <button
-                key={stop.id}
-                type="button"
-                onClick={() => scrollToCard(i)}
-                aria-label={`Ugrás ide: ${stop.name}`}
-                aria-current={i === index ? "true" : undefined}
-                className={cn(
-                  "h-2 rounded-full transition-all duration-fast",
-                  "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-                  i === index ? "w-6 bg-primary" : "w-2 bg-muted-foreground/35",
-                )}
-              />
-            ))}
+          <div className="flex min-w-0 flex-1 items-center justify-center">
+            {stops.length <= 8 ? (
+              <div className="flex items-center gap-1.5">
+                {stops.map((stop, i) => (
+                  <button
+                    key={stop.id}
+                    type="button"
+                    onClick={() => scrollToCard(i)}
+                    aria-label={`Ugrás ide: ${stop.name}`}
+                    aria-current={i === index ? "true" : undefined}
+                    className={cn(
+                      "h-2 rounded-full transition-all duration-fast",
+                      "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                      i === index
+                        ? "w-6 bg-primary"
+                        : "w-2 bg-muted-foreground/35",
+                    )}
+                  />
+                ))}
+              </div>
+            ) : (
+              <p className="font-mono text-[11px] font-bold tabular-nums text-muted-foreground">
+                {index + 1} / {stops.length}
+              </p>
+            )}
           </div>
 
           <Button

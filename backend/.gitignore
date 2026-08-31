@@ -46,3 +46,6 @@ next-env.d.ts
 /logs/
 
 /src/generated/prisma
+
+# menetnapló (napi, gépi állapot — nem verziókezelt)
+/state/journal/

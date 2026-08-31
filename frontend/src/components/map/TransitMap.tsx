@@ -1535,8 +1535,28 @@ export function TransitMap({
           </div>
         ) : null}
 
+        {}
         {filterActive && !focusTripId ? (
-          <div className="absolute right-3 top-[3.4rem] z-overlay flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-xl border border-border bg-card/95 px-3 py-2 shadow-xl backdrop-blur-sm sm:max-w-sm sm:gap-3 sm:px-3.5 sm:py-2.5 md:right-4 md:top-4">
+          <button
+            type="button"
+            onClick={onClearFilters}
+            aria-label={`${filterSummary} — szűrők törlése`}
+            title={filterSummary}
+            className={cn(
+              "absolute right-3 top-3 z-overlay inline-flex h-9 items-center gap-1 rounded-lg px-2",
+              "border border-primary/40 bg-primary/15 text-primary shadow-lg backdrop-blur-sm",
+              "transition-colors duration-fast active:bg-primary/25",
+              "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring md:hidden",
+            )}
+          >
+            <SlidersHorizontal aria-hidden className="h-4 w-4" />
+            <X aria-hidden className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
+
+        {}
+        {filterActive && !focusTripId ? (
+          <div className="absolute right-4 top-4 z-overlay hidden max-w-sm items-center gap-3 rounded-xl border border-border bg-card/95 px-3.5 py-2.5 shadow-xl backdrop-blur-sm md:flex">
             <Crosshair aria-hidden className="h-4 w-4 shrink-0 text-primary" />
             <span className="min-w-0 truncate text-xs font-medium">
               {filterSummary}

@@ -18,6 +18,7 @@ import {
   activeServices, serviceRange, haversineKm, projectOntoShapeKm,
   getFeedVersion, loadGtfs as loadGtfsFrom, type Trip,
 } from './lib/gtfs.ts'
+import { initJournal, recordSighting, journalFor, flushJournal, journalStats } from './lib/journal.ts'
 import { stats } from './api/stats.ts'
 import { ops, adminToken } from './api/ops.ts'
 
@@ -745,6 +746,8 @@ app.get('/gtfs/timetable', (c) => {
       departure: secToHm(first.dep),
       departureSec: first.dep,
       arrival: secToHm(last.dep),
+      /** A menet vége másodpercben — ebből tudja a kliens, hogy már lefutott-e. */
+      arrivalSec: last.dep,
       originName: stops.get(first.stopId)?.name || first.stopId,
       destinationName: stops.get(last.stopId)?.name || last.stopId,
       stopCount: x.stopsOfTrip.length,
@@ -755,6 +758,121 @@ app.get('/gtfs/timetable', (c) => {
   })
 
   return c.json({ route, dir, date: ymd, headsign, stops: stopList, trips: tripRows })
+})
+
+// ── Törölt (kihúzott) menetek ────────────────────────────────────────────────
+/**
+ * Az MVK `list-cancelled-trips` végpontja a mai napra KIHÚZOTT meneteket adja
+ * vissza — nyers alakban csupán `[{ "tripId": "..." }]`, minden más nélkül.
+ * A tripId a statikus GTFS trip_id-vel egyezik, így itt egészítjük ki azzal,
+ * amit a menetrendkönyv meg tud jeleníteni: járat, irány, indulás, végállomás.
+ *
+ * A lista percekben mérhető ütemben változik, ezért NEM a valós idejű feedek
+ * kétmásodperces gyorsítótárát használjuk, hanem saját, hosszabb TTL-t.
+ */
+const CANCELLED_TTL_MS = 30_000
+let cancelledCache: { at: number; ids: string[] } | null = null
+
+/** Az upstream nyers válaszából tiszta, duplikátummentes trip_id lista. */
+function parseCancelledIds(raw: unknown): string[] {
+  const list = Array.isArray(raw)
+    ? raw
+    : Array.isArray((raw as { trips?: unknown } | null)?.trips)
+      ? ((raw as { trips: unknown[] }).trips)
+      : []
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const item of list) {
+    const id = typeof item === 'string'
+      ? item
+      : String((item as Record<string, unknown> | null)?.tripId
+        ?? (item as Record<string, unknown> | null)?.trip_id
+        ?? (item as Record<string, unknown> | null)?.id
+        ?? '')
+    const trimmed = id.trim()
+    if (!trimmed || seen.has(trimmed)) continue
+    seen.add(trimmed)
+    out.push(trimmed)
+  }
+  return out
+}
+
+async function cancelledTripIds(): Promise<string[]> {
+  if (cancelledCache && Date.now() - cancelledCache.at < CANCELLED_TTL_MS) return cancelledCache.ids
+  const { status, buf } = await mvkFetch('/api/v1/gtfs/list-cancelled-trips')
+  if (status !== 200) throw new Error(`list-cancelled-trips HTTP ${status}`)
+  const ids = parseCancelledIds(JSON.parse(buf.toString('utf8').trim() || '[]'))
+  cancelledCache = { at: Date.now(), ids }
+  return ids
+}
+
+/**
+ * A mai kihúzott menetek menetrendi adatokkal. A menetrendkönyv ebből tudja,
+ * melyik indulás van törölve — szemben a „még nem indult el” állapottal, ami
+ * pusztán annyit jelent, hogy a járműhöz még nincs élő pozíció.
+ */
+app.get('/live/cancelled', async (c) => {
+  let ids: string[]
+  let stale = false
+  try {
+    ids = await cancelledTripIds()
+  } catch (e) {
+    // Elavult lista is jobb, mint a semmi: a menetrendkönyv így sem veszti el
+    // a jelöléseket egyetlen sikertelen upstream hívás miatt.
+    if (!cancelledCache) return c.json({ error: (e as Error).message }, 502)
+    ids = cancelledCache.ids
+    stale = true
+  }
+
+  const rows = ids.map((tripId) => {
+    const t = trips.get(tripId)
+    const r = t ? routes.get(t.routeId) : undefined
+    const stopsOfTrip = tripStops.get(tripId)
+    const first = stopsOfTrip?.[0] ?? null
+    const last = stopsOfTrip?.[stopsOfTrip.length - 1] ?? null
+    return {
+      tripId,
+      /** Hamis, ha a statikus GTFS nem ismeri ezt a menetet (elavult feed). */
+      known: Boolean(t),
+      routeId: t?.routeId ?? '',
+      routeShort: r?.short ?? '',
+      routeColor: r?.color ?? '888888',
+      routeText: r?.text ?? 'FFFFFF',
+      dir: t?.dir ?? '',
+      headsign: t?.headsign ?? '',
+      departure: first ? secToHm(first.dep) : null,
+      departureSec: first?.dep ?? null,
+      arrival: last ? secToHm(last.dep) : null,
+      originName: first ? (stops.get(first.stopId)?.name ?? first.stopId) : null,
+      destinationName: last ? (stops.get(last.stopId)?.name ?? last.stopId) : null,
+    }
+  })
+  rows.sort((a, b) => (a.departureSec ?? Infinity) - (b.departureSec ?? Infinity) || a.tripId.localeCompare(b.tripId))
+
+  return c.json({
+    date: budapestNow().ymd,
+    count: rows.length,
+    stale,
+    fetchedAt: new Date(cancelledCache?.at ?? Date.now()).toISOString(),
+    tripIds: ids,
+    trips: rows,
+  })
+})
+
+// ── Menetnapló ───────────────────────────────────────────────────────────────
+/**
+ * Melyik jármű teljesítette az adott menetet. A napló háttérben gyűlik (lásd
+ * `sampleJournal` a start szakaszban), ezért a menetrendkönyv a nap végén is
+ * meg tudja mondani a reggeli menetek járművét — az élő feed ilyenkor már
+ * csak az ÉPPEN futó meneteket ismeri.
+ */
+app.get('/gtfs/trip-journal', (c) => {
+  const ymd = (c.req.query('date') || budapestNow().ymd).trim()
+  if (!/^\d{8}$/.test(ymd)) return c.json({ error: 'érvénytelen ?date= (YYYYMMDD kell)' }, 400)
+  const entries = journalFor(ymd)
+  const out: Record<string, { vehicleId: string; firstSeen: number; lastSeen: number; samples: number }> = {}
+  for (const [tripId, e] of entries) out[tripId] = e
+  return c.json({ date: ymd, count: entries.size, trips: out })
 })
 
 // ── Időjárás ─────────────────────────────────────────────────────────────────
@@ -899,6 +1017,7 @@ app.get('/system/info', (c) => {
     },
     jwt: jwtStatus(readJwt()),
     installationId: readInstallationId() || null,
+    journal: JOURNAL_ON ? journalStats(budapestNow().ymd) : { enabled: false },
   })
 })
 
@@ -1144,6 +1263,40 @@ function warmFeeds() {
 }
 warmFeeds()
 setInterval(warmFeeds, FEED_TTL_MS)
+
+/**
+ * Menetnapló-mintavétel. A gateway 0–24-ben fut, ezért folyamatosan
+ * feljegyezhetjük, melyik jármű melyik meneten látszik — így a menetrendkönyv
+ * a már LEFUTOTT menetekhez is meg tudja mutatni a járművet, amit az élő feed
+ * addigra elfelejtett. A pozíciófeed gyorsítótárazott, tehát ez a hurok
+ * mintavételenként legfeljebb egy upstream hívást jelent.
+ */
+const JOURNAL_ON = (process.env.JOURNAL ?? '1') !== '0'
+const JOURNAL_INTERVAL_SEC = Number(process.env.JOURNAL_INTERVAL_SEC ?? 15)
+const JOURNAL_FLUSH_SEC = Number(process.env.JOURNAL_FLUSH_SEC ?? 60)
+
+async function sampleJournal() {
+  const st = jwtStatus(readJwt())
+  if (!st.present || st.expired) return
+  try {
+    const now = budapestNow()
+    for (const v of await activeVehicles()) {
+      // Csak ismert menetre könyvelünk: az ismeretlen trip_id a feed zaja.
+      if (!v.tripId || !trips.has(v.tripId)) continue
+      recordSighting(now.ymd, v.tripId, v.id, now.unix)
+    }
+  } catch { /* egy kihagyott mintavétel nem gond, a következő pótolja */ }
+}
+
+if (JOURNAL_ON) {
+  initJournal(STATE_DIR, budapestNow().ymd)
+  sampleJournal()
+  setInterval(sampleJournal, JOURNAL_INTERVAL_SEC * 1000)
+  setInterval(flushJournal, JOURNAL_FLUSH_SEC * 1000)
+  for (const sig of ['SIGINT', 'SIGTERM'] as const) {
+    process.on(sig, () => { flushJournal(); process.exit(0) })
+  }
+}
 serve({ fetch: app.fetch, port: PORT, hostname: HOST }, (info) => {
   console.log(`== MVK backend ==  http://${HOST}:${info.port}   (dashboard a /-on)`)
   console.log(`   élő hozzárendelés: ≤${LIVE_MAX_KM} km, ≤${LIVE_MAX_ETA} perc   auto-renew: ${AUTO_RENEW ? 'BE' : 'KI'}`)

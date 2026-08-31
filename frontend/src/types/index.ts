@@ -253,6 +253,8 @@ export interface TimetableTrip {
   departure: string;
   departureSec: number;
   arrival: string;
+  /** A menet vége másodpercben — ebből derül ki, hogy már lefutott-e. */
+  arrivalSec: number;
   originName: string;
   destinationName: string;
   stopCount: number;
@@ -268,4 +270,47 @@ export interface TimetableResponse {
   stops: TimetableStop[];
   trips: TimetableTrip[];
   note?: string;
+}
+
+/** Egy kihúzott menet a mai napról (MVK `list-cancelled-trips` + GTFS adatok). */
+export interface CancelledTrip {
+  tripId: string;
+  /** Hamis, ha a statikus GTFS nem ismeri ezt a menetet (elavult feed). */
+  known: boolean;
+  routeId: string;
+  routeShort: string;
+  routeColor: string;
+  routeText: string;
+  dir: string;
+  headsign: string;
+  departure: string | null;
+  departureSec: number | null;
+  arrival: string | null;
+  originName: string | null;
+  destinationName: string | null;
+}
+
+export interface CancelledTripsResponse {
+  date: string;
+  count: number;
+  /** Igaz, ha az upstream épp nem válaszolt és elavult listát kaptunk. */
+  stale: boolean;
+  fetchedAt: string;
+  tripIds: string[];
+  trips: CancelledTrip[];
+}
+
+/** Egy menet naplózott járműve: a gateway 0–24-ben figyeli, ki teljesítette. */
+export interface TripJournalEntry {
+  vehicleId: string;
+  firstSeen: number;
+  lastSeen: number;
+  /** Hány mintavételen látszott — a magasabb érték biztosabb hozzárendelés. */
+  samples: number;
+}
+
+export interface TripJournalResponse {
+  date: string;
+  count: number;
+  trips: Record<string, TripJournalEntry>;
 }
