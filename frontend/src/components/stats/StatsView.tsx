@@ -7,6 +7,7 @@ import {
   Route as RouteIcon,
   Wrench,
   TrendingUp,
+  Sparkles,
   type LucideIcon,
 } from "lucide-react";
 import type { Route, Stop } from "@/types";
@@ -17,10 +18,18 @@ import { RoutePanel } from "./RoutePanel";
 import { StopPanel } from "./StopPanel";
 import { TravelTimePanel } from "./TravelTimePanel";
 import { NetworkPanel } from "./NetworkPanel";
+import { PredictionPanel } from "./PredictionPanel";
 import { cn } from "@/lib/utils";
 
 type PanelId =
-  "overview" | "vehicle" | "incident" | "route" | "stop" | "travel" | "network";
+  | "overview"
+  | "vehicle"
+  | "incident"
+  | "route"
+  | "stop"
+  | "travel"
+  | "network"
+  | "prediction";
 
 const PANELS: {
   id: PanelId;
@@ -35,6 +44,12 @@ const PANELS: {
   { id: "stop", label: "Megállók", short: "Megállók", icon: MapPinned },
   { id: "travel", label: "Menetidő A→B", short: "A→B", icon: Clock },
   { id: "network", label: "Hálózat", short: "Hálózat", icon: TrendingUp },
+  {
+    id: "prediction",
+    label: "Előrejelzés",
+    short: "Jóslat",
+    icon: Sparkles,
+  },
 ];
 
 export function StatsView({
@@ -109,6 +124,7 @@ export function StatsView({
           {panel === "stop" && <StopPanel stops={stops} />}
           {panel === "travel" && <TravelTimePanel stops={stops} />}
           {panel === "network" && <NetworkPanel />}
+          {panel === "prediction" && <PredictionPanel />}
         </div>
       </div>
     </div>

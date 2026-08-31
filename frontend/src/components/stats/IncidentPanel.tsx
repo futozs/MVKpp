@@ -4,6 +4,7 @@ import {
   Clock4,
   PauseOctagon,
   Undo2,
+  WifiOff,
   Wrench,
 } from "lucide-react";
 import {
@@ -40,6 +41,11 @@ const KIND_META: Record<
     short: "Elakadt",
     icon: PauseOctagon,
   },
+  no_signal: {
+    label: "Adatkiesés (nincs térerő)",
+    short: "Nincs jel",
+    icon: WifiOff,
+  },
   early_end: {
     label: "Korai bevonás",
     short: "Korai vég",
@@ -56,6 +62,7 @@ const FILTERS = [
   { id: "all", label: "Mind" },
   { id: "mid_trip_stop", label: "Elnémult" },
   { id: "stuck", label: "Elakadt" },
+  { id: "no_signal", label: "Nincs jel" },
   { id: "absence", label: "Kiesés" },
 ] as const;
 

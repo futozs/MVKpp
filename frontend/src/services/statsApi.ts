@@ -215,7 +215,7 @@ export type SlowSegment = {
 
 export type Incident = {
   incident_id: number;
-  kind: "mid_trip_stop" | "stuck" | "early_end" | "absence";
+  kind: "mid_trip_stop" | "stuck" | "no_signal" | "early_end" | "absence";
   service_date: string;
   started_ts: number;
   ended_ts: number | null;
@@ -244,6 +244,7 @@ export type FleetReliability = {
   incidents: number;
   mid_trip: number;
   stuck: number;
+  no_signal: number;
   absences: number;
   absent_days: number;
   absent_since: number | null;
@@ -267,6 +268,23 @@ export type IncidentSummary = {
     service_date: string;
     ended_ts: number;
   }[];
+};
+
+export type RoutePrediction = {
+  routeShort: string;
+  color: string | null;
+  probabilityPct: number;
+  avgDelaySec: number | null;
+};
+
+export type PredictionAccuracy = {
+  from: string;
+  to: string;
+  total: number;
+  correct: number;
+  accuracyPct: number | null;
+  daily: { service_date: string; n: number; correct: number }[];
+  byVehicle: { vehicle_id: string; n: number; correct: number }[];
 };
 
 export const statsApi = {
@@ -323,6 +341,16 @@ export const statsApi = {
     get<{ bucketFrom: number; bucketTo: number; segments: SlowSegment[] }>(
       `/network/slow?from=${bucketFrom}&to=${bucketTo}`,
     ),
+
+  predictRoute: (id: string) =>
+    get<{ vehicleId: string; samples: number; candidates: RoutePrediction[] }>(
+      `/vehicle/${encodeURIComponent(id)}/predict-route`,
+    ),
+
+  predictionAccuracy: (from: string, to: string) =>
+    get<PredictionAccuracy>(
+      `/predictions/accuracy?from=${from}&to=${to}`,
+    ),
 };
 
 export function fmtDuration(sec: number | null | undefined): string {
@@ -370,4 +398,17 @@ export function shiftDate(iso: string, days: number): string {
   const d = new Date(iso + "T12:00:00Z");
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
+}
+
+/**
+ * A backend a "hour" mezőt a szolgálati nap kezdetéhez (éjfél) képest méri
+ * órákban, ezért éjfél utáni járatoknál 24-nél nagyobb is lehet (pl. 26 =
+ * hajnal 2, még ugyanahhoz a szolgálati naphoz tartozva). Egy sima "% 24"
+ * megjelenítés két különböző órát azonos feliratra vinné (pl. a kora reggeli
+ * 2 és a hajnali 2 egyaránt "2" lenne), ami a diagramokon összekeveredett,
+ * rossz sorrendben megjelenő feliratokként látszott. Ehelyett 24 fölött "+"
+ * jellel jelezzük a másnapra átnyúló órát.
+ */
+export function formatServiceHour(hour: number): string {
+  return hour < 24 ? String(hour) : `${hour % 24}+`;
 }

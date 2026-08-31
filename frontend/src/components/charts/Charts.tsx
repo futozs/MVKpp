@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { formatServiceHour } from "@/services/statsApi";
 
 export function useMeasure<T extends HTMLElement>() {
   const ref = useRef<T>(null);
@@ -507,7 +508,7 @@ export function HourHeat({
                     }
               }
             >
-              {c.hour % 24}
+              {formatServiceHour(c.hour)}
             </div>
           );
         })}

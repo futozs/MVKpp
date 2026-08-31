@@ -10,6 +10,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import type { Route, LiveVehicle, FilterState } from "../../types";
+import { normalizeSearchText } from "../../lib/utils";
 import { RouteChips } from "./RouteChips";
 
 interface FleetFilterProps {
@@ -85,12 +86,12 @@ export const FleetFilter: React.FC<FleetFilterProps> = ({
 
     if (activeQueries.length > 0) {
       return list.filter((v) => {
-        const vid = String(v.id || "").toLowerCase();
-        const vlabel = String(v.label || "").toLowerCase();
-        return activeQueries.some(
-          (q) =>
-            vid.includes(q.toLowerCase()) || vlabel.includes(q.toLowerCase()),
-        );
+        const vid = normalizeSearchText(String(v.id || ""));
+        const vlabel = normalizeSearchText(String(v.label || ""));
+        return activeQueries.some((q) => {
+          const nq = normalizeSearchText(q);
+          return vid.includes(nq) || vlabel.includes(nq);
+        });
       });
     }
 

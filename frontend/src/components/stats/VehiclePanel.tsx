@@ -513,9 +513,11 @@ export function VehiclePanel({
                           ? "Menet közben elnémult"
                           : i.kind === "stuck"
                             ? "Helyben állt"
-                            : i.kind === "absence"
-                              ? "Kiesett a flottából"
-                              : "Korai bevonás"}
+                            : i.kind === "no_signal"
+                              ? "Adatkiesés (nincs térerő)"
+                              : i.kind === "absence"
+                                ? "Kiesett a flottából"
+                                : "Korai bevonás"}
                       </p>
                       <p className="mt-0.5 text-[11px] text-muted-foreground">{i.note}</p>
                     </div>

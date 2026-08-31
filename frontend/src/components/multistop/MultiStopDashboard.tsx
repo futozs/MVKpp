@@ -4,11 +4,12 @@ import type { Stop } from "@/types";
 import { useGeo } from "@/context/GeoContext";
 import { distanceKm } from "@/lib/geo";
 import { AddStopModal } from "./AddStopModal";
+import { NextDepartureBanner } from "./NextDepartureBanner";
 import { StopCard } from "./StopCard";
 import { StopCarousel } from "./StopCarousel";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
+import { cn, normalizeSearchText } from "@/lib/utils";
 
 const QUICK_STOPS = [
   { label: "Tiszai pályaudvar", match: "Tiszai" },
@@ -112,10 +113,11 @@ export function MultiStopDashboard({
     });
 
   const addByName = (needle: string) => {
+    const q = normalizeSearchText(needle);
     const found = stops.find(
       (s) =>
-        s.name.toLowerCase().includes(needle.toLowerCase()) ||
-        s.id.toLowerCase().includes(needle.toLowerCase()),
+        normalizeSearchText(s.name).includes(q) ||
+        s.id.toLowerCase().includes(q),
     );
     if (found) toggleStop(found.id);
   };
@@ -170,6 +172,12 @@ export function MultiStopDashboard({
           </Button>
         </div>
       </div>
+
+      {watched.length > 1 ? (
+        <div className="shrink-0 px-3 pt-3 sm:px-4">
+          <NextDepartureBanner stops={watched} onFocusMap={onFocusMap} />
+        </div>
+      ) : null}
 
       {}
       {watched.length > 0 ? (

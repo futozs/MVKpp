@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  Bell,
+  BellRing,
   ChevronLeft,
   ChevronRight,
   Crosshair,
@@ -22,6 +24,8 @@ import { RouteTile } from "@/components/transit/RouteTile";
 import { VehicleTrack } from "@/components/transit/VehicleTrack";
 import { formatDistance } from "@/lib/geo";
 import { cn } from "@/lib/utils";
+import { checkAndNotify, getWatch } from "@/lib/notifications";
+import { StopNotifyDialog } from "./StopNotifyDialog";
 
 const POLL_MS = 4000;
 
@@ -57,6 +61,8 @@ export function StopCard({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastFetch, setLastFetch] = useState<Date | null>(null);
+  const [notifyOpen, setNotifyOpen] = useState(false);
+  const [isWatching, setIsWatching] = useState(() => Boolean(getWatch(stop.id)));
   const mounted = useRef(true);
 
   useEffect(() => {
@@ -74,6 +80,7 @@ export function StopCard({
       setData(res);
       setError(null);
       setLastFetch(new Date());
+      checkAndNotify(stop.id, stop.name, res.arrivals);
     } catch (err) {
       if (mounted.current) setError((err as Error).message);
     } finally {
@@ -194,6 +201,26 @@ export function StopCard({
               <Button
                 variant="ghost"
                 size="icon"
+                className={cn(
+                  "h-8 w-8",
+                  isWatching && "text-primary hover:text-primary",
+                )}
+                onClick={() => setNotifyOpen(true)}
+                aria-label={`Értesítés beállítása — ${stop.name}`}
+              >
+                {isWatching ? <BellRing /> : <Bell />}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {isWatching ? "Értesítés beállítva" : "Értesítés beállítása"}
+            </TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
                 className="h-8 w-8 hover:bg-destructive/15 hover:text-destructive"
                 onClick={() => onRemove(stop.id)}
                 aria-label={`${stop.name} levétele a figyelőről`}
@@ -205,6 +232,15 @@ export function StopCard({
           </Tooltip>
         </div>
       </div>
+
+      <StopNotifyDialog
+        open={notifyOpen}
+        onOpenChange={setNotifyOpen}
+        stopId={stop.id}
+        stopName={stop.name}
+        arrivals={arrivals}
+        onChanged={setIsWatching}
+      />
 
       {}
       <div className="border-b border-border bg-muted/30 px-4 py-3.5">

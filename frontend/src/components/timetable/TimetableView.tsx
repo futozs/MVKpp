@@ -40,7 +40,7 @@ import {
   type DayRelation,
 } from "@/lib/tripStatus";
 import { initialTimetableView, saveTimetableView } from "@/lib/viewState";
-import { cn } from "@/lib/utils";
+import { cn, normalizeSearchText } from "@/lib/utils";
 
 interface TimetableViewProps {
   stops: Stop[];
@@ -277,13 +277,13 @@ export function TimetableView({
   }, [favorites, routes]);
 
   const visibleRoutes = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = normalizeSearchText(query.trim());
     if (!q) return routes;
     return routes.filter(
       (r) =>
-        r.short.toLowerCase().includes(q) ||
-        r.long.toLowerCase().includes(q) ||
-        r.directions.some((d) => d.headsign.toLowerCase().includes(q)),
+        normalizeSearchText(r.short).includes(q) ||
+        normalizeSearchText(r.long).includes(q) ||
+        r.directions.some((d) => normalizeSearchText(d.headsign).includes(q)),
     );
   }, [routes, query]);
 

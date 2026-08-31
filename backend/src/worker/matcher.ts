@@ -10,6 +10,7 @@ import {
   budapestOffsetSec,
 } from "../lib/gtfs.ts";
 import { keys, segPairKey } from "../db/dims.ts";
+import { logRoutePrediction } from "./routePrediction.ts";
 
 const RUN_NONE = 0;
 const MAX_OFF_ROUTE_M = 500;
@@ -17,10 +18,18 @@ const DWELL_WINDOW_M = 40;
 const STOPPED_DMS = 10;
 const MAX_SEGMENT_S = 3600;
 const UNDECIDED_GRACE_S = 300;
+// A valós, GPS-jel nélküli szakaszokon (pl. hegyekben) a pingek közti interpolált
+// érkezés simán túlfuthat egy ésszerű késésen. Ilyenkor a 16 bites oszlopra vágás
+// (i16 clamp) korábban 32767 mp-es (546 perc) hamis "extrém késés" kiugrást hozott
+// létre, ami néhány éjszakai eseményen az egész órás átlagot eltorzította.
+// Ehelyett a nem hihető értéket NULL-ra állítjuk, hogy kimaradjon az átlagból.
+const MAX_SANE_DELAY_S = 3600;
 
 const clamp = (v: number, lo: number, hi: number) =>
   Math.max(lo, Math.min(hi, Math.round(v)));
 const i16 = (v: number) => clamp(v, -32768, 32767);
+const saneDelay = (v: number) =>
+  Math.abs(v) > MAX_SANE_DELAY_S ? null : Math.round(v);
 
 export type PingRow = {
   vehicle_key: number;
@@ -103,8 +112,23 @@ async function resolveRunId(
       tripId,
     ],
   );
-  const runId = (res as { insertId: number }).insertId || RUN_NONE;
+  const { insertId, affectedRows } = res as {
+    insertId: number;
+    affectedRows: number;
+  };
+  const runId = insertId || RUN_NONE;
   if (runId) runIdCache.set(cacheKey, runId);
+
+  // affectedRows === 1 az INSERT ... ON DUPLICATE KEY UPDATE MySQL-konvenciója
+  // szerint azt jelenti, hogy ez tényleg egy MOST beszúrt, új trip_run — csak
+  // ekkor van értelme megjósolni (a korábbi hónapok alapján), melyik vonalra
+  // számítanánk ezt a járművet, és rögtön naplózni is a tényleges találatot.
+  if (runId && affectedRows === 1) {
+    logRoutePrediction(pool, runId, vehicleKey, serviceDate, routeKey).catch(
+      () => {},
+    );
+  }
+
   return runId;
 }
 
@@ -166,6 +190,10 @@ function deriveEvents(
       const b = usable[i + 1];
       if (b.along <= a.along) continue;
       if (a.along <= s.alongM && s.alongM < b.along) {
+        // Ha a két szomszédos GPS-jel közt eltelt idő túl nagy (pl. térerő
+        // hiánya a hegyekben), az interpolált érkezés nem megbízható — inkább
+        // ne generáljunk belőle eseményt, mint hogy hamis késés/torlódás jelet adjon.
+        if (b.feed_ts - a.feed_ts > MAX_SEGMENT_S) break;
         const t = (s.alongM - a.along) / (b.along - a.along);
         arr = Math.round(a.feed_ts + t * (b.feed_ts - a.feed_ts));
         break;
@@ -195,7 +223,7 @@ function deriveEvents(
     vehicleKey,
     e.arr,
     e.dep,
-    i16(e.arr - (midnight + e.sched)),
+    saneDelay(e.arr - (midnight + e.sched)),
     e.dwell,
     e.src,
   ]);

@@ -36,7 +36,7 @@ import { useGeo } from "@/context/GeoContext";
 import { distanceKm, nearest } from "@/lib/geo";
 import { initialMapView, saveMapView } from "@/lib/viewState";
 import { token } from "@/lib/theme";
-import { cn } from "@/lib/utils";
+import { cn, normalizeSearchText } from "@/lib/utils";
 
 export interface TileLayerOption {
   id: string;
@@ -457,15 +457,15 @@ export function TransitMap({
     });
 
   const getVisibleVehicles = () => {
-    const q = filters.vq.trim().toLowerCase();
-    const watchList = filters.watch.map((w) => w.toLowerCase());
+    const q = normalizeSearchText(filters.vq.trim());
+    const watchList = filters.watch.map((w) => normalizeSearchText(w));
 
     if (watchList.length > 0 || q) {
       const targets = [...watchList];
       if (q && !targets.includes(q)) targets.push(q);
       return vehicles.filter((v) => {
-        const vid = String(v.id || "").toLowerCase();
-        const label = String(v.label || "").toLowerCase();
+        const vid = normalizeSearchText(String(v.id || ""));
+        const label = normalizeSearchText(String(v.label || ""));
         return targets.some((t) => vid.includes(t) || label.includes(t));
       });
     }
@@ -881,13 +881,13 @@ export function TransitMap({
     }));
 
   const stopResults = useMemo(() => {
-    const q = stopQuery.trim().toLowerCase();
+    const q = normalizeSearchText(stopQuery.trim());
     if (!q) return stops.slice(0, 60);
     return stops
       .filter(
         (s) =>
-          s.name.toLowerCase().includes(q) ||
-          (s.code && s.code.toLowerCase().includes(q)) ||
+          normalizeSearchText(s.name).includes(q) ||
+          (s.code && normalizeSearchText(s.code).includes(q)) ||
           s.id.toLowerCase().includes(q),
       )
       .slice(0, 80);

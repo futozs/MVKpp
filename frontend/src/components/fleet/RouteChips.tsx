@@ -3,7 +3,7 @@ import { Search } from "lucide-react";
 import type { LiveVehicle, Route } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
+import { cn, normalizeSearchText } from "@/lib/utils";
 
 interface RouteChipsProps {
   routes: Record<string, Route>;
@@ -43,12 +43,12 @@ export function RouteChips({
   );
 
   const visible = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = normalizeSearchText(query.trim());
     if (!q) return ordered;
     return ordered.filter(
       (r) =>
-        r.short.toLowerCase().includes(q) ||
-        (r.long && r.long.toLowerCase().includes(q)),
+        normalizeSearchText(r.short).includes(q) ||
+        (r.long && normalizeSearchText(r.long).includes(q)),
     );
   }, [ordered, query]);
 

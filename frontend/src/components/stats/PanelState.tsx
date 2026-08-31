@@ -1,6 +1,7 @@
 import { AlertTriangle, DatabaseZap, Loader2, Search, X } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { Input } from "@/components/ui/input";
+import { normalizeSearchText } from "@/lib/utils";
 import type { QueryState } from "./useStatsQuery";
 
 export function QueryBoundary<T>({
@@ -139,14 +140,14 @@ export function SearchablePicker<T extends string>({
   const [q, setQ] = useState("");
 
   const filtered = useMemo(() => {
-    const t = q.trim().toLowerCase();
+    const t = normalizeSearchText(q.trim());
     if (!t) return items.slice(0, limit);
     return items
       .filter(
         (it) =>
-          it.label.toLowerCase().includes(t) ||
-          (it.sub ?? "").toLowerCase().includes(t) ||
-          (it.search ?? "").toLowerCase().includes(t),
+          normalizeSearchText(it.label).includes(t) ||
+          normalizeSearchText(it.sub ?? "").includes(t) ||
+          normalizeSearchText(it.search ?? "").includes(t),
       )
       .slice(0, limit);
   }, [items, q, limit]);

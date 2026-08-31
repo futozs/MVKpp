@@ -22,6 +22,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { GeoProvider } from "@/context/GeoContext";
 import { initialView, saveView } from "@/lib/viewState";
 import { useAppHeight } from "@/hooks/useAppHeight";
+import { useLiveIncidents } from "@/hooks/useLiveIncidents";
 
 const TAB_IDS: ActiveTab[] = ["map", "multistop", "timetable", "stats"];
 
@@ -50,6 +51,7 @@ const DEFAULT_FILTERS: FilterState = {
 
 export function App() {
   useAppHeight();
+  const liveIncidentCount = useLiveIncidents();
 
   const restored = initialView();
 
@@ -239,6 +241,7 @@ export function App() {
             onManualRefresh={fetchLivePositions}
             monitoredStopsCount={monitoredStopIds.length}
             onOpenMapPicker={() => setMapPickerOpen(true)}
+            liveIncidentCount={liveIncidentCount}
           />
           <MobileHeader
             activeTab={activeTab}
@@ -249,6 +252,7 @@ export function App() {
             onManualRefresh={fetchLivePositions}
             monitoredStopsCount={monitoredStopIds.length}
             onOpenMapPicker={() => setMapPickerOpen(true)}
+            liveIncidentCount={liveIncidentCount}
           />
 
           <InstallBanner />

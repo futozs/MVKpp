@@ -231,6 +231,38 @@ async function detectStuck(pool: Pool, date: string): Promise<IncidentRow[]> {
     const dur = to.feed_ts - from.feed_ts;
     if (dur < STUCK_MIN * 60) continue;
 
+    // Adatkiesés-jel: ha a "megállás" teljes időtartama alatt a pozíció
+    // bit-pontosan ugyanaz maradt minden egyes pingen, az nem valós helyben
+    // állás — egy ténylegesen álló/araszoló jármű GPS-je ennyi idő alatt
+    // szinte biztosan mutatna néhány méteres jitter-t vagy apró elmozdulást.
+    // Az azonos, ismétlődő koordináta jellemzően azt jelzi, hogy a jármű
+    // nem küldött friss adatot (pl. térerő hiánya hegyvidéki szakaszon), és
+    // a feed csak az utolsó ismert pozíciót ismételte — ezt nem szabad
+    // torlódásként/helyben állásként feltüntetni.
+    const distinctPositions = new Set(
+      seq.map((p) => `${p.lat_e7},${p.lon_e7}`),
+    ).size;
+    if (distinctPositions === 1) {
+      out.push({
+        vehicleKey: from.vehicle_key,
+        kind: "no_signal",
+        startedTs: from.feed_ts,
+        endedTs: to.feed_ts,
+        durationS: dur,
+        runId: from.run_id,
+        routeKey: from.route_key,
+        latE7: from.lat_e7,
+        lonE7: from.lon_e7,
+        progressPct: null,
+        severity: 1,
+        confidence: clampPct(40 + Math.min(dur / 120, 30)),
+        peersStuck: 0,
+        resolution: "adat érkezett újra",
+        note: `${Math.round(dur / 60)} percig nem érkezett friss helyzetadat (a pozíció nem változott) — valószínűleg térerő hiánya, nem torlódás.`,
+      });
+      continue;
+    }
+
     if (nearAnyStop(from.lat_e7, from.lon_e7)) continue;
 
     const [peerRows] = await pool.query(

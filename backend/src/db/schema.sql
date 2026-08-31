@@ -269,6 +269,28 @@ CREATE TABLE IF NOT EXISTS agg_vehicle_route (
   KEY ix_route (route_key, period_ym)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- "Melyik vonalra jósoltuk ezt a járművet, és eltalátuk-e?" — statisztikai
+-- (nem valódi gépi tanulásos) becslés: az agg_vehicle_route korábbi
+-- hónapjainak futásgyakorisága alapján, MINDEN ÚJ trip_run-nál (tehát
+-- mielőtt a mai tényleges hozzárendelést felhasználnánk), egyetlen sorban
+-- rögzítjük a jóslatot ÉS a beérkező tényt is — így utólag pontosan
+-- lemérhető, hányszor volt igaza.
+CREATE TABLE IF NOT EXISTS vehicle_route_prediction (
+  pred_id             INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  vehicle_key         SMALLINT UNSIGNED NOT NULL,
+  service_date        DATE NOT NULL,
+  run_id              INT UNSIGNED NOT NULL,
+  predicted_route_key SMALLINT UNSIGNED NULL,
+  predicted_prob_pct  TINYINT UNSIGNED NULL,
+  samples             MEDIUMINT UNSIGNED NOT NULL,
+  actual_route_key    SMALLINT UNSIGNED NOT NULL,
+  correct             TINYINT(1) NOT NULL,
+  created_at          INT UNSIGNED NOT NULL,
+  PRIMARY KEY (pred_id),
+  UNIQUE KEY ux_run (run_id),
+  KEY ix_vehicle_date (vehicle_key, service_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS agg_vehicle_day (
   vehicle_key  SMALLINT UNSIGNED NOT NULL,
   service_date DATE NOT NULL,

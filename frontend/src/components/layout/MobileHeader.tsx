@@ -15,6 +15,7 @@ interface MobileHeaderProps {
   onManualRefresh: () => void;
   monitoredStopsCount: number;
   onOpenMapPicker: () => void;
+  liveIncidentCount: number;
 }
 
 const TABS: { id: ActiveTab; label: string }[] = [
@@ -33,6 +34,7 @@ export function MobileHeader({
   onManualRefresh,
   monitoredStopsCount,
   onOpenMapPicker,
+  liveIncidentCount,
 }: MobileHeaderProps) {
   const weather = useWeather();
   const navRef = useRef<HTMLElement>(null);
@@ -148,6 +150,20 @@ export function MobileHeader({
                   )}
                 >
                   {monitoredStopsCount}
+                </span>
+              ) : null}
+              {tab.id === "stats" && liveIncidentCount > 0 ? (
+                <span
+                  className={cn(
+                    "flex items-center gap-1 rounded px-1 font-mono text-[10px] font-bold tabular-nums",
+                    isActive
+                      ? "bg-primary-foreground/20"
+                      : "bg-late/15 text-late",
+                  )}
+                  title={`${liveIncidentCount} élő üzemzavar-jelzés`}
+                >
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
+                  {liveIncidentCount}
                 </span>
               ) : null}
             </button>

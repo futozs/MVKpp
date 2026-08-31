@@ -137,9 +137,117 @@ stats.get("/vehicle/:id/routes", async (c) => {
   return c.json({ vehicleId: id, routes: rows });
 });
 
+const PREDICT_MONTHS = 6;
+
+// Élő, "on-demand" jóslat: nem tárolt előrejelzés, hanem a lekérdezés
+// pillanatában számolt statisztikai becslés (nem valódi gépi tanulás) a
+// jármű korábbi hónapjainak agg_vehicle_route futásgyakorisága alapján —
+// melyik vonalra a legvalószínűbb, hogy legközelebb beosztják.
+stats.get("/vehicle/:id/predict-route", async (c) => {
+  const id = c.req.param("id");
+  const now = new Date();
+  const thisYm = now.getFullYear() * 100 + (now.getMonth() + 1);
+  const months: number[] = [];
+  let y = Math.floor(thisYm / 100);
+  let m = thisYm % 100;
+  for (let i = 0; i < PREDICT_MONTHS; i++) {
+    months.push(y * 100 + m);
+    m -= 1;
+    if (m === 0) {
+      m = 12;
+      y -= 1;
+    }
+  }
+  const ph = months.map(() => "?").join(",");
+
+  const rows = await query<{
+    route_short: string;
+    color: string | null;
+    runs: number;
+    avg_delay_s: number | null;
+  }>(
+    `SELECT d.route_short, d.color, SUM(a.runs) AS runs,
+            ROUND(SUM(a.avg_delay_s * a.runs) / NULLIF(SUM(a.runs), 0)) AS avg_delay_s
+       FROM agg_vehicle_route a
+       JOIN dim_vehicle v ON v.vehicle_key = a.vehicle_key
+       JOIN dim_route d ON d.route_key = a.route_key
+      WHERE v.vehicle_id = ? AND a.period_ym IN (${ph})
+      GROUP BY d.route_short, d.color
+      ORDER BY runs DESC
+      LIMIT 5`,
+    [id, ...months],
+  );
+  const total = rows.reduce((s, r) => s + Number(r.runs), 0);
+  const candidates = rows.map((r) => ({
+    routeShort: r.route_short,
+    color: r.color,
+    probabilityPct: total ? Math.round((100 * Number(r.runs)) / total) : 0,
+    avgDelaySec: r.avg_delay_s != null ? Number(r.avg_delay_s) : null,
+  }));
+  return c.json({ vehicleId: id, samples: total, candidates });
+});
+
+// Az előre naplózott jóslatok (lásd routePrediction.ts) utólagos pontossága:
+// hányszor volt igaza a korábbi hónapok gyakorisága alapján épített
+// becslésnek a ténylegesen kiadott menethez képest.
+stats.get("/predictions/accuracy", async (c) => {
+  const to = c.req.query("to") ?? defToday();
+  const from =
+    c.req.query("from") ?? iso(new Date(Date.parse(to) - 59 * 86400_000));
+
+  const [overall] = await query<{ n: number; correct: number }>(
+    `SELECT COUNT(*) AS n, COALESCE(SUM(correct), 0) AS correct
+       FROM vehicle_route_prediction
+      WHERE service_date BETWEEN ? AND ?`,
+    [from, to],
+  );
+
+  const daily = await query<{
+    service_date: string;
+    n: number;
+    correct: number;
+  }>(
+    `SELECT service_date, COUNT(*) AS n, COALESCE(SUM(correct), 0) AS correct
+       FROM vehicle_route_prediction
+      WHERE service_date BETWEEN ? AND ?
+      GROUP BY service_date
+      ORDER BY service_date`,
+    [from, to],
+  );
+
+  const byVehicle = await query<{
+    vehicle_id: string;
+    n: number;
+    correct: number;
+  }>(
+    `SELECT v.vehicle_id, COUNT(*) AS n, COALESCE(SUM(p.correct), 0) AS correct
+       FROM vehicle_route_prediction p
+       JOIN dim_vehicle v ON v.vehicle_key = p.vehicle_key
+      WHERE p.service_date BETWEEN ? AND ?
+      GROUP BY v.vehicle_id
+      HAVING n >= 3
+      ORDER BY n DESC
+      LIMIT 30`,
+    [from, to],
+  );
+
+  return c.json({
+    from,
+    to,
+    total: overall?.n ?? 0,
+    correct: overall?.correct ?? 0,
+    accuracyPct: overall?.n
+      ? Math.round((100 * overall.correct) / overall.n)
+      : null,
+    daily,
+    byVehicle,
+  });
+});
+
 const INCIDENT_KINDS = [
   "mid_trip_stop",
   "stuck",
+  "no_signal",
   "early_end",
   "absence",
 ] as const;
@@ -184,6 +292,7 @@ stats.get("/incidents/summary", async (c) => {
             COALESCE(i.n, 0) AS incidents,
             COALESCE(i.mid_trip, 0) AS mid_trip,
             COALESCE(i.stuck, 0) AS stuck,
+            COALESCE(i.no_signal, 0) AS no_signal,
             COALESCE(i.absences, 0) AS absences,
             COALESCE(i.absent_days, 0) AS absent_days,
             open_abs.started_ts AS absent_since,
@@ -200,6 +309,7 @@ stats.get("/incidents/summary", async (c) => {
          SELECT vehicle_key, COUNT(*) AS n,
                 SUM(kind = 'mid_trip_stop') AS mid_trip,
                 SUM(kind = 'stuck') AS stuck,
+                SUM(kind = 'no_signal') AS no_signal,
                 SUM(kind = 'absence') AS absences,
                 COALESCE(SUM(absent_days), 0) AS absent_days
            FROM vehicle_incident

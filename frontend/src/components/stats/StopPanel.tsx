@@ -3,6 +3,7 @@ import { Search } from "lucide-react";
 import type { Stop } from "@/types";
 import {
   fmtDelay,
+  formatServiceHour,
   serviceToday,
   shiftDate,
   statsApi,
@@ -18,7 +19,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { QueryBoundary } from "./PanelState";
 import { useStatsQuery } from "./useStatsQuery";
-import { cn } from "@/lib/utils";
+import { cn, normalizeSearchText } from "@/lib/utils";
 
 function byHour(hours: StopHour[]) {
   const map = new Map<
@@ -71,12 +72,13 @@ export function StopPanel({ stops }: { stops: Stop[] }) {
   const from = shiftDate(to, -13);
 
   const matches = useMemo(() => {
-    const t = search.trim().toLowerCase();
+    const t = normalizeSearchText(search.trim());
     if (!t) return stops.slice(0, 12);
     return stops
       .filter(
         (s) =>
-          s.name.toLowerCase().includes(t) || s.id.toLowerCase().includes(t),
+          normalizeSearchText(s.name).includes(t) ||
+          s.id.toLowerCase().includes(t),
       )
       .slice(0, 12);
   }, [search, stops]);
@@ -192,7 +194,7 @@ export function StopPanel({ stops }: { stops: Stop[] }) {
                   />
                   <StatTile
                     label="Legforgalmasabb óra"
-                    value={busiest ? `${busiest.hour % 24}:00` : "—"}
+                    value={busiest ? `${formatServiceHour(busiest.hour)}:00` : "—"}
                     sub={busiest ? `${busiest.events} érkezés` : undefined}
                   />
                 </div>
@@ -202,9 +204,9 @@ export function StopPanel({ stops }: { stops: Stop[] }) {
                 >
                   <BarChart
                     data={rows.map((r) => ({
-                      label: String(r.hour % 24),
+                      label: formatServiceHour(r.hour),
                       value: r.events,
-                      title: `${r.hour % 24}:00 — ${r.events} érkezés, pontosság ${r.otp ?? "—"}%`,
+                      title: `${formatServiceHour(r.hour)}:00 — ${r.events} érkezés, pontosság ${r.otp ?? "—"}%`,
                     }))}
                     labelEvery={2}
                   />
@@ -217,7 +219,7 @@ export function StopPanel({ stops }: { stops: Stop[] }) {
                     cells={rows.map((r) => ({
                       hour: r.hour,
                       value: r.otp,
-                      title: `${r.hour % 24}:00 — pontosság ${r.otp ?? "—"}%, átlag ${fmtDelay(r.avgDelay)}`,
+                      title: `${formatServiceHour(r.hour)}:00 — pontosság ${r.otp ?? "—"}%, átlag ${fmtDelay(r.avgDelay)}`,
                     }))}
                   />
                 </ChartFrame>
@@ -226,7 +228,7 @@ export function StopPanel({ stops }: { stops: Stop[] }) {
                   {rows.some((r) => r.avgDelay != null) ? (
                     <BarChart
                       data={rows.map((r) => ({
-                        label: String(r.hour % 24),
+                        label: formatServiceHour(r.hour),
                         value: r.avgDelay,
                         tone:
                           (r.avgDelay ?? 0) > 60
@@ -234,7 +236,7 @@ export function StopPanel({ stops }: { stops: Stop[] }) {
                             : (r.avgDelay ?? 0) < -60
                               ? "fill-early"
                               : "fill-ontime",
-                        title: `${r.hour % 24}:00 — ${fmtDelay(r.avgDelay)}`,
+                        title: `${formatServiceHour(r.hour)}:00 — ${fmtDelay(r.avgDelay)}`,
                       }))}
                       labelEvery={2}
                     />

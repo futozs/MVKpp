@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { Search, MapPin, ChevronRight, Plus, Check } from "lucide-react";
 import type { Stop } from "../../types";
+import { normalizeSearchText } from "../../lib/utils";
 
 interface StopSearchListProps {
   stops: Stop[];
@@ -20,13 +21,13 @@ export const StopSearchList: React.FC<StopSearchListProps> = ({
   const [query, setQuery] = useState("");
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = normalizeSearchText(query.trim());
     if (!q) return stops.slice(0, 80);
     return stops
       .filter(
         (s) =>
-          s.name.toLowerCase().includes(q) ||
-          (s.code && s.code.toLowerCase().includes(q)) ||
+          normalizeSearchText(s.name).includes(q) ||
+          (s.code && normalizeSearchText(s.code).includes(q)) ||
           s.id.toLowerCase().includes(q),
       )
       .slice(0, 100);

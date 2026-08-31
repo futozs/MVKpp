@@ -9,7 +9,7 @@ import {
 import { ChartFrame, StatTile } from "@/components/charts/Charts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
+import { cn, normalizeSearchText } from "@/lib/utils";
 
 const fmtMin = (sec: number) => {
   const m = Math.floor(sec / 60);
@@ -38,13 +38,13 @@ function StopSelect({
   // Névre és kódra is keresünk: azonos nevű megállóból több is van, a kód
   // viszont egyedi — ezzel lehet a megfelelőt kiválasztani.
   const matches = useMemo(() => {
-    const t = text.trim().toLowerCase();
+    const t = normalizeSearchText(text.trim());
     if (!t) return [];
     return stops
       .filter(
         (s) =>
-          s.name.toLowerCase().includes(t) ||
-          (s.code || "").toLowerCase().includes(t) ||
+          normalizeSearchText(s.name).includes(t) ||
+          normalizeSearchText(s.code || "").includes(t) ||
           s.id.toLowerCase().includes(t),
       )
       .slice(0, 8);

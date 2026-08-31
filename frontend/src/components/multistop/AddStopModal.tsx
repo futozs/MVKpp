@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { cn } from "@/lib/utils";
+import { cn, normalizeSearchText } from "@/lib/utils";
 
 type AddStopModalProps = {
   isOpen: boolean;
@@ -31,13 +31,13 @@ export function AddStopModal({
   const [query, setQuery] = useState("");
 
   const results = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = normalizeSearchText(query.trim());
     if (!q) return stops.slice(0, 60);
     return stops
       .filter(
         (s) =>
-          s.name.toLowerCase().includes(q) ||
-          (s.code && s.code.toLowerCase().includes(q)) ||
+          normalizeSearchText(s.name).includes(q) ||
+          (s.code && normalizeSearchText(s.code).includes(q)) ||
           s.id.toLowerCase().includes(q),
       )
       .slice(0, 80);
