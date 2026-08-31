@@ -144,34 +144,3 @@ export async function unregisterPushWatch(stopId: string): Promise<void> {
     // A helyi figyelés törlése enélkül is megtörténik — ez csak a szerver oldali rész.
   }
 }
-
-/**
- * Azonnali teszt-push, a küszöb/időzítés-logika megkerülésével — így nem
- * kell valós buszra várni ahhoz, hogy kiderüljön, működik-e a teljes lánc.
- */
-export async function sendTestPush(): Promise<PushDiagnostic> {
-  const result = await ensureSubscription();
-  if (!result.sub) return { ok: false, reason: result.reason };
-  try {
-    const res = await fetch(`${API_BASE}/push/test`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ subscription: result.sub.toJSON() }),
-    });
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      log(`teszt küldés sikertelen: HTTP ${res.status} — ${text}`);
-      return { ok: false, reason: `A szerver elutasította (${res.status}).` };
-    }
-    const data = (await res.json()) as { result?: string };
-    log("teszt küldés eredménye:", data.result);
-    if (data.result !== "ok") {
-      return { ok: false, reason: `A szerver válasza: ${data.result}` };
-    }
-    return { ok: true };
-  } catch (e) {
-    const message = (e as Error).message;
-    log("teszt küldés sikertelen:", message);
-    return { ok: false, reason: `Nem sikerült elérni a szervert: ${message}` };
-  }
-}

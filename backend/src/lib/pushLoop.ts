@@ -4,7 +4,12 @@ import { withHungarianSuffix } from "./huSuffix.ts";
 
 const CHECK_INTERVAL_MS = Number(process.env.PUSH_CHECK_INTERVAL_MS ?? 5_000);
 
-type MinimalArrival = { route: string; etaMin: number; tripId: string };
+type MinimalArrival = {
+  route: string;
+  etaMin: number;
+  tripId: string;
+  vehicle: { id: string } | null;
+};
 type ArrivalsForStop = (
   stopId: string,
   limit: number,
@@ -68,12 +73,12 @@ async function checkOnce(arrivalsForStop: ArrivalsForStop): Promise<void> {
       const fresh = matches.filter((a) => !already.has(a.tripId));
 
       if (fresh.length) {
-        const routes = [...new Set(fresh.map((a) => a.route))];
         const minEta = Math.max(0, Math.round(Math.min(...fresh.map((a) => a.etaMin))));
-        const title =
-          routes.length > 1
-            ? `${routes.map(withHungarianSuffix).join(", ")} buszok`
-            : `${withHungarianSuffix(routes[0])} busz`;
+        const label = (a: MinimalArrival) =>
+          a.vehicle?.id
+            ? `${withHungarianSuffix(a.route)} busz (${a.vehicle.id})`
+            : `${withHungarianSuffix(a.route)} busz`;
+        const title = fresh.length > 1 ? fresh.map(label).join(", ") : label(fresh[0]);
         const body = `${w.stop_name} (${w.stop_id}) — kb. ${minEta} percen belül`;
 
         const result = await sendPush(
@@ -119,7 +124,7 @@ async function selfTest(): Promise<void> {
     );
     if (!subs[0]?.n) {
       console.log(
-        "[push] MÉG SENKI NEM IRATKOZOTT FEL — ha az appban már beállítottál értesítést, az a regisztráció nem jutott el ide (nézd a böngésző konzolját a telefonon, vagy próbáld a 'Teszt küldése' gombot).",
+        "[push] MÉG SENKI NEM IRATKOZOTT FEL — ha az appban már beállítottál értesítést, az a regisztráció nem jutott el ide (nézd a böngésző konzolját a telefonon).",
       );
     }
     console.log("[push] ── önteszt vége: MINDEN RENDBEN ──");

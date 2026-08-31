@@ -107,12 +107,15 @@ export function checkAndNotify(
   const fresh = matches.filter((a) => !already.has(a.tripId));
 
   if (fresh.length) {
-    const routes = [...new Set(fresh.map((a) => a.route))];
     const minEta = Math.max(0, Math.round(Math.min(...fresh.map((a) => a.etaMin))));
+    const label = (a: ArrivalItem) =>
+      a.vehicle?.id
+        ? `${withHungarianSuffix(a.route)} busz (${a.vehicle.id})`
+        : `${withHungarianSuffix(a.route)} busz`;
     const title =
-      routes.length > 1
-        ? `${routes.map(withHungarianSuffix).join(", ")} buszok`
-        : `${withHungarianSuffix(routes[0])} busz`;
+      fresh.length > 1
+        ? `${fresh.map(label).join(", ")}`
+        : label(fresh[0]);
     const body = `${stopName} (${stopId}) — kb. ${minEta} percen belül`;
 
     try {

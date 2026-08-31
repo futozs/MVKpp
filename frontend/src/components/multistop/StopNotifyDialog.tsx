@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BellOff, CheckCircle2, Loader2, XCircle } from "lucide-react";
+import { BellOff, CheckCircle2, XCircle } from "lucide-react";
 import type { ArrivalItem } from "@/types";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,7 +20,7 @@ import {
   requestNotificationPermission,
   setWatch,
 } from "@/lib/notifications";
-import { registerPushWatch, sendTestPush, unregisterPushWatch } from "@/lib/push";
+import { registerPushWatch, unregisterPushWatch } from "@/lib/push";
 
 type StopNotifyDialogProps = {
   open: boolean;
@@ -31,16 +31,10 @@ type StopNotifyDialogProps = {
   onChanged?: (active: boolean) => void;
 };
 
-type Status = { state: "idle" | "checking" | "ok" | "fail"; reason?: string };
+type Status = { state: "idle" | "ok" | "fail"; reason?: string };
 
 function StatusLine({ status, okLabel }: { status: Status; okLabel: string }) {
   if (status.state === "idle") return null;
-  if (status.state === "checking")
-    return (
-      <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Ellenőrzés…
-      </p>
-    );
   if (status.state === "ok")
     return (
       <p className="flex items-center gap-1.5 text-[11px] text-ontime">
@@ -67,7 +61,6 @@ export function StopNotifyDialog({
   const [permissionDenied, setPermissionDenied] = useState(false);
   const [existed, setExisted] = useState(false);
   const [pushStatus, setPushStatus] = useState<Status>({ state: "idle" });
-  const [testStatus, setTestStatus] = useState<Status>({ state: "idle" });
 
   useEffect(() => {
     if (!open) return;
@@ -77,7 +70,6 @@ export function StopNotifyDialog({
     setRouteShorts(w?.routeShorts ?? []);
     setPermissionDenied(notificationPermission() === "denied");
     setPushStatus({ state: "idle" });
-    setTestStatus({ state: "idle" });
   }, [open, stopId]);
 
   const nearbyRoutes = [...new Set(arrivals.map((a) => a.route).filter(Boolean))];
@@ -103,7 +95,6 @@ export function StopNotifyDialog({
     // küld. A dialógus szándékosan NEM zárul be azonnal, hogy lásd, sikerült-e
     // ez a szerver-oldali regisztráció (a helyi, nyitott lapos figyelés
     // ettől függetlenül mindig működik).
-    setPushStatus({ state: "checking" });
     const result = await registerPushWatch({
       stopId,
       stopName,
@@ -111,14 +102,6 @@ export function StopNotifyDialog({
       routeShorts: finalRouteShorts,
     });
     setPushStatus(
-      result.ok ? { state: "ok" } : { state: "fail", reason: result.reason },
-    );
-  };
-
-  const handleTest = async () => {
-    setTestStatus({ state: "checking" });
-    const result = await sendTestPush();
-    setTestStatus(
       result.ok ? { state: "ok" } : { state: "fail", reason: result.reason },
     );
   };
@@ -207,22 +190,6 @@ export function StopNotifyDialog({
               <StatusLine status={pushStatus} okLabel="Sikeresen regisztrálva a szerveren." />
             </div>
           ) : null}
-
-          <div className="space-y-1.5 border-t border-border pt-3">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleTest}
-              disabled={testStatus.state === "checking"}
-            >
-              {testStatus.state === "checking" ? (
-                <Loader2 className="animate-spin" />
-              ) : null}
-              Teszt értesítés küldése most
-            </Button>
-            <StatusLine status={testStatus} okLabel="Elküldve — nézd meg, megjött-e." />
-          </div>
         </div>
 
         <DialogFooter className="gap-2 sm:gap-2">
