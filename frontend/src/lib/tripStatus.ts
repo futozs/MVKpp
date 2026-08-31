@@ -80,3 +80,20 @@ export function tripRunLabel(
       return null;
   }
 }
+
+/**
+ * Egy LEZÁRT menet eltérése múlt időben. A `delaySentence` jelen idejű
+ * („késik") — egy tegnapi menetnél az félrevezető lenne.
+ */
+export function delayPastSentence(
+  sec: number | null | undefined,
+  kind: "start" | "end",
+): string | null {
+  if (sec == null) return null;
+  const verb = kind === "start" ? "indult" : "ért be";
+  const min = Math.round(Math.abs(sec) / 60);
+  if (min < 1) return `Menetrend szerint ${verb}`;
+  return sec > 0
+    ? `${min} percet késve ${verb}`
+    : `${min} perccel korábban ${verb}`;
+}

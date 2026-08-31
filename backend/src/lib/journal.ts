@@ -7,7 +7,9 @@
  * menetet melyik busz vitte — az élő feed ilyenkor már rég nem tud róla.
  *
  * A napló naponta egy JSON fájl a `state/journal/` alatt, hogy a gateway
- * újraindítása se törölje a ma összegyűjtött hozzárendeléseket.
+ * újraindítása se törölje a ma összegyűjtött hozzárendeléseket. A VÉGLEGES tár
+ * az adatbázis (`trip_vehicle_log`): ide a `takeSightings` által visszaadott
+ * deltákat írja ki a gateway, a helyi fájl csak gyorstár és tartalék.
  *
  * FONTOS: az MVK feed trip_id-je nem mindig pontos, ezért mintaszámot is
  * tárolunk — egyetlen villanásnyi észlelés nem elég egy menet „elkönyveléséhez".
@@ -35,6 +37,8 @@ const RETENTION_DAYS = Number(process.env.JOURNAL_RETENTION_DAYS ?? 30)
 let baseDir = ''
 const days = new Map<string, DayLog>()
 const dirty = new Set<string>()
+/** A legutóbbi adatbázis-kiírás óta felgyűlt növekmény (ymd -> trip -> jármű). */
+const pending = new Map<string, DayLog>()
 
 const fileOf = (ymd: string) => join(baseDir, `${ymd}.json`)
 
@@ -70,7 +74,52 @@ export function recordSighting(ymd: string, tripId: string, vehicleId: string, u
   } else {
     byVehicle[vehicleId] = [unix, unix, 1]
   }
+
+  let delta = pending.get(ymd)
+  if (!delta) pending.set(ymd, (delta = {}))
+  const dv = (delta[tripId] ??= {})
+  const dprev = dv[vehicleId]
+  if (dprev) { dprev[1] = unix; dprev[2]++ } else { dv[vehicleId] = [unix, unix, 1] }
+
   dirty.add(ymd)
+}
+
+export type SightingDelta = { tripId: string; vehicleId: string; firstSeen: number; lastSeen: number; samples: number }
+
+/**
+ * A legutóbbi hívás óta felgyűlt észlelések, és a számláló nullázása.
+ * A hívó feladata kiírni őket; ha az adatbázis nem elérhető, a `restore`-ral
+ * visszaadhatja a köteget, hogy a következő körben újra próbálkozhassunk.
+ */
+export function takeSightings(ymd: string): SightingDelta[] {
+  const delta = pending.get(ymd)
+  if (!delta) return []
+  pending.delete(ymd)
+  const out: SightingDelta[] = []
+  for (const [tripId, byVehicle] of Object.entries(delta)) {
+    for (const [vehicleId, [firstSeen, lastSeen, samples]] of Object.entries(byVehicle)) {
+      out.push({ tripId, vehicleId, firstSeen, lastSeen, samples })
+    }
+  }
+  return out
+}
+
+/** Sikertelen kiírás után a köteg visszatétele a következő próbálkozáshoz. */
+export function restoreSightings(ymd: string, rows: SightingDelta[]): void {
+  if (!rows.length) return
+  let delta = pending.get(ymd)
+  if (!delta) pending.set(ymd, (delta = {}))
+  for (const r of rows) {
+    const dv = (delta[r.tripId] ??= {})
+    const prev = dv[r.vehicleId]
+    if (prev) {
+      prev[0] = Math.min(prev[0], r.firstSeen)
+      prev[1] = Math.max(prev[1], r.lastSeen)
+      prev[2] += r.samples
+    } else {
+      dv[r.vehicleId] = [r.firstSeen, r.lastSeen, r.samples]
+    }
+  }
 }
 
 /**

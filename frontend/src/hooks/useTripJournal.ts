@@ -15,6 +15,7 @@ const EMPTY = new Map<string, TripJournalEntry>();
 export function useTripJournal(
   /** YYYYMMDD; `null` esetén nem kérdez le semmit. */
   ymd: string | null,
+  /** 0 vagy kevesebb: egyszeri lekérdezés — egy lezárt nap adata nem változik. */
   pollMs = DEFAULT_POLL_MS,
 ): Map<string, TripJournalEntry> {
   const [data, setData] = useState<TripJournalResponse | null>(null);
@@ -44,6 +45,7 @@ export function useTripJournal(
     };
 
     load();
+    if (pollMs <= 0) return;
     const timer = setInterval(load, pollMs);
     return () => clearInterval(timer);
   }, [ymd, pollMs]);

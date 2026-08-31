@@ -26,6 +26,7 @@ import { Card } from "@/components/ui/card";
 import { RouteTile } from "@/components/transit/RouteTile";
 import { LiveDot } from "@/components/transit/LiveDot";
 import { HereChip } from "@/components/transit/HereChip";
+import { RunSummary } from "./RunSummary";
 import { TimetableGrid } from "./TimetableGrid";
 import { TripProgressRail } from "./TripProgressRail";
 import { useCancelledTrips } from "@/hooks/useCancelledTrips";
@@ -45,8 +46,10 @@ interface TimetableViewProps {
   stops: Stop[];
   liveVehicles: LiveVehicle[];
   onFocusTrip: (tripId: string, vehicleId?: string) => void;
-  /** A GTFS naptári érvényessége (YYYYMMDD) — ezen kívülre nincs menetrend. */
+  /** A GTFS naptári érvényessége (YYYYMMDD) — ezen kívülre nincs élő menetrend. */
   serviceRange: { from: string; to: string } | null;
+  /** Az elrakott menetrend tartománya — a naptár eddig enged visszalépni. */
+  archiveRange: { from: string; to: string; days: number } | null;
 }
 
 function secondsSinceMidnight(d: Date) {
@@ -143,6 +146,7 @@ export function TimetableView({
   liveVehicles,
   onFocusTrip,
   serviceRange,
+  archiveRange,
 }: TimetableViewProps) {
   const restored = initialTimetableView();
   const [routes, setRoutes] = useState<TimetableRoute[]>([]);
@@ -159,8 +163,12 @@ export function TimetableView({
   const pendingTripRef = useRef<string | null>(restored?.tripId ?? null);
   const { favorites, isFavorite, toggleFavorite } = useFavorites();
 
-  const minIso = serviceRange ? ymdToIso(serviceRange.from) : null;
-  const maxIso = serviceRange ? ymdToIso(serviceRange.to) : null;
+  // A naptár addig enged vissza, ameddig elrakott menetrend van: a GTFS feed
+  // csak a következő pár hetet ismeri, a múltat az archívum őrzi.
+  const from = [serviceRange?.from, archiveRange?.from].filter(Boolean).sort()[0];
+  const to = [serviceRange?.to, archiveRange?.to].filter(Boolean).sort().pop();
+  const minIso = from ? ymdToIso(from) : null;
+  const maxIso = to ? ymdToIso(to) : null;
   const [date, setDate] = useState(todayIso());
 
   // A feed betöltése után derül ki, meddig ér az érvényesség — ha a mai nap
@@ -177,7 +185,7 @@ export function TimetableView({
   const cancelled = useCancelledTrips(isToday);
   // A napló minden naplózott napra elérhető, nem csak a maira — így egy tegnapi
   // menetnél is látszik, melyik jármű vitte.
-  const journal = useTripJournal(isoToYmd(date));
+  const journal = useTripJournal(isoToYmd(date), day === "today" ? 60000 : 0);
 
   const [nowSec, setNowSec] = useState(() => secondsSinceMidnight(new Date()));
   useEffect(() => {
@@ -713,7 +721,14 @@ function TripDetail({
   const pastVehicleId = showsJournalVehicle(state)
     ? (journalEntry?.vehicleId ?? null)
     : null;
-  const statusLabel = tripRunLabel(state, pastVehicleId);
+  // Ha a futás-összegző úgyis kiírja a járművet, a fejlécben ne ismételjük.
+  const showRunSummary = Boolean(
+    !cancelled && journalEntry && state !== "scheduled",
+  );
+  const statusLabel = tripRunLabel(
+    state,
+    showRunSummary ? null : pastVehicleId,
+  );
 
   return (
     <div className="max-h-[42vh] shrink-0 overflow-y-auto border-t border-border bg-card shadow-xl">
@@ -800,6 +815,8 @@ function TripDetail({
             Az MVK kihúzta ezt a menetet — ma nem közlekedik. Válassz másik
             indulást.
           </p>
+        ) : showRunSummary && journalEntry ? (
+          <RunSummary entry={journalEntry} />
         ) : null}
       </div>
 

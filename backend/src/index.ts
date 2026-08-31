@@ -16,9 +16,11 @@ import {
   stops, routes, trips, schedByTripStop, stopSched, shapes,
   routeStops, routeShapeIds, tripStops,
   activeServices, serviceRange, haversineKm, projectOntoShapeKm,
-  getFeedVersion, loadGtfs as loadGtfsFrom, type Trip,
+  getFeedVersion, loadGtfs as loadGtfsFrom, resolveRouteId, type Trip,
 } from './lib/gtfs.ts'
-import { initJournal, recordSighting, journalFor, flushJournal, journalStats } from './lib/journal.ts'
+import { initJournal, recordSighting, journalFor, flushJournal, journalStats, takeSightings, restoreSightings } from './lib/journal.ts'
+import { buildRouteIndex, buildTable, buildDaySchedule, secToHm, feedDays, type DaySchedule } from './lib/timetable.ts'
+import { saveDaySchedule, loadDaySchedule, archiveRange, saveSightings, dayRuns, storedFeedVersions } from './lib/archive.ts'
 import { stats } from './api/stats.ts'
 import { ops, adminToken } from './api/ops.ts'
 
@@ -141,7 +143,7 @@ function decodeVehicles(buf: Buffer) {
   const feed = transit_realtime.FeedMessage.decode(new Uint8Array(buf)); const out: unknown[] = []
   for (const e of feed.entity) {
     const v = e.vehicle; if (!v) continue
-    const tripId = v.trip?.tripId || ''; const routeId = v.trip?.routeId || trips.get(tripId)?.routeId || ''; const r = routes.get(routeId)
+    const tripId = v.trip?.tripId || ''; const routeId = resolveRouteId(v.trip?.routeId || '', tripId); const r = routes.get(routeId)
     out.push({ id: v.vehicle?.id || e.id, label: v.vehicle?.label || '', routeId, routeShort: r?.short || routeId, routeColor: r?.color || '888888', routeText: r?.text || 'FFFFFF', headsign: trips.get(tripId)?.headsign || '', lat: v.position?.latitude ?? null, lon: v.position?.longitude ?? null, bearing: v.position?.bearing ?? null, speed: v.position?.speed ?? null, tripId, timestamp: v.timestamp ? Number(v.timestamp) : null })
   }
   return { header: { version: feed.header.gtfsRealtimeVersion, timestamp: Number(feed.header.timestamp || 0) }, vehicles: out }
@@ -156,7 +158,7 @@ async function activeVehicles(): Promise<LiveVeh[]> {
     const feed = transit_realtime.FeedMessage.decode(new Uint8Array(buf))
     for (const e of feed.entity) {
       const v = e.vehicle; if (v?.position?.latitude == null) continue
-      const tripId = v.trip?.tripId || ''; const routeId = v.trip?.routeId || trips.get(tripId)?.routeId || ''
+      const tripId = v.trip?.tripId || ''; const routeId = resolveRouteId(v.trip?.routeId || '', tripId)
       out.push({ id: v.vehicle?.id || e.id, lat: v.position.latitude, lon: v.position.longitude, bearing: v.position.bearing ?? null, speed: v.position.speed ?? null, routeId, tripId })
     }
     vehiclesCache = { at: Date.now(), list: out }
@@ -447,7 +449,13 @@ app.get('/gtfs/route-geo', (c) => {
   }).filter(Boolean)
   return c.json({ routes: out })
 })
-app.get('/gtfs/meta.json', (c) => c.json({ feedVersion: getFeedVersion(), stops: stops.size, routes: routes.size, trips: trips.size, serviceRange: serviceRange() }))
+app.get('/gtfs/meta.json', async (c) => c.json({
+  feedVersion: getFeedVersion(),
+  stops: stops.size, routes: routes.size, trips: trips.size,
+  serviceRange: serviceRange(),
+  /** Meddig ér vissza az elrakott menetrend — a naptár alsó határa ebből jön. */
+  archiveRange: await archiveRange(),
+}))
 
 type TripStopRow = { id: string; name: string; lat: number | null; lon: number | null; dep: number }
 
@@ -620,144 +628,54 @@ app.get('/live/trip-progress', async (c) => {
 })
 
 // ── Menetrendkönyv ───────────────────────────────────────────────────────────
-/** Másodperc a nap kezdetétől -> HH:MM (a 24h fölötti éjszakai menetek is jók). */
-function secToHm(sec: number): string {
-  const h = Math.floor(sec / 3600) % 24
-  const m = Math.floor((sec % 3600) / 60)
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
-}
-
-/** Egy adott napon közlekedő menetek egy járat + irány kombinációra. */
-function tripsOfRouteDir(routeId: string, dir: string, ymd: string) {
-  const active = activeServices(ymd)
-  const out: { tripId: string; trip: Trip; stopsOfTrip: { stopId: string; dep: number }[] }[] = []
-  for (const [tripId, t] of trips) {
-    if (t.routeId !== routeId || t.dir !== dir) continue
-    if (!active.has(t.serviceId)) continue
-    const stopsOfTrip = tripStops.get(tripId)
-    if (!stopsOfTrip || !stopsOfTrip.length) continue
-    out.push({ tripId, trip: t, stopsOfTrip })
-  }
-  out.sort((a, b) => a.stopsOfTrip[0].dep - b.stopsOfTrip[0].dep)
-  return out
-}
-
 /**
- * A menetrendkönyv tartalomjegyzéke: minden járat, irányonként bontva.
- * A leggyakoribb célállomás-felirat adja az irány nevét, mert a GTFS
- * direction_id (0/1) önmagában semmit nem mond az utasnak.
+ * A menetrend forrása kettős: a statikus GTFS feed által lefedett napokat
+ * helyben számoljuk, az azon KÍVÜLI (jellemzően múltbeli) napokat az
+ * adatbázis-archívumból olvassuk. A kliens felé a kettő ugyanúgy néz ki.
  */
-app.get('/gtfs/timetable/routes', (c) => {
-  const ymd = (c.req.query('date') || budapestNow().ymd).trim()
-  const active = activeServices(ymd)
-
-  type DirAgg = { headsigns: Map<string, number>; today: number; total: number; firstDep: number | null }
-  const byRoute = new Map<string, Map<string, DirAgg>>()
-
-  for (const [tripId, t] of trips) {
-    if (!routes.has(t.routeId)) continue
-    let dirs = byRoute.get(t.routeId)
-    if (!dirs) byRoute.set(t.routeId, (dirs = new Map()))
-    let agg = dirs.get(t.dir)
-    if (!agg) dirs.set(t.dir, (agg = { headsigns: new Map(), today: 0, total: 0, firstDep: null }))
-
-    agg.total++
-    if (t.headsign) agg.headsigns.set(t.headsign, (agg.headsigns.get(t.headsign) || 0) + 1)
-    if (active.has(t.serviceId)) {
-      agg.today++
-      const dep = tripStops.get(tripId)?.[0]?.dep
-      if (dep != null && (agg.firstDep == null || dep < agg.firstDep)) agg.firstDep = dep
-    }
+async function daySource(ymd: string): Promise<{ day: DaySchedule; live: boolean } | null> {
+  const range = serviceRange()
+  if (range && ymd >= range.from && ymd <= range.to) {
+    return { day: { date: ymd, feedVersion: getFeedVersion(), routes: buildRouteIndex(ymd), tables: {} }, live: true }
   }
+  const archived = await loadDaySchedule(ymd)
+  return archived ? { day: archived, live: false } : null
+}
 
-  const out = [...byRoute.entries()].map(([routeId, dirs]) => {
-    const r = routes.get(routeId)!
-    const directions = [...dirs.entries()]
-      .map(([dir, agg]) => {
-        let headsign = ''
-        let best = -1
-        for (const [h, n] of agg.headsigns) if (n > best) { best = n; headsign = h }
-        return { dir, headsign, tripsToday: agg.today, tripsTotal: agg.total, firstDeparture: agg.firstDep == null ? null : secToHm(agg.firstDep) }
-      })
-      .sort((a, b) => a.dir.localeCompare(b.dir))
-    return { id: r.id, short: r.short, long: r.long, type: r.type, color: r.color, text: r.text, directions }
-  })
+app.get('/gtfs/timetable/routes', async (c) => {
+  const ymd = (c.req.query('date') || budapestNow().ymd).trim()
+  if (!/^\d{8}$/.test(ymd)) return c.json({ error: 'érvénytelen ?date= (YYYYMMDD kell)' }, 400)
 
-  out.sort((a, b) => {
-    const na = parseInt(a.short, 10), nb = parseInt(b.short, 10)
-    if (!isNaN(na) && !isNaN(nb)) return na - nb || a.short.localeCompare(b.short, 'hu')
-    if (!isNaN(na)) return -1
-    if (!isNaN(nb)) return 1
-    return a.short.localeCompare(b.short, 'hu')
-  })
-
-  return c.json({ date: ymd, routes: out })
+  const src = await daySource(ymd)
+  if (!src) return c.json({ date: ymd, routes: [], note: 'Erre a napra nincs elrakva menetrend.' })
+  return c.json({ date: ymd, archived: !src.live, routes: src.day.routes })
 })
 
-/**
- * Egy járat egy irányának teljes napi menetrendje.
- *
- * A megállósor a legtöbb megállót érintő menetből származik (a betérők és a
- * rövidített menetek így is ugyanabba az oszloprendbe illeszkednek); minden
- * menetnél a hiányzó megállóhoz null kerül.
- */
-app.get('/gtfs/timetable', (c) => {
+app.get('/gtfs/timetable', async (c) => {
   const routeId = (c.req.query('route') || '').trim()
   const dir = (c.req.query('dir') || '').trim()
   const ymd = (c.req.query('date') || budapestNow().ymd).trim()
+  if (!/^\d{8}$/.test(ymd)) return c.json({ error: 'érvénytelen ?date= (YYYYMMDD kell)' }, 400)
 
-  const route = routes.get(routeId)
-  if (!route) return c.json({ error: 'Ismeretlen járat' }, 404)
-
-  const list = tripsOfRouteDir(routeId, dir, ymd)
-  if (!list.length) {
-    return c.json({ route, dir, date: ymd, headsign: '', stops: [], trips: [], note: 'Ezen a napon nem közlekedik.' })
+  const range = serviceRange()
+  if (range && ymd >= range.from && ymd <= range.to) {
+    const table = buildTable(routeId, dir, ymd)
+    if (!table) return c.json({ error: 'Ismeretlen járat' }, 404)
+    return c.json({ ...table, archived: false })
   }
 
-  // Oszloprend: a legtöbb megállót érintő menet megállósora.
-  const longest = list.reduce((a, b) => (b.stopsOfTrip.length > a.stopsOfTrip.length ? b : a), list[0])
-  const stopOrder = longest.stopsOfTrip.map((x) => x.stopId)
-  const indexOfStop = new Map(stopOrder.map((id, i) => [id, i]))
+  // Archív nap: a tárolt táblák közül a kért járat + irány.
+  const day = await loadDaySchedule(ymd)
+  if (!day) return c.json({ error: 'Erre a napra nincs elrakva menetrend.' }, 404)
+  const table = day.tables[`${routeId}|${dir}`]
+  if (table) return c.json({ ...table, date: ymd, archived: true })
 
-  const stopList = stopOrder.map((id) => {
-    const s = stops.get(id)
-    return { id, code: s?.code || '', name: s?.name || id, lat: s?.lat ?? null, lon: s?.lon ?? null }
+  const route = day.routes.find((r) => r.id === routeId)
+  if (!route) return c.json({ error: 'Ismeretlen járat' }, 404)
+  return c.json({
+    route: { id: route.id, short: route.short, long: route.long, type: route.type, color: route.color, text: route.text },
+    dir, date: ymd, headsign: '', stops: [], trips: [], archived: true, note: 'Ezen a napon nem közlekedett.',
   })
-
-  let headsign = ''
-  let best = -1
-  const counts = new Map<string, number>()
-  for (const x of list) if (x.trip.headsign) counts.set(x.trip.headsign, (counts.get(x.trip.headsign) || 0) + 1)
-  for (const [h, n] of counts) if (n > best) { best = n; headsign = h }
-
-  const tripRows = list.map((x) => {
-    const times: (string | null)[] = new Array(stopOrder.length).fill(null)
-    let extraCount = 0
-    for (const st of x.stopsOfTrip) {
-      const i = indexOfStop.get(st.stopId)
-      if (i == null) { extraCount++; continue }
-      times[i] = secToHm(st.dep)
-    }
-    const first = x.stopsOfTrip[0]
-    const last = x.stopsOfTrip[x.stopsOfTrip.length - 1]
-    return {
-      tripId: x.tripId,
-      headsign: x.trip.headsign || headsign,
-      departure: secToHm(first.dep),
-      departureSec: first.dep,
-      arrival: secToHm(last.dep),
-      /** A menet vége másodpercben — ebből tudja a kliens, hogy már lefutott-e. */
-      arrivalSec: last.dep,
-      originName: stops.get(first.stopId)?.name || first.stopId,
-      destinationName: stops.get(last.stopId)?.name || last.stopId,
-      stopCount: x.stopsOfTrip.length,
-      /** A menet a fő megállósoron kívüli megállókat is érint (betérő). */
-      deviates: extraCount > 0,
-      times,
-    }
-  })
-
-  return c.json({ route, dir, date: ymd, headsign, stops: stopList, trips: tripRows })
 })
 
 // ── Törölt (kihúzott) menetek ────────────────────────────────────────────────
@@ -861,18 +779,39 @@ app.get('/live/cancelled', async (c) => {
 
 // ── Menetnapló ───────────────────────────────────────────────────────────────
 /**
- * Melyik jármű teljesítette az adott menetet. A napló háttérben gyűlik (lásd
- * `sampleJournal` a start szakaszban), ezért a menetrendkönyv a nap végén is
- * meg tudja mondani a reggeli menetek járművét — az élő feed ilyenkor már
- * csak az ÉPPEN futó meneteket ismeri.
+ * Melyik jármű teljesítette az adott menetet, és milyen eltéréssel.
+ *
+ * Két forrás egészíti ki egymást: a JÁRMŰ a gateway saját naplójából jön (az
+ * mindig gyűlik, amíg a gateway fut), az ELTÉRÉS pedig a statisztikai worker
+ * `trip_run` táblájából (tényleges indulás/érkezés a menetrendhez képest).
+ * Adatbázis nélkül a mai nap a helyi JSON-naplóból még kiszolgálható.
  */
-app.get('/gtfs/trip-journal', (c) => {
+app.get('/gtfs/trip-journal', async (c) => {
   const ymd = (c.req.query('date') || budapestNow().ymd).trim()
   if (!/^\d{8}$/.test(ymd)) return c.json({ error: 'érvénytelen ?date= (YYYYMMDD kell)' }, 400)
-  const entries = journalFor(ymd)
-  const out: Record<string, { vehicleId: string; firstSeen: number; lastSeen: number; samples: number }> = {}
-  for (const [tripId, e] of entries) out[tripId] = e
-  return c.json({ date: ymd, count: entries.size, trips: out })
+
+  const runs = await dayRuns(ymd)
+  let source = 'db'
+
+  // Az adatbázisba a napló percenként ürül; a mai nap utolsó perce a memóriából
+  // egészíti ki, hogy a frissen elindult menetek se hiányozzanak.
+  if (ymd === budapestNow().ymd) {
+    for (const [tripId, e] of journalFor(ymd)) {
+      const prev = runs.get(tripId)
+      if (prev?.vehicleId) continue
+      runs.set(tripId, {
+        vehicleId: e.vehicleId, samples: e.samples, firstSeen: e.firstSeen, lastSeen: e.lastSeen,
+        startDelaySec: prev?.startDelaySec ?? null, endDelaySec: prev?.endDelaySec ?? null,
+        actualStart: prev?.actualStart ?? null, actualEnd: prev?.actualEnd ?? null,
+        status: prev?.status ?? null, stopsSeen: prev?.stopsSeen ?? null, stopsTotal: prev?.stopsTotal ?? null,
+      })
+    }
+    if (!runs.size) source = 'local'
+  }
+
+  const out: Record<string, unknown> = {}
+  for (const [tripId, r] of runs) out[tripId] = r
+  return c.json({ date: ymd, count: runs.size, source, trips: out })
 })
 
 // ── Időjárás ─────────────────────────────────────────────────────────────────
@@ -1044,7 +983,7 @@ app.get('/live/debug', async (c) => {
           const sid = stu.stopId || ''
           stopIdCount.set(sid, (stopIdCount.get(sid) || 0) + 1)
           if (sampleRaw.length < 3) sampleRaw.push({ tripId: tu.trip?.tripId, stopId: stu.stopId, stopSequence: stu.stopSequence, arrival: stu.arrival, departure: stu.departure })
-          if (sid === stopId) matching.push({ tripId: tu.trip?.tripId, routeId: tu.trip?.routeId, stopSequence: stu.stopSequence,
+          if (sid === stopId) matching.push({ tripId: tu.trip?.tripId, routeId: resolveRouteId(tu.trip?.routeId || '', tu.trip?.tripId || ''), stopSequence: stu.stopSequence,
             arrivalHM: stu.arrival?.time ? new Date(Number(stu.arrival.time) * 1000).toLocaleTimeString('hu-HU', { timeZone: 'Europe/Budapest' }) : null,
             arrivalTime: stu.arrival?.time ? Number(stu.arrival.time) : null, arrivalDelay: stu.arrival?.delay ?? null,
             departureTime: stu.departure?.time ? Number(stu.departure.time) : null, departureDelay: stu.departure?.delay ?? null })
@@ -1288,15 +1227,72 @@ async function sampleJournal() {
   } catch { /* egy kihagyott mintavétel nem gond, a következő pótolja */ }
 }
 
+/**
+ * A napló kiírása: a helyi JSON gyorstárba MINDIG, az adatbázisba pedig a
+ * legutóbbi kör óta felgyűlt növekmény. Az adatbázis a végleges tár — onnan
+ * olvassa vissza a menetrend a múltbeli napok járműveit.
+ */
+async function persistJournal() {
+  flushJournal()
+  const ymd = budapestNow().ymd
+  const rows = takeSightings(ymd)
+  if (!rows.length) return
+  try {
+    if (!(await saveSightings(ymd, rows))) restoreSightings(ymd, rows)
+  } catch (e) {
+    // Adatbázis-kimaradás: a köteg visszakerül, a következő kör újra próbálja.
+    restoreSightings(ymd, rows)
+    console.log('[journal] adatbázis-írás sikertelen:', (e as Error).message)
+  }
+}
+
+/**
+ * A statikus feed által lefedett NAPOK menetrendjének elrakása. A feed mindig
+ * csak a következő pár hetet ismeri, ezért ami kifutna belőle, azt itt mentjük
+ * el — így a menetrendkönyv tetszőlegesen messzire vissza tud nézni.
+ */
+async function archiveSchedules(reason: string) {
+  const today = budapestNow().ymd
+  const feedVersion = getFeedVersion()
+  const counts = { saved: 0, unchanged: 0, past: 0, skipped: 0 }
+  let stored: Map<string, string>
+  try {
+    stored = await storedFeedVersions()
+  } catch {
+    return // nincs adatbázis — a gateway enélkül is teljes értékű
+  }
+
+  for (const ymd of feedDays()) {
+    // Ugyanaz a feed ugyanarra a napra ugyanazt a menetrendet adja: felesleges
+    // újraépíteni. Múltbeli napot pedig soha nem írunk felül.
+    if (stored.get(ymd) === feedVersion) { counts.unchanged++; continue }
+    if (stored.has(ymd) && ymd < today) { counts.past++; continue }
+    try {
+      counts[await saveDaySchedule(buildDaySchedule(ymd), today)]++
+    } catch (e) {
+      console.log(`[archív] ${ymd} mentése sikertelen:`, (e as Error).message)
+      break
+    }
+  }
+  if (counts.saved) {
+    console.log(`[archív] ${reason}: ${counts.saved} nap elrakva, ${counts.unchanged} változatlan, ${counts.past} múltbeli érintetlen`)
+  }
+}
+
 if (JOURNAL_ON) {
   initJournal(STATE_DIR, budapestNow().ymd)
   sampleJournal()
   setInterval(sampleJournal, JOURNAL_INTERVAL_SEC * 1000)
-  setInterval(flushJournal, JOURNAL_FLUSH_SEC * 1000)
+  setInterval(() => { persistJournal().catch(() => {}) }, JOURNAL_FLUSH_SEC * 1000)
   for (const sig of ['SIGINT', 'SIGTERM'] as const) {
     process.on(sig, () => { flushJournal(); process.exit(0) })
   }
 }
+
+// Induláskor, majd óránként: a feed napjainak archiválása. A GTFS maga hat
+// óránként frissül, de a naptárfordulót ennél sűrűbben kell lefedni.
+archiveSchedules('indulás').catch(() => {})
+setInterval(() => { archiveSchedules('napi').catch(() => {}) }, 3600 * 1000)
 serve({ fetch: app.fetch, port: PORT, hostname: HOST }, (info) => {
   console.log(`== MVK backend ==  http://${HOST}:${info.port}   (dashboard a /-on)`)
   console.log(`   élő hozzárendelés: ≤${LIVE_MAX_KM} km, ≤${LIVE_MAX_ETA} perc   auto-renew: ${AUTO_RENEW ? 'BE' : 'KI'}`)

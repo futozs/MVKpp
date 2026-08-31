@@ -62,11 +62,22 @@
 }
 
 .mvk-vehicle .tile {
+  /* A Leaflet divIcon fix 27px szeles; egy ennel szelesebb jelzes (pl. "101B")
+     kulonben jobbra csuszna a jarmu valodi pozicioja mellol. A 50%-os
+     kozepre-huzas barmilyen hosszusagu jelzest a pont fole rendez. */
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  /* Abszolut pozicionalt elem kulonben a 27px-es szuloelemre zsugorodna,
+     es a hosszabb szoveg kilogna a csempebol. */
+  width: max-content;
   display: flex;
   align-items: center;
   justify-content: center;
   min-width: 27px;
   height: 19px;
+  white-space: nowrap;
   padding: 0 5px;
   font-family: var(--font-sans);
   font-weight: 800;

@@ -328,6 +328,7 @@ export function App() {
                 liveVehicles={liveVehicles}
                 onFocusTrip={handleFocusTripOnMap}
                 serviceRange={gtfsMeta?.serviceRange ?? null}
+                archiveRange={gtfsMeta?.archiveRange ?? null}
               />
             )}
           </div>

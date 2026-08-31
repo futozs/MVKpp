@@ -34,6 +34,8 @@ export interface GtfsMeta {
   shapes?: number;
   /** A feed naptári érvényessége, YYYYMMDD alakban. */
   serviceRange?: { from: string; to: string } | null;
+  /** Meddig ér vissza az elrakott menetrend — a naptár ennyire enged visszalépni. */
+  archiveRange?: { from: string; to: string; days: number } | null;
 }
 
 export interface LiveVehicle {
@@ -300,17 +302,33 @@ export interface CancelledTripsResponse {
   trips: CancelledTrip[];
 }
 
-/** Egy menet naplózott járműve: a gateway 0–24-ben figyeli, ki teljesítette. */
+/**
+ * Egy menet TÉNYLEGES futása: melyik jármű vitte és milyen eltéréssel.
+ * A jármű a gateway naplójából jön, az eltérés a statisztikai worker
+ * menetzárásából — utóbbi csak lezárt menetekre van meg.
+ */
 export interface TripJournalEntry {
-  vehicleId: string;
-  firstSeen: number;
-  lastSeen: number;
+  vehicleId: string | null;
   /** Hány mintavételen látszott — a magasabb érték biztosabb hozzárendelés. */
   samples: number;
+  firstSeen: number | null;
+  lastSeen: number | null;
+  /** + = késve indult, − = korábban indult. */
+  startDelaySec: number | null;
+  /** + = késve ért be, − = korábban ért be. */
+  endDelaySec: number | null;
+  actualStart: number | null;
+  actualEnd: number | null;
+  /** `running` | `partial` | `complete` — a menetzárás minősége. */
+  status: string | null;
+  stopsSeen: number | null;
+  stopsTotal: number | null;
 }
 
 export interface TripJournalResponse {
   date: string;
   count: number;
+  /** `db` = adatbázisból, `local` = a gateway helyi naplójából. */
+  source: string;
   trips: Record<string, TripJournalEntry>;
 }

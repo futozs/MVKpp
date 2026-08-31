@@ -433,3 +433,46 @@ CREATE TABLE IF NOT EXISTS vehicle_presence (
   PRIMARY KEY (vehicle_key, service_date),
   KEY ix_date (service_date, active)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ── L3 · MENETREND-ARCHÍVUM ────────────────────────────────────────────
+-- A GTFS feed mindig csak a KÖVETKEZŐ pár hetet ismeri: ami kifut belőle,
+-- azt semmi nem őrzi meg. Enélkül egy múltbeli napra nem lehet megmondani,
+-- egyáltalán milyen menetrend volt érvényes. Ezért a gateway minden feed-
+-- frissítéskor elrakja az érvényességi tartomány összes napjának menetrendjét.
+--
+-- A napi menetrend napról napra szinte azonos, ezért TARTALOM-HASH szerint
+-- deduplikálunk: az összes hétköznap ugyanarra a blobra mutat, így egy év
+-- archívuma is néhány tucat blob marad.
+CREATE TABLE IF NOT EXISTS sched_blob (
+  blob_hash  CHAR(40)           NOT NULL,
+  bytes      MEDIUMINT UNSIGNED NOT NULL,
+  -- gzip-elt JSON: { routes: [...], tables: { "<routeId>|<dir>": {...} } }
+  payload    LONGBLOB           NOT NULL,
+  created_at DATETIME           NOT NULL,
+  PRIMARY KEY (blob_hash)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS sched_day (
+  service_date DATE               NOT NULL,
+  feed_version VARCHAR(24)        NOT NULL,
+  n_routes     SMALLINT UNSIGNED  NOT NULL,
+  n_trips      MEDIUMINT UNSIGNED NOT NULL,
+  blob_hash    CHAR(40)           NOT NULL,
+  captured_at  DATETIME           NOT NULL,
+  PRIMARY KEY (service_date),
+  KEY ix_blob (blob_hash)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Melyik jármű teljesítette az adott menetet. A gateway 0–24-ben mintavételezi
+-- a pozíciófeedet; ez a napló a `trip_run`-tól függetlenül is megvan, mert nem
+-- igényli a statisztikai worker mintaillesztését.
+CREATE TABLE IF NOT EXISTS trip_vehicle_log (
+  service_date DATE               NOT NULL,
+  trip_id      VARCHAR(40)        NOT NULL,
+  vehicle_id   VARCHAR(16)        NOT NULL,
+  first_seen   INT UNSIGNED       NOT NULL,
+  last_seen    INT UNSIGNED       NOT NULL,
+  samples      MEDIUMINT UNSIGNED NOT NULL,
+  PRIMARY KEY (service_date, trip_id, vehicle_id),
+  KEY ix_day (service_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

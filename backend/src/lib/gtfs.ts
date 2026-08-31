@@ -339,6 +339,35 @@ export function loadGtfs(dir: string) {
   };
 }
 
+/**
+ * A valós idejű feed viszonylat-azonosítója nem mindig egyezik a statikus
+ * GTFS route_id-vel: az MVK néha összevont jelzést küld (pl. a 29-es
+ * körjáratra "29-29A"), ami a statikus routes.txt-ben nem létezik. Ilyenkor
+ * a nyers azonosító végigszivárogna a rendszeren: szürke, eltört csempe a
+ * térképen ("29-29A" a 29 helyett), sikertelen szűrés és jármű–menet
+ * párosítás. Ez a függvény egyetlen belépési pontként kanonizálja a
+ * viszonylatot a statikus GTFS-re.
+ */
+export function resolveRouteId(rawRouteId: string, tripId: string): string {
+  const raw = (rawRouteId || "").trim();
+  if (raw && routes.has(raw)) return raw;
+
+  // 1) A menetazonosító a legmegbízhatóbb: a statikus GTFS-ben szerepel.
+  const fromTrip = trips.get(tripId)?.routeId;
+  if (fromTrip && routes.has(fromTrip)) return fromTrip;
+
+  // 2) Ismeretlen menet esetén az összevont jelzés első tagja a viszonylat
+  //    ("29-29A" → "29"), de csak akkor fogadjuk el, ha valódi route_id.
+  if (raw) {
+    for (const part of raw.split(/[-–—/]/)) {
+      const p = part.trim();
+      if (p && routes.has(p)) return p;
+    }
+  }
+
+  return raw || fromTrip || "";
+}
+
 const patternCache = new Map<string, string>();
 
 export function patternHash(tripId: string): string | null {
