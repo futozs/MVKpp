@@ -59,6 +59,11 @@
 
 .mvk-vehicle {
   position: relative;
+  /* A .tile abszolut pozicionalt (kozepre-igazitas miatt), igy kikerul a
+     dokumentumfolyambol es a szulo magassaga 0-ra esne. Ez itt rogziti a
+     magassagot, hogy a .vid rendszamkartya top:100%-a a csempe ALJAHOZ
+     kepest szamoljon, ne csusszon ra a jaratszamra. */
+  height: 19px;
 }
 
 .mvk-vehicle .tile {
