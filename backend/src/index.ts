@@ -728,7 +728,7 @@ function parseCancelledIds(raw: unknown): string[] {
   return out
 }
 
-async function cancelledTripIds(): Promise<string[]> {
+export async function cancelledTripIds(): Promise<string[]> {
   if (cancelledCache && Date.now() - cancelledCache.at < CANCELLED_TTL_MS) return cancelledCache.ids
   const { status, buf } = await mvkFetch('/api/v1/gtfs/list-cancelled-trips')
   if (status !== 200) throw new Error(`list-cancelled-trips HTTP ${status}`)
@@ -1201,7 +1201,7 @@ async function refreshGtfs() {
 loadGtfs()
 refreshGtfs()
 setInterval(() => refreshGtfs(), 6 * 3600 * 1000)
-startPushLoop(arrivalsForStop)
+startPushLoop(arrivalsForStop, cancelledTripIds)
 
 /**
  * A valós idejű feedeket háttérben tartjuk melegen, hogy a kliens-kérések

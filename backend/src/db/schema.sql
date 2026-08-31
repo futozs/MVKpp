@@ -425,6 +425,9 @@ CREATE TABLE IF NOT EXISTS push_watch (
   -- szűrést felülírva — így nem minden aznapi 14-es indulására szól, csak arra
   -- az egyre, amit kiválasztottak.
   trip_id       VARCHAR(64)  NULL,
+  -- Csak megjelenítési szöveghez kell: az indulási megállónál "indul", egy
+  -- útközbeni megállónál "ér ide" a helyes ige a push-üzenetben.
+  is_departure  TINYINT(1)   NOT NULL DEFAULT 0,
   last_notified VARCHAR(512) NULL,
   updated_at    INT UNSIGNED NOT NULL,
   PRIMARY KEY (watch_id),

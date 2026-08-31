@@ -3,17 +3,21 @@ import { pushConfigured, sendPush } from "./push.ts";
 import { withHungarianSuffix } from "./huSuffix.ts";
 
 const CHECK_INTERVAL_MS = Number(process.env.PUSH_CHECK_INTERVAL_MS ?? 3_000);
+/** Ennél nagyobb eltérésnél már érdemes külön megemlíteni a késést/sietést. */
+const DELAY_MENTION_THRESHOLD_S = 60;
 
 type MinimalArrival = {
   route: string;
   etaMin: number;
   tripId: string;
   vehicle: { id: string } | null;
+  delaySec: number | null;
 };
 type ArrivalsForStop = (
   stopId: string,
   limit: number,
 ) => Promise<{ arrivals: MinimalArrival[] }>;
+type CancelledTripIds = () => Promise<string[]>;
 
 type WatchRow = {
   watch_id: number;
@@ -26,8 +30,61 @@ type WatchRow = {
   threshold_min: number;
   route_shorts: string | null;
   trip_id: string | null;
+  is_departure: number;
   last_notified: string | null;
 };
+
+function delaySuffix(delaySec: number | null): string {
+  if (delaySec == null || Math.abs(delaySec) < DELAY_MENTION_THRESHOLD_S) return "";
+  const min = Math.round(Math.abs(delaySec) / 60);
+  return delaySec > 0 ? ` (${min} perc késés)` : ` (${min} perccel korábban)`;
+}
+
+/**
+ * A menetrend fülről beállított figyeléseknél (van trip_id) ellenőrizzük,
+ * nem húzta-e ki az MVK az adott menetet — ha igen, ezt magát is érdemes
+ * jelezni, különben a felhasználó feleslegesen várna egy sosem érkező buszra.
+ */
+async function checkCancelledWatches(
+  stopWatches: WatchRow[],
+  cancelledTripIds: CancelledTripIds,
+): Promise<Set<number>> {
+  const tripWatches = stopWatches.filter((w) => w.trip_id);
+  if (!tripWatches.length) return new Set();
+
+  let cancelled: Set<string>;
+  try {
+    cancelled = new Set(await cancelledTripIds());
+  } catch {
+    return new Set();
+  }
+
+  const handled = new Set<number>();
+  for (const w of tripWatches) {
+    if (!w.trip_id || !cancelled.has(w.trip_id)) continue;
+    const already = new Set((w.last_notified ?? "").split(",").filter(Boolean));
+    if (already.has(`CANCELLED:${w.trip_id}`)) {
+      handled.add(w.watch_id);
+      continue;
+    }
+    const title = "Menet kimaradt";
+    const body = `A ${w.stop_name} (${w.stop_id}) ${w.is_departure ? "-ról induló" : "-hoz érkező"} járatot az MVK törölte — nem fog megérkezni.`;
+    const result = await sendPush(
+      { endpoint: w.endpoint, keys: { p256dh: w.p256dh, auth: w.auth } },
+      { title, body, tag: `mvk-stop-${w.stop_id}` },
+    );
+    if (result === "gone") {
+      await query(`DELETE FROM push_subscription WHERE sub_id = ?`, [w.sub_id]);
+    } else {
+      await query(`UPDATE push_watch SET last_notified = ? WHERE watch_id = ?`, [
+        `CANCELLED:${w.trip_id}`,
+        w.watch_id,
+      ]);
+    }
+    handled.add(w.watch_id);
+  }
+  return handled;
+}
 
 /**
  * Egyetlen ellenőrző kör: minden bejegyzett push-figyelést összevet a friss
@@ -36,10 +93,14 @@ type WatchRow = {
  * ébreszti fel a service workert — ez a lényegi különbség a helyi (nyitott
  * lapos) Notification API-hoz képest.
  */
-async function checkOnce(arrivalsForStop: ArrivalsForStop): Promise<void> {
+async function checkOnce(
+  arrivalsForStop: ArrivalsForStop,
+  cancelledTripIds: CancelledTripIds,
+): Promise<void> {
   const watches = await query<WatchRow>(
     `SELECT w.watch_id, w.sub_id, s.endpoint, s.p256dh, s.auth,
-            w.stop_id, w.stop_name, w.threshold_min, w.route_shorts, w.trip_id, w.last_notified
+            w.stop_id, w.stop_name, w.threshold_min, w.route_shorts, w.trip_id,
+            w.is_departure, w.last_notified
        FROM push_watch w
        JOIN push_subscription s ON s.sub_id = w.sub_id`,
   );
@@ -53,6 +114,8 @@ async function checkOnce(arrivalsForStop: ArrivalsForStop): Promise<void> {
   }
 
   for (const [stopId, stopWatches] of byStop) {
+    const cancelledHandled = await checkCancelledWatches(stopWatches, cancelledTripIds);
+
     let arrivals: MinimalArrival[];
     try {
       arrivals = (await arrivalsForStop(stopId, 8)).arrivals;
@@ -61,6 +124,8 @@ async function checkOnce(arrivalsForStop: ArrivalsForStop): Promise<void> {
     }
 
     for (const w of stopWatches) {
+      if (cancelledHandled.has(w.watch_id)) continue;
+
       // Pontos menetrendi menet (a menetrend fülről beállítva): a route_shorts
       // szűrést felülírja, mert egyértelműen csak arra AZ EGY indulásra kell
       // riasztás, nem az adott vonal bármelyik aznapi menetére.
@@ -85,11 +150,12 @@ async function checkOnce(arrivalsForStop: ArrivalsForStop): Promise<void> {
             ? `${withHungarianSuffix(a.route)} busz (${a.vehicle.id})`
             : `${withHungarianSuffix(a.route)} busz`;
         const title = fresh.length > 1 ? fresh.map(label).join(", ") : label(fresh[0]);
-        // Menetrendi (indulási) figyelésnél az "indul" ige egyértelműsíti,
-        // hogy ez a kiindulási megálló, nem egy útközbeni érkezés.
+        const delayNote = fresh.length === 1 ? delaySuffix(fresh[0].delaySec) : "";
+        // Menetrendi figyelésnél a kiindulási megállónál "indul", egy
+        // útközbeni megállónál "ér ide" a helyes ige.
         const body = w.trip_id
-          ? `kb. ${minEta} percen belül indul — ${w.stop_name} (${w.stop_id})`
-          : `${w.stop_name} (${w.stop_id}) — kb. ${minEta} percen belül`;
+          ? `kb. ${minEta} percen belül ${w.is_departure ? "indul" : "ér ide"}${delayNote} — ${w.stop_name} (${w.stop_id})`
+          : `${w.stop_name} (${w.stop_id}) — kb. ${minEta} percen belül${delayNote}`;
 
         const result = await sendPush(
           { endpoint: w.endpoint, keys: { p256dh: w.p256dh, auth: w.auth } },
@@ -146,12 +212,15 @@ async function selfTest(): Promise<void> {
   }
 }
 
-export function startPushLoop(arrivalsForStop: ArrivalsForStop): void {
+export function startPushLoop(
+  arrivalsForStop: ArrivalsForStop,
+  cancelledTripIds: CancelledTripIds,
+): void {
   selfTest().catch((e) => console.log("[push] önteszt hiba:", (e as Error).message));
   if (!pushConfigured) return; // a self-test már logolta, miért nem indul
   console.log(`[push] hurok elindult (${CHECK_INTERVAL_MS / 1000} mp-enként)`);
   setInterval(() => {
-    checkOnce(arrivalsForStop).catch((e) =>
+    checkOnce(arrivalsForStop, cancelledTripIds).catch((e) =>
       console.log("[push] hiba az ellenőrzési körben:", (e as Error).message),
     );
   }, CHECK_INTERVAL_MS);

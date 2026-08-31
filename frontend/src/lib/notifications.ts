@@ -3,6 +3,14 @@ import { withHungarianSuffix } from "@/lib/utils";
 
 const STORAGE_KEY = "mvk_notify_watches";
 export const DEFAULT_THRESHOLD_MIN = 5;
+/** Ennél nagyobb eltérésnél már érdemes külön megemlíteni a késést/sietést. */
+const DELAY_MENTION_THRESHOLD_S = 60;
+
+function delaySuffix(delaySec: number | null): string {
+  if (delaySec == null || Math.abs(delaySec) < DELAY_MENTION_THRESHOLD_S) return "";
+  const min = Math.round(Math.abs(delaySec) / 60);
+  return delaySec > 0 ? ` (${min} perc késés)` : ` (${min} perccel korábban)`;
+}
 
 export type NotifyWatch = {
   stopId: string;
@@ -16,6 +24,8 @@ export type NotifyWatch = {
    * egyértelműen csak arra AZ EGY indulásra kell szólni.
    */
   tripId?: string;
+  /** A figyelt megálló a menet KIINDULÓ megállója-e (szövegezéshez: "indul" vs "ér ide"). */
+  isDeparture?: boolean;
   /** A legutóbb riasztott menetek tripId-jei — védenek az ismételt riasztás ellen. */
   lastNotifiedTripIds?: string[];
   /**
@@ -143,9 +153,10 @@ export function checkAndNotify(
       fresh.length > 1
         ? `${fresh.map(label).join(", ")}`
         : label(fresh[0]);
+    const delayNote = fresh.length === 1 ? delaySuffix(fresh[0].delaySec) : "";
     const body = watch.tripId
-      ? `kb. ${minEta} percen belül indul — ${stopName} (${stopId})`
-      : `${stopName} (${stopId}) — kb. ${minEta} percen belül`;
+      ? `kb. ${minEta} percen belül ${watch.isDeparture ? "indul" : "ér ide"}${delayNote} — ${stopName} (${stopId})`
+      : `${stopName} (${stopId}) — kb. ${minEta} percen belül${delayNote}`;
 
     try {
       new Notification(title, {

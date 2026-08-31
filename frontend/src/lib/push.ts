@@ -98,6 +98,8 @@ export type PushWatchConfig = {
   routeShorts?: string[];
   /** Ha megadott, csak ez a pontos menetrendi menet vált ki riasztást (menetrend fül). */
   tripId?: string;
+  /** A figyelt megálló a menet KIINDULÓ megállója-e (szövegezéshez: "indul" vs "ér ide"). */
+  isDeparture?: boolean;
 };
 
 /**

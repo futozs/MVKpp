@@ -714,10 +714,15 @@ function TripDetail({
   onClose: () => void;
   onFocusTrip: (tripId: string, vehicleId?: string) => void;
 }) {
-  const [notifyOpen, setNotifyOpen] = useState(false);
-  const originStop = stops[0] ?? null;
-  const isWatchingThisTrip =
-    originStop != null && getWatch(originStop.id)?.tripId === trip.tripId;
+  const [notifyTarget, setNotifyTarget] = useState<{
+    stop: TimetableResponse["stops"][number];
+    isDeparture: boolean;
+  } | null>(null);
+  // Bármelyik megállóhoz állítható értesítés (nem csak a kiindulóhoz) — az
+  // első a "indul", a többi "ideér" szövegezést kap.
+  const watchedStopIndex = stops.findIndex(
+    (s) => getWatch(s.id)?.tripId === trip.tripId,
+  );
 
   const state = tripRunState({
     cancelled,
@@ -811,21 +816,6 @@ function TripDetail({
             </span>
           ) : null}
 
-          {!cancelled && state === "scheduled" && originStop ? (
-            <Button
-              variant="ghost"
-              size="icon"
-              className={cn(
-                "h-8 w-8 shrink-0",
-                isWatchingThisTrip && "text-primary hover:text-primary",
-              )}
-              onClick={() => setNotifyOpen(true)}
-              aria-label="Értesítés beállítása erre a menetre"
-            >
-              {isWatchingThisTrip ? <BellRing /> : <Bell />}
-            </Button>
-          ) : null}
-
           <Button
             variant="ghost"
             size="icon"
@@ -847,15 +837,19 @@ function TripDetail({
         ) : null}
       </div>
 
-      {originStop ? (
+      {notifyTarget ? (
         <TripNotifyDialog
-          open={notifyOpen}
-          onOpenChange={setNotifyOpen}
-          stopId={originStop.id}
-          stopName={originStop.name}
+          open={Boolean(notifyTarget)}
+          onOpenChange={(o) => !o && setNotifyTarget(null)}
+          stopId={notifyTarget.stop.id}
+          stopName={notifyTarget.stop.name}
           tripId={trip.tripId}
           routeShort={routeShort}
-          departureLabel={trip.departure}
+          isDeparture={notifyTarget.isDeparture}
+          departureLabel={
+            trip.times[stops.findIndex((s) => s.id === notifyTarget.stop.id)] ??
+            trip.departure
+          }
         />
       ) : null}
 
@@ -866,25 +860,55 @@ function TripDetail({
           stopNames={stops.map((s) => s.name)}
         />
       ) : (
-        <ol className="columns-1 gap-x-8 px-3 py-2 sm:columns-2 sm:px-4 lg:columns-3">
-          {stops.map((stop, i) => {
-            const time = trip.times[i];
-            if (!time) return null;
-            return (
-              <li
-                key={stop.id}
-                className="flex break-inside-avoid items-baseline justify-between gap-3 border-b border-border/40 py-1.5"
-              >
-                <span className="min-w-0 truncate text-xs text-muted-foreground">
-                  {stop.name}
-                </span>
-                <span className="shrink-0 font-mono text-xs font-semibold tabular-nums">
-                  {time}
-                </span>
-              </li>
-            );
-          })}
-        </ol>
+        <>
+          {!cancelled && state === "scheduled" ? (
+            <p className="px-3 pt-2 text-[11px] text-muted-foreground sm:px-4">
+              Koppints egy megálló csengőjére, hogy szóljunk, mielőtt a busz
+              odaér.
+            </p>
+          ) : null}
+          <ol className="columns-1 gap-x-8 px-3 py-2 sm:columns-2 sm:px-4 lg:columns-3">
+            {stops.map((stop, i) => {
+              const time = trip.times[i];
+              if (!time) return null;
+              const isWatchingThisStop = watchedStopIndex === i;
+              return (
+                <li
+                  key={stop.id}
+                  className="flex break-inside-avoid items-center justify-between gap-2 border-b border-border/40 py-1.5"
+                >
+                  <span className="min-w-0 truncate text-xs text-muted-foreground">
+                    {stop.name}
+                  </span>
+                  <span className="flex shrink-0 items-center gap-1.5">
+                    <span className="font-mono text-xs font-semibold tabular-nums">
+                      {time}
+                    </span>
+                    {!cancelled && state === "scheduled" ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setNotifyTarget({ stop, isDeparture: i === 0 })
+                        }
+                        aria-label={`Értesítés beállítása — ${stop.name}`}
+                        className={cn(
+                          "flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
+                          isWatchingThisStop && "text-primary hover:text-primary",
+                        )}
+                      >
+                        {isWatchingThisStop ? (
+                          <BellRing className="h-3.5 w-3.5" />
+                        ) : (
+                          <Bell className="h-3.5 w-3.5" />
+                        )}
+                      </button>
+                    ) : null}
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+        </>
       )}
     </div>
   );

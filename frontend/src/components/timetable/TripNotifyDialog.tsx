@@ -24,12 +24,14 @@ import { registerPushWatch, unregisterPushWatch } from "@/lib/push";
 type TripNotifyDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** A menet kiinduló megállója — ide szól a figyelés (ez a "végállomás, ahonnan indul"). */
+  /** A kiválasztott megálló, amelyre a figyelés szól — indulási VAGY útközbeni is lehet. */
   stopId: string;
   stopName: string;
   tripId: string;
   routeShort: string;
-  /** A menet indulási ideje, pl. "16:43" — csak megjelenítéshez. */
+  /** Igaz, ha a kiválasztott megálló a menet kiinduló megállója (szövegezéshez). */
+  isDeparture: boolean;
+  /** A menet indulási ideje (vagy a kiválasztott megálló ideje), pl. "16:43" — csak megjelenítéshez. */
   departureLabel: string;
 };
 
@@ -57,6 +59,7 @@ export function TripNotifyDialog({
   stopName,
   tripId,
   routeShort,
+  isDeparture,
   departureLabel,
 }: TripNotifyDialogProps) {
   const [threshold, setThreshold] = useState(DEFAULT_THRESHOLD_MIN);
@@ -81,16 +84,20 @@ export function TripNotifyDialog({
       return;
     }
     const thresholdMin = Math.max(1, Math.min(60, threshold || DEFAULT_THRESHOLD_MIN));
-    setWatch(stopId, { stopName, thresholdMin, tripId });
+    setWatch(stopId, { stopName, thresholdMin, tripId, isDeparture });
 
     // Ugyanaz a szerver oldali push-lánc szolgálja ki, mint a megállófigyelő
     // értesítéseit — csak itt a járat/megálló szűrés helyett egy pontos
-    // tripId-re szól, hogy csak EZ az egy indulás váltson ki riasztást.
+    // tripId-re szól, hogy csak EZ az egy indulás váltson ki riasztást. Mivel
+    // egy megállóhoz csak EGY figyelés tartozhat, ha ugyanerre a megállóra
+    // már van egy sima (megállófigyelős) riasztás, ez felülírja azt — nem
+    // kaphatsz emiatt két külön értesítést ugyanarra a buszra.
     const result = await registerPushWatch({
       stopId,
       stopName,
       thresholdMin,
       tripId,
+      isDeparture,
     });
     setPushRegistered(stopId, result.ok);
     setPushStatus(
@@ -113,8 +120,10 @@ export function TripNotifyDialog({
             Értesítés — {routeShort}-es busz, {departureLabel}
           </DialogTitle>
           <DialogDescription>
-            Szólunk, mielőtt ez a menet elindul innen: {stopName} — lezárt
-            telefonon is, ha a push-regisztráció sikerül.
+            {isDeparture
+              ? `Szólunk, mielőtt ez a menet elindul innen: ${stopName}`
+              : `Szólunk, mielőtt ez a menet ideér: ${stopName}`}{" "}
+            — lezárt telefonon is, ha a push-regisztráció sikerül.
           </DialogDescription>
         </DialogHeader>
 
@@ -129,7 +138,9 @@ export function TripNotifyDialog({
         <div className="space-y-4 py-1">
           <div className="space-y-1.5">
             <Label htmlFor="trip-notify-threshold">
-              Riasztás ennyi perccel indulás előtt
+              {isDeparture
+                ? "Riasztás ennyi perccel indulás előtt"
+                : "Riasztás ennyi perccel érkezés előtt"}
             </Label>
             <Input
               id="trip-notify-threshold"

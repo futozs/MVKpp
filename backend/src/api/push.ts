@@ -27,6 +27,8 @@ type WatchBody = {
   routeShorts?: string[];
   /** Ha megadott, csak ez a pontos menetrendi menet vált ki riasztást (menetrend fül). */
   tripId?: string;
+  /** Az figyelt megálló a menet KIINDULÓ megállója-e (szövegezéshez: "indul" vs "ér ide"). */
+  isDeparture?: boolean;
 };
 
 push.post("/watch", async (c) => {
@@ -45,6 +47,7 @@ push.post("/watch", async (c) => {
       ? body.routeShorts.join(",")
       : null;
   const tripId = body?.tripId || null;
+  const isDeparture = body?.isDeparture ? 1 : 0;
   const now = Math.floor(Date.now() / 1000);
 
   console.log(
@@ -65,13 +68,14 @@ push.post("/watch", async (c) => {
 
   await query(
     `INSERT INTO push_watch
-       (sub_id, stop_id, stop_name, threshold_min, route_shorts, trip_id, updated_at)
-     VALUES (?,?,?,?,?,?,?)
+       (sub_id, stop_id, stop_name, threshold_min, route_shorts, trip_id, is_departure, updated_at)
+     VALUES (?,?,?,?,?,?,?,?)
      ON DUPLICATE KEY UPDATE
        stop_name = VALUES(stop_name), threshold_min = VALUES(threshold_min),
        route_shorts = VALUES(route_shorts), trip_id = VALUES(trip_id),
+       is_departure = VALUES(is_departure),
        updated_at = VALUES(updated_at), last_notified = NULL`,
-    [sub.sub_id, stopId, stopName, thresholdMin, routeShorts, tripId, now],
+    [sub.sub_id, stopId, stopName, thresholdMin, routeShorts, tripId, isDeparture, now],
   );
 
   return c.json({ ok: true });
