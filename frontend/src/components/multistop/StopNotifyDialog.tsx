@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
+import { cn } from "@/lib/utils";
 import {
   DEFAULT_THRESHOLD_MIN,
   getWatch,
@@ -39,8 +39,7 @@ export function StopNotifyDialog({
   onChanged,
 }: StopNotifyDialogProps) {
   const [threshold, setThreshold] = useState(DEFAULT_THRESHOLD_MIN);
-  const [onlyRoute, setOnlyRoute] = useState(false);
-  const [routeShort, setRouteShort] = useState("");
+  const [routeShorts, setRouteShorts] = useState<string[]>([]);
   const [permissionDenied, setPermissionDenied] = useState(false);
   const [existed, setExisted] = useState(false);
 
@@ -49,12 +48,16 @@ export function StopNotifyDialog({
     const w = getWatch(stopId);
     setExisted(Boolean(w));
     setThreshold(w?.thresholdMin ?? DEFAULT_THRESHOLD_MIN);
-    setOnlyRoute(Boolean(w?.routeShort));
-    setRouteShort(w?.routeShort ?? "");
+    setRouteShorts(w?.routeShorts ?? []);
     setPermissionDenied(notificationPermission() === "denied");
   }, [open, stopId]);
 
   const nearbyRoutes = [...new Set(arrivals.map((a) => a.route).filter(Boolean))];
+
+  const toggleRoute = (route: string) =>
+    setRouteShorts((prev) =>
+      prev.includes(route) ? prev.filter((r) => r !== route) : [...prev, route],
+    );
 
   const handleSave = async () => {
     const granted = await requestNotificationPermission();
@@ -65,7 +68,7 @@ export function StopNotifyDialog({
     setWatch(stopId, {
       stopName,
       thresholdMin: Math.max(1, Math.min(60, threshold || DEFAULT_THRESHOLD_MIN)),
-      routeShort: onlyRoute && routeShort.trim() ? routeShort.trim() : undefined,
+      routeShorts: routeShorts.length ? routeShorts : undefined,
     });
     onChanged?.(true);
     onOpenChange(false);
@@ -103,6 +106,8 @@ export function StopNotifyDialog({
             <Input
               id="notify-threshold"
               type="number"
+              inputMode="numeric"
+              pattern="[0-9]*"
               min={1}
               max={60}
               value={threshold}
@@ -111,41 +116,39 @@ export function StopNotifyDialog({
             />
           </div>
 
-          <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5">
-            <div className="min-w-0">
-              <p className="text-sm font-medium">Csak egy konkrét járat</p>
-              <p className="text-[11px] text-muted-foreground">
-                Kikapcsolva: bármelyik vonal jó, csak az időpont számít.
-              </p>
-            </div>
-            <Switch checked={onlyRoute} onCheckedChange={setOnlyRoute} />
-          </div>
-
-          {onlyRoute ? (
-            <div className="space-y-1.5">
-              <Label htmlFor="notify-route">Járatszám</Label>
-              <Input
-                id="notify-route"
-                value={routeShort}
-                onChange={(e) => setRouteShort(e.target.value)}
-                placeholder="pl. 34"
-              />
-              {nearbyRoutes.length ? (
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {nearbyRoutes.map((r) => (
+          <div className="space-y-1.5">
+            <Label>Csak ezekre a járatokra</Label>
+            <p className="text-[11px] text-muted-foreground">
+              Ha egyet sem jelölsz be, bármelyik vonal jó.
+            </p>
+            {nearbyRoutes.length ? (
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {nearbyRoutes.map((route) => {
+                  const active = routeShorts.includes(route);
+                  return (
                     <button
-                      key={r}
+                      key={route}
                       type="button"
-                      onClick={() => setRouteShort(r)}
-                      className="rounded-md border border-border px-2 py-1 font-mono text-[11px] font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+                      onClick={() => toggleRoute(route)}
+                      aria-pressed={active}
+                      className={cn(
+                        "rounded-md border px-2.5 py-1.5 font-mono text-xs font-bold transition-colors",
+                        active
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground",
+                      )}
                     >
-                      {r}
+                      {route}
                     </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-[11px] text-muted-foreground">
+                Most nincs élő járat itt, amit ki lehetne választani.
+              </p>
+            )}
+          </div>
         </div>
 
         <DialogFooter className="gap-2 sm:gap-2">
