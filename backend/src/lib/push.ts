@@ -1,8 +1,11 @@
 import webpush from "web-push";
 
-const PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY ?? "";
-const PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY ?? "";
-const SUBJECT = process.env.VAPID_SUBJECT ?? "";
+// .trim(): ha egy env-fájl-szerkesztő vagy a shell trailing szóközt/új sort
+// hagyott a bemásolt kulcsban, az a Push API-nál rejtélyes "The string did
+// not match the expected pattern" hibaként jelentkezne a böngészőben.
+const PUBLIC_KEY = (process.env.VAPID_PUBLIC_KEY ?? "").trim();
+const PRIVATE_KEY = (process.env.VAPID_PRIVATE_KEY ?? "").trim();
+const SUBJECT = (process.env.VAPID_SUBJECT ?? "").trim();
 
 /**
  * Push csak akkor él, ha mindhárom VAPID env változó be van állítva a
@@ -12,9 +15,23 @@ const SUBJECT = process.env.VAPID_SUBJECT ?? "";
  */
 export const pushConfigured = Boolean(PUBLIC_KEY && PRIVATE_KEY && SUBJECT);
 
+/** A P-256 VAPID publikus kulcs tömörítetlen EC-pont: mindig pontosan 65 byte. */
+function decodedByteLength(base64url: string): number {
+  const padded = base64url + "=".repeat((4 - (base64url.length % 4)) % 4);
+  return Buffer.from(padded.replace(/-/g, "+").replace(/_/g, "/"), "base64").length;
+}
+
 if (pushConfigured) {
   webpush.setVapidDetails(SUBJECT, PUBLIC_KEY, PRIVATE_KEY);
-  console.log(`[push] VAPID beállítva (subject=${SUBJECT}) — push aktív`);
+  const byteLen = decodedByteLength(PUBLIC_KEY);
+  console.log(
+    `[push] VAPID beállítva (subject=${SUBJECT}, publicKey=${PUBLIC_KEY.length} karakter → ${byteLen} byte dekódolva) — push aktív`,
+  );
+  if (byteLen !== 65) {
+    console.log(
+      `[push] FIGYELEM: a VAPID_PUBLIC_KEY dekódolt mérete ${byteLen} byte, 65 kellene legyen — a kulcs valószínűleg sérült (extra szóköz/karakter a .env-ben, vagy nem a teljes kulcs lett bemásolva).`,
+    );
+  }
 } else {
   const missing = [
     !PUBLIC_KEY && "VAPID_PUBLIC_KEY",

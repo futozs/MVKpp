@@ -59,17 +59,28 @@ async function ensureSubscription(): Promise<
       log(`VAPID kulcs lekérése sikertelen: HTTP ${res.status} (${API_BASE}/push/vapid-public-key)`);
       return { sub: null, reason: `Nem sikerült elérni a szervert (${API_BASE}).` };
     }
-    const { publicKey } = (await res.json()) as { publicKey: string | null };
+    const data = (await res.json()) as { publicKey: string | null };
+    const publicKey = data.publicKey?.trim();
     if (!publicKey) {
       log("a szerveren nincs beállítva VAPID kulcs (push kikapcsolva a backenden)");
       return { sub: null, reason: "A szerveren nincs beállítva a push (VAPID hiányzik)." };
+    }
+
+    const keyBytes = urlBase64ToUint8Array(publicKey);
+    log(`VAPID kulcs: ${publicKey.length} karakter → ${keyBytes.length} byte dekódolva`);
+    if (keyBytes.length !== 65) {
+      log("a VAPID kulcs mérete hibás (65 byte kellene) — sérült/hiányos kulcs a szerveren");
+      return {
+        sub: null,
+        reason: `A szerver VAPID kulcsa hibás méretű (${keyBytes.length} byte a várt 65 helyett) — ellenőrizd a VAPID_PUBLIC_KEY-t a szerver .env-jében, nincs-e benne extra szóköz vagy csonka másolás.`,
+      };
     }
 
     log("feliratkozás indul…");
     const reg = await navigator.serviceWorker.ready;
     const sub = await reg.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(publicKey) as BufferSource,
+      applicationServerKey: keyBytes as BufferSource,
     });
     log("feliratkozás sikeres:", sub.endpoint.slice(-16));
     return { sub };
