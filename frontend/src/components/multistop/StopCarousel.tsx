@@ -13,6 +13,8 @@ type StopCarouselProps = {
   onFocusMap: (stop: Stop, vehicleTripId?: string, vehicleId?: string) => void;
   isReordering?: boolean;
   onMove?: (stopId: string, delta: number) => void;
+  distances?: Map<string, number>;
+  nearestId?: string | null;
 };
 
 export function StopCarousel({
@@ -21,6 +23,8 @@ export function StopCarousel({
   onFocusMap,
   isReordering,
   onMove,
+  distances,
+  nearestId,
 }: StopCarouselProps) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [index, setIndex] = useState(0);
@@ -55,6 +59,15 @@ export function StopCarousel({
   useEffect(() => {
     setIndex((prev) => Math.min(prev, Math.max(0, stops.length - 1)));
   }, [stops.length]);
+
+  // Ha a legközelebbi megálló változik (mozgás közben), az kerül a képbe.
+  useEffect(() => {
+    if (!nearestId) return;
+    const track = trackRef.current;
+    if (!track) return;
+    track.scrollTo({ left: 0, behavior: "smooth" });
+    setIndex(0);
+  }, [nearestId]);
 
   const scrollToCard = (target: number) => {
     const track = trackRef.current;
@@ -99,6 +112,8 @@ export function StopCarousel({
               stop={stop}
               onRemove={onRemove}
               onFocusMap={onFocusMap}
+              distanceKm={distances?.get(stop.id) ?? null}
+              isNearest={stop.id === nearestId}
               className="h-full w-full"
               reorder={
                 isReordering && onMove

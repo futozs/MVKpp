@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { motion, useReducedMotion } from "framer-motion";
+import { motion, useDragControls, useReducedMotion } from "framer-motion";
 import { Check, Plus, X } from "lucide-react";
 import type { ArrivalItem, Stop, StopArrivalsResponse } from "@/types";
 import { api } from "@/services/api";
@@ -37,6 +37,7 @@ export function StopDetailDrawer({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const reduce = useReducedMotion();
+  const dragControls = useDragControls();
   const mounted = useRef(true);
 
   useEffect(() => {
@@ -90,6 +91,16 @@ export function StopDetailDrawer({
       initial={reduce ? false : { opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+      // Lehúzással is bezárható. A húzás csak a fogantyúról indul, hogy az
+      // indulások listája továbbra is szabadon görgethető maradjon.
+      drag="y"
+      dragListener={false}
+      dragControls={dragControls}
+      dragConstraints={{ top: 0, bottom: 0 }}
+      dragElastic={{ top: 0, bottom: 0.55 }}
+      onDragEnd={(_, info) => {
+        if (info.offset.y > 90 || info.velocity.y > 650) onClose();
+      }}
       aria-label={`${stop.name} indulásai`}
       className={cn(
         "absolute inset-x-0 bottom-0 z-drawer flex max-h-[50dvh] flex-col overflow-hidden",
@@ -97,7 +108,24 @@ export function StopDetailDrawer({
         "md:inset-x-auto md:bottom-4 md:right-4 md:max-h-[min(62vh,520px)] md:w-[340px] md:rounded-xl md:border",
       )}
     >
-      <div className="flex shrink-0 items-start justify-between gap-2 border-b border-border px-3 py-2.5">
+      {}
+      <div
+        role="button"
+        tabIndex={0}
+        aria-label="Lehúzva bezárható"
+        onPointerDown={(e) => dragControls.start(e)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onClose();
+          }
+        }}
+        className="flex shrink-0 cursor-grab touch-none justify-center pb-1 pt-2.5 active:cursor-grabbing md:hidden"
+      >
+        <span aria-hidden className="h-1 w-10 rounded-full bg-muted-foreground/40" />
+      </div>
+
+      <div className="flex shrink-0 items-start justify-between gap-2 border-b border-border px-3 pb-2.5 pt-1 md:pt-2.5">
         <div className="min-w-0">
           <h3 className="truncate text-sm font-bold tracking-tight">
             {stop.name}

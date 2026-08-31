@@ -20,6 +20,7 @@ import { DelayBar } from "@/components/transit/DelayBar";
 import { LiveTag } from "@/components/transit/LiveDot";
 import { RouteTile } from "@/components/transit/RouteTile";
 import { VehicleTrack } from "@/components/transit/VehicleTrack";
+import { formatDistance } from "@/lib/geo";
 import { cn } from "@/lib/utils";
 
 const POLL_MS = 4000;
@@ -37,6 +38,10 @@ type StopCardProps = {
   onFocusMap: (stop: Stop, vehicleTripId?: string, vehicleId?: string) => void;
   className?: string;
   reorder?: StopCardReorder;
+  /** Távolság a felhasználótól, ha van GPS-jel. */
+  distanceKm?: number | null;
+  /** A figyelt megállók közül ez van a legközelebb. */
+  isNearest?: boolean;
 };
 
 export function StopCard({
@@ -45,6 +50,8 @@ export function StopCard({
   onFocusMap,
   className,
   reorder,
+  distanceKm,
+  isNearest,
 }: StopCardProps) {
   const [data, setData] = useState<StopArrivalsResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -88,6 +95,7 @@ export function StopCard({
     <Card
       className={cn(
         "flex min-w-0 flex-col overflow-hidden shadow-lg",
+        isNearest && "ring-1 ring-primary/50",
         className,
       )}
     >
@@ -100,7 +108,17 @@ export function StopCard({
           >
             {stop.name}
           </h3>
-          <p className="mt-0.5 font-mono text-[11px] tabular-nums text-muted-foreground">
+          <p className="mt-0.5 flex items-center gap-1.5 font-mono text-[11px] tabular-nums text-muted-foreground">
+            {isNearest ? (
+              <span className="rounded bg-primary/15 px-1.5 font-sans font-semibold text-primary">
+                legközelebb
+              </span>
+            ) : null}
+            {distanceKm != null ? (
+              <span className="font-semibold text-foreground">
+                {formatDistance(distanceKm)}
+              </span>
+            ) : null}
             {stop.id}
             {lastFetch
               ? ` · ${lastFetch.toLocaleTimeString("hu-HU", {
@@ -339,7 +357,7 @@ export function StopCard({
           </ul>
         ) : data && next ? (
           <p className="px-4 py-3 text-xs text-muted-foreground">
-            Ez az utolsó ismert indulás ebben az időablakban.
+Nincs több ismert indulás.
           </p>
         ) : null}
       </div>

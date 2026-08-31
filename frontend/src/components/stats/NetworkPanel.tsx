@@ -27,10 +27,6 @@ export function NetworkPanel() {
     <div className="space-y-4">
       <div className="space-y-2">
         <h2 className="text-lg font-bold tracking-tight sm:text-xl">Hálózat</h2>
-        <p className="text-xs text-muted-foreground">
-          Hol veszít a legtöbb időt a forgalom a menetrendhez képest —
-          munkanapokon.
-        </p>
         <PillPicker
           ariaLabel="Napszak"
           value={win}

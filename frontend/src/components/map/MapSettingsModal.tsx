@@ -25,11 +25,10 @@ export function MapSettingsModal({
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="gap-0 overflow-hidden rounded-t-2xl p-0 sm:max-w-md sm:rounded-lg">
-        <DialogHeader className="space-y-1 border-b border-border px-5 py-4 text-left">
+        <DialogHeader className="border-b border-border px-5 py-4 text-left">
           <DialogTitle>Alaptérkép</DialogTitle>
-          <DialogDescription>
-            A választás a böngészőben megjegyződik. Mindegyik szolgáltató
-            ingyenes, kulcs nélkül.
+          <DialogDescription className="sr-only">
+            Válassz alaptérképet
           </DialogDescription>
         </DialogHeader>
 

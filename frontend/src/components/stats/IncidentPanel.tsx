@@ -2,7 +2,6 @@ import { useCallback, useState } from "react";
 import {
   AlertOctagon,
   Clock4,
-  Info,
   PauseOctagon,
   Undo2,
   Wrench,
@@ -29,31 +28,27 @@ import { cn } from "@/lib/utils";
 
 const KIND_META: Record<
   Incident["kind"],
-  { label: string; short: string; icon: typeof Wrench; hint: string }
+  { label: string; short: string; icon: typeof Wrench }
 > = {
   mid_trip_stop: {
     label: "Menet közben elnémult",
     short: "Elnémult",
     icon: AlertOctagon,
-    hint: "A jármű a menet közepén abbahagyta a jeladást, és nem fejezte be az utat.",
   },
   stuck: {
     label: "Helyben állt",
     short: "Elakadt",
     icon: PauseOctagon,
-    hint: "Hosszan mozdulatlan két megálló között — a megállóban állás nem számít bele.",
   },
   early_end: {
     label: "Korai bevonás",
     short: "Korai vég",
     icon: Clock4,
-    hint: "A szokásosnál jóval korábban fejezte be a napot.",
   },
   absence: {
     label: "Kiesett a flottából",
     short: "Kiesés",
     icon: Wrench,
-    hint: "Napokig nem látták forgalomban. A visszatérés zárja le.",
   },
 };
 
@@ -192,16 +187,6 @@ export function IncidentPanel() {
         />
       </div>
 
-      <p className="flex items-start gap-2 rounded-xl border border-border bg-muted/40 px-3 py-2 text-[11px] text-muted-foreground">
-        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-        <span>
-          Minden észlelés konfidenciát kap. Csökkenti, ha a közelben más
-          járművek is álltak (forgalmi torlódás), ha a jármű hamar folytatta
-          (adathiány), vagy ha a menet már majdnem véget ért. Ha a gyűjtés
-          akadozott, aznap egyáltalán nem születik észlelés.
-        </span>
-      </p>
-
       {}
       <QueryBoundary query={sumQ}>
         {(s) => {
@@ -248,7 +233,6 @@ export function IncidentPanel() {
               {s.byKind.length ? (
                 <ChartFrame
                   title="Események típusonként"
-                  hint="A kiválasztott konfidencia-küszöb felett."
                 >
                   <div className="grid gap-2 sm:grid-cols-2">
                     {s.byKind.map((k) => {
@@ -263,9 +247,6 @@ export function IncidentPanel() {
                           <div className="min-w-0 flex-1">
                             <p className="text-xs font-semibold">
                               {meta?.label ?? k.kind}
-                            </p>
-                            <p className="text-[11px] text-muted-foreground">
-                              {meta?.hint}
                             </p>
                           </div>
                           <div className="shrink-0 text-right">
@@ -299,7 +280,6 @@ export function IncidentPanel() {
 
               <ChartFrame
                 title="Legtöbbet érintett járművek"
-                hint="Üzemórára vetítve — a sokat futó jármű természetesen több eseménybe fut bele."
               >
                 {worst.length ? (
                   <RankBars
@@ -324,7 +304,6 @@ export function IncidentPanel() {
               {s.repairs.length ? (
                 <ChartFrame
                   title="Visszatérések forgalomba"
-                  hint="Mennyi idő után állt újra szolgálatba a jármű."
                 >
                   <ul className="divide-y divide-border">
                     {s.repairs.slice(0, 10).map((r, i) => (

@@ -17,10 +17,8 @@ export function QueryBoundary<T>({
       <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-border bg-card/50 px-6 py-10 text-center">
         <DatabaseZap className="h-6 w-6 text-muted-foreground" />
         <p className="text-sm font-semibold">Az adatraktár nem érhető el</p>
-        <p className="max-w-sm text-xs text-muted-foreground">
-          A statisztika MySQL-t használ. Ellenőrizd, hogy fut-e, és lefutott-e a{" "}
-          <code className="font-mono">npm run db:migrate</code>. A valós idejű
-          funkciók ettől függetlenül működnek.
+        <p className="font-mono text-xs text-muted-foreground">
+          npm run db:migrate
         </p>
       </div>
     );
@@ -50,9 +48,6 @@ export function QueryBoundary<T>({
         <p className="text-sm font-semibold">
           Erre az időszakra még nincs adat
         </p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          A gyűjtés folyamatos — a mutatók az adat gyűlésével töltődnek fel.
-        </p>
       </div>
     );
   }
@@ -73,7 +68,7 @@ export function PillPicker<T extends string>({
 }) {
   return (
     <div
-      className="-mx-1 overflow-x-auto px-1 pb-1"
+      className="overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       role="group"
       aria-label={ariaLabel}
     >

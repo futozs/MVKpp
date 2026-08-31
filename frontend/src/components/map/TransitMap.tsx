@@ -10,6 +10,7 @@ import {
   CornerDownLeft,
   Crosshair,
   Hash,
+  Layers,
   LocateFixed,
   Plus,
   Search,
@@ -70,7 +71,7 @@ export const TILE_LAYERS: TileLayerOption[] = [
   {
     id: "osm",
     name: "Utcatérkép",
-    note: "OpenStreetMap — a legtöbb részlettel",
+    note: "OpenStreetMap",
     url: OSM_URL,
     attribution: OSM_ATTRIB,
     maxNativeZoom: 19,
@@ -79,7 +80,7 @@ export const TILE_LAYERS: TileLayerOption[] = [
   {
     id: "dark",
     name: "Sötét",
-    note: "Éjszakai lap — a járatszínek ezen ütnek ki legjobban",
+    note: "Sötétített OpenStreetMap",
     url: OSM_URL,
     attribution: OSM_ATTRIB,
     maxNativeZoom: 19,
@@ -90,7 +91,7 @@ export const TILE_LAYERS: TileLayerOption[] = [
   {
     id: "light",
     name: "Halvány",
-    note: "Kifakított utcatérkép — nappal, sok jármű mellé",
+    note: "Kifakított OpenStreetMap",
     url: OSM_URL,
     attribution: OSM_ATTRIB,
     maxNativeZoom: 19,
@@ -100,7 +101,7 @@ export const TILE_LAYERS: TileLayerOption[] = [
   {
     id: "satellite",
     name: "Műhold",
-    note: "Esri World Imagery, utcanevekkel",
+    note: "Esri World Imagery",
     url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
     labelsUrl:
       "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
@@ -112,7 +113,7 @@ export const TILE_LAYERS: TileLayerOption[] = [
   {
     id: "topo",
     name: "Domborzat",
-    note: "OpenTopoMap — szintvonalakkal, 17-es zoomig",
+    note: "OpenTopoMap",
     url: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
     attribution:
       'Csempe: <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA), adat: &copy; OpenStreetMap',
@@ -147,11 +148,150 @@ function makeTile(conf: TileLayerOption, labels: boolean): L.TileLayer {
   return layer;
 }
 
+/* ── A szűrőpanel építőelemei ────────────────────────────────────────────
+   Egységes ritmus és egyetlen helyen definiált állapotjelzés: a panel így
+   végigpásztázható marad akkor is, ha sok szűrő van egyszerre bekapcsolva. */
+
+function FilterSection({
+  title,
+  aside,
+  last,
+  children,
+}: {
+  title: string;
+  aside?: React.ReactNode;
+  last?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <section
+      className={cn(
+        "space-y-2.5 px-4 py-3.5",
+        !last && "border-b border-border",
+      )}
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          {title}
+        </h3>
+        {typeof aside === "string" ? (
+          <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+            {aside}
+          </span>
+        ) : (
+          aside
+        )}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function Segmented<T extends string>({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: T;
+  onChange: (v: T) => void;
+  options: { id: T; label: string }[];
+}) {
+  return (
+    <div className="space-y-1.5">
+      <span className="block text-[11px] font-medium text-muted-foreground">
+        {label}
+      </span>
+      <div
+        role="group"
+        aria-label={label}
+        className="grid grid-cols-3 gap-1 rounded-lg border border-border bg-muted/60 p-1"
+      >
+        {options.map((o) => (
+          <button
+            key={o.id}
+            type="button"
+            onClick={() => onChange(o.id)}
+            aria-pressed={value === o.id}
+            className={cn(
+              "rounded-md py-1.5 text-xs font-semibold transition-all duration-fast",
+              "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+              value === o.id
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:bg-accent hover:text-foreground",
+            )}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ChipRow<T>({
+  options,
+  value,
+  onChange,
+  disabled,
+}: {
+  options: { value: T; label: string }[];
+  value: T;
+  onChange: (v: T) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {options.map((o) => (
+        <button
+          key={String(o.value)}
+          type="button"
+          disabled={disabled && o.value !== null}
+          onClick={() => onChange(o.value)}
+          aria-pressed={value === o.value}
+          className={cn(
+            "rounded-md border px-2.5 py-1.5 text-xs font-semibold transition-all duration-fast",
+            "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+            "disabled:cursor-not-allowed disabled:opacity-40",
+            value === o.value
+              ? "border-primary bg-primary text-primary-foreground"
+              : "border-border bg-secondary text-muted-foreground hover:bg-accent hover:text-foreground",
+          )}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ToggleRow({
+  id,
+  label,
+  checked,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg px-1 py-2 transition-colors duration-fast hover:bg-accent">
+      <Label htmlFor={id} className="cursor-pointer text-xs font-medium">
+        {label}
+      </Label>
+      <Switch id={id} checked={checked} onCheckedChange={onChange} />
+    </div>
+  );
+}
+
 const MAX_WATCHED = 12;
 
 const NEAR_STOP_KM = 0.4;
-const CLOSE_ZOOM = 18;
-const ME_ZOOM = 17;
+const CLOSE_ZOOM = 17;
+const ME_ZOOM = 16;
 
 /** Érintőképernyőn az ujj nem pixelpontos — a találati sugár ezt pótolja. */
 const IS_TOUCH =
@@ -181,6 +321,7 @@ interface TransitMapProps {
   selectedStopId: string | null;
   monitoredStopIds: string[];
   onToggleMonitorStop: (stopId: string) => void;
+  onOpenMapPicker: () => void;
 }
 
 export function TransitMap({
@@ -199,6 +340,7 @@ export function TransitMap({
   selectedStopId,
   monitoredStopIds,
   onToggleMonitorStop,
+  onOpenMapPicker,
 }: TransitMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -239,7 +381,6 @@ export function TransitMap({
       center: saved ? [saved.lat, saved.lon] : [48.104, 20.79],
       zoom: saved ? saved.zoom : 13,
     });
-    L.control.zoom({ position: "bottomright" }).addTo(map);
 
     const initial = layerConf(tileLayerId);
     tileLayerRef.current = makeTile(initial, false).addTo(map);
@@ -348,13 +489,6 @@ export function TransitMap({
       list = list.filter((v) => (v.speed || 0) > 0.5);
     else if (filters.speed === "idle")
       list = list.filter((v) => (v.speed || 0) <= 0.5);
-
-    if (filters.maxAgeSec != null) {
-      const now = Date.now() / 1000;
-      list = list.filter(
-        (v) => v.timestamp != null && now - v.timestamp <= filters.maxAgeSec!,
-      );
-    }
 
     if (filters.nearMeKm != null && geo.position) {
       const { lat, lon } = geo.position;
@@ -587,10 +721,6 @@ export function TransitMap({
       });
 
       const speed = v.speed != null ? `${Math.round(v.speed * 3.6)} km/h` : "—";
-      const age = v.timestamp
-        ? Math.max(0, Math.round(Date.now() / 1000 - v.timestamp))
-        : null;
-
       marker.bindPopup(`
         <div style="min-width:210px">
           <div style="display:flex;align-items:center;gap:9px;margin-bottom:10px">
@@ -603,7 +733,6 @@ export function TransitMap({
           </div>
           <div style="font-family:var(--font-mono);font-size:12px;color:hsl(var(--muted-foreground));display:grid;gap:3px">
             <div>Sebesség <strong style="color:hsl(var(--foreground))">${speed}</strong></div>
-            ${age != null ? `<div>Adat kora <strong style="color:hsl(var(--foreground))">${age} mp</strong></div>` : ""}
           </div>
           ${
             v.tripId
@@ -844,7 +973,6 @@ export function TransitMap({
     filters.routes.length > 0 ||
     filters.type !== "all" ||
     filters.speed !== "all" ||
-    filters.maxAgeSec != null ||
     filters.nearMeKm != null ||
     filters.onlyWatched ||
     !filters.stops;
@@ -859,37 +987,16 @@ export function TransitMap({
           ? "Csak mozgó járművek"
           : filters.speed === "idle"
             ? "Csak álló járművek"
-            : filters.maxAgeSec != null
-              ? `Friss jelentés (${filters.maxAgeSec / 60} perc)`
-              : filters.onlyWatched
-                ? `Csak a figyelt megállók (${monitoredStopIds.length})`
-                : `Szűrés aktív · ${vehicleResults.length} jármű`;
+            : filters.onlyWatched
+              ? `Csak a figyelt megállók (${monitoredStopIds.length})`
+              : `Szűrés aktív · ${vehicleResults.length} jármű`;
 
   const LAYER_TOGGLES = [
-    { key: "stops", label: "Megállók", description: "Minden GTFS megállópont" },
-    {
-      key: "onlyWatched",
-      label: "Csak a figyeltek",
-      description: `Csak a figyelőre felvett megállók (${monitoredStopIds.length})`,
-    },
-    {
-      key: "shape",
-      label: "Járatnyomvonal",
-      description: "A kiválasztott járatok útvonala",
-    },
-    {
-      key: "labels",
-      label: "Rendszámok",
-      description: "Azonosító minden csempe alatt",
-    },
+    { key: "stops", label: "Megállók" },
+    { key: "onlyWatched", label: `Csak a figyeltek (${monitoredStopIds.length})` },
+    { key: "shape", label: "Járatnyomvonal" },
+    { key: "labels", label: "Rendszámok a csempéken" },
   ] as const;
-
-  const AGE_OPTIONS: { value: number | null; label: string }[] = [
-    { value: null, label: "Mindegy" },
-    { value: 60, label: "1 perc" },
-    { value: 180, label: "3 perc" },
-    { value: 600, label: "10 perc" },
-  ];
 
   const RADIUS_OPTIONS: { value: number | null; label: string }[] = [
     { value: null, label: "Nincs" },
@@ -942,33 +1049,35 @@ export function TransitMap({
           value="filter"
           className="mt-0 min-h-0 flex-1 overflow-y-auto data-[state=inactive]:hidden focus-visible:outline-none"
         >
-          <section className="space-y-3 border-b border-border px-4 py-4">
-            <div className="flex items-baseline justify-between gap-2">
-              <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Jármű követése
-              </Label>
-              {filters.watch.length > 0 ? (
-                <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
-                  {filters.watch.length}/{MAX_WATCHED}
-                </span>
-              ) : null}
-            </div>
-
+          {/* Követés — ez a leggyakoribb művelet, ezért ez van legfelül. */}
+          <FilterSection
+            title="Jármű követése"
+            aside={
+              filters.watch.length > 0
+                ? `${filters.watch.length}/${MAX_WATCHED}`
+                : undefined
+            }
+          >
             <div className="flex items-center gap-2">
               <Input
                 value={typedId}
                 onChange={(e) => {
-                  setTypedId(e.target.value);
-                  setFilters((prev) => ({ ...prev, vq: e.target.value }));
+                  const digits = e.target.value.replace(/[^0-9]/g, "");
+                  setTypedId(digits);
+                  setFilters((prev) => ({ ...prev, vq: digits }));
                 }}
                 onKeyDown={(e) => e.key === "Enter" && addWatch()}
+                inputMode="numeric"
+                pattern="[0-9]*"
+                autoComplete="off"
+                enterKeyHint="done"
                 placeholder="Rendszám, pl. 1641"
                 aria-label="Jármű rendszáma"
-                className="h-9 font-mono tabular-nums"
+                className="h-10 font-mono tabular-nums"
               />
               <Button
                 size="icon"
-                className="h-9 w-9 shrink-0"
+                className="h-10 w-10 shrink-0"
                 onClick={() => addWatch()}
                 disabled={
                   !typedId.trim() || filters.watch.length >= MAX_WATCHED
@@ -988,7 +1097,7 @@ export function TransitMap({
                       onClick={() => removeWatch(id)}
                       aria-label={`${id} eltávolítása a követésből`}
                       className={cn(
-                        "inline-flex h-7 items-center gap-1.5 rounded-md border border-primary/35 bg-primary/12 px-2",
+                        "inline-flex h-8 items-center gap-1.5 rounded-md border border-primary/35 bg-primary/12 px-2.5",
                         "font-mono text-xs font-bold tabular-nums text-primary",
                         "transition-colors duration-fast hover:border-destructive/50 hover:bg-destructive/12 hover:text-destructive",
                         "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
@@ -1002,131 +1111,44 @@ export function TransitMap({
               </ul>
             ) : null}
 
-            <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 px-3 py-2.5">
-              <Label
-                htmlFor="follow-toggle"
-                className="cursor-pointer leading-snug"
-              >
-                <span className="block text-xs font-medium">
-                  Térkép kövesse a járművet
-                </span>
-                <span className="block text-[11px] font-normal text-muted-foreground">
-                  Minden frissülésnél ráugrik
-                </span>
-              </Label>
-              <Switch
-                id="follow-toggle"
-                checked={filters.follow}
-                onCheckedChange={(v) =>
-                  setFilters((prev) => ({ ...prev, follow: v }))
-                }
-              />
-            </div>
-          </section>
+            <ToggleRow
+              id="follow-toggle"
+              label="Térkép kövesse a járművet"
+              checked={filters.follow}
+              onChange={(v) => setFilters((prev) => ({ ...prev, follow: v }))}
+            />
+          </FilterSection>
 
-          <section className="space-y-2.5 border-b border-border px-4 py-4">
-            <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Járműtípus
-            </Label>
-            <div className="grid grid-cols-3 gap-1 rounded-lg border border-border bg-muted/60 p-1">
-              {(
-                [
+          {/* Két egysoros választó egymás mellett — kevesebb görgetés. */}
+          <FilterSection title="Mit mutasson">
+            <div className="grid gap-2.5 sm:grid-cols-2">
+              <Segmented
+                label="Típus"
+                value={filters.type}
+                onChange={(v) => setFilters((prev) => ({ ...prev, type: v }))}
+                options={[
                   { id: "all", label: "Mind" },
                   { id: "bus", label: "Busz" },
                   { id: "tram", label: "Villamos" },
-                ] as const
-              ).map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  onClick={() =>
-                    setFilters((prev) => ({ ...prev, type: option.id }))
-                  }
-                  aria-pressed={filters.type === option.id}
-                  className={cn(
-                    "rounded-md py-1.5 text-xs font-semibold transition-all duration-fast",
-                    "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-                    filters.type === option.id
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "text-muted-foreground hover:bg-accent hover:text-foreground",
-                  )}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-          </section>
-
-          <section className="space-y-2.5 border-b border-border px-4 py-4">
-            <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Mozgásállapot
-            </Label>
-            <div className="grid grid-cols-3 gap-1 rounded-lg border border-border bg-muted/60 p-1">
-              {(
-                [
+                ]}
+              />
+              <Segmented
+                label="Mozgás"
+                value={filters.speed}
+                onChange={(v) => setFilters((prev) => ({ ...prev, speed: v }))}
+                options={[
                   { id: "all", label: "Mind" },
                   { id: "moving", label: "Mozgó" },
                   { id: "idle", label: "Álló" },
-                ] as const
-              ).map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  onClick={() =>
-                    setFilters((prev) => ({ ...prev, speed: option.id }))
-                  }
-                  aria-pressed={filters.speed === option.id}
-                  className={cn(
-                    "rounded-md py-1.5 text-xs font-semibold transition-all duration-fast",
-                    "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-                    filters.speed === option.id
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "text-muted-foreground hover:bg-accent hover:text-foreground",
-                  )}
-                >
-                  {option.label}
-                </button>
-              ))}
+                ]}
+              />
             </div>
-          </section>
+          </FilterSection>
 
-          <section className="space-y-2.5 border-b border-border px-4 py-4">
-            <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Jelentés frissessége
-            </Label>
-            <p className="text-[11px] text-muted-foreground">
-              A régen frissült pozíció félrevezető — itt elrejthető.
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {AGE_OPTIONS.map((option) => (
-                <button
-                  key={String(option.value)}
-                  type="button"
-                  onClick={() =>
-                    setFilters((prev) => ({ ...prev, maxAgeSec: option.value }))
-                  }
-                  aria-pressed={filters.maxAgeSec === option.value}
-                  className={cn(
-                    "rounded-md border px-2.5 py-1 text-xs font-semibold transition-all duration-fast",
-                    "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-                    filters.maxAgeSec === option.value
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border bg-secondary text-muted-foreground hover:bg-accent hover:text-foreground",
-                  )}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-          </section>
-
-          {}
-          <section className="space-y-2.5 border-b border-border px-4 py-4">
-            <div className="flex items-baseline justify-between gap-2">
-              <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                A közelemben
-              </Label>
-              {!geo.position ? (
+          <FilterSection
+            title="A közelemben"
+            aside={
+              !geo.position ? (
                 <button
                   type="button"
                   onClick={geo.start}
@@ -1134,44 +1156,27 @@ export function TransitMap({
                 >
                   GPS bekapcsolása
                 </button>
-              ) : null}
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {RADIUS_OPTIONS.map((option) => (
-                <button
-                  key={String(option.value)}
-                  type="button"
-                  disabled={!geo.position && option.value !== null}
-                  onClick={() =>
-                    setFilters((prev) => ({ ...prev, nearMeKm: option.value }))
-                  }
-                  aria-pressed={filters.nearMeKm === option.value}
-                  className={cn(
-                    "rounded-md border px-2.5 py-1 text-xs font-semibold transition-all duration-fast",
-                    "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-                    "disabled:cursor-not-allowed disabled:opacity-40",
-                    filters.nearMeKm === option.value
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border bg-secondary text-muted-foreground hover:bg-accent hover:text-foreground",
-                  )}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-          </section>
+              ) : undefined
+            }
+          >
+            <ChipRow
+              options={RADIUS_OPTIONS}
+              value={filters.nearMeKm}
+              disabled={!geo.position}
+              onChange={(v) =>
+                setFilters((prev) => ({ ...prev, nearMeKm: v }))
+              }
+            />
+          </FilterSection>
 
-          <section className="space-y-2.5 border-b border-border px-4 py-4">
-            <div className="flex items-baseline justify-between gap-2">
-              <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Járatok
-              </Label>
-              <span className="text-[11px] text-muted-foreground">
-                {filters.routes.length > 0
-                  ? `${filters.routes.length} kiválasztva`
-                  : "mind"}
-              </span>
-            </div>
+          <FilterSection
+            title="Járatok"
+            aside={
+              filters.routes.length > 0
+                ? `${filters.routes.length} kiválasztva`
+                : "mind"
+            }
+          >
             <RouteChips
               routes={routes}
               selectedRoutes={filters.routes}
@@ -1181,38 +1186,44 @@ export function TransitMap({
               }
               liveVehicles={vehicles}
             />
-          </section>
+          </FilterSection>
 
-          <section className="space-y-1 px-4 py-4">
-            <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Térképi rétegek
-            </Label>
-            <div className="mt-2 space-y-1">
-              {LAYER_TOGGLES.map(({ key, label, description }) => (
-                <div
+          <FilterSection title="Megjelenítés" last>
+            <div className="space-y-0.5">
+              {LAYER_TOGGLES.map(({ key, label }) => (
+                <ToggleRow
                   key={key}
-                  className="flex items-center justify-between gap-3 rounded-lg px-2 py-2 transition-colors duration-fast hover:bg-accent"
-                >
-                  <Label
-                    htmlFor={`layer-${key}`}
-                    className="cursor-pointer leading-snug"
-                  >
-                    <span className="block text-xs font-medium">{label}</span>
-                    <span className="block text-[11px] font-normal text-muted-foreground">
-                      {description}
-                    </span>
-                  </Label>
-                  <Switch
-                    id={`layer-${key}`}
-                    checked={filters[key] as boolean}
-                    onCheckedChange={(v) =>
-                      setFilters((prev) => ({ ...prev, [key]: v }))
-                    }
-                  />
-                </div>
+                  id={`layer-${key}`}
+                  label={label}
+                  checked={filters[key] as boolean}
+                  onChange={(v) =>
+                    setFilters((prev) => ({ ...prev, [key]: v }))
+                  }
+                />
               ))}
             </div>
-          </section>
+
+            <Button
+              variant="outline"
+              className="mt-1 w-full justify-start"
+              onClick={onOpenMapPicker}
+            >
+              <Layers />
+              Alaptérkép
+            </Button>
+          </FilterSection>
+
+          {filterActive ? (
+            <div className="sticky bottom-0 border-t border-border bg-card/95 p-3 backdrop-blur-sm">
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={onClearFilters}
+              >
+                Szűrők törlése
+              </Button>
+            </div>
+          ) : null}
         </TabsContent>
 
         {}
@@ -1415,7 +1426,7 @@ export function TransitMap({
             requestAnimationFrame(() => codeInputRef.current?.focus());
           }}
           aria-label="Ugrás megállókód alapján"
-          className="absolute bottom-[92px] left-3 z-overlay h-11 w-11 shadow-lg"
+          className="absolute bottom-3 left-3 z-overlay h-11 w-11 shadow-lg mb-[env(safe-area-inset-bottom)]"
         >
           <Hash />
         </Button>
@@ -1479,7 +1490,7 @@ export function TransitMap({
         ) : null}
 
         {}
-        <div className="absolute bottom-[92px] right-3 z-overlay flex flex-col items-end gap-2">
+        <div className="absolute bottom-3 right-3 z-overlay mb-[env(safe-area-inset-bottom)] flex flex-col items-end gap-2">
           {geo.error && (geoAsked || geo.status !== "denied") ? (
             <p
               role="status"

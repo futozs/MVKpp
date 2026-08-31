@@ -17,6 +17,16 @@
     @apply bg-background text-foreground antialiased;
     font-family: var(--font-sans);
     font-feature-settings: "ss01" 1;
+    /* Telefonon a lap maga soha nem gördül — a belső panelek gördülnek. */
+    overscroll-behavior: none;
+  }
+
+  /*
+   * A magasság forrása a useAppHeight által mért valós viewport; a `100dvh`
+   * csak tartalék, amíg az első mérés lefut.
+   */
+  #root {
+    height: var(--app-h, 100dvh);
   }
 
   .tnum,
@@ -178,4 +188,23 @@
 }
 .leaflet-control-attribution a {
   color: hsl(var(--muted-foreground)) !important;
+}
+
+/* A vízszintesen gördíthető fülsorok jobb széle elhalványul, hogy látszódjon:
+   van még mit odébb húzni. */
+.edge-fade-x {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 12px,
+    #000 calc(100% - 22px),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 12px,
+    #000 calc(100% - 22px),
+    transparent 100%
+  );
 }

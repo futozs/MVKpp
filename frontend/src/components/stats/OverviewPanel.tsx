@@ -46,9 +46,6 @@ export function OverviewPanel({
                 <h2 className="text-lg font-bold tracking-tight sm:text-xl">
                   Adatraktár
                 </h2>
-                <p className="text-xs text-muted-foreground">
-                  A gyűjtés állapota és az eddig felhalmozott mennyiség.
-                </p>
               </div>
               <Button
                 variant="outline"
@@ -132,7 +129,6 @@ export function OverviewPanel({
 
             <ChartFrame
               title="Feldolgozási feladatok"
-              hint="A worker utolsó futásai — ebből látszik, egészséges-e a feldolgozás."
             >
               {d.jobs.length ? (
                 <ul className="divide-y divide-border">

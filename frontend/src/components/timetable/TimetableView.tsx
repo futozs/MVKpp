@@ -318,12 +318,6 @@ export function TimetableView({
             max={maxIso}
             className="mt-2 w-full"
           />
-          {maxIso ? (
-            <p className="mt-1.5 text-[10px] text-muted-foreground">
-              A GTFS-menetrend {ymdToIso(serviceRange!.from)} és {maxIso} között
-              érvényes.
-            </p>
-          ) : null}
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
@@ -458,11 +452,6 @@ export function TimetableView({
               <h3 className="mt-4 text-lg font-bold tracking-tight">
                 Válassz járatot
               </h3>
-              <p className="mt-1.5 text-sm text-muted-foreground">
-                A kiválasztott járat teljes napi menetrendje óránkénti bontásban
-                jelenik meg. Zöld jelöli azokat a meneteket, amelyekre már
-                bejelentkezett busz.
-              </p>
             </Card>
           </div>
         ) : (

@@ -408,7 +408,7 @@ CREATE TABLE IF NOT EXISTS vehicle_incident (
   peers_stuck   TINYINT UNSIGNED  NOT NULL DEFAULT 0,
   -- Hány üzemi napot hiányzott (csak `absence` esetén, lezáráskor).
   absent_days   SMALLINT UNSIGNED NULL,
-  resolution    VARCHAR(16)       NULL,
+  resolution    VARCHAR(48)       NULL,
   note          VARCHAR(160)      NULL,
   detected_at   DATETIME          NOT NULL,
   PRIMARY KEY (incident_id),

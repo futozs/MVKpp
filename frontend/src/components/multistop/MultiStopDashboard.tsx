@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from "react";
-import { ArrowLeftRight, Check, Plus, Radar } from "lucide-react";
+import { ArrowLeftRight, Check, LocateFixed, Plus, Radar } from "lucide-react";
 import type { Stop } from "@/types";
+import { useGeo } from "@/context/GeoContext";
+import { distanceKm } from "@/lib/geo";
 import { AddStopModal } from "./AddStopModal";
 import { StopCard } from "./StopCard";
 import { StopCarousel } from "./StopCarousel";
@@ -32,6 +34,24 @@ export function MultiStopDashboard({
 }: MultiStopDashboardProps) {
   const [isPickerOpen, setPickerOpen] = useState(false);
   const [isReordering, setReordering] = useState(false);
+  const geo = useGeo();
+
+  const [nearestFirst, setNearestFirst] = useState(() => {
+    try {
+      return localStorage.getItem("mvk_watch_nearest_first") !== "0";
+    } catch {
+      return true;
+    }
+  });
+
+  const toggleNearestFirst = () =>
+    setNearestFirst((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("mvk_watch_nearest_first", next ? "1" : "0");
+      } catch {}
+      return next;
+    });
 
   const stopById = useMemo(() => {
     const map = new Map<string, Stop>();
@@ -39,9 +59,35 @@ export function MultiStopDashboard({
     return map;
   }, [stops]);
 
-  const watched = selectedStopIds
+  const manualOrder = selectedStopIds
     .map((id) => stopById.get(id))
     .filter((s): s is Stop => s !== undefined);
+
+  /**
+   * A GPS ismeretében a hozzád legközelebbi figyelt megálló kerül előre — így
+   * tíz felvett megálló mellett is az elsőt látod, amelyikre ténylegesen
+   * ki fogsz állni. Sorrendezés közben a kézi sorrend érvényes.
+   */
+  const distances = useMemo(() => {
+    const map = new Map<string, number>();
+    if (!geo.position) return map;
+    const { lat, lon } = geo.position;
+    manualOrder.forEach((s) =>
+      map.set(s.id, distanceKm(lat, lon, s.lat, s.lon)),
+    );
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [geo.position, selectedStopIds, stopById]);
+
+  const sortByDistance = nearestFirst && !isReordering && distances.size > 0;
+
+  const watched = sortByDistance
+    ? [...manualOrder].sort(
+        (a, b) => (distances.get(a.id) ?? 1e9) - (distances.get(b.id) ?? 1e9),
+      )
+    : manualOrder;
+
+  const nearestId = sortByDistance ? (watched[0]?.id ?? null) : null;
 
   const removeStop = (stopId: string) =>
     setSelectedStopIds((prev) => prev.filter((id) => id !== stopId));
@@ -81,15 +127,24 @@ export function MultiStopDashboard({
           <h2 className="truncate text-sm font-bold tracking-tight sm:text-base">
             Megállófigyelő
           </h2>
-          {}
-          <p className="hidden text-xs text-muted-foreground sm:block">
-            Élő indulások négymásodperces frissüléssel, tetszőleges számú
-            megállóból.
-          </p>
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
-          {watched.length > 1 ? (
+          {manualOrder.length > 1 && geo.position ? (
+            <Button
+              variant={nearestFirst ? "default" : "outline"}
+              size="sm"
+              className="h-10"
+              onClick={toggleNearestFirst}
+              aria-pressed={nearestFirst}
+              title="Legközelebbi megálló elöl"
+            >
+              <LocateFixed />
+              <span className="hidden sm:inline">Legközelebbi elöl</span>
+            </Button>
+          ) : null}
+
+          {watched.length > 1 && !nearestFirst ? (
             <Button
               variant={isReordering ? "default" : "outline"}
               size="sm"
@@ -125,6 +180,8 @@ export function MultiStopDashboard({
             onFocusMap={onFocusMap}
             isReordering={isReordering}
             onMove={moveStop}
+            distances={distances}
+            nearestId={nearestId}
           />
         </div>
       ) : null}
@@ -143,12 +200,6 @@ export function MultiStopDashboard({
             <h3 className="mt-4 text-lg font-bold tracking-tight">
               A figyelő üres
             </h3>
-            <p className="mx-auto mt-1.5 max-w-md text-sm text-muted-foreground">
-              Vedd fel azokat a megállókat, amiket rendszeresen nézel.
-              Mindegyikről látni fogod a következő járatot, a hozzá tartozó
-              buszt és azt, hogy épp merre jár.
-            </p>
-
             <Button
               size="lg"
               className="mt-5"
@@ -194,6 +245,8 @@ export function MultiStopDashboard({
                 stop={stop}
                 onRemove={removeStop}
                 onFocusMap={onFocusMap}
+                distanceKm={distances.get(stop.id) ?? null}
+                isNearest={stop.id === nearestId}
                 reorder={
                   isReordering
                     ? {

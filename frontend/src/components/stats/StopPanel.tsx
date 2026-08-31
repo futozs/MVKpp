@@ -73,7 +73,12 @@ export function StopPanel({ stops }: { stops: Stop[] }) {
   const matches = useMemo(() => {
     const t = search.trim().toLowerCase();
     if (!t) return stops.slice(0, 12);
-    return stops.filter((s) => s.name.toLowerCase().includes(t)).slice(0, 12);
+    return stops
+      .filter(
+        (s) =>
+          s.name.toLowerCase().includes(t) || s.id.toLowerCase().includes(t),
+      )
+      .slice(0, 12);
   }, [search, stops]);
 
   const q = useStatsQuery(
@@ -100,7 +105,7 @@ export function StopPanel({ stops }: { stops: Stop[] }) {
             aria-label="Megálló keresése"
           />
         </div>
-        <div className="-mx-1 overflow-x-auto px-1 pb-1">
+        <div className="overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <div className="flex min-w-max gap-1.5">
             {matches.map((s) => (
               <button
@@ -117,6 +122,9 @@ export function StopPanel({ stops }: { stops: Stop[] }) {
                 )}
               >
                 {s.name}
+                <span className="ml-1.5 font-mono text-[10px] opacity-60">
+                  {s.id}
+                </span>
               </button>
             ))}
             {!matches.length ? (
@@ -191,7 +199,6 @@ export function StopPanel({ stops }: { stops: Stop[] }) {
 
                 <ChartFrame
                   title="Érkezések óránként"
-                  hint="Az üzemi nap kezdetétől számolva — a 24 fölötti órák az éjfél utáni járatok."
                 >
                   <BarChart
                     data={rows.map((r) => ({
@@ -205,10 +212,8 @@ export function StopPanel({ stops }: { stops: Stop[] }) {
 
                 <ChartFrame
                   title="Pontosság óránként"
-                  hint="Minél sötétebb, annál pontosabb az adott óra."
                 >
                   <HourHeat
-                    legend="A szám az órát jelöli. Üres keret = abban az órában nem volt mérés."
                     cells={rows.map((r) => ({
                       hour: r.hour,
                       value: r.otp,
@@ -217,7 +222,7 @@ export function StopPanel({ stops }: { stops: Stop[] }) {
                   />
                 </ChartFrame>
 
-                <ChartFrame title="Átlagos késés óránként" hint="Másodpercben.">
+                <ChartFrame title="Átlagos késés óránként">
                   {rows.some((r) => r.avgDelay != null) ? (
                     <BarChart
                       data={rows.map((r) => ({
@@ -243,7 +248,7 @@ export function StopPanel({ stops }: { stops: Stop[] }) {
         </QueryBoundary>
       ) : (
         <p className="rounded-2xl border border-dashed border-border bg-card/50 px-6 py-10 text-center text-xs text-muted-foreground">
-          Válassz megállót a fenti listából vagy keresővel.
+          Válassz megállót.
         </p>
       )}
     </div>

@@ -154,7 +154,6 @@ export function RoutePanel({ routes }: { routes: Route[] }) {
 
                 <ChartFrame
                   title="Menetrendtartás alakulása"
-                  hint="Naponta, a −1…+5 perces ablakba eső érkezések aránya."
                 >
                   <LineChart
                     unit="%"
@@ -167,7 +166,6 @@ export function RoutePanel({ routes }: { routes: Route[] }) {
 
                 <ChartFrame
                   title="Átlagos késés naponta"
-                  hint="Másodpercben; a nulla vonal alatt a vonal siet."
                 >
                   <LineChart
                     zeroLine
@@ -181,7 +179,6 @@ export function RoutePanel({ routes }: { routes: Route[] }) {
 
                 <ChartFrame
                   title="Teljesített és kiesett menetek"
-                  hint="Naponta."
                 >
                   {merged.length ? (
                     <BarChart

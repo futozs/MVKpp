@@ -70,9 +70,8 @@ export function ApproachStrip({
       <HereChip stops={stops} />
 
       {approach.state === "no-gps" ? (
-        <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
-          Kapcsold be a helymeghatározást, és itt látszik, hány méterre van
-          tőled a busz, és hány perc múlva ér ide.
+        <p className="mt-1.5 text-[11px] text-muted-foreground">
+          Nincs helymeghatározás.
         </p>
       ) : approach.state === "no-vehicle" ? (
         <p className="mt-1.5 text-[11px] text-muted-foreground">
@@ -98,8 +97,7 @@ export function ApproachStrip({
 
           {approach.state === "off-route" ? (
             <p className="mt-1.5 text-[11px] text-muted-foreground">
-              Ez a járat nem halad el melletted, ezért érkezési időt nem
-              becsülünk.
+              A járat nem halad el melletted.
             </p>
           ) : null}
         </>

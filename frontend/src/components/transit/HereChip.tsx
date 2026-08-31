@@ -51,7 +51,7 @@ export function HereChip({
       className={cn("flex min-w-0 items-center gap-1.5 text-[11px]", className)}
       title={
         geo.isStale
-          ? "Az utolsó ismert helyzeted — friss mérés még nem érkezett."
+          ? "Utolsó ismert helyzet"
           : `Pontosság: ±${Math.round(geo.position.accuracyM)} m`
       }
     >

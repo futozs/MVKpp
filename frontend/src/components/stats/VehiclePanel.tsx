@@ -374,7 +374,6 @@ export function VehiclePanel({
 
                   <ChartFrame
                     title="A nap menetei"
-                    hint="Menetrendi sávok — a szélesség a tervezett menetidő, a szín a vonal."
                   >
                     <RunTimeline runs={d.runs} />
                   </ChartFrame>
@@ -481,7 +480,6 @@ export function VehiclePanel({
 
           <ChartFrame
             title="Milyen vonalakon jár?"
-            hint="Havi megoszlás a teljesített menetek alapján."
             action={<Gauge className="h-4 w-4 text-muted-foreground" />}
           >
             {routesQ.data?.routes.length ? (
@@ -503,7 +501,6 @@ export function VehiclePanel({
 
           <ChartFrame
             title="Üzemzavar-előélet"
-            hint="Megszakadt menetek, elakadások és flottából kiesések ehhez a járműhöz."
           >
             {incQ.data?.incidents.length ? (
               <ul className="divide-y divide-border">

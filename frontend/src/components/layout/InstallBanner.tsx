@@ -35,8 +35,7 @@ export function InstallBanner() {
             </p>
           ) : (
             <p className="mt-0.5 text-[11px] text-muted-foreground">
-              Teljes képernyőn, böngészősáv nélkül indul, és offline is
-              megnyílik.
+              Alkalmazásként indul, böngészősáv nélkül.
             </p>
           )}
         </div>

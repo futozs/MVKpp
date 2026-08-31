@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { Layers, RefreshCw } from "lucide-react";
 import type { ActiveTab } from "@/types";
 import { Button } from "@/components/ui/button";
@@ -34,9 +35,24 @@ export function MobileHeader({
   onOpenMapPicker,
 }: MobileHeaderProps) {
   const weather = useWeather();
+  const navRef = useRef<HTMLElement>(null);
+
+  // A fülsor oldalra gördül; a kiválasztott fül különben félig kilóghat.
+  useEffect(() => {
+    navRef.current
+      ?.querySelector('[aria-current="page"]')
+      ?.scrollIntoView({ inline: "center", block: "nearest" });
+  }, [activeTab]);
 
   return (
-    <header className="relative z-bar shrink-0 border-b border-border bg-card md:hidden">
+    <header
+      className={cn(
+        "relative z-bar shrink-0 border-b border-border bg-card md:hidden",
+        // Álló módban (kezdőképernyőről indítva) nincs böngészősáv, a
+        // státuszsáv viszont a lapra ül — ezért kell a felső biztonsági sáv.
+        "pt-[env(safe-area-inset-top)]",
+      )}
+    >
       {}
       <div className="flex h-12 items-center gap-2 px-2">
         <span className="flex shrink-0 items-center gap-1.5 rounded-lg border border-primary/25 bg-primary/10 px-2 py-1">
@@ -96,11 +112,12 @@ export function MobileHeader({
 
       {}
       <nav
+        ref={navRef}
         aria-label="Fő nézetek"
         className={cn(
-          "flex gap-1 overflow-x-auto border-t border-border p-1.5",
+          "edge-fade-x flex gap-1 overflow-x-auto border-t border-border p-1.5",
           "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
-          "snap-x snap-mandatory scroll-px-1.5",
+          "snap-x snap-mandatory scroll-px-1.5 pr-4",
         )}
       >
         {TABS.map((tab) => {

@@ -22,6 +22,15 @@ function splitStatements(sql: string): string[] {
     .filter(Boolean);
 }
 
+/**
+ * Oszlopok, amelyek egy korábbi sémaverzióban szűkebbek voltak. A séma maga
+ * már a végleges típust írja le; ez a lista a meglévő telepítéseket hozza
+ * szintre.
+ */
+const COLUMN_UPGRADES: [table: string, column: string, type: string][] = [
+  ["vehicle_incident", "resolution", "VARCHAR(48) NULL"],
+];
+
 async function main() {
   const log = (s: string) => console.log(`[migrate] ${s}`);
 
@@ -48,6 +57,15 @@ async function main() {
     const stmts = splitStatements(sql);
     for (const s of stmts) await pool.query(s);
     log(`séma: ${stmts.length} utasítás lefutott`);
+
+    // A CREATE TABLE IF NOT EXISTS meglévő táblán nem csinál semmit, ezért a
+    // már kiadott oszlopok szélesítése külön lépés. A MODIFY idempotens.
+    for (const [table, column, type] of COLUMN_UPGRADES) {
+      await pool.query(
+        `ALTER TABLE \`${table}\` MODIFY COLUMN \`${column}\` ${type}`,
+      );
+    }
+    log(`oszlopigazítás: ${COLUMN_UPGRADES.length} rendben`);
 
     for (const p of PARTITIONED) {
       const made = await ensurePartitions(pool, p.table, p.g, p.ahead);

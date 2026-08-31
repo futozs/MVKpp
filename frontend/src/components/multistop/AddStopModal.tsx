@@ -50,10 +50,8 @@ export function AddStopModal({
           <DialogTitle>Megálló felvétele a figyelőre</DialogTitle>
           <DialogDescription>
             {selectedStopIds.length > 0
-              ? `${selectedStopIds.length} megálló a figyelőn. `
-              : ""}
-            A figyelő minden kiválasztott megállóról a következő indulásokat
-            mutatja.
+              ? `${selectedStopIds.length} megálló a figyelőn`
+              : "Még nincs figyelt megálló"}
           </DialogDescription>
         </DialogHeader>
 
@@ -66,7 +64,7 @@ export function AddStopModal({
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Név vagy megállókód — pl. Tiszai, Búza tér, SP1"
+              placeholder="Név vagy megállókód"
               aria-label="Megálló keresése"
               autoFocus
               className="pl-9"

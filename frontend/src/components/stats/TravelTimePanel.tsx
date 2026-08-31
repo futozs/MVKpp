@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ArrowDown, ArrowRightLeft, Info, Zap } from "lucide-react";
+import { ArrowDown, ArrowRightLeft, Zap } from "lucide-react";
 import type { Stop } from "@/types";
 import {
   StatsUnavailableError,
@@ -137,7 +137,7 @@ export function TravelTimePanel({ stops }: { stops: Stop[] }) {
         e instanceof StatsUnavailableError
           ? "Az adatraktár nem érhető el."
           : (e as Error).message.includes("404")
-            ? "Nincs közvetlen járat a két megálló között. Próbálj olyan párt, amit egy vonal érint."
+            ? "Nincs közvetlen járat a két megálló között."
             : (e as Error).message,
       );
     } finally {
@@ -160,10 +160,6 @@ export function TravelTimePanel({ stops }: { stops: Stop[] }) {
         <h2 className="text-lg font-bold tracking-tight sm:text-xl">
           Mennyi idő A-ból B-be?
         </h2>
-        <p className="text-xs text-muted-foreground">
-          Az eddigi mérésekből, napszakra és naptípusra bontva — nem a
-          menetrendből.
-        </p>
       </div>
 
       <div className="rounded-2xl border border-border bg-card p-4 sm:p-5">
@@ -258,27 +254,6 @@ export function TravelTimePanel({ stops }: { stops: Stop[] }) {
                 </strong>{" "}
                 {result.liveFactor > 1 ? "lassabb" : "gyorsabb"} a szokásosnál (
                 {result.liveSamples} friss mérés).
-              </span>
-            </p>
-          ) : null}
-
-          {result.confidence === "nincs adat" ? (
-            <p className="flex items-start gap-2 rounded-xl border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              <span>
-                Ehhez a szakaszhoz még nincs saját mérés, ezért a menetrend a
-                válasz. Ahogy gyűlik az adat, ez magától pontosabb lesz.
-              </span>
-            </p>
-          ) : null}
-
-          {!result.scheduleExact ? (
-            <p className="flex items-start gap-2 rounded-xl border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              <span>
-                A menetrendi alap nem a kért napé: az MVK feedje csak néhány
-                napra teljes előre, ezért a hozzá legközelebbi ismert menetet
-                vettük alapul.
               </span>
             </p>
           ) : null}

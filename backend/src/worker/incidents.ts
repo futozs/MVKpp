@@ -170,7 +170,7 @@ async function detectMidTripStops(
       severity,
       confidence: clampPct(confidence),
       peersStuck: 0,
-      resolution: nextTs ? "aznap folytatta" : "aznap nem tért vissza",
+      resolution: nextTs ? "aznap folytatta" : "nem tért vissza",
       note: `A menet ${progress}%-ánál hallgatott el.`,
     });
   }

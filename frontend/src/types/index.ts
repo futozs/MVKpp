@@ -127,7 +127,6 @@ export interface FilterState {
   routes: string[];
   type: "all" | "bus" | "tram";
   speed: SpeedFilter;
-  maxAgeSec: number | null;
   nearMeKm: number | null;
   sort: VehicleSort;
   stops: boolean;

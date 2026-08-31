@@ -21,6 +21,7 @@ import { VehicleFocusCard } from "@/components/map/VehicleFocusCard";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { GeoProvider } from "@/context/GeoContext";
 import { initialView, saveView } from "@/lib/viewState";
+import { useAppHeight } from "@/hooks/useAppHeight";
 
 const TAB_IDS: ActiveTab[] = ["map", "multistop", "timetable", "stats"];
 
@@ -37,7 +38,6 @@ const DEFAULT_FILTERS: FilterState = {
   routes: [],
   type: "all",
   speed: "all",
-  maxAgeSec: null,
   nearMeKm: null,
   sort: "route",
   stops: true,
@@ -49,6 +49,8 @@ const DEFAULT_FILTERS: FilterState = {
 };
 
 export function App() {
+  useAppHeight();
+
   const restored = initialView();
 
   const [activeTab, setActiveTab] = useState<ActiveTab>(
@@ -226,7 +228,7 @@ export function App() {
   return (
     <GeoProvider>
       <TooltipProvider delayDuration={300}>
-        <div className="flex h-screen w-screen flex-col overflow-hidden bg-background text-foreground">
+        <div className="flex h-full w-full flex-col overflow-hidden bg-background text-foreground">
           {}
           <Header
             activeTab={activeTab}
@@ -272,6 +274,7 @@ export function App() {
                   selectedStopId={selectedStopId}
                   monitoredStopIds={monitoredStopIds}
                   onToggleMonitorStop={handleToggleMonitorStop}
+                  onOpenMapPicker={() => setMapPickerOpen(true)}
                 />
 
                 {}
