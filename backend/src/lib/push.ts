@@ -14,6 +14,16 @@ export const pushConfigured = Boolean(PUBLIC_KEY && PRIVATE_KEY && SUBJECT);
 
 if (pushConfigured) {
   webpush.setVapidDetails(SUBJECT, PUBLIC_KEY, PRIVATE_KEY);
+  console.log(`[push] VAPID beállítva (subject=${SUBJECT}) — push aktív`);
+} else {
+  const missing = [
+    !PUBLIC_KEY && "VAPID_PUBLIC_KEY",
+    !PRIVATE_KEY && "VAPID_PRIVATE_KEY",
+    !SUBJECT && "VAPID_SUBJECT",
+  ].filter(Boolean);
+  console.log(
+    `[push] VAPID nincs beállítva (hiányzik: ${missing.join(", ")}) — a push kikapcsolva, csak a helyi (nyitott lapos) értesítés működik`,
+  );
 }
 
 export const vapidPublicKey = PUBLIC_KEY;
@@ -35,13 +45,27 @@ export async function sendPush(
   subscription: PushSubscriptionJSON,
   payload: { title: string; body: string; tag: string },
 ): Promise<PushSendResult> {
-  if (!pushConfigured) return "error";
+  const shortEndpoint = subscription.endpoint.slice(-16);
+  if (!pushConfigured) {
+    console.log(`[push] küldés kihagyva (nincs VAPID) — ...${shortEndpoint}`);
+    return "error";
+  }
   try {
     await webpush.sendNotification(subscription, JSON.stringify(payload));
+    console.log(`[push] elküldve: "${payload.title}" → ...${shortEndpoint}`);
     return "ok";
   } catch (err) {
     const status = (err as { statusCode?: number }).statusCode;
-    if (status === 404 || status === 410) return "gone";
+    const message = (err as Error).message;
+    if (status === 404 || status === 410) {
+      console.log(
+        `[push] feliratkozás lejárt (${status}) → ...${shortEndpoint}, törlöm`,
+      );
+      return "gone";
+    }
+    console.log(
+      `[push] hiba küldéskor (${status ?? "?"}): ${message} → ...${shortEndpoint}`,
+    );
     return "error";
   }
 }

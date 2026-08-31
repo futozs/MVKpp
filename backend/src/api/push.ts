@@ -44,6 +44,10 @@ push.post("/watch", async (c) => {
       : null;
   const now = Math.floor(Date.now() / 1000);
 
+  console.log(
+    `[push] figyelés mentése: stop=${stopId} (${stopName}), küszöb=${thresholdMin}p, járatok=${routeShorts ?? "bármelyik"}, endpoint=...${endpoint.slice(-16)}`,
+  );
+
   await query(
     `INSERT INTO push_subscription (endpoint, p256dh, auth, created_at)
      VALUES (?,?,?,?)
@@ -77,6 +81,8 @@ push.delete("/watch", async (c) => {
   const endpoint = body?.endpoint;
   const stopId = body?.stopId;
   if (!endpoint || !stopId) return c.json({ error: "Hiányzó mező" }, 400);
+
+  console.log(`[push] figyelés törlése: stop=${stopId}, endpoint=...${endpoint.slice(-16)}`);
 
   await query(
     `DELETE w FROM push_watch w

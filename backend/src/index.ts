@@ -4,6 +4,13 @@
  *  - /api/* -> https://mccaze.mvkzrt.hu:8443 (Bearer beinjektálva)
  *  - Token: state/jwt.txt; GTFS indításkor frissül.
  */
+// Ennek KELL lennie a legelső importnak: ES modulban minden import a fájl
+// saját kódja előtt fut le (a sorrend köztük számít), tehát ha ez nem az
+// első sor, a lenti importok (pl. api/stats.ts → db/pool.ts, api/push.ts →
+// lib/push.ts) MÁR a .env betöltése ELŐTT olvasnák ki a process.env-et, és
+// mindig az alapértelmezésekkel indulnának. Ha nincs .env, a dotenv
+// csendben átlép rajta — a rendszer korábban is működött .env nélkül.
+import 'dotenv/config'
 import { serve } from '@hono/node-server'
 import { networkInterfaces } from 'node:os'
 import { Hono, type Context } from 'hono'

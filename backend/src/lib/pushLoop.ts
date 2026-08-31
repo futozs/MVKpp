@@ -38,6 +38,9 @@ async function checkOnce(arrivalsForStop: ArrivalsForStop): Promise<void> {
        JOIN push_subscription s ON s.sub_id = w.sub_id`,
   );
   if (!watches.length) return;
+  console.log(
+    `[push] ellenőrzés: ${watches.length} figyelés, ${new Set(watches.map((w) => w.stop_id)).size} megálló`,
+  );
 
   const byStop = new Map<string, WatchRow[]>();
   for (const w of watches) {
@@ -95,13 +98,11 @@ async function checkOnce(arrivalsForStop: ArrivalsForStop): Promise<void> {
 }
 
 export function startPushLoop(arrivalsForStop: ArrivalsForStop): void {
-  if (!pushConfigured) {
-    console.log("[push] VAPID nincs beállítva — a push-hurok nem indul el");
-    return;
-  }
+  if (!pushConfigured) return; // a lib/push.ts már logolta, miért nem indul
+  console.log(`[push] hurok elindult (${CHECK_INTERVAL_MS / 1000} mp-enként)`);
   setInterval(() => {
     checkOnce(arrivalsForStop).catch((e) =>
-      console.log("[push] hiba:", (e as Error).message),
+      console.log("[push] hiba az ellenőrzési körben:", (e as Error).message),
     );
   }, CHECK_INTERVAL_MS);
 }

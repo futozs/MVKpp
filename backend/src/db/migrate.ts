@@ -1,3 +1,5 @@
+// Legelső import: a lenti ./pool.ts modulbetöltéskor olvassa a process.env-et.
+import "dotenv/config";
 import mysql from "mysql2/promise";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";

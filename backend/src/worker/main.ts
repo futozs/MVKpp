@@ -1,3 +1,5 @@
+// Legelső import: a lenti db/pool.ts modulbetöltéskor olvassa a process.env-et.
+import "dotenv/config";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Pool } from "mysql2/promise";
