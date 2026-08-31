@@ -25,6 +25,8 @@ type WatchBody = {
   stopName?: string;
   thresholdMin?: number;
   routeShorts?: string[];
+  /** Ha megadott, csak ez a pontos menetrendi menet vált ki riasztást (menetrend fül). */
+  tripId?: string;
 };
 
 push.post("/watch", async (c) => {
@@ -42,10 +44,11 @@ push.post("/watch", async (c) => {
     Array.isArray(body?.routeShorts) && body.routeShorts.length
       ? body.routeShorts.join(",")
       : null;
+  const tripId = body?.tripId || null;
   const now = Math.floor(Date.now() / 1000);
 
   console.log(
-    `[push] figyelés mentése: stop=${stopId} (${stopName}), küszöb=${thresholdMin}p, járatok=${routeShorts ?? "bármelyik"}, endpoint=...${endpoint.slice(-16)}`,
+    `[push] figyelés mentése: stop=${stopId} (${stopName}), küszöb=${thresholdMin}p, járatok=${routeShorts ?? "bármelyik"}, trip=${tripId ?? "-"}, endpoint=...${endpoint.slice(-16)}`,
   );
 
   await query(
@@ -62,13 +65,13 @@ push.post("/watch", async (c) => {
 
   await query(
     `INSERT INTO push_watch
-       (sub_id, stop_id, stop_name, threshold_min, route_shorts, updated_at)
-     VALUES (?,?,?,?,?,?)
+       (sub_id, stop_id, stop_name, threshold_min, route_shorts, trip_id, updated_at)
+     VALUES (?,?,?,?,?,?,?)
      ON DUPLICATE KEY UPDATE
        stop_name = VALUES(stop_name), threshold_min = VALUES(threshold_min),
-       route_shorts = VALUES(route_shorts), updated_at = VALUES(updated_at),
-       last_notified = NULL`,
-    [sub.sub_id, stopId, stopName, thresholdMin, routeShorts, now],
+       route_shorts = VALUES(route_shorts), trip_id = VALUES(trip_id),
+       updated_at = VALUES(updated_at), last_notified = NULL`,
+    [sub.sub_id, stopId, stopName, thresholdMin, routeShorts, tripId, now],
   );
 
   return c.json({ ok: true });

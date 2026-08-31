@@ -96,6 +96,8 @@ export type PushWatchConfig = {
   stopName: string;
   thresholdMin: number;
   routeShorts?: string[];
+  /** Ha megadott, csak ez a pontos menetrendi menet vált ki riasztást (menetrend fül). */
+  tripId?: string;
 };
 
 /**

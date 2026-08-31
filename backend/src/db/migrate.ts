@@ -33,6 +33,16 @@ const COLUMN_UPGRADES: [table: string, column: string, type: string][] = [
   ["vehicle_incident", "resolution", "VARCHAR(48) NULL"],
 ];
 
+/**
+ * Új oszlopok, amik egy korábbi telepítésen még hiányoznak. A CREATE TABLE
+ * IF NOT EXISTS egy már létező táblán nem ad hozzá oszlopot, ezért ez a
+ * lista pótolja utólag — a duplikált-oszlop hibát (MySQL 1060) szándékosan
+ * elnyeljük, hogy többször futtatva is biztonságos maradjon.
+ */
+const NEW_COLUMNS: [table: string, column: string, type: string][] = [
+  ["push_watch", "trip_id", "VARCHAR(64) NULL AFTER route_shorts"],
+];
+
 async function main() {
   const log = (s: string) => console.log(`[migrate] ${s}`);
 
@@ -68,6 +78,17 @@ async function main() {
       );
     }
     log(`oszlopigazítás: ${COLUMN_UPGRADES.length} rendben`);
+
+    for (const [table, column, type] of NEW_COLUMNS) {
+      try {
+        await pool.query(
+          `ALTER TABLE \`${table}\` ADD COLUMN \`${column}\` ${type}`,
+        );
+      } catch (e) {
+        if ((e as { errno?: number }).errno !== 1060) throw e; // 1060 = oszlop már létezik
+      }
+    }
+    log(`új oszlopok: ${NEW_COLUMNS.length} rendben`);
 
     for (const p of PARTITIONED) {
       const made = await ensurePartitions(pool, p.table, p.g, p.ahead);

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Ban,
+  Bell,
+  BellRing,
   Bus,
   CalendarDays,
   ChevronLeft,
@@ -28,6 +30,7 @@ import { LiveDot } from "@/components/transit/LiveDot";
 import { HereChip } from "@/components/transit/HereChip";
 import { RunSummary } from "./RunSummary";
 import { TimetableGrid } from "./TimetableGrid";
+import { TripNotifyDialog } from "./TripNotifyDialog";
 import { TripProgressRail } from "./TripProgressRail";
 import { useCancelledTrips } from "@/hooks/useCancelledTrips";
 import { useTripJournal } from "@/hooks/useTripJournal";
@@ -39,6 +42,7 @@ import {
   tripRunState,
   type DayRelation,
 } from "@/lib/tripStatus";
+import { getWatch } from "@/lib/notifications";
 import { initialTimetableView, saveTimetableView } from "@/lib/viewState";
 import { cn, normalizeSearchText } from "@/lib/utils";
 
@@ -668,6 +672,7 @@ export function TimetableView({
               <TripDetail
                 trip={selectedTrip}
                 stops={table.stops}
+                routeShort={selectedRoute.short}
                 vehicle={selectedVehicle}
                 cancelled={selectedTripCancelled}
                 journalEntry={journal.get(selectedTrip.tripId) ?? null}
@@ -687,6 +692,7 @@ export function TimetableView({
 function TripDetail({
   trip,
   stops,
+  routeShort,
   vehicle,
   cancelled,
   journalEntry,
@@ -697,6 +703,7 @@ function TripDetail({
 }: {
   trip: TimetableTrip;
   stops: TimetableResponse["stops"];
+  routeShort: string;
   vehicle: LiveVehicle | null;
   /** A menet ki van húzva: nem késik, hanem el sem indul. */
   cancelled: boolean;
@@ -707,6 +714,11 @@ function TripDetail({
   onClose: () => void;
   onFocusTrip: (tripId: string, vehicleId?: string) => void;
 }) {
+  const [notifyOpen, setNotifyOpen] = useState(false);
+  const originStop = stops[0] ?? null;
+  const isWatchingThisTrip =
+    originStop != null && getWatch(originStop.id)?.tripId === trip.tripId;
+
   const state = tripRunState({
     cancelled,
     hasLiveVehicle: vehicle !== null,
@@ -799,6 +811,21 @@ function TripDetail({
             </span>
           ) : null}
 
+          {!cancelled && state === "scheduled" && originStop ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "h-8 w-8 shrink-0",
+                isWatchingThisTrip && "text-primary hover:text-primary",
+              )}
+              onClick={() => setNotifyOpen(true)}
+              aria-label="Értesítés beállítása erre a menetre"
+            >
+              {isWatchingThisTrip ? <BellRing /> : <Bell />}
+            </Button>
+          ) : null}
+
           <Button
             variant="ghost"
             size="icon"
@@ -819,6 +846,18 @@ function TripDetail({
           <RunSummary entry={journalEntry} />
         ) : null}
       </div>
+
+      {originStop ? (
+        <TripNotifyDialog
+          open={notifyOpen}
+          onOpenChange={setNotifyOpen}
+          stopId={originStop.id}
+          stopName={originStop.name}
+          tripId={trip.tripId}
+          routeShort={routeShort}
+          departureLabel={trip.departure}
+        />
+      ) : null}
 
       {vehicle ? (
         <TripProgressRail

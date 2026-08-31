@@ -10,8 +10,22 @@ export type NotifyWatch = {
   thresholdMin: number;
   /** Ha üres/hiányzik, bármelyik vonal jó; ha van benne elem, csak ezekre a járatszámokra szól. */
   routeShorts?: string[];
+  /**
+   * Ha megadott, csak ez a pontos menetrendi menet vált ki riasztást (a
+   * menetrend fülről beállítva) — felülírja a routeShorts szűrést, mert
+   * egyértelműen csak arra AZ EGY indulásra kell szólni.
+   */
+  tripId?: string;
   /** A legutóbb riasztott menetek tripId-jei — védenek az ismételt riasztás ellen. */
   lastNotifiedTripIds?: string[];
+  /**
+   * Sikerült-e a szerveren is regisztrálni ezt a figyelést push-ra. Ha igen,
+   * a helyi (nyitott lapos) Notification API NEM dob saját értesítést —
+   * különben ugyanarra a buszra két értesítés jönne (egy helyi, egy push),
+   * amíg a lap nyitva van. Csak akkor esünk vissza a helyi útra, ha a push
+   * regisztráció nem sikerült.
+   */
+  pushRegistered?: boolean;
 };
 
 export function notificationsSupported(): boolean {
@@ -73,6 +87,14 @@ function updateNotifiedTripIds(stopId: string, tripIds: string[]): void {
   writeAll(all);
 }
 
+export function setPushRegistered(stopId: string, ok: boolean): void {
+  const all = readAll();
+  const w = all[stopId];
+  if (!w) return;
+  all[stopId] = { ...w, pushRegistered: ok };
+  writeAll(all);
+}
+
 
 /**
  * A StopCard minden sikeres lekérés után meghívja. Ha az adott megállóra van
@@ -94,10 +116,15 @@ export function checkAndNotify(
   if (notificationPermission() !== "granted") return;
   const watch = getWatch(stopId);
   if (!watch) return;
+  // Ha a push-regisztráció sikerült, a szerver saját maga küld értesítést —
+  // ha itt is dobnánk egyet, amíg a lap nyitva van, duplán jönne.
+  if (watch.pushRegistered) return;
 
   const matches = arrivals.filter(
     (a) =>
-      (!watch.routeShorts?.length || watch.routeShorts.includes(a.route)) &&
+      (watch.tripId
+        ? a.tripId === watch.tripId
+        : !watch.routeShorts?.length || watch.routeShorts.includes(a.route)) &&
       a.etaMin >= 0 &&
       a.etaMin <= watch.thresholdMin,
   );
@@ -116,7 +143,9 @@ export function checkAndNotify(
       fresh.length > 1
         ? `${fresh.map(label).join(", ")}`
         : label(fresh[0]);
-    const body = `${stopName} (${stopId}) — kb. ${minEta} percen belül`;
+    const body = watch.tripId
+      ? `kb. ${minEta} percen belül indul — ${stopName} (${stopId})`
+      : `${stopName} (${stopId}) — kb. ${minEta} percen belül`;
 
     try {
       new Notification(title, {

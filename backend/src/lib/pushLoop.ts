@@ -2,7 +2,7 @@ import { query } from "../db/pool.ts";
 import { pushConfigured, sendPush } from "./push.ts";
 import { withHungarianSuffix } from "./huSuffix.ts";
 
-const CHECK_INTERVAL_MS = Number(process.env.PUSH_CHECK_INTERVAL_MS ?? 5_000);
+const CHECK_INTERVAL_MS = Number(process.env.PUSH_CHECK_INTERVAL_MS ?? 3_000);
 
 type MinimalArrival = {
   route: string;
@@ -25,6 +25,7 @@ type WatchRow = {
   stop_name: string;
   threshold_min: number;
   route_shorts: string | null;
+  trip_id: string | null;
   last_notified: string | null;
 };
 
@@ -38,7 +39,7 @@ type WatchRow = {
 async function checkOnce(arrivalsForStop: ArrivalsForStop): Promise<void> {
   const watches = await query<WatchRow>(
     `SELECT w.watch_id, w.sub_id, s.endpoint, s.p256dh, s.auth,
-            w.stop_id, w.stop_name, w.threshold_min, w.route_shorts, w.last_notified
+            w.stop_id, w.stop_name, w.threshold_min, w.route_shorts, w.trip_id, w.last_notified
        FROM push_watch w
        JOIN push_subscription s ON s.sub_id = w.sub_id`,
   );
@@ -60,10 +61,15 @@ async function checkOnce(arrivalsForStop: ArrivalsForStop): Promise<void> {
     }
 
     for (const w of stopWatches) {
+      // Pontos menetrendi menet (a menetrend fülről beállítva): a route_shorts
+      // szűrést felülírja, mert egyértelműen csak arra AZ EGY indulásra kell
+      // riasztás, nem az adott vonal bármelyik aznapi menetére.
       const routeFilter = w.route_shorts ? w.route_shorts.split(",") : null;
       const matches = arrivals.filter(
         (a) =>
-          (!routeFilter || routeFilter.includes(a.route)) &&
+          (w.trip_id
+            ? a.tripId === w.trip_id
+            : !routeFilter || routeFilter.includes(a.route)) &&
           a.etaMin >= 0 &&
           a.etaMin <= w.threshold_min,
       );
@@ -79,7 +85,11 @@ async function checkOnce(arrivalsForStop: ArrivalsForStop): Promise<void> {
             ? `${withHungarianSuffix(a.route)} busz (${a.vehicle.id})`
             : `${withHungarianSuffix(a.route)} busz`;
         const title = fresh.length > 1 ? fresh.map(label).join(", ") : label(fresh[0]);
-        const body = `${w.stop_name} (${w.stop_id}) — kb. ${minEta} percen belül`;
+        // Menetrendi (indulási) figyelésnél az "indul" ige egyértelműsíti,
+        // hogy ez a kiindulási megálló, nem egy útközbeni érkezés.
+        const body = w.trip_id
+          ? `kb. ${minEta} percen belül indul — ${w.stop_name} (${w.stop_id})`
+          : `${w.stop_name} (${w.stop_id}) — kb. ${minEta} percen belül`;
 
         const result = await sendPush(
           { endpoint: w.endpoint, keys: { p256dh: w.p256dh, auth: w.auth } },

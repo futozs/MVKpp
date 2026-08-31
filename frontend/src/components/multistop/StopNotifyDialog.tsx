@@ -18,6 +18,7 @@ import {
   getWatch,
   notificationPermission,
   requestNotificationPermission,
+  setPushRegistered,
   setWatch,
 } from "@/lib/notifications";
 import { registerPushWatch, unregisterPushWatch } from "@/lib/push";
@@ -101,6 +102,7 @@ export function StopNotifyDialog({
       thresholdMin,
       routeShorts: finalRouteShorts,
     });
+    setPushRegistered(stopId, result.ok);
     setPushStatus(
       result.ok ? { state: "ok" } : { state: "fail", reason: result.reason },
     );

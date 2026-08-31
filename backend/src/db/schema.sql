@@ -420,6 +420,11 @@ CREATE TABLE IF NOT EXISTS push_watch (
   stop_name     VARCHAR(128) NOT NULL,
   threshold_min TINYINT UNSIGNED NOT NULL DEFAULT 5,
   route_shorts  VARCHAR(255) NULL,
+  -- Ha megadott: csak ez a pontos menetrendi menet (pl. egy kiválasztott
+  -- 16:43-as indulás a menetrend fülön) váltja ki a riasztást, a route_shorts
+  -- szűrést felülírva — így nem minden aznapi 14-es indulására szól, csak arra
+  -- az egyre, amit kiválasztottak.
+  trip_id       VARCHAR(64)  NULL,
   last_notified VARCHAR(512) NULL,
   updated_at    INT UNSIGNED NOT NULL,
   PRIMARY KEY (watch_id),
