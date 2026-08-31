@@ -4,7 +4,6 @@ import type { Stop } from "@/types";
 import { useGeo } from "@/context/GeoContext";
 import { distanceKm } from "@/lib/geo";
 import { AddStopModal } from "./AddStopModal";
-import { NextDepartureBanner } from "./NextDepartureBanner";
 import { StopCard } from "./StopCard";
 import { StopCarousel } from "./StopCarousel";
 import { Button } from "@/components/ui/button";
@@ -172,12 +171,6 @@ export function MultiStopDashboard({
           </Button>
         </div>
       </div>
-
-      {watched.length > 1 ? (
-        <div className="shrink-0 px-3 pt-3 sm:px-4">
-          <NextDepartureBanner stops={watched} onFocusMap={onFocusMap} />
-        </div>
-      ) : null}
 
       {}
       {watched.length > 0 ? (

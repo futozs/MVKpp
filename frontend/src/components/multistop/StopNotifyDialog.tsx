@@ -39,8 +39,8 @@ export function StopNotifyDialog({
   onChanged,
 }: StopNotifyDialogProps) {
   const [threshold, setThreshold] = useState(DEFAULT_THRESHOLD_MIN);
-  const [onlyVehicle, setOnlyVehicle] = useState(false);
-  const [vehicleId, setVehicleId] = useState("");
+  const [onlyRoute, setOnlyRoute] = useState(false);
+  const [routeShort, setRouteShort] = useState("");
   const [permissionDenied, setPermissionDenied] = useState(false);
   const [existed, setExisted] = useState(false);
 
@@ -49,16 +49,12 @@ export function StopNotifyDialog({
     const w = getWatch(stopId);
     setExisted(Boolean(w));
     setThreshold(w?.thresholdMin ?? DEFAULT_THRESHOLD_MIN);
-    setOnlyVehicle(Boolean(w?.vehicleId));
-    setVehicleId(w?.vehicleId ?? "");
+    setOnlyRoute(Boolean(w?.routeShort));
+    setRouteShort(w?.routeShort ?? "");
     setPermissionDenied(notificationPermission() === "denied");
   }, [open, stopId]);
 
-  const nearbyVehicleIds = [
-    ...new Set(
-      arrivals.map((a) => a.vehicle?.id).filter((id): id is string => !!id),
-    ),
-  ];
+  const nearbyRoutes = [...new Set(arrivals.map((a) => a.route).filter(Boolean))];
 
   const handleSave = async () => {
     const granted = await requestNotificationPermission();
@@ -69,7 +65,7 @@ export function StopNotifyDialog({
     setWatch(stopId, {
       stopName,
       thresholdMin: Math.max(1, Math.min(60, threshold || DEFAULT_THRESHOLD_MIN)),
-      vehicleId: onlyVehicle && vehicleId.trim() ? vehicleId.trim() : undefined,
+      routeShort: onlyRoute && routeShort.trim() ? routeShort.trim() : undefined,
     });
     onChanged?.(true);
     onOpenChange(false);
@@ -117,33 +113,33 @@ export function StopNotifyDialog({
 
           <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5">
             <div className="min-w-0">
-              <p className="text-sm font-medium">Csak egy konkrét jármű</p>
+              <p className="text-sm font-medium">Csak egy konkrét járat</p>
               <p className="text-[11px] text-muted-foreground">
-                Kikapcsolva: bármelyik következő busz jó.
+                Kikapcsolva: bármelyik vonal jó, csak az időpont számít.
               </p>
             </div>
-            <Switch checked={onlyVehicle} onCheckedChange={setOnlyVehicle} />
+            <Switch checked={onlyRoute} onCheckedChange={setOnlyRoute} />
           </div>
 
-          {onlyVehicle ? (
+          {onlyRoute ? (
             <div className="space-y-1.5">
-              <Label htmlFor="notify-vehicle">Jármű azonosító</Label>
+              <Label htmlFor="notify-route">Járatszám</Label>
               <Input
-                id="notify-vehicle"
-                value={vehicleId}
-                onChange={(e) => setVehicleId(e.target.value)}
-                placeholder="pl. 1641"
+                id="notify-route"
+                value={routeShort}
+                onChange={(e) => setRouteShort(e.target.value)}
+                placeholder="pl. 34"
               />
-              {nearbyVehicleIds.length ? (
+              {nearbyRoutes.length ? (
                 <div className="flex flex-wrap gap-1.5 pt-1">
-                  {nearbyVehicleIds.map((id) => (
+                  {nearbyRoutes.map((r) => (
                     <button
-                      key={id}
+                      key={r}
                       type="button"
-                      onClick={() => setVehicleId(id)}
+                      onClick={() => setRouteShort(r)}
                       className="rounded-md border border-border px-2 py-1 font-mono text-[11px] font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
                     >
-                      {id}
+                      {r}
                     </button>
                   ))}
                 </div>

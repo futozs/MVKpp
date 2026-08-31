@@ -7,10 +7,10 @@ export type NotifyWatch = {
   stopId: string;
   stopName: string;
   thresholdMin: number;
-  /** Ha üres, bármelyik következő busz jó; ha megadott, csak ez a jármű. */
-  vehicleId?: string;
-  /** Az utoljára riasztott menet tripId-je — ez véd az ismételt riasztás ellen. */
-  lastNotifiedTripId?: string;
+  /** Ha üres, bármelyik vonal jó; ha megadott, csak ez a járatszám (pl. "34"). */
+  routeShort?: string;
+  /** A legutóbb riasztott menetek tripId-jei — védenek az ismételt riasztás ellen. */
+  lastNotifiedTripIds?: string[];
 };
 
 export function notificationsSupported(): boolean {
@@ -53,7 +53,7 @@ export function getWatch(stopId: string): NotifyWatch | null {
 
 export function setWatch(
   stopId: string,
-  watch: Omit<NotifyWatch, "stopId" | "lastNotifiedTripId"> | null,
+  watch: Omit<NotifyWatch, "stopId" | "lastNotifiedTripIds"> | null,
 ): void {
   const all = readAll();
   if (!watch) {
@@ -64,20 +64,21 @@ export function setWatch(
   writeAll(all);
 }
 
-function markNotified(stopId: string, tripId: string): void {
+function updateNotifiedTripIds(stopId: string, tripIds: string[]): void {
   const all = readAll();
   const w = all[stopId];
   if (!w) return;
-  all[stopId] = { ...w, lastNotifiedTripId: tripId };
+  all[stopId] = { ...w, lastNotifiedTripIds: tripIds };
   writeAll(all);
 }
 
 /**
  * A StopCard minden sikeres lekérés után meghívja. Ha az adott megállóra van
- * beállított figyelés, és a megfelelő busz (bármelyik, vagy a kijelölt
- * jármű) a küszöbidőn belülre ért, egy natív böngésző-értesítést dob — de
- * menetenként csak egyszer (a `lastNotifiedTripId` védi az ismétlést, amíg a
- * busz be nem érkezik és egy új menet nem kerül a küszöb alá).
+ * beállított figyelés, megnézi, mely érkezések esnek a küszöbidőn belülre
+ * (a beállított járatszámra szűkítve, ha van ilyen megadva), és HA VAN ÚJ
+ * (még nem riasztott) találat, egyetlen rövid értesítést dob — a járat-
+ * számokkal és a megállóval, iránymegjelölés nélkül. Egy adott menet
+ * (tripId) csak egyszer vált ki riasztást, amíg be nem érkezik.
  *
  * Figyelem: ez a bejelentkezés csak addig működik, amíg az oldal/lap nyitva
  * (vagy háttérben fut a böngészőben) — teljesen bezárt alkalmazásból nem jön
@@ -92,28 +93,40 @@ export function checkAndNotify(
   const watch = getWatch(stopId);
   if (!watch) return;
 
-  const candidate = watch.vehicleId
-    ? arrivals.find(
-        (a) => a.vehicle?.id?.trim() === watch.vehicleId?.trim(),
-      )
-    : arrivals[0];
-  if (!candidate) return;
-  if (candidate.tripId === watch.lastNotifiedTripId) return;
-  if (candidate.etaMin > watch.thresholdMin || candidate.etaMin < 0) return;
+  const matches = arrivals.filter(
+    (a) =>
+      (!watch.routeShort || a.route === watch.routeShort) &&
+      a.etaMin >= 0 &&
+      a.etaMin <= watch.thresholdMin,
+  );
+  if (!matches.length) return;
 
-  const title = watch.vehicleId
-    ? `${watch.vehicleId} jármű közeleg`
-    : `${candidate.route} busz közeleg`;
-  const body = `${candidate.route} (${candidate.headsign}) kb. ${Math.max(0, Math.round(candidate.etaMin))} percen belül ideér: ${stopName}`;
+  const already = new Set(watch.lastNotifiedTripIds ?? []);
+  const fresh = matches.filter((a) => !already.has(a.tripId));
 
-  try {
-    new Notification(title, {
-      body,
-      tag: `mvk-stop-${stopId}`,
-      icon: "/icon-192.png",
-    });
-  } catch {
-    // Néhány böngésző (pl. háttérben lévő mobil tab) eldobhatja — nem kritikus.
+  if (fresh.length) {
+    const routes = [...new Set(fresh.map((a) => a.route))];
+    const minEta = Math.max(0, Math.round(Math.min(...fresh.map((a) => a.etaMin))));
+    const title =
+      routes.length > 1 ? `${routes.join(", ")} buszok` : `${routes[0]} busz`;
+    const body = `${stopName} — kb. ${minEta} percen belül`;
+
+    try {
+      new Notification(title, {
+        body,
+        tag: `mvk-stop-${stopId}`,
+        icon: "/icon-192.png",
+      });
+    } catch {
+      // Néhány böngésző (pl. háttérben lévő mobil tab) eldobhatja — nem kritikus.
+    }
   }
-  markNotified(stopId, candidate.tripId);
+
+  // A jelenlegi küszöbön belüli menetek listája lesz az új "riasztott" halmaz —
+  // ha egy busz kikerül innen (megérkezett), a helyére kerülő új menet ismét
+  // kiválthat riasztást.
+  updateNotifiedTripIds(
+    stopId,
+    matches.map((a) => a.tripId),
+  );
 }
