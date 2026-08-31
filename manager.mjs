@@ -26,7 +26,7 @@ const STATE_DIR = join(BACKEND_DIR, 'state')
 const PID_FILE = join(STATE_DIR, 'manager.pid')
 const GATEWAY_PORT = 8088
 const GATEWAY_PATHS = [
-  '/api', '/live', '/gtfs', '/stats', '/system',
+  '/api', '/live', '/gtfs', '/stats', '/system', '/push',
   '/_health', '/_jwt', '/_export', '/_ingest', '/_renew', '/weather',
 ]
 
