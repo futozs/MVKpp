@@ -11,7 +11,7 @@ export const GATEWAY_TARGET = process.env.VITE_GATEWAY ?? 'http://127.0.0.1:8088
 
 /** A gateway felé továbbított útvonalak. */
 const PROXY_PATHS = [
-  '/api', '/live', '/gtfs', '/stats', '/system',
+  '/api', '/live', '/gtfs', '/stats', '/system', '/push',
   '/_health', '/_jwt', '/_export', '/_ingest', '/_renew', '/weather',
 ]
 
