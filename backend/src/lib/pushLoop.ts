@@ -5,6 +5,8 @@ import { withHungarianSuffix } from "./huSuffix.ts";
 const CHECK_INTERVAL_MS = Number(process.env.PUSH_CHECK_INTERVAL_MS ?? 3_000);
 /** Ennél nagyobb eltérésnél már érdemes külön megemlíteni a késést/sietést. */
 const DELAY_MENTION_THRESHOLD_S = 60;
+/** Ismétlődő figyelésnél ennyi perc eltérést engedünk a célzott óra:perctől. */
+const RECURRING_WINDOW_MIN = 4;
 
 type MinimalArrival = {
   route: string;
@@ -18,6 +20,7 @@ type ArrivalsForStop = (
   limit: number,
 ) => Promise<{ arrivals: MinimalArrival[] }>;
 type CancelledTripIds = () => Promise<string[]>;
+type NowSecOfDay = () => number;
 
 type WatchRow = {
   watch_id: number;
@@ -31,6 +34,7 @@ type WatchRow = {
   route_shorts: string | null;
   trip_id: string | null;
   is_departure: number;
+  sched_min: number | null;
   last_notified: string | null;
 };
 
@@ -40,27 +44,25 @@ function delaySuffix(delaySec: number | null): string {
   return delaySec > 0 ? ` (${min} perc késés)` : ` (${min} perccel korábban)`;
 }
 
+/** Kör alakú (0-1439) percek közti legkisebb távolság — az éjfél átlépését is helyesen kezeli. */
+function minuteDistance(a: number, b: number): number {
+  const d = Math.abs(a - b);
+  return Math.min(d, 1440 - d);
+}
+
 /**
  * A menetrend fülről beállított figyeléseknél (van trip_id) ellenőrizzük,
  * nem húzta-e ki az MVK az adott menetet — ha igen, ezt magát is érdemes
  * jelezni, különben a felhasználó feleslegesen várna egy sosem érkező buszra.
+ * Ismétlődő (sched_min) figyeléseknél ez nem alkalmazható (nincs egyetlen
+ * fix tripId) — azoknál a lenti fő szűrés dobja csendben a kihúzott menetet.
  */
 async function checkCancelledWatches(
   stopWatches: WatchRow[],
-  cancelledTripIds: CancelledTripIds,
+  cancelled: Set<string>,
 ): Promise<Set<number>> {
-  const tripWatches = stopWatches.filter((w) => w.trip_id);
-  if (!tripWatches.length) return new Set();
-
-  let cancelled: Set<string>;
-  try {
-    cancelled = new Set(await cancelledTripIds());
-  } catch {
-    return new Set();
-  }
-
   const handled = new Set<number>();
-  for (const w of tripWatches) {
+  for (const w of stopWatches) {
     if (!w.trip_id || !cancelled.has(w.trip_id)) continue;
     const already = new Set((w.last_notified ?? "").split(",").filter(Boolean));
     if (already.has(`CANCELLED:${w.trip_id}`)) {
@@ -96,11 +98,12 @@ async function checkCancelledWatches(
 async function checkOnce(
   arrivalsForStop: ArrivalsForStop,
   cancelledTripIds: CancelledTripIds,
+  nowSecOfDay: NowSecOfDay,
 ): Promise<void> {
   const watches = await query<WatchRow>(
     `SELECT w.watch_id, w.sub_id, s.endpoint, s.p256dh, s.auth,
             w.stop_id, w.stop_name, w.threshold_min, w.route_shorts, w.trip_id,
-            w.is_departure, w.last_notified
+            w.is_departure, w.sched_min, w.last_notified
        FROM push_watch w
        JOIN push_subscription s ON s.sub_id = w.sub_id`,
   );
@@ -113,8 +116,16 @@ async function checkOnce(
     byStop.set(w.stop_id, list);
   }
 
+  let cancelled: Set<string>;
+  try {
+    cancelled = new Set(await cancelledTripIds());
+  } catch {
+    cancelled = new Set();
+  }
+  const nowMin = Math.floor(nowSecOfDay() / 60);
+
   for (const [stopId, stopWatches] of byStop) {
-    const cancelledHandled = await checkCancelledWatches(stopWatches, cancelledTripIds);
+    const cancelledHandled = await checkCancelledWatches(stopWatches, cancelled);
 
     let arrivals: MinimalArrival[];
     try {
@@ -122,22 +133,35 @@ async function checkOnce(
     } catch {
       continue;
     }
+    // A törölt meneteket a fő szűrésből is kizárjuk — ismétlődő figyelésnél
+    // (nincs egyetlen fix tripId) ez az egyetlen módja, hogy ne riasszunk
+    // egy adott napon kihúzott menetre.
+    arrivals = arrivals.filter((a) => !cancelled.has(a.tripId));
 
     for (const w of stopWatches) {
       if (cancelledHandled.has(w.watch_id)) continue;
 
-      // Pontos menetrendi menet (a menetrend fülről beállítva): a route_shorts
-      // szűrést felülírja, mert egyértelműen csak arra AZ EGY indulásra kell
-      // riasztás, nem az adott vonal bármelyik aznapi menetére.
+      // Három szűrési mód, egymást kizárva:
+      //  1) sched_min megadva: "ismétlődő" — route + menetrendi óra:perc
+      //     közelség alapján, mert a GTFS naponta más tripId-t ad ugyanarra
+      //     a mintára.
+      //  2) trip_id megadva: pontosan EZ az egy menet (menetrend fülről,
+      //     egyszeri kiválasztás).
+      //  3) egyik sem: a megállófigyelős, route_shorts alapú szűrés.
       const routeFilter = w.route_shorts ? w.route_shorts.split(",") : null;
-      const matches = arrivals.filter(
-        (a) =>
-          (w.trip_id
-            ? a.tripId === w.trip_id
-            : !routeFilter || routeFilter.includes(a.route)) &&
-          a.etaMin >= 0 &&
-          a.etaMin <= w.threshold_min,
-      );
+      const matches = arrivals.filter((a) => {
+        if (w.sched_min != null) {
+          if (routeFilter && !routeFilter.includes(a.route)) return false;
+          const delayMin = Math.round((a.delaySec ?? 0) / 60);
+          const schedMin = ((nowMin + a.etaMin - delayMin) % 1440 + 1440) % 1440;
+          if (minuteDistance(schedMin, w.sched_min) > RECURRING_WINDOW_MIN) return false;
+        } else if (w.trip_id) {
+          if (a.tripId !== w.trip_id) return false;
+        } else if (routeFilter && !routeFilter.includes(a.route)) {
+          return false;
+        }
+        return a.etaMin >= 0 && a.etaMin <= w.threshold_min;
+      });
       if (!matches.length) continue;
 
       const already = new Set((w.last_notified ?? "").split(",").filter(Boolean));
@@ -151,9 +175,10 @@ async function checkOnce(
             : `${withHungarianSuffix(a.route)} busz`;
         const title = fresh.length > 1 ? fresh.map(label).join(", ") : label(fresh[0]);
         const delayNote = fresh.length === 1 ? delaySuffix(fresh[0].delaySec) : "";
-        // Menetrendi figyelésnél a kiindulási megállónál "indul", egy
-        // útközbeni megállónál "ér ide" a helyes ige.
-        const body = w.trip_id
+        // Menetrend-alapú (pontos vagy ismétlődő) figyelésnél a kiindulási
+        // megállónál "indul", egy útközbeni megállónál "ér ide" a helyes ige.
+        const isSchedulePinned = w.trip_id != null || w.sched_min != null;
+        const body = isSchedulePinned
           ? `kb. ${minEta} percen belül ${w.is_departure ? "indul" : "ér ide"}${delayNote} — ${w.stop_name} (${w.stop_id})`
           : `${w.stop_name} (${w.stop_id}) — kb. ${minEta} percen belül${delayNote}`;
 
@@ -215,12 +240,13 @@ async function selfTest(): Promise<void> {
 export function startPushLoop(
   arrivalsForStop: ArrivalsForStop,
   cancelledTripIds: CancelledTripIds,
+  nowSecOfDay: NowSecOfDay,
 ): void {
   selfTest().catch((e) => console.log("[push] önteszt hiba:", (e as Error).message));
   if (!pushConfigured) return; // a self-test már logolta, miért nem indul
   console.log(`[push] hurok elindult (${CHECK_INTERVAL_MS / 1000} mp-enként)`);
   setInterval(() => {
-    checkOnce(arrivalsForStop, cancelledTripIds).catch((e) =>
+    checkOnce(arrivalsForStop, cancelledTripIds, nowSecOfDay).catch((e) =>
       console.log("[push] hiba az ellenőrzési körben:", (e as Error).message),
     );
   }, CHECK_INTERVAL_MS);

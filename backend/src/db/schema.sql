@@ -428,6 +428,14 @@ CREATE TABLE IF NOT EXISTS push_watch (
   -- Csak megjelenítési szöveghez kell: az indulási megállónál "indul", egy
   -- útközbeni megállónál "ér ide" a helyes ige a push-üzenetben.
   is_departure  TINYINT(1)   NOT NULL DEFAULT 0,
+  -- "Ismétlődő" figyelés (menetrend fül, checkbox): a GTFS naponta ÚJ
+  -- trip_id-t ad ugyanarra a menetrendi mintára, ezért itt nem a trip_id-re,
+  -- hanem a route_shorts + ez a menetrendi óra:perc (0-1439, éjféltől
+  -- számolva) alapján illesztünk — így minden napra szól, amikor ez a járat
+  -- tényleg közlekedik, anélkül hogy előre le kellene kérdezni a GTFS
+  -- naptárt (a napi élő érkezés-lista úgyis csak a ténylegesen közlekedő
+  -- meneteket adja vissza).
+  sched_min     SMALLINT     NULL,
   last_notified VARCHAR(512) NULL,
   updated_at    INT UNSIGNED NOT NULL,
   PRIMARY KEY (watch_id),
@@ -538,5 +546,20 @@ CREATE TABLE IF NOT EXISTS trip_vehicle_log (
   last_seen    INT UNSIGNED       NOT NULL,
   samples      MEDIUMINT UNSIGNED NOT NULL,
   PRIMARY KEY (service_date, trip_id, vehicle_id),
+  KEY ix_day (service_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Kihúzott (törölt) menetek napló. Az MVK `list-cancelled-trips` végpontja
+-- KIZÁRÓLAG a mai napra válaszol, és semmi nem őrzi meg — enélkül visszalapozva
+-- a menetrendkönyv nem tudná megmondani, mely menetek maradtak ki egy múltbeli
+-- napon. A gateway percenként mintázza a listát, és amit lát, azt itt végleg
+-- megőrzi.
+CREATE TABLE IF NOT EXISTS cancelled_trip_log (
+  service_date DATE               NOT NULL,
+  trip_id      VARCHAR(40)        NOT NULL,
+  first_seen   INT UNSIGNED       NOT NULL,
+  last_seen    INT UNSIGNED       NOT NULL,
+  samples      MEDIUMINT UNSIGNED NOT NULL DEFAULT 1,
+  PRIMARY KEY (service_date, trip_id),
   KEY ix_day (service_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

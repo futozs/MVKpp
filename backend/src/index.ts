@@ -27,7 +27,7 @@ import {
 } from './lib/gtfs.ts'
 import { initJournal, recordSighting, journalFor, flushJournal, journalStats, takeSightings, restoreSightings } from './lib/journal.ts'
 import { buildRouteIndex, buildTable, buildDaySchedule, secToHm, feedDays, type DaySchedule } from './lib/timetable.ts'
-import { saveDaySchedule, loadDaySchedule, archiveRange, saveSightings, dayRuns, storedFeedVersions } from './lib/archive.ts'
+import { saveDaySchedule, loadDaySchedule, archiveRange, saveSightings, dayRuns, storedFeedVersions, saveCancelledTrips, dayCancelledTripIds } from './lib/archive.ts'
 import { stats } from './api/stats.ts'
 import { ops, adminToken } from './api/ops.ts'
 import { push } from './api/push.ts'
@@ -88,7 +88,7 @@ function hmFromUnix(unix: number): string {
   const d = new Date((unix + tzOffsetSec()) * 1000)
   return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`
 }
-function budapestNow() {
+export function budapestNow() {
   const unix = Math.floor(Date.now() / 1000); const offset = tzOffsetSec()
   const secOfDay = (((unix + offset) % 86400) + 86400) % 86400
   const d = new Date((unix + offset) * 1000)
@@ -737,12 +737,55 @@ export async function cancelledTripIds(): Promise<string[]> {
   return ids
 }
 
+/** Egy trip_id kiegészítése a menetrendkönyvnek kellő adatokkal. */
+function cancelledTripRow(tripId: string) {
+  const t = trips.get(tripId)
+  const r = t ? routes.get(t.routeId) : undefined
+  const stopsOfTrip = tripStops.get(tripId)
+  const first = stopsOfTrip?.[0] ?? null
+  const last = stopsOfTrip?.[stopsOfTrip.length - 1] ?? null
+  return {
+    tripId,
+    /** Hamis, ha a statikus GTFS nem ismeri ezt a menetet (elavult/rotált feed). */
+    known: Boolean(t),
+    routeId: t?.routeId ?? '',
+    routeShort: r?.short ?? '',
+    routeColor: r?.color ?? '888888',
+    routeText: r?.text ?? 'FFFFFF',
+    dir: t?.dir ?? '',
+    headsign: t?.headsign ?? '',
+    departure: first ? secToHm(first.dep) : null,
+    departureSec: first?.dep ?? null,
+    arrival: last ? secToHm(last.dep) : null,
+    originName: first ? (stops.get(first.stopId)?.name ?? first.stopId) : null,
+    destinationName: last ? (stops.get(last.stopId)?.name ?? last.stopId) : null,
+  }
+}
+function sortCancelledRows(rows: ReturnType<typeof cancelledTripRow>[]) {
+  return rows.sort((a, b) => (a.departureSec ?? Infinity) - (b.departureSec ?? Infinity) || a.tripId.localeCompare(b.tripId))
+}
+
 /**
- * A mai kihúzott menetek menetrendi adatokkal. A menetrendkönyv ebből tudja,
+ * A kihúzott menetek menetrendi adatokkal. A menetrendkönyv ebből tudja,
  * melyik indulás van törölve — szemben a „még nem indult el” állapottal, ami
  * pusztán annyit jelent, hogy a járműhöz még nincs élő pozíció.
+ *
+ * `?date=` nélkül (vagy a mai napra) élőben az upstream-ről jön a lista —
+ * ilyenkor ezt egyúttal el is rakjuk (`saveCancelledTrips`), hogy visszalapozva
+ * is megmaradjon. Múltbeli napra a `cancelled_trip_log` archívumból szolgálunk
+ * ki, mert az upstream végpont KIZÁRÓLAG a mai napot ismeri.
  */
 app.get('/live/cancelled', async (c) => {
+  const today = budapestNow().ymd
+  const ymd = (c.req.query('date') || today).trim()
+  if (!/^\d{8}$/.test(ymd)) return c.json({ error: 'érvénytelen ?date= (YYYYMMDD kell)' }, 400)
+
+  if (ymd !== today) {
+    const ids = await dayCancelledTripIds(ymd)
+    const rows = sortCancelledRows(ids.map(cancelledTripRow))
+    return c.json({ date: ymd, count: rows.length, stale: false, archived: true, fetchedAt: null, tripIds: ids, trips: rows })
+  }
+
   let ids: string[]
   let stale = false
   try {
@@ -754,36 +797,18 @@ app.get('/live/cancelled', async (c) => {
     ids = cancelledCache.ids
     stale = true
   }
+  // Amit ma élőben látunk kihúzva, azt itt is rögzítjük — a háttér-mintavétel
+  // (lásd lent) mellett ez biztosítja, hogy egy éppen megjelenő törlés se
+  // maradjon ki, még mielőtt a periodikus kör lefutna.
+  if (!stale && ids.length) saveCancelledTrips(today, ids, budapestNow().unix).catch(() => {})
 
-  const rows = ids.map((tripId) => {
-    const t = trips.get(tripId)
-    const r = t ? routes.get(t.routeId) : undefined
-    const stopsOfTrip = tripStops.get(tripId)
-    const first = stopsOfTrip?.[0] ?? null
-    const last = stopsOfTrip?.[stopsOfTrip.length - 1] ?? null
-    return {
-      tripId,
-      /** Hamis, ha a statikus GTFS nem ismeri ezt a menetet (elavult feed). */
-      known: Boolean(t),
-      routeId: t?.routeId ?? '',
-      routeShort: r?.short ?? '',
-      routeColor: r?.color ?? '888888',
-      routeText: r?.text ?? 'FFFFFF',
-      dir: t?.dir ?? '',
-      headsign: t?.headsign ?? '',
-      departure: first ? secToHm(first.dep) : null,
-      departureSec: first?.dep ?? null,
-      arrival: last ? secToHm(last.dep) : null,
-      originName: first ? (stops.get(first.stopId)?.name ?? first.stopId) : null,
-      destinationName: last ? (stops.get(last.stopId)?.name ?? last.stopId) : null,
-    }
-  })
-  rows.sort((a, b) => (a.departureSec ?? Infinity) - (b.departureSec ?? Infinity) || a.tripId.localeCompare(b.tripId))
+  const rows = sortCancelledRows(ids.map(cancelledTripRow))
 
   return c.json({
-    date: budapestNow().ymd,
+    date: today,
     count: rows.length,
     stale,
+    archived: false,
     fetchedAt: new Date(cancelledCache?.at ?? Date.now()).toISOString(),
     tripIds: ids,
     trips: rows,
@@ -1201,7 +1226,7 @@ async function refreshGtfs() {
 loadGtfs()
 refreshGtfs()
 setInterval(() => refreshGtfs(), 6 * 3600 * 1000)
-startPushLoop(arrivalsForStop, cancelledTripIds)
+startPushLoop(arrivalsForStop, cancelledTripIds, () => budapestNow().secOfDay)
 
 /**
  * A valós idejű feedeket háttérben tartjuk melegen, hogy a kliens-kérések
@@ -1302,6 +1327,27 @@ if (JOURNAL_ON) {
     process.on(sig, () => { flushJournal(); process.exit(0) })
   }
 }
+
+/**
+ * Kihúzott menetek háttér-mintavétele. A `/live/cancelled` végpont csak akkor
+ * ír az archívumba, ha valaki épp nézi a menetrendkönyvet — enélkül egy olyan
+ * nap, amikor senki nem nyitotta meg az appot, örökre üresen maradna, pedig a
+ * törlés akkor is megtörtént. Ez a kör az `cancelledTripIds()` 30 mp-es
+ * gyorsítótárát követve legfeljebb annyiszor hív upstream-et, ahányszor a lista
+ * ténylegesen frissül.
+ */
+async function sampleCancelledTrips() {
+  const st = jwtStatus(readJwt())
+  if (!st.present || st.expired) return
+  try {
+    const ids = await cancelledTripIds()
+    if (!ids.length) return
+    const now = budapestNow()
+    await saveCancelledTrips(now.ymd, ids, now.unix)
+  } catch { /* egy kihagyott mintavétel nem gond, a következő pótolja */ }
+}
+sampleCancelledTrips()
+setInterval(sampleCancelledTrips, CANCELLED_TTL_MS)
 
 // Induláskor, majd óránként: a feed napjainak archiválása. A GTFS maga hat
 // óránként frissül, de a naptárfordulót ennél sűrűbben kell lefedni.

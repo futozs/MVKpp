@@ -232,3 +232,37 @@ export async function dayRuns(ymd: string): Promise<Map<string, RunRecord>> {
 
   return out
 }
+
+// ── Kihúzott menetek napló ───────────────────────────────────────────────────
+
+/**
+ * Egy mintavétel eredménye: ami épp kihúzva látszik, azt a mai (vagy a
+ * megadott) napra véglegesen elrakjuk. `ON DUPLICATE KEY` miatt biztonságos
+ * ugyanazt a menetet többször is beküldeni egy napon belül.
+ */
+export async function saveCancelledTrips(ymd: string, tripIds: string[], nowTs: number): Promise<boolean> {
+  if (!tripIds.length) return true
+  if (!(await archiveReady())) return false
+  const sqlDate = ymdToSql(ymd)
+  const values = tripIds.map((id) => [sqlDate, id, nowTs, nowTs])
+  const placeholders = values.map(() => '(?,?,?,?,1)').join(',')
+  await query(
+    `INSERT INTO cancelled_trip_log (service_date, trip_id, first_seen, last_seen, samples)
+     VALUES ${placeholders}
+     ON DUPLICATE KEY UPDATE
+       last_seen = GREATEST(last_seen, VALUES(last_seen)),
+       samples = samples + 1`,
+    values.flat(),
+  )
+  return true
+}
+
+/** Az adott napon (visszamenőleg is) kihúzottnak látott menetek trip_id-jei. */
+export async function dayCancelledTripIds(ymd: string): Promise<string[]> {
+  if (!(await archiveReady())) return []
+  const rows = await query<{ trip_id: string }>(
+    `SELECT trip_id FROM cancelled_trip_log WHERE service_date = ? ORDER BY trip_id`,
+    [ymdToSql(ymd)],
+  )
+  return rows.map((r) => r.trip_id)
+}

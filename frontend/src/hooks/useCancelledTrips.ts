@@ -25,12 +25,13 @@ const EMPTY: CancelledTripsState = {
 };
 
 /**
- * A mai kihúzott menetek. `enabled=false` esetén (pl. más napot néz a felhasználó)
- * nem kérdez le semmit, és üres listát ad — a nem-mai napokra nincs értelmezhető
- * törlési információ.
+ * Egy nap kihúzott menetei. `ymd=null` esetén nem kérdez le semmit. Mai napra
+ * (`isToday=true`) rendszeresen újralekérdez, mert a lista élőben változik;
+ * múltbeli napra egyszeri lekérdezés elég, mert az archívum onnantól fix.
  */
 export function useCancelledTrips(
-  enabled: boolean,
+  ymd: string | null,
+  isToday: boolean,
   pollMs = DEFAULT_POLL_MS,
 ): CancelledTripsState {
   const [data, setData] = useState<CancelledTripsResponse | null>(null);
@@ -45,7 +46,7 @@ export function useCancelledTrips(
   }, []);
 
   useEffect(() => {
-    if (!enabled) {
+    if (!ymd) {
       setData(null);
       setError(null);
       return;
@@ -53,7 +54,7 @@ export function useCancelledTrips(
 
     const load = async () => {
       try {
-        const res = await api.getCancelledTrips();
+        const res = await api.getCancelledTrips(isToday ? undefined : ymd);
         if (!mounted.current) return;
         setData(res);
         setError(null);
@@ -65,17 +66,18 @@ export function useCancelledTrips(
     };
 
     load();
+    if (!isToday) return;
     const timer = setInterval(load, pollMs);
     return () => clearInterval(timer);
-  }, [enabled, pollMs]);
+  }, [ymd, isToday, pollMs]);
 
   return useMemo(() => {
-    if (!enabled || !data) return error ? { ...EMPTY, error } : EMPTY;
+    if (!ymd || !data) return error ? { ...EMPTY, error } : EMPTY;
     return {
       ids: new Set(data.tripIds),
       trips: data.trips,
       date: data.date,
       error,
     };
-  }, [enabled, data, error]);
+  }, [ymd, data, error]);
 }

@@ -116,10 +116,14 @@ export const api = {
     );
   },
 
-  /** A mai napra kihúzott (törölt) menetek — a menetrendkönyv jelöléseihez. */
-  async getCancelledTrips(): Promise<CancelledTripsResponse> {
+  /**
+   * Egy nap kihúzott (törölt) menetei — a menetrendkönyv jelöléseihez.
+   * `date` nélkül a mai nap élő listája jön; korábbi nappal az archívumból.
+   */
+  async getCancelledTrips(date?: string): Promise<CancelledTripsResponse> {
+    const q = date ? `?date=${encodeURIComponent(date)}` : "";
     return handleResponse<CancelledTripsResponse>(
-      await fetch(`${API_BASE}/live/cancelled`),
+      await fetch(`${API_BASE}/live/cancelled${q}`),
       "/live/cancelled",
     );
   },

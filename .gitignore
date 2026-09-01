@@ -76,3 +76,5 @@ state/
 dist-*
 *.zip
 *.tar.gz
+backend/gtfs
+backend/gtfs/calendar_dates.txt

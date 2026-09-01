@@ -5,6 +5,14 @@ const STORAGE_KEY = "mvk_notify_watches";
 export const DEFAULT_THRESHOLD_MIN = 5;
 /** Ennél nagyobb eltérésnél már érdemes külön megemlíteni a késést/sietést. */
 const DELAY_MENTION_THRESHOLD_S = 60;
+/** Ismétlődő figyelésnél ennyi perc eltérést engedünk a célzott óra:perctől. */
+const RECURRING_WINDOW_MIN = 4;
+
+/** Kör alakú (0-1439) percek közti legkisebb távolság — az éjfél átlépését is helyesen kezeli. */
+function minuteDistance(a: number, b: number): number {
+  const d = Math.abs(a - b);
+  return Math.min(d, 1440 - d);
+}
 
 function delaySuffix(delaySec: number | null): string {
   if (delaySec == null || Math.abs(delaySec) < DELAY_MENTION_THRESHOLD_S) return "";
@@ -26,6 +34,8 @@ export type NotifyWatch = {
   tripId?: string;
   /** A figyelt megálló a menet KIINDULÓ megállója-e (szövegezéshez: "indul" vs "ér ide"). */
   isDeparture?: boolean;
+  /** "Ismétlődő" figyelés: menetrendi óra:perc (0-1439) a tripId helyett — minden napra szól. */
+  schedMin?: number;
   /** A legutóbb riasztott menetek tripId-jei — védenek az ismételt riasztás ellen. */
   lastNotifiedTripIds?: string[];
   /**
@@ -130,14 +140,23 @@ export function checkAndNotify(
   // ha itt is dobnánk egyet, amíg a lap nyitva van, duplán jönne.
   if (watch.pushRegistered) return;
 
-  const matches = arrivals.filter(
-    (a) =>
-      (watch.tripId
-        ? a.tripId === watch.tripId
-        : !watch.routeShorts?.length || watch.routeShorts.includes(a.route)) &&
-      a.etaMin >= 0 &&
-      a.etaMin <= watch.thresholdMin,
-  );
+  const nowMin = (() => {
+    const d = new Date();
+    return d.getHours() * 60 + d.getMinutes();
+  })();
+  const matches = arrivals.filter((a) => {
+    if (watch.schedMin != null) {
+      if (watch.routeShorts?.length && !watch.routeShorts.includes(a.route)) return false;
+      const delayMin = Math.round((a.delaySec ?? 0) / 60);
+      const schedMin = (((nowMin + a.etaMin - delayMin) % 1440) + 1440) % 1440;
+      if (minuteDistance(schedMin, watch.schedMin) > RECURRING_WINDOW_MIN) return false;
+    } else if (watch.tripId) {
+      if (a.tripId !== watch.tripId) return false;
+    } else if (watch.routeShorts?.length && !watch.routeShorts.includes(a.route)) {
+      return false;
+    }
+    return a.etaMin >= 0 && a.etaMin <= watch.thresholdMin;
+  });
   if (!matches.length) return;
 
   const already = new Set(watch.lastNotifiedTripIds ?? []);
@@ -154,7 +173,8 @@ export function checkAndNotify(
         ? `${fresh.map(label).join(", ")}`
         : label(fresh[0]);
     const delayNote = fresh.length === 1 ? delaySuffix(fresh[0].delaySec) : "";
-    const body = watch.tripId
+    const isSchedulePinned = watch.tripId != null || watch.schedMin != null;
+    const body = isSchedulePinned
       ? `kb. ${minEta} percen belül ${watch.isDeparture ? "indul" : "ér ide"}${delayNote} — ${stopName} (${stopId})`
       : `${stopName} (${stopId}) — kb. ${minEta} percen belül${delayNote}`;
 

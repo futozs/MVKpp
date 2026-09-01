@@ -42,6 +42,7 @@ const COLUMN_UPGRADES: [table: string, column: string, type: string][] = [
 const NEW_COLUMNS: [table: string, column: string, type: string][] = [
   ["push_watch", "trip_id", "VARCHAR(64) NULL AFTER route_shorts"],
   ["push_watch", "is_departure", "TINYINT(1) NOT NULL DEFAULT 0 AFTER trip_id"],
+  ["push_watch", "sched_min", "SMALLINT NULL AFTER is_departure"],
 ];
 
 async function main() {

@@ -100,6 +100,8 @@ export type PushWatchConfig = {
   tripId?: string;
   /** A figyelt megálló a menet KIINDULÓ megállója-e (szövegezéshez: "indul" vs "ér ide"). */
   isDeparture?: boolean;
+  /** "Ismétlődő" figyelés: menetrendi óra:perc (0-1439) a tripId helyett — minden napra szól. */
+  schedMin?: number;
 };
 
 /**

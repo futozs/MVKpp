@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   DEFAULT_THRESHOLD_MIN,
   getWatch,
@@ -31,7 +32,7 @@ type TripNotifyDialogProps = {
   routeShort: string;
   /** Igaz, ha a kiválasztott megálló a menet kiinduló megállója (szövegezéshez). */
   isDeparture: boolean;
-  /** A menet indulási ideje (vagy a kiválasztott megálló ideje), pl. "16:43" — csak megjelenítéshez. */
+  /** A menet indulási ideje (vagy a kiválasztott megálló ideje), "HH:MM" formában. */
   departureLabel: string;
 };
 
@@ -52,6 +53,16 @@ function StatusLine({ status, okLabel }: { status: Status; okLabel: string }) {
   );
 }
 
+/** "HH:MM" → percek éjféltől (0-1439). Hibás formátumnál null. */
+function parseHm(hm: string): number | null {
+  const m = /^(\d{1,2}):(\d{2})/.exec(hm.trim());
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (h < 0 || h > 27 || min < 0 || min > 59) return null;
+  return (h * 60 + min) % 1440;
+}
+
 export function TripNotifyDialog({
   open,
   onOpenChange,
@@ -63,6 +74,7 @@ export function TripNotifyDialog({
   departureLabel,
 }: TripNotifyDialogProps) {
   const [threshold, setThreshold] = useState(DEFAULT_THRESHOLD_MIN);
+  const [recurring, setRecurring] = useState(false);
   const [permissionDenied, setPermissionDenied] = useState(false);
   const [existed, setExisted] = useState(false);
   const [pushStatus, setPushStatus] = useState<Status>({ state: "idle" });
@@ -70,9 +82,11 @@ export function TripNotifyDialog({
   useEffect(() => {
     if (!open) return;
     const w = getWatch(stopId);
-    const matchesThisTrip = w?.tripId === tripId;
-    setExisted(matchesThisTrip);
-    setThreshold(matchesThisTrip ? w!.thresholdMin : DEFAULT_THRESHOLD_MIN);
+    // Egy megállóhoz csak egy figyelés tartozhat — ha van bármilyen aktív
+    // figyelés ezen a megállón, az a jelenlegi állapot, amit mutatunk.
+    setExisted(Boolean(w));
+    setThreshold(w?.thresholdMin ?? DEFAULT_THRESHOLD_MIN);
+    setRecurring(w?.schedMin != null);
     setPermissionDenied(notificationPermission() === "denied");
     setPushStatus({ state: "idle" });
   }, [open, stopId, tripId]);
@@ -84,21 +98,28 @@ export function TripNotifyDialog({
       return;
     }
     const thresholdMin = Math.max(1, Math.min(60, threshold || DEFAULT_THRESHOLD_MIN));
-    setWatch(stopId, { stopName, thresholdMin, tripId, isDeparture });
-
-    // Ugyanaz a szerver oldali push-lánc szolgálja ki, mint a megállófigyelő
-    // értesítéseit — csak itt a járat/megálló szűrés helyett egy pontos
-    // tripId-re szól, hogy csak EZ az egy indulás váltson ki riasztást. Mivel
-    // egy megállóhoz csak EGY figyelés tartozhat, ha ugyanerre a megállóra
-    // már van egy sima (megállófigyelős) riasztás, ez felülírja azt — nem
-    // kaphatsz emiatt két külön értesítést ugyanarra a buszra.
-    const result = await registerPushWatch({
+    const schedMin = recurring ? (parseHm(departureLabel) ?? undefined) : undefined;
+    const config = {
       stopId,
       stopName,
       thresholdMin,
-      tripId,
       isDeparture,
-    });
+      // Ismétlődő módban a GTFS naponta más tripId-t ad ugyanarra a
+      // menetrendi mintára, ezért ilyenkor nem a tripId-t, hanem a
+      // járatszám + óra:perc kombinációt figyeljük — minden napra szól,
+      // amikor ez a járat ténylegesen közlekedik.
+      tripId: recurring ? undefined : tripId,
+      routeShorts: recurring ? [routeShort] : undefined,
+      schedMin,
+    };
+    setWatch(stopId, config);
+
+    // Ugyanaz a szerver oldali push-lánc szolgálja ki, mint a megállófigyelő
+    // értesítéseit. Mivel egy megállóhoz csak EGY figyelés tartozhat, ha
+    // ugyanerre a megállóra már van egy sima (megállófigyelős) riasztás, ez
+    // felülírja azt — nem kaphatsz emiatt két külön értesítést ugyanarra a
+    // buszra.
+    const result = await registerPushWatch(config);
     setPushRegistered(stopId, result.ok);
     setPushStatus(
       result.ok ? { state: "ok" } : { state: "fail", reason: result.reason },
@@ -153,6 +174,19 @@ export function TripNotifyDialog({
               onChange={(e) => setThreshold(Number(e.target.value))}
               className="w-24"
             />
+          </div>
+
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5">
+            <div className="min-w-0">
+              <p className="text-sm font-medium">Ismétlődő — minden nap</p>
+              <p className="text-[11px] text-muted-foreground">
+                Nem csak erre az egy napra, hanem minden napra szól, amikor a{" "}
+                {routeShort}-es busz {departureLabel}-kor közlekedik innen. Ez
+                kell a napi iskolabuszhoz/munkába járáshoz — egyszer állítod
+                be, és nem kell újra minden alkalommal.
+              </p>
+            </div>
+            <Switch checked={recurring} onCheckedChange={setRecurring} />
           </div>
 
           {pushStatus.state !== "idle" ? (

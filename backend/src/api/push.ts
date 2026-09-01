@@ -29,6 +29,13 @@ type WatchBody = {
   tripId?: string;
   /** Az figyelt megálló a menet KIINDULÓ megállója-e (szövegezéshez: "indul" vs "ér ide"). */
   isDeparture?: boolean;
+  /**
+   * "Ismétlődő" figyelés (menetrend fül, checkbox): menetrendi óra:perc
+   * 0-1439 (éjféltől számolt perc), a tripId helyett — mert a GTFS naponta
+   * más trip_id-t ad ugyanarra a mintára. Ha ez meg van adva, a tripId
+   * mezőt figyelmen kívül hagyjuk.
+   */
+  schedMin?: number;
 };
 
 push.post("/watch", async (c) => {
@@ -46,12 +53,18 @@ push.post("/watch", async (c) => {
     Array.isArray(body?.routeShorts) && body.routeShorts.length
       ? body.routeShorts.join(",")
       : null;
-  const tripId = body?.tripId || null;
+  const schedMin =
+    Number.isFinite(body?.schedMin) && body!.schedMin! >= 0 && body!.schedMin! < 1440
+      ? Math.round(body!.schedMin!)
+      : null;
+  // Ismétlődő figyelésnél nincs értelme egy konkrét tripId-nek — a napi
+  // eltérő trip_id-k helyett a route + óra:perc alapján illesztünk.
+  const tripId = schedMin == null ? body?.tripId || null : null;
   const isDeparture = body?.isDeparture ? 1 : 0;
   const now = Math.floor(Date.now() / 1000);
 
   console.log(
-    `[push] figyelés mentése: stop=${stopId} (${stopName}), küszöb=${thresholdMin}p, járatok=${routeShorts ?? "bármelyik"}, trip=${tripId ?? "-"}, endpoint=...${endpoint.slice(-16)}`,
+    `[push] figyelés mentése: stop=${stopId} (${stopName}), küszöb=${thresholdMin}p, járatok=${routeShorts ?? "bármelyik"}, trip=${tripId ?? "-"}, ismétlődő=${schedMin ?? "-"}, endpoint=...${endpoint.slice(-16)}`,
   );
 
   await query(
@@ -68,14 +81,14 @@ push.post("/watch", async (c) => {
 
   await query(
     `INSERT INTO push_watch
-       (sub_id, stop_id, stop_name, threshold_min, route_shorts, trip_id, is_departure, updated_at)
-     VALUES (?,?,?,?,?,?,?,?)
+       (sub_id, stop_id, stop_name, threshold_min, route_shorts, trip_id, is_departure, sched_min, updated_at)
+     VALUES (?,?,?,?,?,?,?,?,?)
      ON DUPLICATE KEY UPDATE
        stop_name = VALUES(stop_name), threshold_min = VALUES(threshold_min),
        route_shorts = VALUES(route_shorts), trip_id = VALUES(trip_id),
-       is_departure = VALUES(is_departure),
+       is_departure = VALUES(is_departure), sched_min = VALUES(sched_min),
        updated_at = VALUES(updated_at), last_notified = NULL`,
-    [sub.sub_id, stopId, stopName, thresholdMin, routeShorts, tripId, isDeparture, now],
+    [sub.sub_id, stopId, stopName, thresholdMin, routeShorts, tripId, isDeparture, schedMin, now],
   );
 
   return c.json({ ok: true });

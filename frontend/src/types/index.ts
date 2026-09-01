@@ -297,7 +297,9 @@ export interface CancelledTripsResponse {
   count: number;
   /** Igaz, ha az upstream épp nem válaszolt és elavult listát kaptunk. */
   stale: boolean;
-  fetchedAt: string;
+  /** Igaz, ha a lista nem élőben jött, hanem a múltbeli archívumból. */
+  archived: boolean;
+  fetchedAt: string | null;
   tripIds: string[];
   trips: CancelledTrip[];
 }

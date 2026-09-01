@@ -184,9 +184,10 @@ export function TimetableView({
   const isToday = date === todayIso();
   const day = dayRelation(date, todayIso());
 
-  // A kihúzott menetek listája csak a mai napra értelmezhető: az MVK végpontja
-  // az aznapi törléseket adja, más napra nincs mit jelölni.
-  const cancelled = useCancelledTrips(isToday);
+  // Mai napra élőben az MVK végpontjáról jön a lista, korábbi napra a backend
+  // archívumából — a menetrendkönyv attól függetlenül tudja jelölni a törölt
+  // meneteket, hogy visszalapoztunk-e a múltba.
+  const cancelled = useCancelledTrips(isoToYmd(date), isToday);
   // A napló minden naplózott napra elérhető, nem csak a maira — így egy tegnapi
   // menetnél is látszik, melyik jármű vitte.
   const journal = useTripJournal(isoToYmd(date), day === "today" ? 60000 : 0);
