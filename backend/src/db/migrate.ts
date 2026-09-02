@@ -36,6 +36,20 @@ const NEW_COLUMNS: [table: string, column: string, type: string][] = [
   ["push_subscription", "enabled", "TINYINT(1) NOT NULL DEFAULT 1"],
 ];
 
+/**
+ * Néhány éles adatbázison az `account` tábla egy KORÁBBI (a jelszó nélküli
+ * passkey-fiókok előtti) funkcióból maradt vissza egy `key_hash NOT NULL`
+ * oszloppal, amit a mostani kód sosem tölt ki — emiatt minden új fiók
+ * beszúrása `ER_NO_DEFAULT_FOR_FIELD` hibával elszállt. A `schema.sql`
+ * `CREATE TABLE IF NOT EXISTS`-a ilyenkor nem fut le újra (a tábla már
+ * létezik), ezért itt lazítjuk NULL-ozhatóvá — frissen telepített
+ * adatbázisokon ez az oszlop eleve nincs is, ott az ismeretlen oszlop hibát
+ * (1054) egyszerűen figyelmen kívül hagyjuk.
+ */
+const LEGACY_COLUMN_RELAX: [table: string, column: string, type: string][] = [
+  ["account", "key_hash", "VARCHAR(255) NULL"],
+];
+
 async function main() {
   const log = (s: string) => console.log(`[migrate] ${s}`);
 
@@ -80,6 +94,17 @@ async function main() {
       }
     }
     log(`új oszlopok: ${NEW_COLUMNS.length} rendben`);
+
+    for (const [table, column, type] of LEGACY_COLUMN_RELAX) {
+      try {
+        await pool.query(
+          `ALTER TABLE \`${table}\` MODIFY COLUMN \`${column}\` ${type}`,
+        );
+      } catch (e) {
+        if ((e as { errno?: number }).errno !== 1054) throw e;
+      }
+    }
+    log(`örökölt oszlopok lazítása: ${LEGACY_COLUMN_RELAX.length} rendben`);
 
     for (const p of PARTITIONED) {
       const made = await ensurePartitions(pool, p.table, p.g, p.ahead);

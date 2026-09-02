@@ -252,10 +252,18 @@ account.post("/passkey/register-verify", async (c) => {
   const { credential, credentialDeviceType, credentialBackedUp } = verification.registrationInfo;
   const now = Math.floor(Date.now() / 1000);
 
-  await query(
-    `INSERT INTO account (email, created_at) VALUES (?,?)`,
-    [email, now],
-  );
+  try {
+    await query(
+      `INSERT INTO account (email, created_at) VALUES (?,?)`,
+      [email, now],
+    );
+  } catch (e) {
+    console.error("[account] fiók beszúrása sikertelen:", e);
+    return c.json(
+      { error: "A fiók létrehozása sikertelen — próbáld újra, vagy jelezd az üzemeltetőnek." },
+      500,
+    );
+  }
   const acc = await findAccountByEmail(email);
   if (!acc) return c.json({ error: "A fiók létrehozása sikertelen" }, 500);
 
