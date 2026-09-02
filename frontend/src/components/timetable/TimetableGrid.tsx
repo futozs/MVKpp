@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { Clock } from "lucide-react";
 import type { LiveVehicle, TimetableTrip, TripJournalEntry } from "@/types";
 import {
@@ -42,6 +42,8 @@ interface TimetableGridProps {
   nowSec: number;
   /** A nézett nap viszonya a maihoz. */
   day: DayRelation;
+  /** A viszonylat szokásos (leggyakoribb) célállomása — a jelmagyarázathoz. */
+  directionHeadsign: string;
 }
 
 export function TimetableGrid({
@@ -53,6 +55,7 @@ export function TimetableGrid({
   onSelectTrip,
   nowSec,
   day,
+  directionHeadsign,
 }: TimetableGridProps) {
   const rows = useMemo(() => groupByHour(trips), [trips]);
 
@@ -71,6 +74,32 @@ export function TimetableGrid({
 
   // Az „aktuális óra" és a halványítás csak a mai napon jelent bármit.
   const currentHour = day === "today" ? Math.floor(nowSec / 3600) : -1;
+
+  // Belépéskor arra a menetre görgetünk, amelyik épp fut (van hozzá élő
+  // jármű), ha nincs ilyen, a legközelebbi induló menetre.
+  const activeTripId = useMemo(() => {
+    if (day !== "today") return null;
+    let best: TimetableTrip | null = null;
+    for (const t of trips) {
+      if (cancelledTripIds.has(t.tripId)) continue;
+      if (!vehicleByTrip.has(t.tripId)) continue;
+      if (!best || t.departureSec > best.departureSec) best = t;
+    }
+    return best?.tripId ?? nextTripId;
+  }, [trips, vehicleByTrip, cancelledTripIds, day, nextTripId]);
+
+  const tripButtonRefs = useRef(new Map<string, HTMLButtonElement>());
+  const scrolledForTripsRef = useRef<TimetableTrip[] | null>(null);
+
+  useEffect(() => {
+    if (scrolledForTripsRef.current !== trips) {
+      scrolledForTripsRef.current = trips;
+      if (activeTripId) {
+        const el = tripButtonRefs.current.get(activeTripId);
+        el?.scrollIntoView({ block: "center", behavior: "smooth" });
+      }
+    }
+  }, [trips, activeTripId]);
 
   return (
     <ul className="divide-y divide-border/60">
@@ -106,7 +135,9 @@ export function TimetableGrid({
                 const vehicle = isCancelled
                   ? null
                   : (vehicleByTrip.get(trip.tripId) ?? null);
-                const isLive = vehicle !== null;
+                // Az élő GPS-jelzés napfüggetlenül a tripId alapján érkezik, ezért
+                // csak a mai napon jelentheti azt, hogy EZ a menet fut éppen.
+                const isLive = day === "today" && vehicle !== null;
                 const isNext = trip.tripId === nextTripId;
                 const isSelected = trip.tripId === selectedTripId;
                 const isPast =
@@ -116,6 +147,10 @@ export function TimetableGrid({
                 return (
                   <button
                     key={trip.tripId}
+                    ref={(el) => {
+                      if (el) tripButtonRefs.current.set(trip.tripId, el);
+                      else tripButtonRefs.current.delete(trip.tripId);
+                    }}
                     type="button"
                     onClick={() => onSelectTrip(trip)}
                     aria-pressed={isSelected}
@@ -126,6 +161,7 @@ export function TimetableGrid({
                       journal,
                       nowSec,
                       day,
+                      directionHeadsign,
                     })}
                     className={cn(
                       "relative flex h-9 min-w-[46px] items-center justify-center rounded-lg border px-2.5",
@@ -159,6 +195,17 @@ export function TimetableGrid({
                         className="absolute bottom-1 right-1 h-1 w-1 rounded-full bg-muted-foreground"
                       />
                     ) : null}
+
+                    {}
+                    {trip.headsignDiffers && !isCancelled ? (
+                      <span
+                        aria-hidden
+                        className={cn(
+                          "absolute right-1 top-1 h-1.5 w-1.5 rounded-full",
+                          isLive ? "bg-primary-foreground" : "bg-early",
+                        )}
+                      />
+                    ) : null}
                   </button>
                 );
               })}
@@ -178,6 +225,7 @@ function buildTitle({
   journal,
   nowSec,
   day,
+  directionHeadsign,
 }: {
   trip: TimetableTrip;
   isCancelled: boolean;
@@ -185,6 +233,7 @@ function buildTitle({
   journal: Map<string, TripJournalEntry>;
   nowSec: number;
   day: DayRelation;
+  directionHeadsign: string;
 }): string {
   if (isCancelled) {
     return `${trip.destinationName} — TÖRÖLVE, ez a menet nem indul el`;
@@ -204,6 +253,9 @@ function buildTitle({
       : null);
   return [
     `${trip.destinationName} — érkezés ${trip.arrival}`,
+    trip.headsignDiffers
+      ? `eltér a szokásos iránytól (${directionHeadsign} helyett ${trip.headsign} felé)`
+      : "",
     tripRunLabel(state, vehicleId),
   ]
     .filter(Boolean)

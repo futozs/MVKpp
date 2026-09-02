@@ -2,13 +2,16 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Pause, Play, ScrollText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { adminHeaders, getSystemUrl } from '@/lib/admin'
+import { getSystemUrl } from '@/lib/admin'
 import { cn } from '@/lib/utils'
 
 type LogSource = { name: string; label: string; size: number; mtime: string | null; exists: boolean }
 
 const POLL_MS = 3000
-const LINES = 400
+// A backend legfeljebb 2000 sort ad ki egy kérésre (lásd backend/src/api/ops.ts)
+// — ezt kérjük is, hogy a napló egy valódi, nagy terminálablaknak érződjön, ne
+// egy pár tucat soros kivonatnak.
+const LINES = 2000
 
 function humanSize(bytes: number): string {
   if (!bytes) return '—'
@@ -37,7 +40,7 @@ export function LogViewer() {
 
   const loadSources = useCallback(async () => {
     try {
-      const res = await fetch(getSystemUrl('/system/logs'), { cache: 'no-store', headers: adminHeaders() })
+      const res = await fetch(getSystemUrl('/system/logs'), { cache: 'no-store' })
       const data = await res.json()
       setSources(data.sources ?? [])
     } catch {
@@ -50,13 +53,7 @@ export function LogViewer() {
     try {
       const res = await fetch(getSystemUrl(`/system/logs/${source}?lines=${LINES}`), {
         cache: 'no-store',
-        headers: adminHeaders(),
       })
-      if (res.status === 401) {
-        setLines([])
-        setNote('A naplók admin tokent kérnek — add meg fentebb, az Újratelepítés kártyán.')
-        return
-      }
       const data = await res.json()
       setLines(data.lines ?? [])
       setNote(data.note ?? data.error ?? null)
@@ -98,7 +95,7 @@ export function LogViewer() {
   const activeSource = sources.find((s) => s.name === active)
 
   return (
-    <Card className="flex flex-col gap-3 p-5">
+    <Card className="flex min-h-0 flex-1 flex-col gap-3 p-5">
       <div className="flex flex-wrap items-start gap-3">
         <div className="min-w-0 flex-1">
           <h2 className="flex items-center gap-2 text-base font-bold tracking-tight">
@@ -106,7 +103,7 @@ export function LogViewer() {
             Naplók
           </h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            A futó folyamatok kimenete — a szerverhez való bejelentkezés nélkül.
+            A futó folyamatok teljes kimenete, egyben — a szerverhez való bejelentkezés nélkül.
           </p>
         </div>
 
@@ -142,17 +139,28 @@ export function LogViewer() {
         ))}
       </div>
 
-      <pre
-        ref={preRef}
-        onScroll={onScroll}
-        className="h-80 overflow-auto rounded-lg border border-border bg-background p-3 font-mono text-[11px] leading-relaxed text-muted-foreground"
-      >
-        {lines.length ? lines.join('\n') : (note ?? (loading ? 'Betöltés…' : 'Üres napló.'))}
-      </pre>
+      {/* Nagy, folytonos terminálablak — nem egy pár tucat soros kivonat. */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border/80 bg-[#0b0f0d] shadow-inner">
+        <div className="flex shrink-0 items-center gap-1.5 border-b border-white/10 px-3 py-2">
+          <span className="h-2.5 w-2.5 rounded-full bg-destructive/70" />
+          <span className="h-2.5 w-2.5 rounded-full bg-early/70" />
+          <span className="h-2.5 w-2.5 rounded-full bg-ontime/70" />
+          <span className="ml-2 truncate font-mono text-[10px] text-white/50">
+            {activeSource?.label ?? active}.log
+          </span>
+        </div>
+        <pre
+          ref={preRef}
+          onScroll={onScroll}
+          className="min-h-[60vh] flex-1 overflow-auto p-3 font-mono text-[11px] leading-relaxed text-white/80"
+        >
+          {lines.length ? lines.join('\n') : (note ?? (loading ? 'Betöltés…' : 'Üres napló.'))}
+        </pre>
+      </div>
 
       {activeSource ? (
         <p className="text-[11px] text-muted-foreground">
-          {activeSource.label} · {humanSize(activeSource.size)}
+          {activeSource.label} · {humanSize(activeSource.size)} · {lines.length} sor betöltve
           {activeSource.mtime
             ? ` · utolsó bejegyzés ${new Date(activeSource.mtime).toLocaleString('hu-HU')}`
             : ''}

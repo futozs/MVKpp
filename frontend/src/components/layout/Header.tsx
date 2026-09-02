@@ -1,4 +1,4 @@
-import { Layers, RefreshCw, Thermometer } from "lucide-react";
+import { Bell, Layers, RefreshCw, Thermometer, UserRound } from "lucide-react";
 import type { ActiveTab } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,12 +21,15 @@ interface HeaderProps {
   monitoredStopsCount: number;
   onOpenMapPicker: () => void;
   liveIncidentCount: number;
+  onOpenNotifications: () => void;
+  onOpenAccount: () => void;
 }
 
 const TABS: { id: ActiveTab; label: string }[] = [
   { id: "map", label: "Forgalmi térkép" },
   { id: "multistop", label: "Megállófigyelő" },
   { id: "timetable", label: "Menetrend" },
+  { id: "planner", label: "Útvonaltervező" },
   { id: "stats", label: "Statisztika" },
 ];
 
@@ -40,6 +43,8 @@ export function Header({
   monitoredStopsCount,
   onOpenMapPicker,
   liveIncidentCount,
+  onOpenNotifications,
+  onOpenAccount,
 }: HeaderProps) {
   const weather = useWeather();
 
@@ -148,6 +153,34 @@ export function Header({
               <TooltipContent>Alaptérkép választása</TooltipContent>
             </Tooltip>
           ) : null}
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onOpenAccount}
+                aria-label="Fiók és felhős mentés"
+              >
+                <UserRound />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Fiók és felhős mentés</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onOpenNotifications}
+                aria-label="Értesítések"
+              >
+                <Bell />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Értesítések</TooltipContent>
+          </Tooltip>
 
           <Tooltip>
             <TooltipTrigger asChild>

@@ -15,8 +15,12 @@ import { TransitMap } from "@/components/map/TransitMap";
 import { MultiStopDashboard } from "@/components/multistop/MultiStopDashboard";
 import { StopDetailDrawer } from "@/components/stops/StopDetailDrawer";
 import { TimetableView } from "@/components/timetable/TimetableView";
+import { RoutePlannerView } from "@/components/routeplanner/RoutePlannerView";
 import { StatsView } from "@/components/stats/StatsView";
 import { MapSettingsModal } from "@/components/map/MapSettingsModal";
+import { NotificationsModal } from "@/components/notifications/NotificationsModal";
+import { AccountModal } from "@/components/account/AccountModal";
+import { useCloudBackup } from "@/hooks/useCloudBackup";
 import { VehicleFocusCard } from "@/components/map/VehicleFocusCard";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { GeoProvider } from "@/context/GeoContext";
@@ -24,7 +28,13 @@ import { initialView, saveView } from "@/lib/viewState";
 import { useAppHeight } from "@/hooks/useAppHeight";
 import { useLiveIncidents } from "@/hooks/useLiveIncidents";
 
-const TAB_IDS: ActiveTab[] = ["map", "multistop", "timetable", "stats"];
+const TAB_IDS: ActiveTab[] = [
+  "map",
+  "multistop",
+  "timetable",
+  "planner",
+  "stats",
+];
 
 /** A manifest gyorsindítói `#map`, `#timetable` stb. alakban nyitják az appot. */
 function hashTab(): ActiveTab | null {
@@ -69,6 +79,9 @@ export function App() {
     () => localStorage.getItem("mvk_map_tile") || "osm",
   );
   const [isMapPickerOpen, setMapPickerOpen] = useState(false);
+  const [isNotificationsOpen, setNotificationsOpen] = useState(false);
+  const [isAccountOpen, setAccountOpen] = useState(false);
+  useCloudBackup();
 
   const handleSelectTileLayer = (layerId: string) => {
     setTileLayerId(layerId);
@@ -242,6 +255,8 @@ export function App() {
             monitoredStopsCount={monitoredStopIds.length}
             onOpenMapPicker={() => setMapPickerOpen(true)}
             liveIncidentCount={liveIncidentCount}
+            onOpenNotifications={() => setNotificationsOpen(true)}
+            onOpenAccount={() => setAccountOpen(true)}
           />
           <MobileHeader
             activeTab={activeTab}
@@ -253,6 +268,8 @@ export function App() {
             monitoredStopsCount={monitoredStopIds.length}
             onOpenMapPicker={() => setMapPickerOpen(true)}
             liveIncidentCount={liveIncidentCount}
+            onOpenNotifications={() => setNotificationsOpen(true)}
+            onOpenAccount={() => setAccountOpen(true)}
           />
 
           <InstallBanner />
@@ -335,6 +352,8 @@ export function App() {
                 archiveRange={gtfsMeta?.archiveRange ?? null}
               />
             )}
+
+            {activeTab === "planner" && <RoutePlannerView stops={stops} />}
           </div>
 
           {}
@@ -343,6 +362,16 @@ export function App() {
             onClose={() => setMapPickerOpen(false)}
             currentLayerId={tileLayerId}
             onSelectLayer={handleSelectTileLayer}
+          />
+
+          <NotificationsModal
+            isOpen={isNotificationsOpen}
+            onClose={() => setNotificationsOpen(false)}
+          />
+
+          <AccountModal
+            isOpen={isAccountOpen}
+            onClose={() => setAccountOpen(false)}
           />
         </div>
       </TooltipProvider>

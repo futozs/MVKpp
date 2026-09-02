@@ -1,10 +1,9 @@
 /**
- * Admin token és a telepítő állapotszerverének címe.
+ * A telepítő állapotszerverének címe.
  *
- * A token a böngészőben marad (localStorage), és csak kérésfejlécben utazik —
- * a szerver soha nem adja ki, a hub soha nem jeleníti meg olvashatóan.
+ * A rendszerhub kizárólag helyi hálózaton fut, ezért az üzemeltetési
+ * végpontok (naplók, újratelepítés) nem kérnek admin tokent.
  */
-const TOKEN_KEY = 'mvk.adminToken'
 
 /** A manager beépített állapotszerverének portja (lásd manager.mjs). */
 const DEPLOY_STATUS_PORT = '8089'
@@ -26,28 +25,6 @@ export function getSystemUrl(path: string): string {
     return `https://${hostname}${path}`
   }
   return `http://${hostname}:8088${path}`
-}
-
-export function getAdminToken(): string {
-  try {
-    return localStorage.getItem(TOKEN_KEY) ?? ''
-  } catch {
-    // Privát ablakban a tároló írása/olvasása dobhat.
-    return ''
-  }
-}
-
-export function setAdminToken(token: string): void {
-  try {
-    if (token) localStorage.setItem(TOKEN_KEY, token)
-    else localStorage.removeItem(TOKEN_KEY)
-  } catch {
-    /* token nélkül is működik minden olvasó funkció */
-  }
-}
-
-export function adminHeaders(): Record<string, string> {
-  return { 'X-Admin-Token': getAdminToken(), 'Content-Type': 'application/json' }
 }
 
 /**

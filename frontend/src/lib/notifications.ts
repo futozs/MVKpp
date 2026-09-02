@@ -86,6 +86,72 @@ export function getWatch(stopId: string): NotifyWatch | null {
   return readAll()[stopId] ?? null;
 }
 
+/** Az összes beállított figyelés — az értesítések oldal kezelőfelületéhez. */
+export function getAllWatches(): NotifyWatch[] {
+  return Object.values(readAll());
+}
+
+export function removeWatch(stopId: string): void {
+  const all = readAll();
+  delete all[stopId];
+  writeAll(all);
+}
+
+// ── Globális értesítési beállítások (fő kapcsoló + "ne zavarj") ──────────
+
+const SETTINGS_KEY = "mvk_notify_settings";
+
+export type NotificationSettings = {
+  /** Fő kapcsoló — kikapcsolva semmilyen (helyi) értesítés nem jelenik meg. */
+  enabled: boolean;
+  dnd: {
+    enabled: boolean;
+    /** Éjfél óta eltelt percek (0-1439). */
+    startMin: number;
+    endMin: number;
+  };
+};
+
+const DEFAULT_SETTINGS: NotificationSettings = {
+  enabled: true,
+  dnd: { enabled: false, startMin: 22 * 60, endMin: 7 * 60 },
+};
+
+export function getNotificationSettings(): NotificationSettings {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (!raw) return DEFAULT_SETTINGS;
+    const parsed = JSON.parse(raw) as Partial<NotificationSettings>;
+    return {
+      enabled: parsed.enabled ?? DEFAULT_SETTINGS.enabled,
+      dnd: { ...DEFAULT_SETTINGS.dnd, ...parsed.dnd },
+    };
+  } catch {
+    return DEFAULT_SETTINGS;
+  }
+}
+
+export function setNotificationSettings(settings: NotificationSettings): void {
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  } catch {
+    /* localStorage megtelt vagy tiltott */
+  }
+}
+
+/** Éjfélen átnyúló ablakot is helyesen kezel (pl. 22:00–07:00). */
+export function isWithinDnd(
+  dnd: NotificationSettings["dnd"],
+  now: Date = new Date(),
+): boolean {
+  if (!dnd.enabled || dnd.startMin === dnd.endMin) return false;
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  if (dnd.startMin < dnd.endMin) {
+    return nowMin >= dnd.startMin && nowMin < dnd.endMin;
+  }
+  return nowMin >= dnd.startMin || nowMin < dnd.endMin;
+}
+
 export function setWatch(
   stopId: string,
   watch: Omit<NotifyWatch, "stopId" | "lastNotifiedTripIds"> | null,
@@ -134,6 +200,8 @@ export function checkAndNotify(
   arrivals: ArrivalItem[],
 ): void {
   if (notificationPermission() !== "granted") return;
+  const settings = getNotificationSettings();
+  if (!settings.enabled || isWithinDnd(settings.dnd)) return;
   const watch = getWatch(stopId);
   if (!watch) return;
   // Ha a push-regisztráció sikerült, a szerver saját maga küld értesítést —

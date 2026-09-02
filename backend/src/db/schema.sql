@@ -400,11 +400,16 @@ CREATE TABLE IF NOT EXISTS prediction_log (
 -- telefonon/bezárt lapnál is ide jut el az értesítés, mert az OS a saját
 -- push-szolgáltatásán (FCM/APNs/stb.) ébreszti fel a service workert.
 CREATE TABLE IF NOT EXISTS push_subscription (
-  sub_id     INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  endpoint   VARCHAR(512) NOT NULL,
-  p256dh     VARCHAR(255) NOT NULL,
-  auth       VARCHAR(255) NOT NULL,
-  created_at INT UNSIGNED NOT NULL,
+  sub_id       INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  endpoint     VARCHAR(512) NOT NULL,
+  p256dh       VARCHAR(255) NOT NULL,
+  auth         VARCHAR(255) NOT NULL,
+  created_at   INT UNSIGNED NOT NULL,
+  -- "Ne zavarj" időszak, percben éjfél óta (0-1439). NULL = nincs beállítva,
+  -- ilyenkor a push a nap minden szakában mehet. Az időszak átnyúlhat
+  -- éjfélen (pl. 22:00-tól 07:00-ig) — ezt a kiértékelő oldal kezeli.
+  dnd_start_min SMALLINT NULL,
+  dnd_end_min   SMALLINT NULL,
   PRIMARY KEY (sub_id),
   UNIQUE KEY ux_endpoint (endpoint(255))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -443,6 +448,45 @@ CREATE TABLE IF NOT EXISTS push_watch (
   KEY ix_stop (stop_id),
   CONSTRAINT fk_push_watch_sub FOREIGN KEY (sub_id)
     REFERENCES push_subscription(sub_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- FIÓK ÉS FELHŐS MENTÉS (jelszó nélküli)
+--
+-- Nincs jelszó és nincs e-mail-hitelesítés (nincs levélküldő infrastruktúra
+-- a projektben) — a belépés maga a titkos kulcs, amit a kliens hoz létre és
+-- csak a HASH-ét küldi el soha nem magát a kulcsot tárolva a szerveren
+-- olvashatóan. Az e-mail csak megjelenítési címke, hogy a felhasználó
+-- felismerje a fiókját, NEM hitelesítési tényező — ezért nincs rajta UNIQUE
+-- megszorítás, és önmagában nem is elég egy meglévő fiók eléréséhez.
+-- A mentés iránya szigorúan egyirányú AUTOMATÁBÓL: a kliens rendszeresen
+-- felküldi a localStorage-ját, de a szerver soha nem küld le adatot magától
+-- — letöltés csak a felhasználó kifejezett "Visszaállítás" kérésére történik
+-- (lásd account.ts), így a helyi adat automatikusan sosem íródik felül.
+-- ═══════════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS account (
+  account_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  email      VARCHAR(255) NOT NULL,
+  -- SHA-256 a kulcsról — a kulcs maga (256 bit, kliensoldali CSPRNG) olyan
+  -- nagy entrópiájú, hogy egy gyors hash is elég a brute-force ellen (nem
+  -- emberi jelszó, nincs szükség lassító bcrypt/scrypt-re).
+  key_hash   CHAR(64)     NOT NULL,
+  created_at INT UNSIGNED NOT NULL,
+  PRIMARY KEY (account_id),
+  UNIQUE KEY ux_key_hash (key_hash)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Egy fiókhoz mindig csak a LEGUTÓBBI mentés él — nem verziózott archívum,
+-- csak biztonsági másolat adatvesztés (törölt/eltűnt localStorage) ellen.
+CREATE TABLE IF NOT EXISTS account_backup (
+  account_id INT UNSIGNED NOT NULL,
+  payload    LONGBLOB     NOT NULL,
+  bytes      INT UNSIGNED NOT NULL,
+  updated_at INT UNSIGNED NOT NULL,
+  PRIMARY KEY (account_id),
+  CONSTRAINT fk_account_backup_account FOREIGN KEY (account_id)
+    REFERENCES account(account_id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ═══════════════════════════════════════════════════════════════════════

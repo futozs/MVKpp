@@ -304,9 +304,11 @@ export function TimetableView({
   const cancelledTripCount =
     table?.trips.filter((t) => cancelled.ids.has(t.tripId)).length ?? 0;
   const liveTripCount =
-    table?.trips.filter(
-      (t) => vehicleByTrip.has(t.tripId) && !cancelled.ids.has(t.tripId),
-    ).length ?? 0;
+    day === "today"
+      ? (table?.trips.filter(
+          (t) => vehicleByTrip.has(t.tripId) && !cancelled.ids.has(t.tripId),
+        ).length ?? 0)
+      : 0;
   const cancelledByRoute = useMemo(() => {
     const map = new Map<string, number>();
     for (const t of cancelled.trips) {
@@ -640,6 +642,26 @@ export function TimetableView({
             </div>
 
             {}
+            {table &&
+            table.trips.some((t) => t.deviates || t.headsignDiffers) ? (
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border/60 px-3 py-1.5 text-[11px] text-muted-foreground sm:px-4">
+                {table.trips.some((t) => t.headsignDiffers) ? (
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-early" />
+                    más célállomás, mint a viszonylat szokásos iránya (
+                    {table.headsign})
+                  </span>
+                ) : null}
+                {table.trips.some((t) => t.deviates) ? (
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-1 w-1 rounded-full bg-muted-foreground" />
+                    a szokásos útvonalon kívüli megállót is érint (betérő)
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+
+            {}
             <div className="min-h-0 flex-1 overflow-y-auto">
               {tableLoading ? (
                 <p className="px-4 py-10 text-center font-mono text-xs text-muted-foreground">
@@ -664,6 +686,7 @@ export function TimetableView({
                   }
                   nowSec={nowSec}
                   day={day}
+                  directionHeadsign={table.headsign}
                 />
               )}
             </div>
@@ -768,6 +791,7 @@ function TripDetail({
             <span className="block font-mono text-[11px] tabular-nums text-muted-foreground">
               érkezés {trip.arrival} · {trip.stopCount} megálló
               {trip.deviates ? " · betérő" : ""}
+              {trip.headsignDiffers ? " · eltérő célállomás" : ""}
             </span>
             {}
             {!cancelled && statusLabel && (vehicle || pastVehicleId) ? (

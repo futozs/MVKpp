@@ -7,6 +7,7 @@ import {
   activeServices,
   budapestOffsetSec,
 } from "../lib/gtfs.ts";
+import { PROFILE_WINDOW_DAYS } from "../worker/roller.ts";
 
 export const stats = new Hono();
 
@@ -474,6 +475,52 @@ function findPath(
     : null;
 }
 
+const LIVE_FALLBACK_MIN_N = 3;
+const LIVE_FALLBACK_BUCKET_RADIUS = 8; // ±8 × 15 perc = ±2 óra
+
+/**
+ * Ha egy szakaszhoz még nincs éjszakai rollup-profilja (agg_segment_profile),
+ * a nyers mérésekből (segment_run) számolunk azonnal — így friss, alig
+ * néhány órás gyűjtés is használható, nem kell megvárni a hajnali job-ot.
+ */
+async function liveSegmentPercentiles(
+  segKey: number,
+  daytype: number,
+  school: number,
+  bucket: number,
+): Promise<{ p50: number; p85: number; n: number } | null> {
+  const [row] = await query<{
+    n: number;
+    p50_s: number | null;
+    p85_s: number | null;
+  }>(
+    `SELECT COUNT(*) AS n,
+            MAX(CASE WHEN rn = GREATEST(1, CEIL(cnt * 0.50)) THEN travel_s END) AS p50_s,
+            MAX(CASE WHEN rn = GREATEST(1, CEIL(cnt * 0.85)) THEN travel_s END) AS p85_s
+       FROM (
+         SELECT travel_s,
+                ROW_NUMBER() OVER (ORDER BY travel_s) AS rn,
+                COUNT(*)     OVER ()                  AS cnt
+           FROM segment_run
+          WHERE segment_key = ?
+            AND daytype = ? AND school = ?
+            AND service_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+            AND LEAST(ABS(tod_bucket - ?), 96 - ABS(tod_bucket - ?)) <= ?
+       ) x`,
+    [
+      segKey,
+      daytype,
+      school,
+      PROFILE_WINDOW_DAYS,
+      bucket,
+      bucket,
+      LIVE_FALLBACK_BUCKET_RADIUS,
+    ],
+  );
+  if (!row || row.n < LIVE_FALLBACK_MIN_N || row.p50_s == null) return null;
+  return { p50: row.p50_s, p85: row.p85_s ?? row.p50_s, n: row.n };
+}
+
 stats.get("/segment", async (c) => {
   const fromId = (c.req.query("from") ?? "").trim();
   const toId = (c.req.query("to") ?? "").trim();
@@ -602,7 +649,20 @@ stats.get("/segment", async (c) => {
   let minSamples = Infinity;
   let measured = 0;
 
-  const legs = pairs.map((p) => {
+  const legs: {
+    from: string;
+    to: string;
+    schedS: number;
+    p50S: number;
+    p85S: number;
+    samples: number;
+    source: string;
+  }[] = [];
+
+  // Láncolt szakaszok: a következő szakasz indulási időpontja (és így a
+  // időablaka) a megelőző szakaszok tényleges idejétől függ, ezért ez
+  // sorban fut, nem párhuzamosan.
+  for (const p of pairs) {
     const bucket = Math.floor(
       ((((startLocal + cursor) % 86400) + 86400) % 86400) / 900,
     );
@@ -624,30 +684,52 @@ stats.get("/segment", async (c) => {
       })[0];
     }
 
-    const p50 = hit?.p50_s ?? p.schedGap;
-    const p85 = hit?.p85_s ?? p.schedGap;
-    if (hit) {
-      measured++;
-      minSamples = Math.min(minSamples, hit.n);
-    }
-    p50Total += p50;
-    excessSq += Math.max(0, p85 - p50) ** 2;
-    cursor += p50;
+    let p50 = hit?.p50_s;
+    let p85 = hit?.p85_s;
+    let samples = hit?.n ?? 0;
+    let source: string;
 
-    return {
+    if (hit) {
+      source = hit.tod_bucket === bucket ? "profil" : "profil-közelítő";
+    } else if (p.segKey != null) {
+      const live = await liveSegmentPercentiles(
+        p.segKey,
+        cal.daytype,
+        cal.school,
+        bucket,
+      );
+      if (live) {
+        p50 = live.p50;
+        p85 = live.p85;
+        samples = live.n;
+        source = "élő mérés";
+      } else {
+        source = "menetrend";
+      }
+    } else {
+      source = "menetrend";
+    }
+
+    const p50Final = p50 ?? p.schedGap;
+    const p85Final = p85 ?? p.schedGap;
+    if (source !== "menetrend") {
+      measured++;
+      minSamples = Math.min(minSamples, samples);
+    }
+    p50Total += p50Final;
+    excessSq += Math.max(0, p85Final - p50Final) ** 2;
+    cursor += p50Final;
+
+    legs.push({
       from: stops.get(p.from)?.name ?? p.from,
       to: stops.get(p.to)?.name ?? p.to,
       schedS: p.schedGap,
-      p50S: p50,
-      p85S: p85,
-      samples: hit?.n ?? 0,
-      source: hit
-        ? hit.tod_bucket === bucket
-          ? "profil"
-          : "profil-közelítő"
-        : "menetrend",
-    };
-  });
+      p50S: p50Final,
+      p85S: p85Final,
+      samples,
+      source,
+    });
+  }
 
   const p85Total = p50Total + Math.sqrt(excessSq);
 

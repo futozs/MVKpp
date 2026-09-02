@@ -94,6 +94,51 @@ push.post("/watch", async (c) => {
   return c.json({ ok: true });
 });
 
+type DndBody = {
+  subscription?: { endpoint?: string; keys?: { p256dh?: string; auth?: string } };
+  dndEnabled?: boolean;
+  dndStartMin?: number;
+  dndEndMin?: number;
+};
+
+/**
+ * "Ne zavarj" időszak mentése egy feliratkozáshoz. Ha `dndEnabled` hamis
+ * (vagy nincs megadva), a mezők NULL-ra állnak — a push-hurok ilyenkor a nap
+ * minden szakában küld.
+ */
+push.post("/dnd", async (c) => {
+  const body = await c.req.json<DndBody>().catch(() => null);
+  const endpoint = body?.subscription?.endpoint;
+  const p256dh = body?.subscription?.keys?.p256dh;
+  const auth = body?.subscription?.keys?.auth;
+  if (!endpoint || !p256dh || !auth) {
+    return c.json({ error: "Hiányzó mező" }, 400);
+  }
+
+  const validMin = (n: unknown): n is number =>
+    Number.isFinite(n) && (n as number) >= 0 && (n as number) < 1440;
+  const enabled = body?.dndEnabled === true;
+  const startMin = enabled && validMin(body?.dndStartMin) ? Math.round(body!.dndStartMin!) : null;
+  const endMin = enabled && validMin(body?.dndEndMin) ? Math.round(body!.dndEndMin!) : null;
+
+  console.log(
+    `[push] ne zavarj mentése: endpoint=...${endpoint.slice(-16)}, ${startMin != null && endMin != null ? `${startMin}p–${endMin}p` : "kikapcsolva"}`,
+  );
+
+  await query(
+    `INSERT INTO push_subscription (endpoint, p256dh, auth, created_at, dnd_start_min, dnd_end_min)
+     VALUES (?,?,?,?,?,?)
+     ON DUPLICATE KEY UPDATE p256dh = VALUES(p256dh), auth = VALUES(auth),
+       dnd_start_min = VALUES(dnd_start_min), dnd_end_min = VALUES(dnd_end_min)`,
+    [endpoint, p256dh, auth, Math.floor(Date.now() / 1000), startMin, endMin],
+  );
+
+  return c.json({
+    ok: true,
+    dnd: startMin != null && endMin != null ? { startMin, endMin } : null,
+  });
+});
+
 push.delete("/watch", async (c) => {
   const body = await c
     .req.json<{ endpoint?: string; stopId?: string }>()

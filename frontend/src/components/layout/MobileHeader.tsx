@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { Layers, RefreshCw } from "lucide-react";
+import { Bell, Layers, RefreshCw, UserRound } from "lucide-react";
 import type { ActiveTab } from "@/types";
 import { Button } from "@/components/ui/button";
 import { LiveDot } from "@/components/transit/LiveDot";
@@ -16,12 +16,15 @@ interface MobileHeaderProps {
   monitoredStopsCount: number;
   onOpenMapPicker: () => void;
   liveIncidentCount: number;
+  onOpenNotifications: () => void;
+  onOpenAccount: () => void;
 }
 
 const TABS: { id: ActiveTab; label: string }[] = [
   { id: "map", label: "Térkép" },
   { id: "multistop", label: "Figyelő" },
   { id: "timetable", label: "Menetrend" },
+  { id: "planner", label: "Útvonal" },
   { id: "stats", label: "Statisztika" },
 ];
 
@@ -35,6 +38,8 @@ export function MobileHeader({
   monitoredStopsCount,
   onOpenMapPicker,
   liveIncidentCount,
+  onOpenNotifications,
+  onOpenAccount,
 }: MobileHeaderProps) {
   const weather = useWeather();
   const navRef = useRef<HTMLElement>(null);
@@ -98,6 +103,26 @@ export function MobileHeader({
             <Layers />
           </Button>
         ) : null}
+
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-9 w-9 shrink-0"
+          onClick={onOpenAccount}
+          aria-label="Fiók és felhős mentés"
+        >
+          <UserRound />
+        </Button>
+
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-9 w-9 shrink-0"
+          onClick={onOpenNotifications}
+          aria-label="Értesítések"
+        >
+          <Bell />
+        </Button>
 
         <Button
           variant="outline"

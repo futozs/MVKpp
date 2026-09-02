@@ -29,9 +29,10 @@ import { initJournal, recordSighting, journalFor, flushJournal, journalStats, ta
 import { buildRouteIndex, buildTable, buildDaySchedule, secToHm, feedDays, type DaySchedule } from './lib/timetable.ts'
 import { saveDaySchedule, loadDaySchedule, archiveRange, saveSightings, dayRuns, storedFeedVersions, saveCancelledTrips, dayCancelledTripIds } from './lib/archive.ts'
 import { stats } from './api/stats.ts'
-import { ops, adminToken } from './api/ops.ts'
+import { ops } from './api/ops.ts'
 import { push } from './api/push.ts'
 import { startPushLoop } from './lib/pushLoop.ts'
+import { account } from './api/account.ts'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(HERE, '..')
@@ -345,28 +346,25 @@ const app = new Hono()
 app.use('*', async (c, next) => {
   c.header('Access-Control-Allow-Origin', '*')
   c.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-  // Az X-Admin-Token nelkul a hub uzemeltetesi hivasai (naplok, ujratelepites)
-  // mar a preflightnal elbuknanak, amikor a hub nem a gateway origin-jerol jon.
-  c.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Admin-Token')
+  c.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Account-Key')
   c.header('Access-Control-Max-Age', '86400')
   if (c.req.method === 'OPTIONS') return c.body(null, 204)
   await next()
 })
 
-function isAdminRequest(c: Context): boolean {
-  return (c.req.header('x-admin-token') ?? '') === adminToken()
-}
-
 // Statisztikai adatraktár (külön adatbázis; ha nem elérhető, 503-at ad és
 // a valós idejű funkciók érintetlenek maradnak).
 app.route('/stats', stats)
 
-// Uzemeltetes: ujratelepites es naplok. A rombolo muveletek admin tokent kernek.
+// Uzemeltetes: ujratelepites es naplok. Csak helyi halozaton fut, hitelesites nelkul.
 app.route('/system', ops)
 
 // Web Push feliratkozasok es figyelesek. VAPID nelkul 503-at ad, a kliens
 // ilyenkor a helyi (nyitott lapos) ertesitesre esik vissza.
 app.route('/push', push)
+
+// Jelszo nelkuli fiok + felhos biztonsagi mentes (csak felfele automatikus).
+app.route('/account', account)
 
 // A Hub kiszolgalasa a gateway-rol, /hub alatt.
 //
@@ -1075,10 +1073,6 @@ app.post('/_renew', async (c) => { const r = await renew('kézi'); return c.json
  * `managed` mezője jelzi előre, hogy a hub ne ígérjen olyat, ami nem történik meg.
  */
 app.post('/system/restart', (c) => {
-  // A gateway halozaton is elerheto, ezert az ujrainditas admin tokent ker.
-  if ((c.req.header('x-admin-token') ?? '') !== adminToken()) {
-    return c.json({ error: 'Ervenytelen vagy hianyzo admin token.' }, 401)
-  }
   const managed = process.env.MVK_MANAGED === '1'
   console.log('[system] ⟳ újraindítási kérés a hubról')
   // A válasz még kimegy, csak utána lépünk ki.
@@ -1094,7 +1088,6 @@ app.post('/system/restart', (c) => {
 
 /** GTFS menetrend újratöltése a forrásból, a szerver leállítása nélkül. */
 app.post('/system/reload-gtfs', async (c) => {
-  if (!isAdminRequest(c)) return c.json({ error: 'Érvénytelen vagy hiányzó admin token.' }, 401)
   try {
     await refreshGtfs()
     return c.json({
@@ -1130,7 +1123,6 @@ app.get('/system/cache', (c) => {
 })
 
 app.post('/system/refresh-app-token', async (c) => {
-  if (!isAdminRequest(c)) return c.json({ error: 'Érvénytelen vagy hiányzó admin token.' }, 401)
   const BUNDLE = 'com.hclinear.metaccazeMiskolc'
   const APPNAME = 'MVK MobilON+'
   const home = process.env.HOME || '/Users/' + (process.env.USER || '')
@@ -1366,8 +1358,6 @@ serve({ fetch: app.fetch, port: PORT, hostname: HOST }, (info) => {
     console.log(`   elerheto cimek: ${addrs.join('  ') || '(csak localhost)'}`)
     console.log(`   dashboard: http://<cim>:${info.port}/    hub: http://<cim>:${info.port}/hub/`)
   }
-  // Az admin token elso hivasra generalodik; kiirjuk, hogy a hubba be lehessen masolni.
-  console.log(`   admin token (hub → Ujratelepites): ${adminToken()}`)
   if (HOST === '0.0.0.0') {
     console.log('   FIGYELEM: a gateway minden halozati interfeszen hallgat. Ha az internet fele is nyitva van, tedd tuzfal moge.')
   }

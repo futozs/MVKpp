@@ -36,7 +36,20 @@ type WatchRow = {
   is_departure: number;
   sched_min: number | null;
   last_notified: string | null;
+  dnd_start_min: number | null;
+  dnd_end_min: number | null;
 };
+
+/** Éjfélen átnyúló ablakot is helyesen kezel (pl. 22:00–07:00). */
+function isWithinDnd(
+  startMin: number | null,
+  endMin: number | null,
+  nowMin: number,
+): boolean {
+  if (startMin == null || endMin == null || startMin === endMin) return false;
+  if (startMin < endMin) return nowMin >= startMin && nowMin < endMin;
+  return nowMin >= startMin || nowMin < endMin;
+}
 
 function delaySuffix(delaySec: number | null): string {
   if (delaySec == null || Math.abs(delaySec) < DELAY_MENTION_THRESHOLD_S) return "";
@@ -60,12 +73,19 @@ function minuteDistance(a: number, b: number): number {
 async function checkCancelledWatches(
   stopWatches: WatchRow[],
   cancelled: Set<string>,
+  nowMin: number,
 ): Promise<Set<number>> {
   const handled = new Set<number>();
   for (const w of stopWatches) {
     if (!w.trip_id || !cancelled.has(w.trip_id)) continue;
     const already = new Set((w.last_notified ?? "").split(",").filter(Boolean));
     if (already.has(`CANCELLED:${w.trip_id}`)) {
+      handled.add(w.watch_id);
+      continue;
+    }
+    // "Ne zavarj" alatt nem küldünk — a lenti sor NEM íródik last_notified-ba,
+    // tehát a következő körben (akár DND után) újra megpróbáljuk.
+    if (isWithinDnd(w.dnd_start_min, w.dnd_end_min, nowMin)) {
       handled.add(w.watch_id);
       continue;
     }
@@ -103,7 +123,8 @@ async function checkOnce(
   const watches = await query<WatchRow>(
     `SELECT w.watch_id, w.sub_id, s.endpoint, s.p256dh, s.auth,
             w.stop_id, w.stop_name, w.threshold_min, w.route_shorts, w.trip_id,
-            w.is_departure, w.sched_min, w.last_notified
+            w.is_departure, w.sched_min, w.last_notified,
+            s.dnd_start_min, s.dnd_end_min
        FROM push_watch w
        JOIN push_subscription s ON s.sub_id = w.sub_id`,
   );
@@ -125,7 +146,11 @@ async function checkOnce(
   const nowMin = Math.floor(nowSecOfDay() / 60);
 
   for (const [stopId, stopWatches] of byStop) {
-    const cancelledHandled = await checkCancelledWatches(stopWatches, cancelled);
+    const cancelledHandled = await checkCancelledWatches(
+      stopWatches,
+      cancelled,
+      nowMin,
+    );
 
     let arrivals: MinimalArrival[];
     try {
@@ -140,6 +165,10 @@ async function checkOnce(
 
     for (const w of stopWatches) {
       if (cancelledHandled.has(w.watch_id)) continue;
+      // "Ne zavarj" alatt szándékosan nem frissítjük a last_notified-ot, hogy
+      // a busz — ha még a küszöbön belül van — DND után újra megjelölhető
+      // legyen.
+      if (isWithinDnd(w.dnd_start_min, w.dnd_end_min, nowMin)) continue;
 
       // Három szűrési mód, egymást kizárva:
       //  1) sched_min megadva: "ismétlődő" — route + menetrendi óra:perc

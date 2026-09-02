@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import {
   Activity,
   Bus,
-  Clock,
   MapPinned,
   Route as RouteIcon,
   Wrench,
@@ -16,7 +15,6 @@ import { VehiclePanel } from "./VehiclePanel";
 import { IncidentPanel } from "./IncidentPanel";
 import { RoutePanel } from "./RoutePanel";
 import { StopPanel } from "./StopPanel";
-import { TravelTimePanel } from "./TravelTimePanel";
 import { NetworkPanel } from "./NetworkPanel";
 import { PredictionPanel } from "./PredictionPanel";
 import { cn } from "@/lib/utils";
@@ -27,22 +25,29 @@ type PanelId =
   | "incident"
   | "route"
   | "stop"
-  | "travel"
   | "network"
   | "prediction";
 
+const OVERVIEW_PANEL: { id: PanelId; label: string; short: string; icon: LucideIcon } = {
+  id: "overview",
+  label: "Áttekintés",
+  short: "Áttek.",
+  icon: Activity,
+};
+
+// Az „Áttekintés” alapból nincs kitéve a fülsorra — összefoglaló nézet, ami
+// leginkább csak első pillantásra kell, a többi fül a napi munkára való. Az
+// OVERVIEW_PANEL-en keresztül külön gombbal továbbra is elérhető.
 const PANELS: {
   id: PanelId;
   label: string;
   short: string;
   icon: LucideIcon;
 }[] = [
-  { id: "overview", label: "Áttekintés", short: "Áttek.", icon: Activity },
   { id: "vehicle", label: "Járművek", short: "Járművek", icon: Bus },
   { id: "incident", label: "Üzemzavarok", short: "Zavarok", icon: Wrench },
   { id: "route", label: "Vonalak", short: "Vonalak", icon: RouteIcon },
   { id: "stop", label: "Megállók", short: "Megállók", icon: MapPinned },
-  { id: "travel", label: "Menetidő A→B", short: "A→B", icon: Clock },
   { id: "network", label: "Hálózat", short: "Hálózat", icon: TrendingUp },
   {
     id: "prediction",
@@ -61,8 +66,8 @@ export function StatsView({
   routes: Route[];
   onFocusVehicle?: (vehicleId: string) => void;
 }) {
-  const [panel, setPanel] = useState<PanelId>("overview");
-  const navRef = useRef<HTMLElement>(null);
+  const [panel, setPanel] = useState<PanelId>("vehicle");
+  const navRef = useRef<HTMLUListElement>(null);
 
   // A fülsor telefonon oldalra görgethető — a kiválasztott fül különben
   // kicsúszhat a képből, és nem látszik, hol tartunk.
@@ -76,19 +81,21 @@ export function StatsView({
     <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col">
       {}
       <nav
-        ref={navRef}
         aria-label="Statisztikai nézetek"
-        className={cn(
-          "shrink-0 overflow-x-auto border-b border-border bg-background/85 px-3 backdrop-blur-sm sm:px-4",
-          "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
-        )}
+        className="flex shrink-0 items-stretch gap-1 border-b border-border bg-background/85 px-3 backdrop-blur-sm sm:px-4"
       >
-        <ul className="flex min-w-max gap-1 py-2">
+        <ul
+          ref={navRef}
+          className={cn(
+            "flex min-w-0 flex-1 gap-1 overflow-x-auto py-2",
+            "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+          )}
+        >
           {PANELS.map((p) => {
             const Icon = p.icon;
             const active = panel === p.id;
             return (
-              <li key={p.id}>
+              <li key={p.id} className="shrink-0">
                 <button
                   type="button"
                   onClick={() => setPanel(p.id)}
@@ -109,6 +116,24 @@ export function StatsView({
             );
           })}
         </ul>
+
+        {}
+        <button
+          type="button"
+          onClick={() => setPanel("overview")}
+          aria-current={panel === "overview" ? "page" : undefined}
+          title="Áttekintés (összefoglaló nézet)"
+          className={cn(
+            "flex shrink-0 items-center gap-1.5 self-center whitespace-nowrap rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-colors",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+            panel === "overview"
+              ? "border-primary bg-primary text-primary-foreground"
+              : "border-border/70 text-muted-foreground hover:bg-accent hover:text-foreground",
+          )}
+        >
+          <OVERVIEW_PANEL.icon className="h-3.5 w-3.5 shrink-0" />
+          <span className="hidden md:inline">{OVERVIEW_PANEL.label}</span>
+        </button>
       </nav>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -122,7 +147,6 @@ export function StatsView({
           {panel === "incident" && <IncidentPanel />}
           {panel === "route" && <RoutePanel routes={routes} />}
           {panel === "stop" && <StopPanel stops={stops} />}
-          {panel === "travel" && <TravelTimePanel stops={stops} />}
           {panel === "network" && <NetworkPanel />}
           {panel === "prediction" && <PredictionPanel />}
         </div>

@@ -833,10 +833,12 @@ export function TransitMap({
 
           bounds.push([res.vehicle.lat, res.vehicle.lon]);
 
-          if (fit && bounds.length && mapRef.current) {
-            mapRef.current.fitBounds(bounds, {
-              padding: [60, 60],
-              maxZoom: 16,
+          if (fit && mapRef.current) {
+            // Rákövetéskor azonnal, animáció nélkül a járműre zoomolunk —
+            // nem a teljes útvonalra, hogy ne kelljen várni a következő
+            // frissítési ciklusra.
+            mapRef.current.setView([res.vehicle.lat, res.vehicle.lon], 15, {
+              animate: false,
             });
           } else if (mapRef.current) {
             mapRef.current.flyTo([res.vehicle.lat, res.vehicle.lon], 15, {

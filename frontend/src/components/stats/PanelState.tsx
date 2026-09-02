@@ -1,4 +1,11 @@
-import { AlertTriangle, DatabaseZap, Loader2, Search, X } from "lucide-react";
+import {
+  AlertTriangle,
+  DatabaseZap,
+  Loader2,
+  Search,
+  Star,
+  X,
+} from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { Input } from "@/components/ui/input";
 import { normalizeSearchText } from "@/lib/utils";
@@ -61,11 +68,16 @@ export function PillPicker<T extends string>({
   value,
   onChange,
   ariaLabel,
+  isFavorite,
+  onToggleFavorite,
 }: {
   items: { id: T; label: string; sub?: string; color?: string | null }[];
   value: T | null;
   onChange: (id: T) => void;
   ariaLabel: string;
+  /** Ha adott, minden pill mellett csillag jelenik meg kedvenc jelöléshez. */
+  isFavorite?: (id: T) => boolean;
+  onToggleFavorite?: (id: T) => void;
 }) {
   return (
     <div
@@ -76,33 +88,59 @@ export function PillPicker<T extends string>({
       <div className="flex min-w-max gap-1.5">
         {items.map((it) => {
           const active = it.id === value;
+          const favorite = isFavorite?.(it.id) ?? false;
           return (
-            <button
+            <span
               key={it.id}
-              type="button"
-              onClick={() => onChange(it.id)}
-              aria-pressed={active}
               className={[
-                "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-colors",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+                "flex items-center gap-1 rounded-lg border pl-2.5 pr-1.5 py-1.5 text-xs font-semibold transition-colors",
                 active
                   ? "border-primary bg-primary text-primary-foreground"
                   : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground",
               ].join(" ")}
             >
-              {it.color ? (
-                <span
-                  className="h-2 w-2 shrink-0 rounded-full"
-                  style={{ background: `#${it.color}` }}
-                />
+              <button
+                type="button"
+                onClick={() => onChange(it.id)}
+                aria-pressed={active}
+                className="flex items-center gap-1.5 focus-visible:outline-none"
+              >
+                {it.color ? (
+                  <span
+                    className="h-2 w-2 shrink-0 rounded-full"
+                    style={{ background: `#${it.color}` }}
+                  />
+                ) : null}
+                <span className="tabular-nums">{it.label}</span>
+                {it.sub ? (
+                  <span className="max-w-[9rem] truncate opacity-60">
+                    {it.sub}
+                  </span>
+                ) : null}
+              </button>
+              {onToggleFavorite ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleFavorite(it.id);
+                  }}
+                  aria-pressed={favorite}
+                  aria-label={
+                    favorite ? "Eltávolítás a kedvencekből" : "Kedvencnek jelölés"
+                  }
+                  className={[
+                    "flex h-5 w-5 shrink-0 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+                    favorite ? "text-early" : "opacity-40 hover:opacity-100",
+                  ].join(" ")}
+                >
+                  <Star
+                    className="h-3.5 w-3.5"
+                    fill={favorite ? "currentColor" : "none"}
+                  />
+                </button>
               ) : null}
-              <span className="tabular-nums">{it.label}</span>
-              {it.sub ? (
-                <span className="max-w-[9rem] truncate opacity-60">
-                  {it.sub}
-                </span>
-              ) : null}
-            </button>
+            </span>
           );
         })}
       </div>
@@ -122,6 +160,8 @@ export function SearchablePicker<T extends string>({
   ariaLabel,
   placeholder,
   limit = 120,
+  isFavorite,
+  onToggleFavorite,
 }: {
   /** A `search` csak a szűréshez kell — a pillen nem jelenik meg. */
   items: {
@@ -136,6 +176,9 @@ export function SearchablePicker<T extends string>({
   ariaLabel: string;
   placeholder: string;
   limit?: number;
+  /** Ha adott, minden pill mellett csillag jelenik meg kedvenc jelöléshez. */
+  isFavorite?: (id: T) => boolean;
+  onToggleFavorite?: (id: T) => void;
 }) {
   const [q, setQ] = useState("");
 
@@ -189,6 +232,8 @@ export function SearchablePicker<T extends string>({
             value={value}
             onChange={onChange}
             items={filtered}
+            isFavorite={isFavorite}
+            onToggleFavorite={onToggleFavorite}
           />
           {items.length > filtered.length ? (
             <p className="px-1 text-[11px] text-muted-foreground">

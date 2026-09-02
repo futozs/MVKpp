@@ -30,6 +30,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { QueryBoundary, SearchablePicker } from "./PanelState";
 import { useStatsQuery } from "./useStatsQuery";
+import { useFavoriteVehicles } from "@/hooks/useFavoriteVehicles";
 import { cn } from "@/lib/utils";
 
 const FAST_DMS = 100;
@@ -212,6 +213,7 @@ export function VehiclePanel({
 }) {
   const [vehicleId, setVehicleId] = useState<string | null>(null);
   const [date, setDate] = useState(serviceToday());
+  const { isFavoriteVehicle, toggleFavoriteVehicle } = useFavoriteVehicles();
 
   const listQ = useStatsQuery(
     useCallback(() => statsApi.vehicles(), []),
@@ -264,11 +266,19 @@ export function VehiclePanel({
               placeholder="Rendszám, pl. 1641"
               value={vehicleId}
               onChange={setVehicleId}
-              items={d.vehicles.map((v) => ({
-                id: v.vehicle_id,
-                label: v.vehicle_id,
-                sub: v.kind === "TRAM" ? "🚋" : undefined,
-              }))}
+              items={[...d.vehicles]
+                .sort((a, b) => {
+                  const fa = isFavoriteVehicle(a.vehicle_id) ? 0 : 1;
+                  const fb = isFavoriteVehicle(b.vehicle_id) ? 0 : 1;
+                  return fa - fb;
+                })
+                .map((v) => ({
+                  id: v.vehicle_id,
+                  label: v.vehicle_id,
+                  sub: v.kind === "TRAM" ? "🚋" : undefined,
+                }))}
+              isFavorite={isFavoriteVehicle}
+              onToggleFavorite={toggleFavoriteVehicle}
             />
           </div>
         )}

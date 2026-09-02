@@ -117,7 +117,12 @@ export interface TripPathResponse {
   scheduleDeviationSec?: number | null;
 }
 
-export type ActiveTab = "map" | "multistop" | "timetable" | "stats";
+export type ActiveTab =
+  | "map"
+  | "multistop"
+  | "timetable"
+  | "planner"
+  | "stats";
 
 export type SpeedFilter = "all" | "moving" | "idle";
 
@@ -261,6 +266,8 @@ export interface TimetableTrip {
   destinationName: string;
   stopCount: number;
   deviates: boolean;
+  /** A menet célja eltér a viszonylat szokásos (leggyakoribb) célállomásától. */
+  headsignDiffers: boolean;
   times: (string | null)[];
 }
 

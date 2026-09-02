@@ -29,6 +29,8 @@ export type TimetableTripRow = {
   destinationName: string
   stopCount: number
   deviates: boolean
+  /** A menet célja eltér a viszonylat szokásos (leggyakoribb) célállomásától. */
+  headsignDiffers: boolean
   times: (string | null)[]
 }
 
@@ -164,9 +166,10 @@ export function buildTable(routeId: string, dir: string, ymd: string): Timetable
     }
     const first = x.stopsOfTrip[0]
     const last = x.stopsOfTrip[x.stopsOfTrip.length - 1]
+    const tripHeadsign = x.trip.headsign || headsign
     return {
       tripId: x.tripId,
-      headsign: x.trip.headsign || headsign,
+      headsign: tripHeadsign,
       departure: secToHm(first.dep),
       departureSec: first.dep,
       arrival: secToHm(last.dep),
@@ -177,6 +180,8 @@ export function buildTable(routeId: string, dir: string, ymd: string): Timetable
       stopCount: x.stopsOfTrip.length,
       /** A menet a fő megállósoron kívüli megállókat is érint (betérő). */
       deviates: extraCount > 0,
+      /** Pl. új alviszonylat (14E) vagy megváltozott végállomás egy régi táblán belül. */
+      headsignDiffers: headsign.length > 0 && tripHeadsign !== headsign,
       times,
     }
   })

@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { adminHeaders, getSystemUrl } from '@/lib/admin'
+import { getSystemUrl } from '@/lib/admin'
 import { cn } from '@/lib/utils'
 
 type SystemActionsProps = {
@@ -128,7 +128,7 @@ export function SystemActions({ onRefreshed }: SystemActionsProps) {
     setReloading(true)
     setReloadResult(null)
     try {
-      const res = await fetch(getSystemUrl('/system/reload-gtfs'), { method: 'POST', headers: adminHeaders() })
+      const res = await fetch(getSystemUrl('/system/reload-gtfs'), { method: 'POST' })
       const data = await res.json()
       setReloadResult(
         data.ok
@@ -150,7 +150,7 @@ export function SystemActions({ onRefreshed }: SystemActionsProps) {
     setTokenRefreshing(true)
     setTokenResult(null)
     try {
-      const res = await fetch(getSystemUrl('/system/refresh-app-token'), { method: 'POST', headers: adminHeaders() })
+      const res = await fetch(getSystemUrl('/system/refresh-app-token'), { method: 'POST' })
       const data = await res.json()
       setTokenResult({
         ok: Boolean(res.ok && data.ok),

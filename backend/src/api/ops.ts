@@ -1,9 +1,7 @@
-import { Hono, type MiddlewareHandler } from "hono";
-import { randomBytes, timingSafeEqual } from "node:crypto";
+import { Hono } from "hono";
 import {
   closeSync,
   existsSync,
-  mkdirSync,
   openSync,
   readFileSync,
   readSync,
@@ -18,7 +16,6 @@ const BACKEND_ROOT = join(HERE, "..", "..");
 const PROJECT_ROOT = join(BACKEND_ROOT, "..");
 const STATE_DIR = join(BACKEND_ROOT, "state");
 const LOGS_DIR = join(PROJECT_ROOT, "logs");
-const TOKEN_FILE = join(STATE_DIR, "admin_token.txt");
 const STATUS_FILE = join(STATE_DIR, "deploy-status.json");
 
 const LOG_SOURCES = [
@@ -42,55 +39,17 @@ const LOG_LABELS: Record<LogSource, string> = {
   redeploy: "Újratelepítés",
 };
 
-let cachedToken = "";
-
-export function adminToken(): string {
-  if (cachedToken) return cachedToken;
-  mkdirSync(STATE_DIR, { recursive: true });
-  try {
-    const existing = readFileSync(TOKEN_FILE, "utf8").trim();
-    if (existing.length >= 16) {
-      cachedToken = existing;
-      return cachedToken;
-    }
-  } catch {}
-  cachedToken = randomBytes(16).toString("hex");
-  writeFileSync(TOKEN_FILE, cachedToken, { mode: 0o600 });
-  console.log(`[ops] admin token generálva → ${TOKEN_FILE}`);
-  console.log(`[ops] ADMIN TOKEN: ${cachedToken}`);
-  return cachedToken;
-}
-
-function tokenMatches(given: string): boolean {
-  const want = Buffer.from(adminToken());
-  const got = Buffer.from(given ?? "");
-  return want.length === got.length && timingSafeEqual(want, got);
-}
-
+// A rendszerhub kizárólag helyi hálózaton fut, nincs internetre kitéve —
+// ezért az üzemeltetési végpontok (naplók, újratelepítés) nem kérnek admin
+// tokent. Ha valaha internetre kerülne, ezt előbb pótolni kell.
 export const ops = new Hono();
 
-const requireAdmin = async (c: {
-  req: { header: (k: string) => string | undefined };
-}) => {
-  const given = c.req.header("x-admin-token") ?? "";
-  return tokenMatches(given);
-};
-
-ops.get("/auth-status", (c) =>
-  c.json({
-    required: true,
-    configured: adminToken().length > 0,
-    header: "X-Admin-Token",
-  }),
-);
+ops.get("/auth-status", (c) => c.json({ required: false }));
 
 ops.get("/deploy-status", (c) => {
   try {
     const raw = readFileSync(STATUS_FILE, "utf8");
-    const t = adminToken();
-    return c.json(
-      JSON.parse(t ? raw.split(t).join("«admin token elrejtve»") : raw),
-    );
+    return c.json(JSON.parse(raw));
   } catch {
     return c.json({
       running: false,
@@ -101,20 +60,6 @@ ops.get("/deploy-status", (c) => {
     });
   }
 });
-
-const logGuard: MiddlewareHandler = async (c, next) => {
-  if (!(await requireAdmin(c))) {
-    return c.json({ error: "A naplók megtekintéséhez admin token kell." }, 401);
-  }
-  await next();
-};
-ops.use("/logs", logGuard);
-ops.use("/logs/*", logGuard);
-
-function redact(line: string): string {
-  const t = adminToken();
-  return t ? line.split(t).join("«admin token elrejtve»") : line;
-}
 
 ops.get("/logs", (c) => {
   const list = LOG_SOURCES.map((name) => {
@@ -162,10 +107,7 @@ ops.get("/logs/:source", (c) => {
     const text = buf.toString("utf8");
     const all = text.split(/\r?\n/);
     if (start > 0 && all.length) all.shift();
-    const tail = all
-      .filter((l) => l.length)
-      .slice(-lines)
-      .map(redact);
+    const tail = all.filter((l) => l.length).slice(-lines);
     return c.json({
       source,
       label: LOG_LABELS[source as LogSource],
@@ -178,10 +120,6 @@ ops.get("/logs/:source", (c) => {
 });
 
 ops.post("/redeploy", async (c) => {
-  if (!(await requireAdmin(c))) {
-    return c.json({ error: "Érvénytelen vagy hiányzó admin token." }, 401);
-  }
-
   // A backendet a manager.mjs fork()-olja, ezért van IPC-csatornája
   // (process.send) a szülő felé. Az újratelepítés a manager saját
   // folyamatán BELÜL fut le (lásd manager.mjs performRedeploy) — a manager

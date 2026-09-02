@@ -1,4 +1,4 @@
-const SHELL_CACHE = "mvk-shell-v4";
+const SHELL_CACHE = "mvk-shell-v5";
 const SHELL_ASSETS = [
   "/",
   "/index.html",
@@ -6,6 +6,32 @@ const SHELL_ASSETS = [
   "/icon-192.png",
   "/icon-512.png",
 ];
+
+// Térképcsempe-gyorsítótár: ha egyszer, pl. otthoni wifin betöltődött egy
+// csempe, onnantól mobilneten is azonnal jön a tárolóból — nem kell újra
+// letölteni. A csempék gyakorlatilag sosem változnak, ezért "cache-first"
+// stratégia jár: ha van a tárolóban, azt adjuk vissza, hálózat nélkül.
+const TILE_CACHE = "mvk-tiles-v1";
+const TILE_HOSTS = [
+  "tile.openstreetmap.org",
+  "tile.opentopomap.org",
+  "server.arcgisonline.com",
+];
+const TILE_CACHE_MAX = 4000;
+
+function isTileRequest(url) {
+  const host = url.hostname;
+  return TILE_HOSTS.some((h) => host === h || host.endsWith(`.${h}`));
+}
+
+/** Durva sapka a csempetárolón — enélkül egy hosszabb böngészés után korlátlanul nőne. */
+async function trimTileCache() {
+  const cache = await caches.open(TILE_CACHE);
+  const keys = await cache.keys();
+  if (keys.length <= TILE_CACHE_MAX) return;
+  const excess = keys.length - TILE_CACHE_MAX;
+  await Promise.all(keys.slice(0, excess).map((k) => cache.delete(k)));
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -23,9 +49,12 @@ self.addEventListener("activate", (event) => {
       .keys()
       .then((keys) =>
         Promise.all(
-          keys.filter((k) => k !== SHELL_CACHE).map((k) => caches.delete(k)),
+          keys
+            .filter((k) => k !== SHELL_CACHE && k !== TILE_CACHE)
+            .map((k) => caches.delete(k)),
         ),
       )
+      .then(() => trimTileCache())
       .then(() => self.clients.claim()),
   );
 });
@@ -45,6 +74,28 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
 
   const url = new URL(request.url);
+
+  if (isTileRequest(url)) {
+    event.respondWith(
+      caches.open(TILE_CACHE).then(async (cache) => {
+        const cached = await cache.match(request);
+        if (cached) return cached;
+        const res = await fetch(request);
+        // A Leaflet nem kér CORS-t a csempékhez, ezért a válasz "opaque"
+        // (státusz 0, res.ok mindig hamis) — de attól még érvényes kép, és a
+        // Cache API el is tudja tárolni, csak a tartalmát nem olvashatjuk ki.
+        if (res.ok || res.type === "opaque") {
+          await cache.put(request, res.clone());
+          // Ritkán (nem minden csempénél) ellenőrizzük a sapkát — a teljes
+          // tároló kilistázása minden egyes csempénél felesleges terhelés lenne.
+          if (Math.random() < 0.05) event.waitUntil(trimTileCache());
+        }
+        return res;
+      }),
+    );
+    return;
+  }
+
   if (url.origin !== self.location.origin) return;
   if (LIVE_PREFIXES.some((p) => url.pathname.startsWith(p))) return;
 

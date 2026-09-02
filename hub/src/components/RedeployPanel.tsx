@@ -5,14 +5,12 @@ import {
   CircleDashed,
   Hammer,
   Loader2,
-  Lock,
   RefreshCcwDot,
   X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { adminHeaders, deployStatusUrl, getAdminToken, setAdminToken, getSystemUrl } from '@/lib/admin'
+import { deployStatusUrl, getSystemUrl } from '@/lib/admin'
 import { cn } from '@/lib/utils'
 
 type StepState = 'pending' | 'running' | 'done' | 'failed'
@@ -64,8 +62,6 @@ function StepRow({ step }: { step: DeployStep }) {
  * megkerülésével — így a folyamat végig követhető, nem fekete doboz.
  */
 export function RedeployPanel({ onFinished }: { onFinished: () => void }) {
-  const [token, setToken] = useState(getAdminToken())
-  const [tokenSaved, setTokenSaved] = useState(false)
   const [status, setStatus] = useState<DeployStatus | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -140,16 +136,12 @@ export function RedeployPanel({ onFinished }: { onFinished: () => void }) {
     try {
       const res = await fetch(getSystemUrl('/system/redeploy'), {
         method: 'POST',
-        headers: adminHeaders(),
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ skipPull }),
       })
       const data = await res.json()
       if (!res.ok) {
-        setError(
-          res.status === 401
-            ? 'Hibás admin token. A helyes érték a szerver indítási naplójában és a backend/state/admin_token.txt fájlban van.'
-            : data.error || 'Az újratelepítést nem sikerült elindítani.'
-        )
+        setError(data.error || 'Az újratelepítést nem sikerült elindítani.')
         return
       }
       setPolling(true)
@@ -174,43 +166,6 @@ export function RedeployPanel({ onFinished }: { onFinished: () => void }) {
         <p className="mt-0.5 text-xs text-muted-foreground">
           Mindent leállít, frissít gitből, buildeli a backendet, a dashboardot és a hubot, majd
           nulláról indít. A haladás akkor is látszik, amikor a gateway épp nem él.
-        </p>
-      </div>
-
-      {/* Admin token */}
-      <div className="space-y-1.5 rounded-lg border border-border bg-muted/30 p-3">
-        <label className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-          <Lock className="h-3 w-3" />
-          Admin token
-        </label>
-        <div className="flex gap-2">
-          <Input
-            type="password"
-            value={token}
-            onChange={(e) => {
-              setToken(e.target.value)
-              setTokenSaved(false)
-            }}
-            placeholder="a szerver indítási naplójából"
-            className="font-mono text-xs"
-            autoComplete="off"
-          />
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              setAdminToken(token.trim())
-              setTokenSaved(true)
-            }}
-          >
-            {tokenSaved ? <Check className="text-primary" /> : null}
-            {tokenSaved ? 'Mentve' : 'Mentés'}
-          </Button>
-        </div>
-        <p className="text-[11px] leading-relaxed text-muted-foreground">
-          A gateway hálózaton is elérhető, ezért az újratelepítés — ami kódot tölt le és futtat —
-          tokent kér. Az érték a <code className="font-mono">backend/state/admin_token.txt</code>{' '}
-          fájlban van, és a szerver indításkor is kiírja.
         </p>
       </div>
 

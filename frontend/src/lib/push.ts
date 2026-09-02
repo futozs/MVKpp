@@ -137,6 +137,35 @@ export async function registerPushWatch(
   }
 }
 
+/**
+ * "Ne zavarj" időszak mentése a szerveren — ez a bezárt/lezárt telefonra
+ * érkező push-üzeneteket is elnémítja, nem csak a nyitott lap helyi
+ * értesítését. Ha nincs (még) push-feliratkozás, csendben kihagyjuk: a
+ * helyi DND-beállítás (localStorage) a nyitott lapon önmagában is működik.
+ */
+export async function setDnd(
+  dnd: { enabled: boolean; startMin: number; endMin: number },
+): Promise<PushDiagnostic> {
+  const sub = await getSubscription();
+  if (!sub) return { ok: false, reason: "Nincs aktív push-feliratkozás." };
+  try {
+    const res = await fetch(`${API_BASE}/push/dnd`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        subscription: sub.toJSON(),
+        dndEnabled: dnd.enabled,
+        dndStartMin: dnd.startMin,
+        dndEndMin: dnd.endMin,
+      }),
+    });
+    if (!res.ok) return { ok: false, reason: `A szerver elutasította (${res.status}).` };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, reason: (e as Error).message };
+  }
+}
+
 export async function unregisterPushWatch(stopId: string): Promise<void> {
   const sub = await getSubscription();
   if (!sub) return;
