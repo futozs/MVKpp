@@ -25,8 +25,13 @@ if (!API_BASE && typeof window !== "undefined" && import.meta.env.PROD) {
 }
 
 const SESSION_STORAGE = "mvk_account";
-/** Csak ez alatt a névtér alatt élő kulcsokat mentjük/állítjuk vissza — ez maga sosem szerepel a mentésben. */
-const BACKUP_PREFIX = "mvk_";
+/**
+ * Minden localStorage-kulcs utazik a mentésben, KIVÉVE ezt a listát — a
+ * munkamenet-token eszközhöz kötött, azt sosem visznénk a felhőbe. Korábban
+ * ez egy "mvk_" előtag-egyezéshez volt kötve: bármelyik jövőbeli (vagy akár
+ * meglévő, de elgépelt/eltérő névterű) kulcs csendben kimaradt volna a
+ * mentésből — pl. így maradtak le a statisztika fülön mentett kedvencek is.
+ */
 const EXCLUDE_FROM_BACKUP = new Set([SESSION_STORAGE]);
 
 export type Session = { email: string; sessionToken: string };
@@ -226,12 +231,12 @@ export async function getBackupStatus(): Promise<AccountResult<BackupStatus>> {
   }
 }
 
-/** Az app saját localStorage-kulcsainak pillanatképe — ez utazik a felhőbe. */
+/** A teljes localStorage pillanatképe (a kizártak nélkül) — ez utazik a felhőbe. */
 function snapshotLocalData(): Record<string, string> {
   const out: Record<string, string> = {};
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
-    if (!key || !key.startsWith(BACKUP_PREFIX) || EXCLUDE_FROM_BACKUP.has(key)) continue;
+    if (!key || EXCLUDE_FROM_BACKUP.has(key)) continue;
     const value = localStorage.getItem(key);
     if (value != null) out[key] = value;
   }
@@ -276,7 +281,7 @@ export async function pullBackup(): Promise<
     const restored = data.data as Record<string, string>;
     let n = 0;
     for (const [key, value] of Object.entries(restored)) {
-      if (!key.startsWith(BACKUP_PREFIX) || EXCLUDE_FROM_BACKUP.has(key)) continue;
+      if (EXCLUDE_FROM_BACKUP.has(key)) continue;
       try {
         localStorage.setItem(key, value);
         n++;

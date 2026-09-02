@@ -2,17 +2,21 @@ import { useMemo, useState } from "react";
 import {
   ArrowRightLeft,
   Bus,
+  Clock3,
   Footprints,
+  History,
   MapPin,
   TramFront,
   Zap,
 } from "lucide-react";
 import type { RoutePlanLeg, RoutePlanTrip, Stop } from "@/types";
 import { api } from "@/services/api";
-import { statsApi } from "@/services/statsApi";
+import { statsApi, fmtDuration, type SegmentEstimate } from "@/services/statsApi";
 import { ChartFrame } from "@/components/charts/Charts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateField } from "@/components/ui/date-field";
+import { TimeField } from "@/components/ui/time-field";
 import { cn, normalizeSearchText } from "@/lib/utils";
 
 const fmtMin = (sec: number) => {
@@ -163,6 +167,38 @@ function nowLocalInput(): string {
   return d.toISOString().slice(0, 16);
 }
 
+/**
+ * Az MVK route/plan végpontja a departureTime szövegét szó szerint, a saját
+ * (budapesti) idejeként értelmezi — a "Z" (UTC) jelölést figyelmen kívül
+ * hagyja. Ha ide valódi UTC-re konvertált időt küldenénk (pl. nyáron 07:00
+ * helyi idő → 05:00Z), a szerver azt is 05:00-ként, tehát 2 órával korábbi
+ * időpontként venné figyelembe — pontosan ez okozta, hogy egy megadott
+ * 7:00-ás indulás a keresésben 5:00-ként jelent meg. Ezért ide a helyi
+ * óra:perc számjegyeket küldjük, "Z"-vel megjelölve, DE valódi
+ * időzóna-konverzió nélkül.
+ *
+ * A visszakapott itinerárium-időbélyegek (trip.start/end) viszont MÁR
+ * valódi UTC-ben érkeznek — azokat a hm() lent a szokásos Date-konverzióval
+ * jeleníti meg helyesen. A saját statisztika-backendünk (statsApi) szintén
+ * valódi UTC-t vár, ott a sima toISOString() a helyes — ld. toTrueUtcIso().
+ */
+function toMvkDepartureParam(localAt: string): string {
+  const withSeconds = localAt.length <= 16 ? `${localAt}:00` : localAt;
+  return `${withSeconds}Z`;
+}
+
+/** A saját backendünknek (statsApi) szánt, valódi UTC időbélyeg. */
+function toTrueUtcIso(localAt: string): string {
+  return new Date(localAt).toISOString();
+}
+
+const PAST_BUFFER_MS = 3 * 60_000;
+
+/** Múltbeli időpontnál az élő MVK-tervező helyett a mért adatainkból becslünk. */
+function isPastMoment(localAt: string): boolean {
+  return new Date(localAt).getTime() < Date.now() - PAST_BUFFER_MS;
+}
+
 function usePlaces(stops: Stop[]) {
   return useMemo(() => {
     const byName = new Map<string, Stop>();
@@ -259,6 +295,60 @@ function PlaceSelect({
   );
 }
 
+function HistoricCard({ est }: { est: SegmentEstimate }) {
+  const excessS = Math.max(0, est.p50S - est.schedS);
+  return (
+    <div className="rounded-2xl border border-border bg-card p-4">
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="flex items-center gap-1.5 text-sm font-bold">
+          {est.routeShort ? (
+            <span
+              className="flex h-5 min-w-5 items-center justify-center rounded px-1.5 text-[11px] font-bold text-primary-foreground"
+              style={{ background: est.routeColor ? `#${est.routeColor}` : "hsl(var(--primary))" }}
+            >
+              {est.routeShort}
+            </span>
+          ) : null}
+          {est.headsign ? <span className="font-normal text-muted-foreground">{est.headsign}</span> : null}
+        </p>
+        <p className="text-xs text-muted-foreground">~{fmtDuration(est.p50S)}</p>
+      </div>
+
+      <p className="mt-2 text-xs text-muted-foreground">
+        Várható menetidő a mért adatok alapján{" "}
+        <span className="font-semibold text-foreground">{fmtDuration(est.p50S)}</span>
+        {excessS > 30 ? (
+          <>
+            {" "}— menetrend szerint {fmtDuration(est.schedS)}, tehát átlagosan{" "}
+            <span className="text-late">{fmtDuration(excessS)}-cel több</span> kellett.
+          </>
+        ) : (
+          " — nagyjából a menetrend szerint."
+        )}
+      </p>
+
+      {est.legs.length > 1 ? (
+        <ol className="mt-3 space-y-1.5 border-t border-border pt-2.5">
+          {est.legs.map((l, i) => (
+            <li key={i} className="flex items-center justify-between gap-2 text-[11px]">
+              <span className="min-w-0 truncate text-muted-foreground">
+                {l.from} → {l.to}
+              </span>
+              <span className="shrink-0 tabular-nums">{fmtDuration(l.p50S)}</span>
+            </li>
+          ))}
+        </ol>
+      ) : null}
+
+      <p className="mt-2.5 text-[11px] text-muted-foreground">
+        {est.samples > 0
+          ? `${est.samples} mérésből, ${est.confidence} megbízhatóságú becslés${est.scheduleExact ? "" : " (nem az adott napra érvényes menetrend alapján)"}.`
+          : "Nincs mért adat ehhez az időszakhoz, a menetrendi időt mutatjuk."}
+      </p>
+    </div>
+  );
+}
+
 /**
  * Útvonaltervező — helynév alapján (nem megállóazonosító alapján) kérdez rá,
  * melyik járattal, mikor és honnan lehet eljutni A-ból B-be. Az MVK saját,
@@ -277,24 +367,42 @@ export function RoutePlannerView({ stops }: { stops: Stop[] }) {
   const [at, setAt] = useState(nowLocalInput());
   const [trips, setTrips] = useState<RoutePlanTrip[] | null>(null);
   const [delays, setDelays] = useState<Map<string, DelayInfo>>(new Map());
+  const [historic, setHistoric] = useState<SegmentEstimate | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const fromPlace = places.find((s) => s.id === from);
   const toPlace = places.find((s) => s.id === to);
+  const past = isPastMoment(at);
 
   const run = async () => {
     if (!fromPlace || !toPlace) return;
     setLoading(true);
     setError(null);
     setTrips(null);
+    setHistoric(null);
     setDelays(new Map());
     try {
-      const iso = new Date(at).toISOString();
+      // A múltbeli időpontnál az élő MVK-tervező üres/hibás választ ad
+      // (nem tud múltra tervezni) — helyette a saját mért adatainkból
+      // (menetrend + tényleges mért menetidő) becsülünk, hogy pl. arra is
+      // lehessen válaszolni: "tegnap mennyi késéssel értem be a városba".
+      if (past) {
+        try {
+          const est = await statsApi.segment(fromPlace.id, toPlace.id, toTrueUtcIso(at));
+          setHistoric(est);
+        } catch {
+          setError(
+            "Erre az útvonalra nincs történeti adatunk ehhez az időponthoz — ez csak olyan megállópárokra működik, amelyeket egyetlen járat közvetlenül, átszállás nélkül összeköt.",
+          );
+        }
+        return;
+      }
+
       const plan = await api.planRoute(
         { lat: fromPlace.lat, lon: fromPlace.lon },
         { lat: toPlace.lat, lon: toPlace.lon },
-        iso,
+        toMvkDepartureParam(at),
       );
       const transit = plan.trips.filter((t) => t.travelProfile === "TRANSIT");
       setTrips(transit);
@@ -318,7 +426,7 @@ export function RoutePlannerView({ stops }: { stops: Stop[] }) {
       if (uniq.size) {
         const keys = [...uniq.keys()];
         const legs = [...uniq.values()];
-        const delayRes = await statsApi.routeDelays(iso, legs);
+        const delayRes = await statsApi.routeDelays(toTrueUtcIso(at), legs);
         const map = new Map<string, DelayInfo>();
         keys.forEach((k, i) => map.set(k, delayRes.results[i]));
         setDelays(map);
@@ -366,19 +474,27 @@ export function RoutePlannerView({ stops }: { stops: Stop[] }) {
           </div>
 
           <div className="mt-3 flex flex-wrap items-end gap-3">
-            <div className="min-w-48 flex-1 space-y-1.5">
+            <div className="space-y-1.5">
               <label
-                htmlFor="rp-at"
+                htmlFor="rp-at-date"
                 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
               >
                 Mikor
               </label>
-              <Input
-                id="rp-at"
-                type="datetime-local"
-                value={at}
-                onChange={(e) => setAt(e.target.value)}
-              />
+              <div className="flex gap-2">
+                <DateField
+                  id="rp-at-date"
+                  value={at.slice(0, 10)}
+                  onChange={(d) => setAt(`${d}T${at.slice(11, 16)}`)}
+                  aria-label="Útvonaltervezés dátuma"
+                />
+                <TimeField
+                  value={at.slice(11, 16)}
+                  onChange={(t) => setAt(`${at.slice(0, 10)}T${t}`)}
+                  aria-label="Útvonaltervezés időpontja"
+                  className="w-24"
+                />
+              </div>
             </div>
             <Button
               variant="outline"
@@ -389,10 +505,22 @@ export function RoutePlannerView({ stops }: { stops: Stop[] }) {
               <ArrowRightLeft />
             </Button>
             <Button onClick={run} disabled={!fromPlace || !toPlace || loading}>
-              <Zap className={loading ? "animate-pulse" : undefined} />
-              {loading ? "Keresés…" : "Útvonal keresése"}
+              {past ? (
+                <History className={loading ? "animate-pulse" : undefined} />
+              ) : (
+                <Zap className={loading ? "animate-pulse" : undefined} />
+              )}
+              {loading ? "Keresés…" : past ? "Történeti becslés" : "Útvonal keresése"}
             </Button>
           </div>
+
+          {past ? (
+            <p className="mt-3 flex items-start gap-1.5 rounded-lg border border-border bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
+              <Clock3 className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+              Ez az időpont a múltban van — az élő MVK-tervező helyett a saját
+              mért menetidő- és késésadatainkból becslünk.
+            </p>
+          ) : null}
 
           {error ? (
             <p className="mt-3 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
@@ -411,6 +539,15 @@ export function RoutePlannerView({ stops }: { stops: Stop[] }) {
                 <TripCard key={t.logDetailsId} trip={t} delays={delays} />
               ))}
             </div>
+          </ChartFrame>
+        ) : null}
+
+        {historic ? (
+          <ChartFrame
+            title="Történeti becslés"
+            hint={`${fromPlace?.name} → ${toPlace?.name}`}
+          >
+            <HistoricCard est={historic} />
           </ChartFrame>
         ) : null}
       </div>

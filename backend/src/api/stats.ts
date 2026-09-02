@@ -6,6 +6,7 @@ import {
   tripStops,
   activeServices,
   budapestOffsetSec,
+  routes,
 } from "../lib/gtfs.ts";
 import { PROFILE_WINDOW_DAYS } from "../worker/roller.ts";
 
@@ -737,6 +738,8 @@ stats.get("/segment", async (c) => {
     liveRatio && isNow ? Math.max(0.7, Math.min(2.0, liveRatio)) : null;
 
   const samples = minSamples === Infinity ? 0 : minSamples;
+  const viaTrip = trips.get(path.via);
+  const viaRoute = viaTrip ? routes.get(viaTrip.routeId) : undefined;
   const result = {
     from: stops.get(fromId)?.name,
     to: stops.get(toId)?.name,
@@ -744,6 +747,9 @@ stats.get("/segment", async (c) => {
     daytype: cal.daytype,
     school: cal.school === 1,
     via: path.via,
+    routeShort: viaRoute?.short ?? null,
+    routeColor: viaRoute?.color ?? null,
+    headsign: viaTrip?.headsign ?? null,
     scheduleExact,
     stopsBetween: pairs.length,
     schedS: schedTotal,

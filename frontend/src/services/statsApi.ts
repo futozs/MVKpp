@@ -206,6 +206,9 @@ export type SegmentEstimate = {
   daytype: number;
   school: boolean;
   via: string;
+  routeShort: string | null;
+  routeColor: string | null;
+  headsign: string | null;
   scheduleExact: boolean;
   stopsBetween: number;
   schedS: number;

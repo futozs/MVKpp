@@ -4,7 +4,6 @@ import {
   Bell,
   BellRing,
   Bus,
-  CalendarDays,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -25,6 +24,7 @@ import { api } from "@/services/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import { DateField } from "@/components/ui/date-field";
 import { RouteTile } from "@/components/transit/RouteTile";
 import { LiveDot } from "@/components/transit/LiveDot";
 import { HereChip } from "@/components/transit/HereChip";
@@ -110,23 +110,14 @@ function DayPicker({
         <ChevronLeft className="h-3.5 w-3.5" />
       </Button>
 
-      <label className="relative flex min-w-0 flex-1 items-center justify-center">
-        <span className="sr-only">Menetrend napja</span>
-        <CalendarDays
-          aria-hidden
-          className="pointer-events-none mr-1.5 h-3.5 w-3.5 shrink-0 text-primary"
-        />
-        <input
-          type="date"
-          value={value}
-          min={min ?? undefined}
-          max={max ?? undefined}
-          onChange={(e) =>
-            e.target.value && onChange(clampIso(e.target.value, min, max))
-          }
-          className="w-[7.5rem] bg-transparent text-center font-mono text-xs font-semibold tabular-nums text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-        />
-      </label>
+      <DateField
+        value={value}
+        onChange={(next) => onChange(clampIso(next, min, max))}
+        min={min}
+        max={max}
+        aria-label="Menetrend napja"
+        className="h-7 min-w-0 flex-1 justify-center border-none bg-transparent px-1.5 text-xs shadow-none"
+      />
 
       <Button
         variant="ghost"

@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { TimeField } from "@/components/ui/time-field";
 import {
   DEFAULT_THRESHOLD_MIN,
   getAllWatches,
@@ -215,34 +216,34 @@ export function NotificationsModal({ isOpen, onClose }: NotificationsModalProps)
 
             {settings.dnd.enabled ? (
               <div className="flex items-center gap-2">
-                <label className="flex-1 space-y-1 text-[11px] text-muted-foreground">
-                  Ettől
-                  <input
-                    type="time"
+                <div className="flex-1 space-y-1">
+                  <span className="text-[11px] text-muted-foreground">Ettől</span>
+                  <TimeField
                     value={minToTime(settings.dnd.startMin)}
-                    onChange={(e) =>
+                    onChange={(next) =>
                       applyDnd({
                         ...settings,
-                        dnd: { ...settings.dnd, startMin: timeToMin(e.target.value) },
+                        dnd: { ...settings.dnd, startMin: timeToMin(next) },
                       })
                     }
-                    className="block w-full rounded-md border border-border bg-card px-2 py-1.5 font-mono text-sm text-foreground"
+                    aria-label="Ne zavarj kezdete"
+                    className="bg-card"
                   />
-                </label>
-                <label className="flex-1 space-y-1 text-[11px] text-muted-foreground">
-                  Eddig
-                  <input
-                    type="time"
+                </div>
+                <div className="flex-1 space-y-1">
+                  <span className="text-[11px] text-muted-foreground">Eddig</span>
+                  <TimeField
                     value={minToTime(settings.dnd.endMin)}
-                    onChange={(e) =>
+                    onChange={(next) =>
                       applyDnd({
                         ...settings,
-                        dnd: { ...settings.dnd, endMin: timeToMin(e.target.value) },
+                        dnd: { ...settings.dnd, endMin: timeToMin(next) },
                       })
                     }
-                    className="block w-full rounded-md border border-border bg-card px-2 py-1.5 font-mono text-sm text-foreground"
+                    aria-label="Ne zavarj vége"
+                    className="bg-card"
                   />
-                </label>
+                </div>
               </div>
             ) : (
               <p className="text-[11px] text-muted-foreground">
