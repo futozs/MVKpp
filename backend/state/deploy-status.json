@@ -1,8 +1,8 @@
 {
   "running": false,
   "ok": true,
-  "startedAt": "2026-08-30T22:25:35.254Z",
-  "finishedAt": "2026-08-30T22:26:53.959Z",
+  "startedAt": "2026-09-02T04:32:46.824Z",
+  "finishedAt": "2026-09-02T04:32:56.142Z",
   "currentStep": null,
   "error": null,
   "steps": [
@@ -10,29 +10,36 @@
       "id": "stop",
       "label": "Folyamatok leállítása",
       "state": "done",
-      "ms": 1509,
+      "ms": 581,
       "note": null
     },
     {
       "id": "install",
       "label": "Függőségek telepítése",
       "state": "done",
-      "ms": 27179,
+      "ms": 303,
       "note": "4 csomag könyvtár"
+    },
+    {
+      "id": "migrate",
+      "label": "Adatbázis migráció",
+      "state": "done",
+      "ms": 2278,
+      "note": "backend/src/db/migrate.ts lefutott"
     },
     {
       "id": "build",
       "label": "Build (backend, frontend, hub)",
       "state": "done",
-      "ms": 37120,
+      "ms": 4590,
       "note": "backend + frontend + hub"
     },
     {
       "id": "start",
       "label": "Rendszer indítása",
       "state": "done",
-      "ms": 12836,
-      "note": "A gateway válaszol (pid 76825)"
+      "ms": 1526,
+      "note": "A gateway válaszol (pid 44943)"
     }
   ]
 }

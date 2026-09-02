@@ -12,11 +12,12 @@
 import { spawn, execSync } from 'node:child_process'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { existsSync, mkdirSync, appendFileSync, readFileSync, writeFileSync, statSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, appendFileSync, readFileSync, writeFileSync, statSync, rmSync, openSync } from 'node:fs'
 import { createServer, request as httpRequest } from 'node:http'
 import { createReadStream } from 'node:fs'
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
+const SELF = fileURLToPath(import.meta.url)
+const __dirname = dirname(SELF)
 const BACKEND_DIR = join(__dirname, 'backend')
 const FRONTEND_DIR = join(__dirname, 'frontend')
 const HUB_DIR = join(__dirname, 'hub')
@@ -32,6 +33,34 @@ const GATEWAY_PATHS = [
 
 // Check if --prod flag is passed
 const PROD_MODE = process.argv.includes('--prod')
+
+/**
+ * Éles módban ez a szkript magát a háttérbe teszi, mielőtt bármi mást
+ * csinálna. Enélkül a terminál, amiben valaki a `bun run start`-ot elindítja,
+ * a manager ELŐTÉR-folyamata marad — és egy későbbi újratelepítés (ami ezt a
+ * példányt megöli, hogy helyet adjon az újnak) pont EZT a terminált szakítja
+ * meg, akkor is, ha az illető már rég nem is arra a terminálra figyel.
+ *
+ * A redeploy.mjs a saját maga indította gyereknek eleve beállítja ezt a
+ * jelzőt (MVK_DAEMON=1), így ott nem fut le még egyszer ez az újraindulás —
+ * csak a kézzel, terminálból indított eset (bun run start) éri el ezt az ágat.
+ */
+const DAEMON_ENV = 'MVK_DAEMON'
+if (PROD_MODE && process.env[DAEMON_ENV] !== '1') {
+  mkdirSync(LOGS_DIR, { recursive: true })
+  const outFd = openSync(join(LOGS_DIR, 'manager.log'), 'a')
+  const child = spawn(process.execPath, [SELF, ...process.argv.slice(2)], {
+    cwd: __dirname,
+    detached: true,
+    stdio: ['ignore', outFd, outFd],
+    env: { ...process.env, [DAEMON_ENV]: '1' },
+  })
+  child.unref()
+  console.log(`\n\x1b[38;2;61;220;132m\x1b[1m>> A rendszer elindult a háttérben (pid ${child.pid}).\x1b[0m`)
+  console.log(`   Élő napló: tail -f logs/manager.log`)
+  console.log(`   Ez a terminál mostantól szabadon használható — egy újratelepítés nem szakítja meg.\n`)
+  process.exit(0)
+}
 
 mkdirSync(LOGS_DIR, { recursive: true })
 mkdirSync(STATE_DIR, { recursive: true })

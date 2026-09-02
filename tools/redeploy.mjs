@@ -252,7 +252,10 @@ async function startManager() {
     cwd: ROOT,
     detached: true,
     stdio: ['ignore', outFd, outFd],
-    env: { ...process.env },
+    // MVK_DAEMON=1: mi magunk már detached+unref módon indítjuk, a manager
+    // saját magát-háttérbe-tevő logikájára itt nincs szükség (az csak a
+    // kézzel, terminálból indított `bun run start` esetén kell).
+    env: { ...process.env, MVK_DAEMON: '1' },
   })
   child.unref()
   log(`manager elindítva (pid ${child.pid}, --prod)`)
