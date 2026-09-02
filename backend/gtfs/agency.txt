@@ -1,2 +1,0 @@
-﻿agency_id,agency_name,agency_url,agency_timezone,agency_phone,agency_lang,agency_fare_url,agency_email
-MVK,MVK Zrt.,https://mvkzrt.hu/,Europe/Budapest,+3646504 810,hu ,https://mvkzrt.hu/jegyek-es-berletek/jegy-es-berletarak,ugyfelszolgalat@mvkzrt.hu
