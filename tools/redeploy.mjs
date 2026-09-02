@@ -35,6 +35,7 @@ const STEPS = [
   { id: 'stop', label: 'Folyamatok leállítása' },
   ...(SKIP_PULL ? [] : [{ id: 'pull', label: 'Frissítés gitből' }]),
   { id: 'install', label: 'Függőségek telepítése' },
+  { id: 'migrate', label: 'Adatbázis migráció' },
   { id: 'build', label: 'Build (backend, frontend, hub)' },
   { id: 'start', label: 'Rendszer indítása' },
 ]
@@ -199,49 +200,62 @@ async function gitPull() {
 }
 
 // ── 3. függőségek ───────────────────────────────────────────────────────
+// A projekt bunra épül (lásd a gyökér package.json "bun run" szkriptjeit),
+// ezért itt is bunnal telepítünk — ugyanaz a csomagkezelő, mint a kézi
+// `bun run start` esetén, így a lockfile és a node_modules nem csúszik szét.
 async function installDeps() {
   const dirs = ['.', 'backend', 'frontend', 'hub'].filter((d) =>
     existsSync(join(ROOT, d, 'package.json'))
   )
   for (const d of dirs) {
-    const r = await run('npm', ['install', '--no-audit', '--no-fund'], join(ROOT, d))
-    if (r.code !== 0) throw new Error(`npm install hiba: ${d}`)
+    const r = await run('bun', ['install'], join(ROOT, d))
+    if (r.code !== 0) throw new Error(`bun install hiba: ${d}`)
   }
   return `${dirs.length} csomag könyvtár`
 }
 
-// ── 4. build ────────────────────────────────────────────────────────────
+// ── 4. adatbázis migráció ───────────────────────────────────────────────
+// Ugyanaz a lépés, amit a gyökér `bun run start` is elvégez (bun run migrate
+// → cd backend && bun run db:migrate), hogy az újratelepítés utáni séma
+// tényleg naprakész legyen, nem csak a kód.
+async function migrateDb() {
+  const r = await run('bun', ['run', 'migrate'], ROOT)
+  if (r.code !== 0) throw new Error('A db migráció nem sikerült — a részletek a naplóban.')
+  return 'backend/src/db/migrate.ts lefutott'
+}
+
+// ── 5. build ────────────────────────────────────────────────────────────
 async function buildAll() {
-  const targets = [
-    ['backend', 'backend'],
-    ['frontend', 'frontend'],
-    ['hub', 'hub'],
-  ]
-  for (const [label, dir] of targets) {
-    if (!existsSync(join(ROOT, dir, 'package.json'))) continue
-    const r = await run('npm', ['run', 'build'], join(ROOT, dir))
-    if (r.code !== 0) {
-      // Itt szándékosan megállunk: hibás buildet nem indítunk el. A régi
-      // rendszer ilyenkor sajnos már le van állítva, ezért a hibát a hub
-      // felületén jól láthatóan meg kell mutatni.
-      throw new Error(`A(z) ${label} build megbukott — a fordítási hibák a naplóban.`)
-    }
+  // Egyetlen bun szkript, ugyanaz, amit a gyökér `bun run start` is hív
+  // (build:frontend + build:hub + build:backend) — így a build sorrendje és
+  // eredménye nem térhet el attól, mintha valaki kézzel futtatná.
+  const r = await run('bun', ['run', 'build'], ROOT)
+  if (r.code !== 0) {
+    // Itt szándékosan megállunk: hibás buildet nem indítunk el. A régi
+    // rendszer ilyenkor sajnos már le van állítva, ezért a hibát a hub
+    // felületén jól láthatóan meg kell mutatni.
+    throw new Error('A build megbukott — a fordítási hibák a naplóban.')
   }
   return 'backend + frontend + hub'
 }
 
-// ── 5. indítás ──────────────────────────────────────────────────────────
+// ── 6. indítás ──────────────────────────────────────────────────────────
 async function startManager() {
   const { openSync } = await import('node:fs')
   const outFd = openSync(join(LOGS, 'manager.log'), 'a')
-  const child = spawn('node', ['manager.mjs'], {
+  // A "--prod" flag itt nem elhagyható: enélkül a manager dev módra esik
+  // vissza, és a már megépített dist helyett újra Vite dev szervereket (npx
+  // vite) indítana a háttérben — ez okozta a redeploy utáni "random
+  // folyamatot". A gyökér `bun run start` is ugyanígy hívja: node manager.mjs
+  // -- --prod.
+  const child = spawn('node', ['manager.mjs', '--prod'], {
     cwd: ROOT,
     detached: true,
     stdio: ['ignore', outFd, outFd],
     env: { ...process.env },
   })
   child.unref()
-  log(`manager elindítva (pid ${child.pid})`)
+  log(`manager elindítva (pid ${child.pid}, --prod)`)
 
   // Megvárjuk, amíg a gateway tényleg válaszol — a „elindítottam" önmagában
   // nem bizonyíték arra, hogy fel is jött.
@@ -281,6 +295,7 @@ async function main() {
     stop: stopEverything,
     pull: gitPull,
     install: installDeps,
+    migrate: migrateDb,
     build: buildAll,
     start: startManager,
   }
@@ -308,7 +323,7 @@ async function main() {
 
     // Bukott build után a rendszer le van állítva. Megpróbáljuk a MEGLÉVŐ
     // (régi) kóddal visszahozni, hogy ne maradjon halott a szerver.
-    if (status.currentStep === 'build' || status.currentStep === 'install') {
+    if (['install', 'migrate', 'build'].includes(status.currentStep)) {
       log('helyreállítási kísérlet: indítás a jelenlegi kóddal…')
       try {
         const note = await startManager()
@@ -316,7 +331,7 @@ async function main() {
         status.error += ' A rendszer a korábbi kóddal visszaindult.'
       } catch (e2) {
         log(`✗ a helyreállítás sem sikerült: ${e2.message}`)
-        status.error += ' A rendszert kézzel kell elindítani: npm start'
+        status.error += ' A rendszert kézzel kell elindítani: bun run start'
       }
     }
   } finally {
