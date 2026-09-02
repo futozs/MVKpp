@@ -3,12 +3,9 @@ import { withHungarianSuffix } from "@/lib/utils";
 
 const STORAGE_KEY = "mvk_notify_watches";
 export const DEFAULT_THRESHOLD_MIN = 5;
-/** Ennél nagyobb eltérésnél már érdemes külön megemlíteni a késést/sietést. */
 const DELAY_MENTION_THRESHOLD_S = 60;
-/** Ismétlődő figyelésnél ennyi perc eltérést engedünk a célzott óra:perctől. */
 const RECURRING_WINDOW_MIN = 4;
 
-/** Kör alakú (0-1439) percek közti legkisebb távolság — az éjfél átlépését is helyesen kezeli. */
 function minuteDistance(a: number, b: number): number {
   const d = Math.abs(a - b);
   return Math.min(d, 1440 - d);
@@ -24,27 +21,11 @@ export type NotifyWatch = {
   stopId: string;
   stopName: string;
   thresholdMin: number;
-  /** Ha üres/hiányzik, bármelyik vonal jó; ha van benne elem, csak ezekre a járatszámokra szól. */
   routeShorts?: string[];
-  /**
-   * Ha megadott, csak ez a pontos menetrendi menet vált ki riasztást (a
-   * menetrend fülről beállítva) — felülírja a routeShorts szűrést, mert
-   * egyértelműen csak arra AZ EGY indulásra kell szólni.
-   */
   tripId?: string;
-  /** A figyelt megálló a menet KIINDULÓ megállója-e (szövegezéshez: "indul" vs "ér ide"). */
   isDeparture?: boolean;
-  /** "Ismétlődő" figyelés: menetrendi óra:perc (0-1439) a tripId helyett — minden napra szól. */
   schedMin?: number;
-  /** A legutóbb riasztott menetek tripId-jei — védenek az ismételt riasztás ellen. */
   lastNotifiedTripIds?: string[];
-  /**
-   * Sikerült-e a szerveren is regisztrálni ezt a figyelést push-ra. Ha igen,
-   * a helyi (nyitott lapos) Notification API NEM dob saját értesítést —
-   * különben ugyanarra a buszra két értesítés jönne (egy helyi, egy push),
-   * amíg a lap nyitva van. Csak akkor esünk vissza a helyi útra, ha a push
-   * regisztráció nem sikerült.
-   */
   pushRegistered?: boolean;
 };
 
@@ -78,7 +59,6 @@ function writeAll(watches: Record<string, NotifyWatch>): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(watches));
   } catch {
-    // localStorage megtelt vagy tiltott — a figyelmeztetés csendben elmarad.
   }
 }
 
@@ -86,7 +66,6 @@ export function getWatch(stopId: string): NotifyWatch | null {
   return readAll()[stopId] ?? null;
 }
 
-/** Az összes beállított figyelés — az értesítések oldal kezelőfelületéhez. */
 export function getAllWatches(): NotifyWatch[] {
   return Object.values(readAll());
 }
@@ -97,16 +76,13 @@ export function removeWatch(stopId: string): void {
   writeAll(all);
 }
 
-// ── Globális értesítési beállítások (fő kapcsoló + "ne zavarj") ──────────
 
 const SETTINGS_KEY = "mvk_notify_settings";
 
 export type NotificationSettings = {
-  /** Fő kapcsoló — kikapcsolva semmilyen (helyi) értesítés nem jelenik meg. */
   enabled: boolean;
   dnd: {
     enabled: boolean;
-    /** Éjfél óta eltelt percek (0-1439). */
     startMin: number;
     endMin: number;
   };
@@ -135,11 +111,9 @@ export function setNotificationSettings(settings: NotificationSettings): void {
   try {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   } catch {
-    /* localStorage megtelt vagy tiltott */
   }
 }
 
-/** Éjfélen átnyúló ablakot is helyesen kezel (pl. 22:00–07:00). */
 export function isWithinDnd(
   dnd: NotificationSettings["dnd"],
   now: Date = new Date(),
@@ -182,18 +156,6 @@ export function setPushRegistered(stopId: string, ok: boolean): void {
 }
 
 
-/**
- * A StopCard minden sikeres lekérés után meghívja. Ha az adott megállóra van
- * beállított figyelés, megnézi, mely érkezések esnek a küszöbidőn belülre
- * (a beállított járatszámra szűkítve, ha van ilyen megadva), és HA VAN ÚJ
- * (még nem riasztott) találat, egyetlen rövid értesítést dob — a járat-
- * számokkal és a megállóval, iránymegjelölés nélkül. Egy adott menet
- * (tripId) csak egyszer vált ki riasztást, amíg be nem érkezik.
- *
- * Figyelem: ez a bejelentkezés csak addig működik, amíg az oldal/lap nyitva
- * (vagy háttérben fut a böngészőben) — teljesen bezárt alkalmazásból nem jön
- * push-értesítés, mert ehhez saját push-szerver infrastruktúra kellene.
- */
 export function checkAndNotify(
   stopId: string,
   stopName: string,
@@ -204,8 +166,6 @@ export function checkAndNotify(
   if (!settings.enabled || isWithinDnd(settings.dnd)) return;
   const watch = getWatch(stopId);
   if (!watch) return;
-  // Ha a push-regisztráció sikerült, a szerver saját maga küld értesítést —
-  // ha itt is dobnánk egyet, amíg a lap nyitva van, duplán jönne.
   if (watch.pushRegistered) return;
 
   const nowMin = (() => {
@@ -253,13 +213,9 @@ export function checkAndNotify(
         icon: "/icon-192.png",
       });
     } catch {
-      // Néhány böngésző (pl. háttérben lévő mobil tab) eldobhatja — nem kritikus.
     }
   }
 
-  // A jelenlegi küszöbön belüli menetek listája lesz az új "riasztott" halmaz —
-  // ha egy busz kikerül innen (megérkezett), a helyére kerülő új menet ismét
-  // kiválthat riasztást.
   updateNotifiedTripIds(
     stopId,
     matches.map((a) => a.tripId),

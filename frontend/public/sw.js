@@ -7,10 +7,6 @@ const SHELL_ASSETS = [
   "/icon-512.png",
 ];
 
-// Térképcsempe-gyorsítótár: ha egyszer, pl. otthoni wifin betöltődött egy
-// csempe, onnantól mobilneten is azonnal jön a tárolóból — nem kell újra
-// letölteni. A csempék gyakorlatilag sosem változnak, ezért "cache-first"
-// stratégia jár: ha van a tárolóban, azt adjuk vissza, hálózat nélkül.
 const TILE_CACHE = "mvk-tiles-v1";
 const TILE_HOSTS = [
   "tile.openstreetmap.org",
@@ -24,7 +20,6 @@ function isTileRequest(url) {
   return TILE_HOSTS.some((h) => host === h || host.endsWith(`.${h}`));
 }
 
-/** Durva sapka a csempetárolón — enélkül egy hosszabb böngészés után korlátlanul nőne. */
 async function trimTileCache() {
   const cache = await caches.open(TILE_CACHE);
   const keys = await cache.keys();
@@ -81,13 +76,8 @@ self.addEventListener("fetch", (event) => {
         const cached = await cache.match(request);
         if (cached) return cached;
         const res = await fetch(request);
-        // A Leaflet nem kér CORS-t a csempékhez, ezért a válasz "opaque"
-        // (státusz 0, res.ok mindig hamis) — de attól még érvényes kép, és a
-        // Cache API el is tudja tárolni, csak a tartalmát nem olvashatjuk ki.
-        if (res.ok || res.type === "opaque") {
+        if (res.ok) {
           await cache.put(request, res.clone());
-          // Ritkán (nem minden csempénél) ellenőrizzük a sapkát — a teljes
-          // tároló kilistázása minden egyes csempénél felesleges terhelés lenne.
           if (Math.random() < 0.05) event.waitUntil(trimTileCache());
         }
         return res;
@@ -120,10 +110,6 @@ self.addEventListener("fetch", (event) => {
   );
 });
 
-// Web Push: a szerver a felhasználó telefonjának lezárt állapotában is ide
-// tud üzenetet küldeni (az OS a saját push-szolgáltatásán ébreszti fel ezt a
-// workert) — ez a különbség a lapon belüli Notification API-hoz képest,
-// ami csak addig működik, amíg az oldal ténylegesen fut.
 self.addEventListener("push", (event) => {
   let data = {};
   try {

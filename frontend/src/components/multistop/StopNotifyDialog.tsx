@@ -92,10 +92,6 @@ export function StopNotifyDialog({
     onChanged?.(true);
 
     // Ez teszi lehetővé, hogy lezárt telefonon/bezárt lapnál is jöjjön
-    // értesítés — a szerver saját maga figyeli az érkezéseket és push-t
-    // küld. A dialógus szándékosan NEM zárul be azonnal, hogy lásd, sikerült-e
-    // ez a szerver-oldali regisztráció (a helyi, nyitott lapos figyelés
-    // ettől függetlenül mindig működik).
     const result = await registerPushWatch({
       stopId,
       stopName,

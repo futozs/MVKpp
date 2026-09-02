@@ -3,9 +3,7 @@ import { pushConfigured, sendPush } from "./push.ts";
 import { withHungarianSuffix } from "./huSuffix.ts";
 
 const CHECK_INTERVAL_MS = Number(process.env.PUSH_CHECK_INTERVAL_MS ?? 3_000);
-/** Ennél nagyobb eltérésnél már érdemes külön megemlíteni a késést/sietést. */
 const DELAY_MENTION_THRESHOLD_S = 60;
-/** Ismétlődő figyelésnél ennyi perc eltérést engedünk a célzott óra:perctől. */
 const RECURRING_WINDOW_MIN = 4;
 
 type MinimalArrival = {
@@ -40,7 +38,6 @@ type WatchRow = {
   dnd_end_min: number | null;
 };
 
-/** Éjfélen átnyúló ablakot is helyesen kezel (pl. 22:00–07:00). */
 function isWithinDnd(
   startMin: number | null,
   endMin: number | null,
@@ -57,19 +54,11 @@ function delaySuffix(delaySec: number | null): string {
   return delaySec > 0 ? ` (${min} perc késés)` : ` (${min} perccel korábban)`;
 }
 
-/** Kör alakú (0-1439) percek közti legkisebb távolság — az éjfél átlépését is helyesen kezeli. */
 function minuteDistance(a: number, b: number): number {
   const d = Math.abs(a - b);
   return Math.min(d, 1440 - d);
 }
 
-/**
- * A menetrend fülről beállított figyeléseknél (van trip_id) ellenőrizzük,
- * nem húzta-e ki az MVK az adott menetet — ha igen, ezt magát is érdemes
- * jelezni, különben a felhasználó feleslegesen várna egy sosem érkező buszra.
- * Ismétlődő (sched_min) figyeléseknél ez nem alkalmazható (nincs egyetlen
- * fix tripId) — azoknál a lenti fő szűrés dobja csendben a kihúzott menetet.
- */
 async function checkCancelledWatches(
   stopWatches: WatchRow[],
   cancelled: Set<string>,
@@ -83,8 +72,6 @@ async function checkCancelledWatches(
       handled.add(w.watch_id);
       continue;
     }
-    // "Ne zavarj" alatt nem küldünk — a lenti sor NEM íródik last_notified-ba,
-    // tehát a következő körben (akár DND után) újra megpróbáljuk.
     if (isWithinDnd(w.dnd_start_min, w.dnd_end_min, nowMin)) {
       handled.add(w.watch_id);
       continue;
@@ -108,13 +95,6 @@ async function checkCancelledWatches(
   return handled;
 }
 
-/**
- * Egyetlen ellenőrző kör: minden bejegyzett push-figyelést összevet a friss
- * érkezésekkel, és ha van új (még nem riasztott) találat, push-t küld. Zárt
- * telefonon/bezárt lapnál is működik, mert a böngésző push-szolgáltatása
- * ébreszti fel a service workert — ez a lényegi különbség a helyi (nyitott
- * lapos) Notification API-hoz képest.
- */
 async function checkOnce(
   arrivalsForStop: ArrivalsForStop,
   cancelledTripIds: CancelledTripIds,
@@ -158,25 +138,12 @@ async function checkOnce(
     } catch {
       continue;
     }
-    // A törölt meneteket a fő szűrésből is kizárjuk — ismétlődő figyelésnél
-    // (nincs egyetlen fix tripId) ez az egyetlen módja, hogy ne riasszunk
-    // egy adott napon kihúzott menetre.
     arrivals = arrivals.filter((a) => !cancelled.has(a.tripId));
 
     for (const w of stopWatches) {
       if (cancelledHandled.has(w.watch_id)) continue;
-      // "Ne zavarj" alatt szándékosan nem frissítjük a last_notified-ot, hogy
-      // a busz — ha még a küszöbön belül van — DND után újra megjelölhető
-      // legyen.
       if (isWithinDnd(w.dnd_start_min, w.dnd_end_min, nowMin)) continue;
 
-      // Három szűrési mód, egymást kizárva:
-      //  1) sched_min megadva: "ismétlődő" — route + menetrendi óra:perc
-      //     közelség alapján, mert a GTFS naponta más tripId-t ad ugyanarra
-      //     a mintára.
-      //  2) trip_id megadva: pontosan EZ az egy menet (menetrend fülről,
-      //     egyszeri kiválasztás).
-      //  3) egyik sem: a megállófigyelős, route_shorts alapú szűrés.
       const routeFilter = w.route_shorts ? w.route_shorts.split(",") : null;
       const matches = arrivals.filter((a) => {
         if (w.sched_min != null) {
@@ -204,8 +171,6 @@ async function checkOnce(
             : `${withHungarianSuffix(a.route)} busz`;
         const title = fresh.length > 1 ? fresh.map(label).join(", ") : label(fresh[0]);
         const delayNote = fresh.length === 1 ? delaySuffix(fresh[0].delaySec) : "";
-        // Menetrend-alapú (pontos vagy ismétlődő) figyelésnél a kiindulási
-        // megállónál "indul", egy útközbeni megállónál "ér ide" a helyes ige.
         const isSchedulePinned = w.trip_id != null || w.sched_min != null;
         const body = isSchedulePinned
           ? `kb. ${minEta} percen belül ${w.is_departure ? "indul" : "ér ide"}${delayNote} — ${w.stop_name} (${w.stop_id})`
@@ -229,12 +194,6 @@ async function checkOnce(
   }
 }
 
-/**
- * Induláskor egyszer lefutó önteszt — pontosan azért, hogy a log alapján
- * egyértelmű legyen, hol akad el a lánc, anélkül hogy valós buszra kellene
- * várni. Ha ez a blokk nem "MINDEN RENDBEN"-nel zár, onnantól tudjuk, melyik
- * lépésnél van a hiba (VAPID, DB-tábla, vagy egyszerűen nincs feliratkozás).
- */
 async function selfTest(): Promise<void> {
   console.log("[push] ── önteszt ──");
   console.log(`[push] VAPID: ${pushConfigured ? "beállítva" : "HIÁNYZIK"}`);
@@ -272,7 +231,7 @@ export function startPushLoop(
   nowSecOfDay: NowSecOfDay,
 ): void {
   selfTest().catch((e) => console.log("[push] önteszt hiba:", (e as Error).message));
-  if (!pushConfigured) return; // a self-test már logolta, miért nem indul
+  if (!pushConfigured) return;
   console.log(`[push] hurok elindult (${CHECK_INTERVAL_MS / 1000} mp-enként)`);
   setInterval(() => {
     checkOnce(arrivalsForStop, cancelledTripIds, nowSecOfDay).catch((e) =>

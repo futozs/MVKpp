@@ -140,10 +140,6 @@ stats.get("/vehicle/:id/routes", async (c) => {
 
 const PREDICT_MONTHS = 6;
 
-// Élő, "on-demand" jóslat: nem tárolt előrejelzés, hanem a lekérdezés
-// pillanatában számolt statisztikai becslés (nem valódi gépi tanulás) a
-// jármű korábbi hónapjainak agg_vehicle_route futásgyakorisága alapján —
-// melyik vonalra a legvalószínűbb, hogy legközelebb beosztják.
 stats.get("/vehicle/:id/predict-route", async (c) => {
   const id = c.req.param("id");
   const now = new Date();
@@ -188,9 +184,6 @@ stats.get("/vehicle/:id/predict-route", async (c) => {
   return c.json({ vehicleId: id, samples: total, candidates });
 });
 
-// Az előre naplózott jóslatok (lásd routePrediction.ts) utólagos pontossága:
-// hányszor volt igaza a korábbi hónapok gyakorisága alapján épített
-// becslésnek a ténylegesen kiadott menethez képest.
 stats.get("/predictions/accuracy", async (c) => {
   const to = c.req.query("to") ?? defToday();
   const from =
@@ -476,13 +469,8 @@ function findPath(
 }
 
 const LIVE_FALLBACK_MIN_N = 3;
-const LIVE_FALLBACK_BUCKET_RADIUS = 8; // ±8 × 15 perc = ±2 óra
+const LIVE_FALLBACK_BUCKET_RADIUS = 8;
 
-/**
- * Ha egy szakaszhoz még nincs éjszakai rollup-profilja (agg_segment_profile),
- * a nyers mérésekből (segment_run) számolunk azonnal — így friss, alig
- * néhány órás gyűjtés is használható, nem kell megvárni a hajnali job-ot.
- */
 async function liveSegmentPercentiles(
   segKey: number,
   daytype: number,
@@ -659,9 +647,6 @@ stats.get("/segment", async (c) => {
     source: string;
   }[] = [];
 
-  // Láncolt szakaszok: a következő szakasz indulási időpontja (és így a
-  // időablaka) a megelőző szakaszok tényleges idejétől függ, ezért ez
-  // sorban fut, nem párhuzamosan.
   for (const p of pairs) {
     const bucket = Math.floor(
       ((((startLocal + cursor) % 86400) + 86400) % 86400) / 900,
@@ -799,6 +784,113 @@ stats.get("/segment", async (c) => {
   }
 
   return c.json(result);
+});
+
+const ROUTE_DELAY_MIN_N = 3;
+
+async function routeStopDelay(
+  routeShort: string,
+  stopId: string,
+  atUnix: number,
+): Promise<{ avgDelaySec: number | null; samples: number }> {
+  const [route] = await query<{ route_key: number }>(
+    `SELECT route_key FROM dim_route WHERE route_short = ?`,
+    [routeShort],
+  );
+  if (!route) return { avgDelaySec: null, samples: 0 };
+
+  const stripped = stopId.replace(/^\d+:/, "");
+  const stopIds = stripped === stopId ? [stopId] : [stopId, stripped];
+  const [stop] = await query<{ stop_key: number }>(
+    `SELECT stop_key FROM dim_stop WHERE gtfs_stop_id IN (${stopIds.map(() => "?").join(",")}) LIMIT 1`,
+    stopIds,
+  );
+  if (!stop) return { avgDelaySec: null, samples: 0 };
+
+  const date = iso(new Date(atUnix * 1000));
+  const [cal] = await query<{ daytype: number; school: number }>(
+    `SELECT daytype, school FROM dim_calendar WHERE service_date = ?`,
+    [date],
+  );
+  const startLocal = atUnix + budapestOffsetSec(new Date(atUnix * 1000));
+  const secOfDay = ((startLocal % 86400) + 86400) % 86400;
+
+  type Row = { avg_delay: number | null; n: number };
+  const runQuery = async (
+    windowS: number | null,
+    matchDaytype: boolean,
+    matchSchool: boolean,
+  ): Promise<Row | undefined> => {
+    const conds = ["se.route_key = ?", "se.stop_key = ?", "se.delay_s IS NOT NULL"];
+    const params: (string | number)[] = [route.route_key, stop.stop_key];
+    if (matchDaytype || matchSchool) {
+      conds.push("c.service_date = se.service_date");
+    }
+    if (matchDaytype) {
+      conds.push("c.daytype = ?");
+      params.push(cal?.daytype ?? 0);
+    }
+    if (matchSchool) {
+      conds.push("c.school = ?");
+      params.push(cal?.school ?? 1);
+    }
+    if (windowS != null) {
+      conds.push("ABS(se.sched_s - ?) <= ?");
+      params.push(secOfDay, windowS);
+    }
+    const join = matchDaytype || matchSchool ? "JOIN dim_calendar c ON c.service_date = se.service_date" : "";
+    const [row] = await query<Row>(
+      `SELECT AVG(se.delay_s) AS avg_delay, COUNT(*) AS n
+         FROM stop_event se ${join}
+        WHERE ${conds.join(" AND ")}`,
+      params,
+    );
+    return row;
+  };
+
+  const attempts: [number | null, boolean, boolean][] = [
+    [3600, true, true],
+    [7200, true, true],
+    [3600, true, false],
+    [7200, false, false],
+    [null, false, false],
+  ];
+
+  let best: Row | undefined;
+  for (const [windowS, matchDaytype, matchSchool] of attempts) {
+    const row = await runQuery(windowS, matchDaytype, matchSchool);
+    if (row && row.n > (best?.n ?? 0)) best = row;
+    if (best && best.n >= ROUTE_DELAY_MIN_N) break;
+  }
+
+  if (!best || !best.n) return { avgDelaySec: null, samples: 0 };
+  return { avgDelaySec: Math.round(best.avg_delay ?? 0), samples: best.n };
+}
+
+stats.post("/route-delays", async (c) => {
+  const body = await c.req
+    .json<{ at?: string; legs?: { routeShort?: string; stopId?: string }[] }>()
+    .catch(() => null);
+  const atUnix = body?.at
+    ? Math.floor(Date.parse(body.at) / 1000)
+    : Math.floor(Date.now() / 1000);
+  const legs = body?.legs ?? [];
+  if (!Number.isFinite(atUnix) || !Array.isArray(legs) || !legs.length) {
+    return c.json({ error: "hiányzó ?at= vagy legs[]" }, 400);
+  }
+  if (legs.length > 20) {
+    return c.json({ error: "legfeljebb 20 leg egyszerre" }, 400);
+  }
+
+  const results = await Promise.all(
+    legs.map((l) =>
+      l.routeShort && l.stopId
+        ? routeStopDelay(l.routeShort, l.stopId, atUnix)
+        : Promise.resolve({ avgDelaySec: null, samples: 0 }),
+    ),
+  );
+
+  return c.json({ results });
 });
 
 stats.get("/network/slow", async (c) => {

@@ -231,14 +231,6 @@ async function detectStuck(pool: Pool, date: string): Promise<IncidentRow[]> {
     const dur = to.feed_ts - from.feed_ts;
     if (dur < STUCK_MIN * 60) continue;
 
-    // Adatkiesés-jel: ha a "megállás" teljes időtartama alatt a pozíció
-    // bit-pontosan ugyanaz maradt minden egyes pingen, az nem valós helyben
-    // állás — egy ténylegesen álló/araszoló jármű GPS-je ennyi idő alatt
-    // szinte biztosan mutatna néhány méteres jitter-t vagy apró elmozdulást.
-    // Az azonos, ismétlődő koordináta jellemzően azt jelzi, hogy a jármű
-    // nem küldött friss adatot (pl. térerő hiánya hegyvidéki szakaszon), és
-    // a feed csak az utolsó ismert pozíciót ismételte — ezt nem szabad
-    // torlódásként/helyben állásként feltüntetni.
     const distinctPositions = new Set(
       seq.map((p) => `${p.lat_e7},${p.lon_e7}`),
     ).size;

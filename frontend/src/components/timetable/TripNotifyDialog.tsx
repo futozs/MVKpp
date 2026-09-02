@@ -25,14 +25,11 @@ import { registerPushWatch, unregisterPushWatch } from "@/lib/push";
 type TripNotifyDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** A kiválasztott megálló, amelyre a figyelés szól — indulási VAGY útközbeni is lehet. */
   stopId: string;
   stopName: string;
   tripId: string;
   routeShort: string;
-  /** Igaz, ha a kiválasztott megálló a menet kiinduló megállója (szövegezéshez). */
   isDeparture: boolean;
-  /** A menet indulási ideje (vagy a kiválasztott megálló ideje), "HH:MM" formában. */
   departureLabel: string;
 };
 
@@ -82,8 +79,6 @@ export function TripNotifyDialog({
   useEffect(() => {
     if (!open) return;
     const w = getWatch(stopId);
-    // Egy megállóhoz csak egy figyelés tartozhat — ha van bármilyen aktív
-    // figyelés ezen a megállón, az a jelenlegi állapot, amit mutatunk.
     setExisted(Boolean(w));
     setThreshold(w?.thresholdMin ?? DEFAULT_THRESHOLD_MIN);
     setRecurring(w?.schedMin != null);
@@ -104,21 +99,12 @@ export function TripNotifyDialog({
       stopName,
       thresholdMin,
       isDeparture,
-      // Ismétlődő módban a GTFS naponta más tripId-t ad ugyanarra a
-      // menetrendi mintára, ezért ilyenkor nem a tripId-t, hanem a
-      // járatszám + óra:perc kombinációt figyeljük — minden napra szól,
-      // amikor ez a járat ténylegesen közlekedik.
       tripId: recurring ? undefined : tripId,
       routeShorts: recurring ? [routeShort] : undefined,
       schedMin,
     };
     setWatch(stopId, config);
 
-    // Ugyanaz a szerver oldali push-lánc szolgálja ki, mint a megállófigyelő
-    // értesítéseit. Mivel egy megállóhoz csak EGY figyelés tartozhat, ha
-    // ugyanerre a megállóra már van egy sima (megállófigyelős) riasztás, ez
-    // felülírja azt — nem kaphatsz emiatt két külön értesítést ugyanarra a
-    // buszra.
     const result = await registerPushWatch(config);
     setPushRegistered(stopId, result.ok);
     setPushStatus(

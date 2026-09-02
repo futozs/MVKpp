@@ -39,9 +39,6 @@ const LOG_LABELS: Record<LogSource, string> = {
   redeploy: "Újratelepítés",
 };
 
-// A rendszerhub kizárólag helyi hálózaton fut, nincs internetre kitéve —
-// ezért az üzemeltetési végpontok (naplók, újratelepítés) nem kérnek admin
-// tokent. Ha valaha internetre kerülne, ezt előbb pótolni kell.
 export const ops = new Hono();
 
 ops.get("/auth-status", (c) => c.json({ required: false }));
@@ -120,12 +117,6 @@ ops.get("/logs/:source", (c) => {
 });
 
 ops.post("/redeploy", async (c) => {
-  // A backendet a manager.mjs fork()-olja, ezért van IPC-csatornája
-  // (process.send) a szülő felé. Az újratelepítés a manager saját
-  // folyamatán BELÜL fut le (lásd manager.mjs performRedeploy) — a manager
-  // sosem lép ki eközben, így az a terminál, amiben a rendszer fut, nem
-  // szakad meg. Ha valaki a backendet a manageren kívül futtatja (pl. `cd
-  // backend && bun run dev`), nincs ilyen csatorna — akkor ezt jelezzük.
   if (typeof process.send !== "function") {
     return c.json(
       {

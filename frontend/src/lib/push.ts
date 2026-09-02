@@ -35,10 +35,6 @@ async function getSubscription(): Promise<PushSubscription | null> {
 
 export type PushDiagnostic = { ok: boolean; reason?: string };
 
-/**
- * Minden lépést naplóz, hogy telefonon (ahol nincs kényelmes devtools) is
- * kideríthető legyen a böngésző konzoljából, pontosan hol akad el a lánc.
- */
 async function ensureSubscription(): Promise<
   { sub: PushSubscription } | { sub: null; reason: string }
 > {
@@ -96,21 +92,11 @@ export type PushWatchConfig = {
   stopName: string;
   thresholdMin: number;
   routeShorts?: string[];
-  /** Ha megadott, csak ez a pontos menetrendi menet vált ki riasztást (menetrend fül). */
   tripId?: string;
-  /** A figyelt megálló a menet KIINDULÓ megállója-e (szövegezéshez: "indul" vs "ér ide"). */
   isDeparture?: boolean;
-  /** "Ismétlődő" figyelés: menetrendi óra:perc (0-1439) a tripId helyett — minden napra szól. */
   schedMin?: number;
 };
 
-/**
- * Feliratkozik (ha még nincs), és regisztrálja a figyelést a szerveren, hogy
- * a phone lezárt/az app bezárt állapotában is jöhessen push-értesítés. Ha
- * bármi hiányzik (nincs HTTPS, iOS-en nincs kezdőképernyőre telepítve, a
- * szerveren nincs VAPID beállítva), a helyi (nyitott lapos) Notification API
- * akkor is működik tovább — a hiba oka mindig a konzolba íródik.
- */
 export async function registerPushWatch(
   config: PushWatchConfig,
 ): Promise<PushDiagnostic> {
@@ -137,12 +123,6 @@ export async function registerPushWatch(
   }
 }
 
-/**
- * "Ne zavarj" időszak mentése a szerveren — ez a bezárt/lezárt telefonra
- * érkező push-üzeneteket is elnémítja, nem csak a nyitott lap helyi
- * értesítését. Ha nincs (még) push-feliratkozás, csendben kihagyjuk: a
- * helyi DND-beállítás (localStorage) a nyitott lapon önmagában is működik.
- */
 export async function setDnd(
   dnd: { enabled: boolean; startMin: number; endMin: number },
 ): Promise<PushDiagnostic> {
@@ -176,6 +156,5 @@ export async function unregisterPushWatch(stopId: string): Promise<void> {
       body: JSON.stringify({ endpoint: sub.endpoint, stopId }),
     });
   } catch {
-    // A helyi figyelés törlése enélkül is megtörténik — ez csak a szerver oldali rész.
   }
 }

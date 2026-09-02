@@ -17,14 +17,6 @@ function monthsBack(ym: number, n: number): number[] {
   return out;
 }
 
-/**
- * Statisztikai — nem valódi gépi tanulásos — előrejelzés: az adott jármű
- * korábbi hónapjainak agg_vehicle_route futásgyakorisága alapján melyik
- * vonalon a legvalószínűbb, hogy ismét feltűnik. Kizárólag a KORÁBBI
- * hónapok adatát nézi, a mai tényleges hozzárendelést nem ismeri — ezért
- * minden új trip_run-nál rögzíthető a jóslat ÉS a beérkező tény egyszerre,
- * hogy utólag pontosan lemérhető legyen, hányszor volt igaza.
- */
 export async function logRoutePrediction(
   pool: Pool,
   runId: number,
@@ -46,7 +38,7 @@ export async function logRoutePrediction(
   );
   const dist = rows as { route_key: number; runs: number }[];
   const total = dist.reduce((a, r) => a + Number(r.runs), 0);
-  if (!total) return; // nincs történeti adat — nincs mit jósolni
+  if (!total) return;
 
   const top = dist[0];
   const predictedRouteKey = top.route_key;
@@ -72,6 +64,5 @@ export async function logRoutePrediction(
       ],
     );
   } catch {
-    // A jóslat naplózása mellékes — sosem akaszthatja meg a fő illesztést.
   }
 }

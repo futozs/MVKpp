@@ -451,14 +451,18 @@ CREATE TABLE IF NOT EXISTS push_watch (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ═══════════════════════════════════════════════════════════════════════
--- FIÓK ÉS FELHŐS MENTÉS (jelszó nélküli)
+-- FIÓK ÉS FELHŐS MENTÉS (jelszó nélküli — WebAuthn passkey)
 --
--- Nincs jelszó és nincs e-mail-hitelesítés (nincs levélküldő infrastruktúra
--- a projektben) — a belépés maga a titkos kulcs, amit a kliens hoz létre és
--- csak a HASH-ét küldi el soha nem magát a kulcsot tárolva a szerveren
--- olvashatóan. Az e-mail csak megjelenítési címke, hogy a felhasználó
--- felismerje a fiókját, NEM hitelesítési tényező — ezért nincs rajta UNIQUE
--- megszorítás, és önmagában nem is elég egy meglévő fiók eléréséhez.
+-- Nincs jelszó: a hitelesítés a böngésző/eszköz saját passkey-mechanizmusa
+-- (Touch ID, Windows Hello, telefon lezárási PIN, biztonsági kulcs stb.) — a
+-- szerver soha nem lát és nem tárol semmilyen titkot, csak a nyilvános
+-- kulcsot és egy számlálót minden regisztrált hitelesítőhöz (account_credential).
+-- A ceremóniát a @simplewebauthn/server könyvtár végzi (account.ts).
+--
+-- Sikeres regisztráció/belépés után a szerver egy saját munkamenet-tokent ad
+-- ki (account_session) — ezt küldi a kliens az X-Account-Session fejlécben a
+-- mentési végpontokhoz, mert a WebAuthn maga nem ad hordozható tokent.
+--
 -- A mentés iránya szigorúan egyirányú AUTOMATÁBÓL: a kliens rendszeresen
 -- felküldi a localStorage-ját, de a szerver soha nem küld le adatot magától
 -- — letöltés csak a felhasználó kifejezett "Visszaállítás" kérésére történik
@@ -468,13 +472,43 @@ CREATE TABLE IF NOT EXISTS push_watch (
 CREATE TABLE IF NOT EXISTS account (
   account_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
   email      VARCHAR(255) NOT NULL,
-  -- SHA-256 a kulcsról — a kulcs maga (256 bit, kliensoldali CSPRNG) olyan
-  -- nagy entrópiájú, hogy egy gyors hash is elég a brute-force ellen (nem
-  -- emberi jelszó, nincs szükség lassító bcrypt/scrypt-re).
-  key_hash   CHAR(64)     NOT NULL,
   created_at INT UNSIGNED NOT NULL,
   PRIMARY KEY (account_id),
-  UNIQUE KEY ux_key_hash (key_hash)
+  UNIQUE KEY ux_email (email)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Egy fiókhoz több passkey is tartozhat (telefon, laptop, biztonsági kulcs).
+CREATE TABLE IF NOT EXISTS account_credential (
+  credential_id VARCHAR(255) NOT NULL, -- base64url WebAuthn credential ID
+  account_id    INT UNSIGNED NOT NULL,
+  public_key    VARBINARY(512) NOT NULL,
+  -- Visszajátszás-védelem: minden hitelesítésnél nőnie kell (vagy 0 marad
+  -- resident key + support nélkül) — ha visszafelé lépne, az klónozott
+  -- hitelesítőre utalna.
+  counter       BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  transports    VARCHAR(128) NULL,
+  device_type   VARCHAR(16) NULL,
+  backed_up     TINYINT(1) NOT NULL DEFAULT 0,
+  device_name   VARCHAR(64) NULL,
+  created_at    INT UNSIGNED NOT NULL,
+  last_used_at  INT UNSIGNED NULL,
+  PRIMARY KEY (credential_id),
+  KEY ix_account (account_id),
+  CONSTRAINT fk_account_credential_account FOREIGN KEY (account_id)
+    REFERENCES account(account_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Bejelentkezés utáni munkamenet — a nyers tokent csak a kliens ismeri, itt
+-- csak a hash-e van (ugyanaz az elv, mint a régebbi push-feliratkozásoknál).
+CREATE TABLE IF NOT EXISTS account_session (
+  session_hash CHAR(64)     NOT NULL, -- SHA-256 a munkamenet-tokenről
+  account_id   INT UNSIGNED NOT NULL,
+  created_at   INT UNSIGNED NOT NULL,
+  expires_at   INT UNSIGNED NOT NULL,
+  PRIMARY KEY (session_hash),
+  KEY ix_account (account_id),
+  CONSTRAINT fk_account_session_account FOREIGN KEY (account_id)
+    REFERENCES account(account_id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Egy fiókhoz mindig csak a LEGUTÓBBI mentés él — nem verziózott archívum,

@@ -117,9 +117,6 @@ export function useGeolocation(): GeoState {
     );
   }, []);
 
-  // Betöltéskor magától elindul, hogy a térkép rögtön a felhasználó
-  // környékére tudjon zoomolni. Csak akkor marad csendben, ha a felhasználó
-  // korábban kifejezetten kikapcsolta ("0"), vagy a böngésző letiltotta.
   useEffect(() => {
     let optedOut = false;
     try {

@@ -44,7 +44,6 @@ export function MobileHeader({
   const weather = useWeather();
   const navRef = useRef<HTMLElement>(null);
 
-  // A fülsor oldalra gördül; a kiválasztott fül különben félig kilóghat.
   useEffect(() => {
     navRef.current
       ?.querySelector('[aria-current="page"]')
@@ -55,9 +54,6 @@ export function MobileHeader({
     <header
       className={cn(
         "relative z-bar shrink-0 border-b border-border bg-card md:hidden",
-        // Álló módban (kezdőképernyőről indítva) nincs böngészősáv, a
-        // státuszsáv viszont a lapra ül — a biztonsági sáv és a ráadás
-        // térköz az index.css `.pwa-inset-top` szabályában van.
         "pwa-inset-top",
       )}
     >

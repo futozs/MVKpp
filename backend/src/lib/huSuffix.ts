@@ -1,4 +1,3 @@
-/** A tízesek saját illeszkedése — pl. "húszas", nem "húszes". */
 const TENS_SUFFIX: Record<number, string> = {
   1: "es",
   2: "as",
@@ -11,7 +10,6 @@ const TENS_SUFFIX: Record<number, string> = {
   9: "es",
 };
 
-/** Az egyesek illeszkedése — pl. "ötös", "hatos", "hármas". */
 const ONES_SUFFIX: Record<number, string> = {
   1: "es",
   2: "es",
@@ -24,12 +22,6 @@ const ONES_SUFFIX: Record<number, string> = {
   9: "es",
 };
 
-/**
- * Magyar illeszkedő végződés hozzáfűzése a járatszámhoz (pl. "14" → "14-es"),
- * hogy a push-értesítés úgy olvasson, ahogy valaki tényleg mondaná. Ugyanaz
- * a szabály, mint a frontend `lib/notifications.ts`-ében — mivel a push
- * kiküldés a szerveren történik, itt is szükség van rá.
- */
 export function withHungarianSuffix(routeShort: string): string {
   const trimmed = routeShort.trim();
   const n = Number(trimmed);

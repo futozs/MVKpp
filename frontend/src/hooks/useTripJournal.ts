@@ -2,20 +2,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { TripJournalEntry, TripJournalResponse } from "@/types";
 import { api } from "@/services/api";
 
-/** A napló lassan gyűlik; a menetrendnek percenkénti frissítés bőven elég. */
 const DEFAULT_POLL_MS = 60000;
 
 const EMPTY = new Map<string, TripJournalEntry>();
 
-/**
- * Melyik jármű teljesítette az adott nap meneteit. A gateway 0–24-ben naplóz,
- * ezért a MÁR LEFUTOTT menetekhez is van válasz — az élő járműlista csak az
- * éppen közlekedőket ismeri.
- */
 export function useTripJournal(
-  /** YYYYMMDD; `null` esetén nem kérdez le semmit. */
   ymd: string | null,
-  /** 0 vagy kevesebb: egyszeri lekérdezés — egy lezárt nap adata nem változik. */
   pollMs = DEFAULT_POLL_MS,
 ): Map<string, TripJournalEntry> {
   const [data, setData] = useState<TripJournalResponse | null>(null);
@@ -39,8 +31,6 @@ export function useTripJournal(
         const res = await api.getTripJournal(ymd);
         if (mounted.current) setData(res);
       } catch {
-        // A korábbi napló megmarad: egy sikertelen lekérdezés miatt ne
-        // tűnjenek el a már megjelenített járműazonosítók.
       }
     };
 

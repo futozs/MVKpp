@@ -36,9 +36,6 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        // Telefonon alulról feljövő lap: a hüvelykujj közelében nyílik, és nem
-        // kell 50%-os transzformra hagyatkozni a függőleges középre tételhez.
-        // Tabletnél felfelé középre igazít.
         "fixed inset-x-0 bottom-0 z-dialog grid max-h-[85dvh] w-full gap-4 border-t bg-background p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] shadow-2xl duration-200",
         "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
         "data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom",

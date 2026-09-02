@@ -33,6 +33,27 @@ async function get<T>(path: string): Promise<T> {
   return res.json();
 }
 
+async function post<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_BASE}/stats${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 503) {
+    const b = await res.json().catch(() => ({ error: "" }));
+    throw new StatsUnavailableError(
+      b.error || "Az adatraktár nem érhető el.",
+    );
+  }
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `Statisztika [${res.status}] ${path}: ${text || res.statusText}`,
+    );
+  }
+  return res.json();
+}
+
 export type HealthCounts = {
   pings: number;
   runs: number;
@@ -337,6 +358,13 @@ export const statsApi = {
       `/segment?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&at=${encodeURIComponent(at)}`,
     ),
 
+  /** Egy útvonaltervező-itinerárium tömegközlekedési legjeihez mért átlagos késés. */
+  routeDelays: (at: string, legs: { routeShort: string; stopId: string }[]) =>
+    post<{ results: { avgDelaySec: number | null; samples: number }[] }>(
+      "/route-delays",
+      { at, legs },
+    ),
+
   slowSegments: (bucketFrom = 28, bucketTo = 36) =>
     get<{ bucketFrom: number; bucketTo: number; segments: SlowSegment[] }>(
       `/network/slow?from=${bucketFrom}&to=${bucketTo}`,
@@ -400,15 +428,6 @@ export function shiftDate(iso: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-/**
- * A backend a "hour" mezőt a szolgálati nap kezdetéhez (éjfél) képest méri
- * órákban, ezért éjfél utáni járatoknál 24-nél nagyobb is lehet (pl. 26 =
- * hajnal 2, még ugyanahhoz a szolgálati naphoz tartozva). Egy sima "% 24"
- * megjelenítés két különböző órát azonos feliratra vinné (pl. a kora reggeli
- * 2 és a hajnali 2 egyaránt "2" lenne), ami a diagramokon összekeveredett,
- * rossz sorrendben megjelenő feliratokként látszott. Ehelyett 24 fölött "+"
- * jellel jelezzük a másnapra átnyúló órát.
- */
 export function formatServiceHour(hour: number): string {
   return hour < 24 ? String(hour) : `${hour % 24}+`;
 }

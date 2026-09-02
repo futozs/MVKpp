@@ -35,9 +35,6 @@ const OVERVIEW_PANEL: { id: PanelId; label: string; short: string; icon: LucideI
   icon: Activity,
 };
 
-// Az „Áttekintés” alapból nincs kitéve a fülsorra — összefoglaló nézet, ami
-// leginkább csak első pillantásra kell, a többi fül a napi munkára való. Az
-// OVERVIEW_PANEL-en keresztül külön gombbal továbbra is elérhető.
 const PANELS: {
   id: PanelId;
   label: string;
@@ -69,8 +66,6 @@ export function StatsView({
   const [panel, setPanel] = useState<PanelId>("vehicle");
   const navRef = useRef<HTMLUListElement>(null);
 
-  // A fülsor telefonon oldalra görgethető — a kiválasztott fül különben
-  // kicsúszhat a képből, és nem látszik, hol tartunk.
   useEffect(() => {
     navRef.current
       ?.querySelector('[aria-current="page"]')

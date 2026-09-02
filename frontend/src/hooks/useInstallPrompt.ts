@@ -1,9 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 
-/**
- * A Chrome `beforeinstallprompt` eseménye — a típus még nem része a
- * lib.dom.d.ts-nek, ezért itt írjuk le.
- */
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
@@ -11,13 +7,11 @@ interface BeforeInstallPromptEvent extends Event {
 
 const DISMISSED_KEY = "mvk_install_dismissed";
 
-/** Az iOS Safari nem ad telepítési eseményt — ott kézi útmutató kell. */
 function isIos(): boolean {
   if (typeof navigator === "undefined") return false;
   const ua = navigator.userAgent;
   return (
     /iPad|iPhone|iPod/.test(ua) ||
-    // iPadOS asztali módban Mac-nek adja ki magát, de van érintése.
     (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)
   );
 }
@@ -26,18 +20,14 @@ function isStandalone(): boolean {
   if (typeof window === "undefined") return false;
   return (
     window.matchMedia?.("(display-mode: standalone)").matches ||
-    // Az iOS saját, szabványon kívüli jelzése.
     (navigator as { standalone?: boolean }).standalone === true
   );
 }
 
 export interface InstallState {
-  /** Megjeleníthető-e egyáltalán a telepítési ajánlat. */
   canOffer: boolean;
-  /** Nincs natív prompt: iOS-en lépésről lépésre kell elmondani. */
   needsManualSteps: boolean;
   installed: boolean;
-  /** A natív telepítőpárbeszéd megnyitása. */
   install: () => Promise<void>;
   dismiss: () => void;
 }
@@ -57,8 +47,6 @@ export function useInstallPrompt(): InstallState {
 
   useEffect(() => {
     const onBeforeInstall = (e: Event) => {
-      // A böngésző saját mini-sávja helyett a saját, magyar nyelvű ajánlatunk
-      // jelenik meg — ezért fogjuk el az eseményt.
       e.preventDefault();
       setDeferred(e as BeforeInstallPromptEvent);
     };

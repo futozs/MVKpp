@@ -1,10 +1,8 @@
 import { useEffect, useState } from "react";
 import {
   AlertTriangle,
-  Check,
   CloudUpload,
-  Copy,
-  KeyRound,
+  Fingerprint,
   LogOut,
   ShieldCheck,
   UserRound,
@@ -19,14 +17,16 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  connectWithKey,
-  forgetAccountOnThisDevice,
-  getAccount,
+  addPasskeyToCurrentAccount,
   getBackupStatus,
+  getSession,
+  loginWithPasskey,
+  logout,
+  passkeysSupported,
   pullBackup,
   pushBackup,
   registerAccount,
-  type Account,
+  type Session,
 } from "@/lib/account";
 import { cn } from "@/lib/utils";
 
@@ -44,37 +44,34 @@ function fmtWhen(unixSec: number | null): string {
 }
 
 export function AccountModal({ isOpen, onClose }: AccountModalProps) {
-  const [account, setAccount] = useState<Account | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [mode, setMode] = useState<"new" | "existing">("new");
   const [email, setEmail] = useState("");
-  const [keyInput, setKeyInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [freshKey, setFreshKey] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
 
   const [status, setStatus] = useState<{
     lastBackupAt: number | null;
     bytes: number;
+    credentialCount: number;
   } | null>(null);
   const [statusBusy, setStatusBusy] = useState(false);
   const [actionNote, setActionNote] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
-    setAccount(getAccount());
+    setSession(getSession());
     setError(null);
-    setFreshKey(null);
     setActionNote(null);
   }, [isOpen]);
 
   useEffect(() => {
-    if (!isOpen || !account) return;
+    if (!isOpen || !session) return;
     setStatusBusy(true);
     getBackupStatus()
       .then((res) => setStatus(res.ok ? res.data : null))
       .finally(() => setStatusBusy(false));
-  }, [isOpen, account]);
+  }, [isOpen, session]);
 
   const handleRegister = async () => {
     setBusy(true);
@@ -85,22 +82,28 @@ export function AccountModal({ isOpen, onClose }: AccountModalProps) {
       setError(res.reason);
       return;
     }
-    setFreshKey(res.data.key);
-    setAccount(res.data);
+    setSession(res.data);
     pushBackup().catch(() => {});
   };
 
-  const handleConnect = async () => {
+  const handleLogin = async () => {
     setBusy(true);
     setError(null);
-    const res = await connectWithKey(keyInput.trim());
+    const res = await loginWithPasskey(email.trim());
     setBusy(false);
     if (!res.ok) {
       setError(res.reason);
       return;
     }
-    setAccount(res.data);
-    setKeyInput("");
+    setSession(res.data);
+  };
+
+  const handleAddDevice = async () => {
+    setStatusBusy(true);
+    setActionNote(null);
+    const res = await addPasskeyToCurrentAccount();
+    setActionNote(res.ok ? "Új passkey hozzáadva ehhez a fiókhoz." : res.reason);
+    setStatusBusy(false);
   };
 
   const handlePushNow = async () => {
@@ -131,27 +134,14 @@ export function AccountModal({ isOpen, onClose }: AccountModalProps) {
     setStatusBusy(false);
   };
 
-  const handleForget = () => {
-    if (
-      !window.confirm(
-        "Leválasztod a fiókot erről az eszközről? A felhőben mentett adat megmarad, később a kulccsal újra csatlakozhatsz.",
-      )
-    )
-      return;
-    forgetAccountOnThisDevice();
-    setAccount(null);
+  const handleLogout = async () => {
+    if (!window.confirm("Kijelentkezel erről az eszközről? A felhőben mentett adat megmarad.")) return;
+    await logout();
+    setSession(null);
     setStatus(null);
   };
 
-  const copyKey = async (key: string) => {
-    try {
-      await navigator.clipboard.writeText(key);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      /* a vágólap megtagadható */
-    }
-  };
+  const supported = passkeysSupported();
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -162,13 +152,18 @@ export function AccountModal({ isOpen, onClose }: AccountModalProps) {
             Fiók és felhős mentés
           </DialogTitle>
           <DialogDescription>
-            Jelszó nélkül — a kedvenceid, figyeléseid és beállításaid mentése
-            biztonsági másolatként.
+            Jelszó nélkül, passkey-vel — a kedvenceid, figyeléseid és
+            beállításaid mentése biztonsági másolatként.
           </DialogDescription>
         </DialogHeader>
 
         <div className="max-h-[70dvh] space-y-4 overflow-y-auto px-5 py-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] sm:max-h-[65vh]">
-          {!account ? (
+          {!supported ? (
+            <p className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>Ez a böngésző nem támogatja a passkey-alapú bejelentkezést.</span>
+            </p>
+          ) : !session ? (
             <>
               <div className="flex gap-1 rounded-lg border border-border bg-muted/40 p-1">
                 <button
@@ -193,85 +188,38 @@ export function AccountModal({ isOpen, onClose }: AccountModalProps) {
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >
-                  Van már kulcsom
+                  Van már fiókom
                 </button>
               </div>
 
-              {freshKey ? (
-                <div className="space-y-2 rounded-xl border border-primary/40 bg-primary/10 p-3.5">
-                  <p className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
-                    <ShieldCheck className="h-4 w-4 text-primary" />
-                    Fiók létrehozva
-                  </p>
-                  <p className="text-[11px] text-muted-foreground">
-                    Ez a kulcs csak most, EGYETLEN alkalommal látszik. Mentsd
-                    el (pl. jelszókezelőbe) — ezzel tudsz majd egy másik
-                    eszközön is csatlakozni ugyanehhez a fiókhoz.
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <code className="min-w-0 flex-1 truncate rounded-md border border-border bg-card px-2.5 py-1.5 font-mono text-xs">
-                      {freshKey}
-                    </code>
-                    <Button size="sm" variant="outline" onClick={() => copyKey(freshKey)}>
-                      {copied ? <Check className="text-primary" /> : <Copy />}
-                      {copied ? "Másolva" : "Másolás"}
-                    </Button>
-                  </div>
-                  <Button size="sm" className="w-full" onClick={() => setFreshKey(null)}>
-                    Rendben, elmentettem
-                  </Button>
-                </div>
-              ) : mode === "new" ? (
-                <div className="space-y-2">
-                  <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    E-mail cím
-                  </label>
-                  <p className="text-[11px] text-muted-foreground">
-                    Csak megjelenítési címke — nincs jelszó, nincs
-                    megerősítő levél. A tényleges kulcsot ez az eszköz hozza
-                    létre.
-                  </p>
-                  <Input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="pl. zsombi@example.com"
-                  />
-                  <Button
-                    className="w-full"
-                    onClick={handleRegister}
-                    disabled={busy || !email.includes("@")}
-                  >
-                    <KeyRound className={busy ? "animate-pulse" : undefined} />
-                    {busy ? "Létrehozás…" : "Fiók létrehozása"}
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    Kulcs
-                  </label>
-                  <p className="text-[11px] text-muted-foreground">
-                    Illeszd be a másik eszközön kapott kulcsot — ezzel
-                    csatlakozol ugyanahhoz a fiókhoz, letöltés nélkül.
-                  </p>
-                  <Input
-                    value={keyInput}
-                    onChange={(e) => setKeyInput(e.target.value)}
-                    placeholder="a mentett kulcs…"
-                    className="font-mono text-xs"
-                    autoComplete="off"
-                  />
-                  <Button
-                    className="w-full"
-                    onClick={handleConnect}
-                    disabled={busy || !keyInput.trim()}
-                  >
-                    <KeyRound className={busy ? "animate-pulse" : undefined} />
-                    {busy ? "Ellenőrzés…" : "Csatlakozás"}
-                  </Button>
-                </div>
-              )}
+              <div className="space-y-2">
+                <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  E-mail cím
+                </label>
+                <p className="text-[11px] text-muted-foreground">
+                  {mode === "new"
+                    ? "A böngésző rögtön kér egy passkey-t (ujjlenyomat, arc, PIN vagy biztonsági kulcs) — nincs jelszó, nincs megerősítő levél."
+                    : "A meglévő fiókodhoz regisztrált passkey-vel jelentkezel be — a böngésző felajánlja vagy kéri a hitelesítőt."}
+                </p>
+                <Input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="pl. zsombi@example.com"
+                />
+                <Button
+                  className="w-full"
+                  onClick={mode === "new" ? handleRegister : handleLogin}
+                  disabled={busy || !email.includes("@")}
+                >
+                  <Fingerprint className={busy ? "animate-pulse" : undefined} />
+                  {busy
+                    ? "Várakozás a hitelesítőre…"
+                    : mode === "new"
+                      ? "Passkey létrehozása"
+                      : "Bejelentkezés passkey-vel"}
+                </Button>
+              </div>
 
               {error ? (
                 <p className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
@@ -283,11 +231,14 @@ export function AccountModal({ isOpen, onClose }: AccountModalProps) {
           ) : (
             <>
               <div className="rounded-xl border border-border bg-muted/30 p-3.5">
-                <p className="truncate text-sm font-semibold">{account.email}</p>
+                <p className="flex items-center gap-1.5 truncate text-sm font-semibold">
+                  <ShieldCheck className="h-4 w-4 shrink-0 text-primary" />
+                  {session.email}
+                </p>
                 <p className="mt-1 text-[11px] text-muted-foreground">
                   {statusBusy
                     ? "Állapot lekérdezése…"
-                    : `Utolsó mentés: ${fmtWhen(status?.lastBackupAt ?? null)}`}
+                    : `Utolsó mentés: ${fmtWhen(status?.lastBackupAt ?? null)} · ${status?.credentialCount ?? 1} passkey`}
                 </p>
               </div>
 
@@ -324,11 +275,22 @@ export function AccountModal({ isOpen, onClose }: AccountModalProps) {
               <Button
                 variant="ghost"
                 size="sm"
+                className="w-full"
+                onClick={handleAddDevice}
+                disabled={statusBusy}
+              >
+                <Fingerprint />
+                Új eszköz/passkey hozzáadása
+              </Button>
+
+              <Button
+                variant="ghost"
+                size="sm"
                 className="w-full text-muted-foreground"
-                onClick={handleForget}
+                onClick={handleLogout}
               >
                 <LogOut />
-                Leválasztás erről az eszközről
+                Kijelentkezés erről az eszközről
               </Button>
             </>
           )}

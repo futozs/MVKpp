@@ -36,7 +36,6 @@ const TAB_IDS: ActiveTab[] = [
   "stats",
 ];
 
-/** A manifest gyorsindítói `#map`, `#timetable` stb. alakban nyitják az appot. */
 function hashTab(): ActiveTab | null {
   if (typeof window === "undefined") return null;
   const id = window.location.hash.replace(/^#/, "");

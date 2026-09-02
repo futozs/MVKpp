@@ -4,12 +4,6 @@
  *  - /api/* -> https://mccaze.mvkzrt.hu:8443 (Bearer beinjektálva)
  *  - Token: state/jwt.txt; GTFS indításkor frissül.
  */
-// Ennek KELL lennie a legelső importnak: ES modulban minden import a fájl
-// saját kódja előtt fut le (a sorrend köztük számít), tehát ha ez nem az
-// első sor, a lenti importok (pl. api/stats.ts → db/pool.ts, api/push.ts →
-// lib/push.ts) MÁR a .env betöltése ELŐTT olvasnák ki a process.env-et, és
-// mindig az alapértelmezésekkel indulnának. Ha nincs .env, a dotenv
-// csendben átlép rajta — a rendszer korábban is működött .env nélkül.
 import 'dotenv/config'
 import { serve } from '@hono/node-server'
 import { networkInterfaces } from 'node:os'
@@ -46,20 +40,16 @@ mkdirSync(STATE_DIR, { recursive: true })
 const API_ORIGIN = 'https://mccaze.mvkzrt.hu:8443'
 const GTFS_ORIGIN = 'http://84.206.68.21:8080'
 const PORT = Number(process.env.PORT ?? 8088)
-// Halozaton is elerheto: a hub es a dashboard mas gepekrol/telefonrol is nyithato.
-// Szukitheto a HOST env-vel (pl. HOST=127.0.0.1) ha csak helyi eleres kell.
 const HOST = process.env.HOST ?? '0.0.0.0'
 const AUTO_RENEW = (process.env.AUTO_RENEW ?? '1') !== '0'
 const RENEW_PATH = process.env.RENEW_PATH ?? '/api/v1/installation/generate-jwt'
 const RENEW_MARGIN_SEC = Number(process.env.RENEW_MARGIN_SEC ?? 900)
 const CHECK_INTERVAL_SEC = Number(process.env.CHECK_INTERVAL_SEC ?? 120)
-// élő hozzárendelés hangolása:
-const LIVE_MAX_KM = Number(process.env.LIVE_MAX_KM ?? 12)   // ennél távolabbi busz nem élő
-const LIVE_MAX_ETA = Number(process.env.LIVE_MAX_ETA ?? 60) // ennél későbbi érkezés nem élő
+const LIVE_MAX_KM = Number(process.env.LIVE_MAX_KM ?? 12)
+const LIVE_MAX_ETA = Number(process.env.LIVE_MAX_ETA ?? 60)
 
 const { transit_realtime } = GtfsRealtimeBindings
 
-// ── token / jwt ──
 const readFileSafe = (p: string) => { try { return readFileSync(p, 'utf8').trim() } catch { return '' } }
 const readJwt = () => readFileSafe(JWT_FILE)
 const readInstallationId = () => readFileSafe(INST_FILE)
@@ -74,17 +64,11 @@ function jwtStatus(tok: string): JwtStatus {
   return { present: true, exp, expiresInSec: exp ? exp - now : null, expired: exp !== undefined && exp <= now, installationId: typeof c['installation-id'] === 'string' ? (c['installation-id'] as string) : undefined }
 }
 
-// ── GTFS statikus ──
-// A betöltő, az indexek és a geometria a megosztott modulban él, hogy a
-// statisztikai worker pontosan ugyanazt használja: src/lib/gtfs.ts
 function loadGtfs() {
   const r = loadGtfsFrom(GTFS_DIR)
   console.log(`[GTFS] stops=${r.stops} routes=${r.routes} trips=${r.trips} stopTimes=${r.stopTimes} shapes=${r.shapes} feed=${r.feedVersion}`)
 }
-// A gép SAJÁT helyi offsetjét használjuk (nem a hibás Intl Europe/Budapest-et).
-// TZ_OFFSET_SEC env-vel felülírható (nyáron 7200 = +2h).
 function tzOffsetSec(): number { return Number(process.env.TZ_OFFSET_SEC ?? -new Date().getTimezoneOffset() * 60) }
-// Bármely unix-ból tiszta aritmetikával Budapest HH:MM (nincs tz-adatbázis).
 function hmFromUnix(unix: number): string {
   const d = new Date((unix + tzOffsetSec()) * 1000)
   return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`
@@ -97,8 +81,7 @@ export function budapestNow() {
   return { ymd, secOfDay, unix, midnightUnix: unix - secOfDay, offset }
 }
 
-// ── MVK fetch + GTFS-RT ──
-let tokenRejectedAt = 0 // mikor utasított el a szerver egy ÉRVÉNYES (nem lejárt) tokent
+let tokenRejectedAt = 0
 async function mvkFetch(path: string): Promise<{ status: number; buf: Buffer }> {
   const tok = readJwt(); const headers: Record<string, string> = { accept: 'application/json' }
   if (tok) headers.authorization = `Bearer ${tok}`
@@ -106,14 +89,6 @@ async function mvkFetch(path: string): Promise<{ status: number; buf: Buffer }> 
   if (res.status === 401 || res.status === 403) { const st = jwtStatus(tok); if (st.present && !st.expired) { tokenRejectedAt = Math.floor(Date.now() / 1000); console.log(`[api] ⚠️ ${res.status} érvényes tokenre → app-refresh jelzés`) } }
   return { status: res.status, buf: Buffer.from(await res.arrayBuffer()) }
 }
-/**
- * Valós idejű feed-gyorsítótár.
- *
- * Az MVK API-hívás ~150 ms. Korábban minden kliens-kérés külön felment
- * upstream-re: hat megállókártya négymásodpercenként tizenkét hívást
- * indított ugyanazért a két feedért. Itt egy háttérhurok tartja frissen a
- * két feedet, a végpontok pedig a memóriából szolgálnak ki (~1 ms).
- */
 const FEED_TTL_MS = 2000
 type FeedEntry = { at: number; status: number; buf: Buffer; inflight: Promise<{ status: number; buf: Buffer }> | null }
 const feedCache = new Map<string, FeedEntry>()
@@ -121,7 +96,6 @@ const feedCache = new Map<string, FeedEntry>()
 async function cachedFeed(path: string): Promise<{ status: number; buf: Buffer }> {
   const entry = feedCache.get(path)
   if (entry && Date.now() - entry.at < FEED_TTL_MS) return { status: entry.status, buf: entry.buf }
-  // Egyszerre érkező kérések ugyanarra a feedre egyetlen upstream hívást kapnak.
   if (entry?.inflight) return entry.inflight
 
   const inflight = mvkFetch(path)
@@ -130,7 +104,6 @@ async function cachedFeed(path: string): Promise<{ status: number; buf: Buffer }
       return res
     })
     .catch((err) => {
-      // Hiba esetén az előző (elavult) válasz jobb, mint a semmi.
       const prev = feedCache.get(path)
       if (prev) feedCache.set(path, { ...prev, inflight: null })
       else feedCache.delete(path)
@@ -146,7 +119,6 @@ async function cachedFeed(path: string): Promise<{ status: number; buf: Buffer }
   return inflight
 }
 
-/** A dekódolt járműlista is gyorsítótárazva: kártyánként újradekódolni pazarlás. */
 let vehiclesCache: { at: number; list: LiveVeh[] } | null = null
 
 function decodeVehicles(buf: Buffer) {
@@ -172,16 +144,10 @@ async function activeVehicles(): Promise<LiveVeh[]> {
       out.push({ id: v.vehicle?.id || e.id, lat: v.position.latitude, lon: v.position.longitude, bearing: v.position.bearing ?? null, speed: v.position.speed ?? null, routeId, tripId })
     }
     vehiclesCache = { at: Date.now(), list: out }
-  } catch { /* üres */ }
+  } catch {   }
   return out
 }
 
-/**
- * VALÓS érkezések. Az élő buszokat POZÍCIÓ szerint rendeljük hozzá: vonalanként a
- * stophoz legközelebbi élő járművek a LEGKORÁBBI érkezésekhez, SORJÁBAN. Az MVK
- * trip_id-je megbízhatatlan, ezért nem arra hagyatkozunk. Csak közeli busz
- * (≤LIVE_MAX_KM) és ≤LIVE_MAX_ETA perces érkezés kaphat élőt.
- */
 async function arrivalsForStop(stopId: string, limit: number) {
   const now = budapestNow()
   const active = activeServices(now.ymd)
@@ -208,7 +174,6 @@ async function arrivalsForStop(stopId: string, limit: number) {
     } else rtErr = `get-updates HTTP ${status}`
   } catch (err) { rtErr = (err as Error).message }
 
-  // dedup trip_id szerint; RT-idő ha van (VALÓS érkezés), különben menetrend
   const cand = new Map<string, { unix: number; delay: number | null; hasRT: boolean }>()
   for (const { trip, dep } of stopSched.get(stopId) || []) {
     const tr = trips.get(trip); if (!tr || !active.has(tr.serviceId)) continue
@@ -218,7 +183,6 @@ async function arrivalsForStop(stopId: string, limit: number) {
   }
   for (const [trip, p] of pred) if (!cand.has(trip)) cand.set(trip, { unix: p.unix, delay: p.delay, hasRT: true })
 
-  // Helper to find nearest stop {id, name}
   const findNearestStop = (lat: number, lon: number): { id: string; name: string } | null => {
     let bestDist = Infinity
     let best: { id: string; name: string } | null = null
@@ -229,7 +193,6 @@ async function arrivalsForStop(stopId: string, limit: number) {
     return best
   }
 
-  // jármű trip_id szerint vagy vonalanként legközelebbi aktív jármű
   const vehByTrip = new Map<string, LiveVeh>()
   for (const v of vehicles) if (v.tripId) vehByTrip.set(v.tripId, v)
 
@@ -241,23 +204,15 @@ async function arrivalsForStop(stopId: string, limit: number) {
     .filter((x) => { const k = x.routeId + '|' + hmFromUnix(x.unix) + '|' + x.headsign; if (seen.has(k)) return false; seen.add(k); return true })
   const s = stops.get(stopId)
 
-  // Egy fizikai jármű csak EGY (a legkorábbi, hozzá illő) érkezéshez rendelhető —
-  // különben ugyanaz a busz több jövőbeli járatnál is "élőnek" tűnik.
   const usedVehicleIds = new Set<string>()
   const arrivals = rows
     .map((x) => {
       const tr = trips.get(x.tripId); const r = routes.get(tr?.routeId || '')
       let veh = vehByTrip.get(x.tripId) || null
       if (veh) usedVehicleIds.add(veh.id)
-      // Ha nincs közvetlen tripId egyezés, de fut (még szabad) jármű ugyanezen a vonalon:
       if (!veh) {
         const routeVehs = vehicles.filter((v) => {
           if (v.routeId !== tr?.routeId || usedVehicleIds.has(v.id)) return false
-          // A routeId egyezés ODA-VISSZA irányban egyaránt teljesül (ugyanaz a routeId mindkét
-          // irányban) — ha ismerjük a jármű saját (bár pontatlan, de irány szempontjából jó
-          // közelítő) trip_id-jét, és az MÁSIK irányban közlekedik (pl. már megfordult és a
-          // visszaútját kezdte meg), ne fogadjuk el találgatásnak, mert nem ez fogja
-          // teljesíteni a keresett érkezést.
           const vDir = v.tripId ? trips.get(v.tripId)?.dir : undefined
           if (vDir != null && tr?.dir != null && vDir !== tr.dir) return false
           return true
@@ -280,10 +235,6 @@ async function arrivalsForStop(stopId: string, limit: number) {
           progressDesc = atStop ? `A megállóban van (${s.name})` : `${currentStopName} közelében (~${distanceToStopKm} km)`
         }
 
-        // A hozzárendelt jármű élő infóját CSAK akkor tartjuk meg, ha ténylegesen hihető,
-        // hogy ez a jármű még ezt a járatot fogja teljesíteni ennél a megállónál. Két
-        // eset zárja ki (mindkettő az MVK feed megbízhatatlan tripId/routeId mezői miatt
-        // fordulhat elő, ezért geometriára, nem pedig ezekre a mezőkre hagyatkozunk):
         let invalid = false
         if (!atStop && distanceToStopKm >= 0.15) {
           const shape = tr?.shapeId ? shapes.get(tr.shapeId) : null
@@ -291,24 +242,13 @@ async function arrivalsForStop(stopId: string, limit: number) {
             const vehProj = projectOntoShapeKm(shape, veh.lat, veh.lon)
             if (vehProj) {
               if (vehProj.distKm > 0.5) {
-                // 1) ÚTVONALON KÍVÜL: a jármű valójában NINCS ezen az útvonalon (pl. az RT
-                //    feed még a régi routeId-t adja rá, miközben már másik viszonylatra/
-                //    irányba állt át) — ilyenkor a "vonalon egyetlen szabad jármű" találgatás
-                //    tévedés, nem szabad hozzárendelni.
                 invalid = true
               } else {
                 const stopProj = projectOntoShapeKm(shape, s.lat, s.lon)
-                // 2) MÁR ELHALADT: a jármű a menetrendnél korábban jár ("siet"), ezért az RT
-                //    előrejelzés "MOST"-ot mutat, miközben GPS szerint már RÉGEN elhagyta a
-                //    célmegállót. A pillanatnyi GPS-irány (bearing) erre megbízhatatlan —
-                //    ehelyett az útvonal mentén megtett távolságot hasonlítjuk össze.
                 if (stopProj && vehProj.alongKm > stopProj.alongKm + 0.1) invalid = true
               }
             }
           }
-          // Kiegészítő jel (ha a shape hiányzik vagy a vetítés bizonytalan volt): ha a GPS
-          // szerint legközelebbi megálló ugyanezen a trip-en a célmegálló UTÁN következik
-          // a menetrend szerint, az is elhaladást jelez.
           if (!invalid && currentStopId && currentStopId !== stopId) {
             const targetDep = schedByTripStop.get(x.tripId + ' ' + stopId)
             const vehDep = schedByTripStop.get(x.tripId + ' ' + currentStopId)
@@ -341,41 +281,28 @@ async function arrivalsForStop(stopId: string, limit: number) {
 const FRONTEND_DIST = join(ROOT, '..', 'frontend', 'dist')
 const FRONTEND_INDEX = join(FRONTEND_DIST, 'index.html')
 
-// ── app ──
 const app = new Hono()
 app.use('*', async (c, next) => {
   c.header('Access-Control-Allow-Origin', '*')
   c.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-  c.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Account-Key')
+  c.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Account-Session')
   c.header('Access-Control-Max-Age', '86400')
   if (c.req.method === 'OPTIONS') return c.body(null, 204)
   await next()
 })
 
-// Statisztikai adatraktár (külön adatbázis; ha nem elérhető, 503-at ad és
-// a valós idejű funkciók érintetlenek maradnak).
 app.route('/stats', stats)
 
-// Uzemeltetes: ujratelepites es naplok. Csak helyi halozaton fut, hitelesites nelkul.
 app.route('/system', ops)
 
-// Web Push feliratkozasok es figyelesek. VAPID nelkul 503-at ad, a kliens
-// ilyenkor a helyi (nyitott lapos) ertesitesre esik vissza.
 app.route('/push', push)
 
-// Jelszo nelkuli fiok + felhos biztonsagi mentes (csak felfele automatikus).
 app.route('/account', account)
 
-// A Hub kiszolgalasa a gateway-rol, /hub alatt.
-//
-// Igy tavoli elereshez (VPN) EGYETLEN port eleg: a dashboard a gyokeren, a hub
-// a /hub-on, az API pedig ugyanitt — nem kell harom portot atengedni a tunelen,
-// es nem kell a Vite dev szervert kitenni a halozatra.
 const HUB_DIST = join(ROOT, '..', 'hub', 'dist')
 
 function serveStatic(baseDir: string, rel: string) {
   const filePath = join(baseDir, rel)
-  // Kilepes a konyvtarbol nem megengedett (pl. ../../etc/passwd).
   if (!filePath.startsWith(baseDir) || !existsSync(filePath)) return null
   const ext = rel.split('.').pop()?.toLowerCase() ?? ''
   const mime: Record<string, string> = {
@@ -400,8 +327,6 @@ app.get('/hub/*', (c) => {
   return c.text('A hub meg nincs buildelve. Futtasd: cd hub && npm run build', 404)
 })
 
-// Static frontend serving (dist fallback or dashboard.html)
-// CSAK dev módban: prod módban a frontend szerver az 5173-as porton serve-eli ezt.
 if (process.env.NODE_ENV !== 'production') {
   app.get('/', (c) => {
     try {
@@ -413,7 +338,6 @@ if (process.env.NODE_ENV !== 'production') {
     }
   })
 } else {
-  // Prod módban: csak info
   app.get('/', (c) => {
     return c.json({
       message: 'MVK MobilON+ API Gateway',
@@ -423,7 +347,6 @@ if (process.env.NODE_ENV !== 'production') {
   })
 }
 
-// Serve static assets from frontend/dist/assets if available
 app.get('/assets/*', (c) => {
   const rel = c.req.path.replace(/^\/assets\//, '')
   const filePath = join(FRONTEND_DIST, 'assets', rel)
@@ -448,7 +371,6 @@ app.get('/assets/*', (c) => {
 
 app.get('/gtfs/stops.json', (c) => c.json([...stops.values()].map((s) => [s.id, s.code, s.name, s.lat, s.lon])))
 app.get('/gtfs/routes.json', (c) => c.json([...routes.values()].map((r) => [r.id, r.short, r.long, r.type, r.color, r.text])))
-// Járatszűrő: egy vagy több járat vonalgeometriája + megállói (?route=20,1V vagy route_id).
 app.get('/gtfs/route-geo', (c) => {
   const want = (c.req.query('route') || '').split(',').map((x) => x.trim()).filter(Boolean).slice(0, 16)
   if (!want.length) return c.json({ error: 'hiányzó ?route=' }, 400)
@@ -464,13 +386,11 @@ app.get('/gtfs/meta.json', async (c) => c.json({
   feedVersion: getFeedVersion(),
   stops: stops.size, routes: routes.size, trips: trips.size,
   serviceRange: serviceRange(),
-  /** Meddig ér vissza az elrakott menetrend — a naptár alsó határa ebből jön. */
   archiveRange: await archiveRange(),
 }))
 
 type TripStopRow = { id: string; name: string; lat: number | null; lon: number | null; dep: number }
 
-/** Egy menet megállósora névvel, koordinátával és menetrendi indulással. */
 function tripStopRows(tripId: string): TripStopRow[] | null {
   const seq = tripStops.get(tripId)
   if (!seq?.length) return null
@@ -481,47 +401,24 @@ function tripStopRows(tripId: string): TripStopRow[] | null {
       name: s?.name || x.stopId,
       lat: s?.lat ?? null,
       lon: s?.lon ?? null,
-      /** Menetrendi indulás másodpercben éjfél óta. */
       dep: x.dep,
     }
   })
 }
 
-/**
- * Menetrendi eltérés a busz PILLANATNYI helyén: + késik, − siet.
- *
- * A két szomszédos megálló menetrendi ideje között ott interpolálunk, ahol a
- * busz a szakaszon tart — így nem kell megvárni a következő megállót ahhoz,
- * hogy látszódjon a csúszás.
- */
 function deviationSec(stopList: TripStopRow[], segmentIndex: number, fraction: number): number | null {
   const from = stopList[segmentIndex]
   if (!from) return null
   const to = stopList[segmentIndex + 1] ?? from
   const sched = from.dep + (to.dep - from.dep) * fraction
 
-  // Az éjfél utáni menetek menetrendi ideje 86400 fölött van, a mostani
-  // másodperc viszont a nap elejéről számol: fél napnál nagyobb különbség
-  // mindig napváltás, nem késés.
   let dev = budapestNow().secOfDay - sched
   if (dev > 43200) dev -= 86400
   if (dev < -43200) dev += 86400
 
-  // Háromnegyed órán túl már nem menetrendi csúszásról van szó, hanem rossz
-  // jármű-hozzárendelésről — ilyet inkább nem állítunk.
   return Math.abs(dev) > 2700 ? null : Math.round(dev)
 }
 
-/**
- * Hol tart a busz a menet megállósorán.
- *
- * A busz pozícióját a járat vonalgeometriájára vetítjük, és ugyanígy a
- * megállókat is — így megmondható, MELYIK két megálló között jár éppen, és
- * a szakaszon belül hol tart. A pillanatnyi GPS-irány megbízhatatlan, ezért
- * kizárólag a vonal menti távolságra hagyatkozunk.
- *
- * Ha nincs használható geometria, a legközelebbi megállóra esünk vissza.
- */
 function progressOnTrip(tripId: string, vehicle: LiveVeh) {
   const trip = trips.get(tripId)
   const stopList = tripStopRows(tripId)
@@ -537,7 +434,6 @@ function progressOnTrip(tripId: string, vehicle: LiveVeh) {
       s.lat != null && s.lon != null ? projectOntoShapeKm(shape, s.lat, s.lon)?.alongKm ?? null : null
     )
 
-    // A busz túl messze van a vonaltól: a vetített érték félrevezető lenne.
     if (busProjection && busProjection.distKm <= 1.5) {
       const along = busProjection.alongKm
       for (let i = 0; i < stopAlong.length - 1; i++) {
@@ -564,7 +460,6 @@ function progressOnTrip(tripId: string, vehicle: LiveVeh) {
     }
   }
 
-  // Geometria nélkül: a legközelebbi megálló.
   if (segmentIndex == null) {
     let best = 0
     let bestDist = Infinity
@@ -585,14 +480,10 @@ function progressOnTrip(tripId: string, vehicle: LiveVeh) {
 
   return {
     stops: stopList,
-    /** Hányadik megálló UTÁN jár (0 = az első és második között). */
     segmentIndex,
-    /** 0..1 a szakaszon belül. */
     segmentFraction,
-    /** 0..1 a teljes menetre. */
     progress,
     nextStop: stopList[Math.min(stopList.length - 1, segmentIndex + 1)] ?? null,
-    /** + = késik, − = siet. */
     scheduleDeviationSec: deviationSec(stopList, segmentIndex, segmentFraction),
   }
 }
@@ -638,12 +529,6 @@ app.get('/live/trip-progress', async (c) => {
   })
 })
 
-// ── Menetrendkönyv ───────────────────────────────────────────────────────────
-/**
- * A menetrend forrása kettős: a statikus GTFS feed által lefedett napokat
- * helyben számoljuk, az azon KÍVÜLI (jellemzően múltbeli) napokat az
- * adatbázis-archívumból olvassuk. A kliens felé a kettő ugyanúgy néz ki.
- */
 async function daySource(ymd: string): Promise<{ day: DaySchedule; live: boolean } | null> {
   const range = serviceRange()
   if (range && ymd >= range.from && ymd <= range.to) {
@@ -675,7 +560,6 @@ app.get('/gtfs/timetable', async (c) => {
     return c.json({ ...table, archived: false })
   }
 
-  // Archív nap: a tárolt táblák közül a kért járat + irány.
   const day = await loadDaySchedule(ymd)
   if (!day) return c.json({ error: 'Erre a napra nincs elrakva menetrend.' }, 404)
   const table = day.tables[`${routeId}|${dir}`]
@@ -689,20 +573,9 @@ app.get('/gtfs/timetable', async (c) => {
   })
 })
 
-// ── Törölt (kihúzott) menetek ────────────────────────────────────────────────
-/**
- * Az MVK `list-cancelled-trips` végpontja a mai napra KIHÚZOTT meneteket adja
- * vissza — nyers alakban csupán `[{ "tripId": "..." }]`, minden más nélkül.
- * A tripId a statikus GTFS trip_id-vel egyezik, így itt egészítjük ki azzal,
- * amit a menetrendkönyv meg tud jeleníteni: járat, irány, indulás, végállomás.
- *
- * A lista percekben mérhető ütemben változik, ezért NEM a valós idejű feedek
- * kétmásodperces gyorsítótárát használjuk, hanem saját, hosszabb TTL-t.
- */
 const CANCELLED_TTL_MS = 30_000
 let cancelledCache: { at: number; ids: string[] } | null = null
 
-/** Az upstream nyers válaszából tiszta, duplikátummentes trip_id lista. */
 function parseCancelledIds(raw: unknown): string[] {
   const list = Array.isArray(raw)
     ? raw
@@ -735,7 +608,6 @@ export async function cancelledTripIds(): Promise<string[]> {
   return ids
 }
 
-/** Egy trip_id kiegészítése a menetrendkönyvnek kellő adatokkal. */
 function cancelledTripRow(tripId: string) {
   const t = trips.get(tripId)
   const r = t ? routes.get(t.routeId) : undefined
@@ -744,7 +616,6 @@ function cancelledTripRow(tripId: string) {
   const last = stopsOfTrip?.[stopsOfTrip.length - 1] ?? null
   return {
     tripId,
-    /** Hamis, ha a statikus GTFS nem ismeri ezt a menetet (elavult/rotált feed). */
     known: Boolean(t),
     routeId: t?.routeId ?? '',
     routeShort: r?.short ?? '',
@@ -763,16 +634,6 @@ function sortCancelledRows(rows: ReturnType<typeof cancelledTripRow>[]) {
   return rows.sort((a, b) => (a.departureSec ?? Infinity) - (b.departureSec ?? Infinity) || a.tripId.localeCompare(b.tripId))
 }
 
-/**
- * A kihúzott menetek menetrendi adatokkal. A menetrendkönyv ebből tudja,
- * melyik indulás van törölve — szemben a „még nem indult el” állapottal, ami
- * pusztán annyit jelent, hogy a járműhöz még nincs élő pozíció.
- *
- * `?date=` nélkül (vagy a mai napra) élőben az upstream-ről jön a lista —
- * ilyenkor ezt egyúttal el is rakjuk (`saveCancelledTrips`), hogy visszalapozva
- * is megmaradjon. Múltbeli napra a `cancelled_trip_log` archívumból szolgálunk
- * ki, mert az upstream végpont KIZÁRÓLAG a mai napot ismeri.
- */
 app.get('/live/cancelled', async (c) => {
   const today = budapestNow().ymd
   const ymd = (c.req.query('date') || today).trim()
@@ -789,15 +650,10 @@ app.get('/live/cancelled', async (c) => {
   try {
     ids = await cancelledTripIds()
   } catch (e) {
-    // Elavult lista is jobb, mint a semmi: a menetrendkönyv így sem veszti el
-    // a jelöléseket egyetlen sikertelen upstream hívás miatt.
     if (!cancelledCache) return c.json({ error: (e as Error).message }, 502)
     ids = cancelledCache.ids
     stale = true
   }
-  // Amit ma élőben látunk kihúzva, azt itt is rögzítjük — a háttér-mintavétel
-  // (lásd lent) mellett ez biztosítja, hogy egy éppen megjelenő törlés se
-  // maradjon ki, még mielőtt a periodikus kör lefutna.
   if (!stale && ids.length) saveCancelledTrips(today, ids, budapestNow().unix).catch(() => {})
 
   const rows = sortCancelledRows(ids.map(cancelledTripRow))
@@ -813,15 +669,6 @@ app.get('/live/cancelled', async (c) => {
   })
 })
 
-// ── Menetnapló ───────────────────────────────────────────────────────────────
-/**
- * Melyik jármű teljesítette az adott menetet, és milyen eltéréssel.
- *
- * Két forrás egészíti ki egymást: a JÁRMŰ a gateway saját naplójából jön (az
- * mindig gyűlik, amíg a gateway fut), az ELTÉRÉS pedig a statisztikai worker
- * `trip_run` táblájából (tényleges indulás/érkezés a menetrendhez képest).
- * Adatbázis nélkül a mai nap a helyi JSON-naplóból még kiszolgálható.
- */
 app.get('/gtfs/trip-journal', async (c) => {
   const ymd = (c.req.query('date') || budapestNow().ymd).trim()
   if (!/^\d{8}$/.test(ymd)) return c.json({ error: 'érvénytelen ?date= (YYYYMMDD kell)' }, 400)
@@ -829,8 +676,6 @@ app.get('/gtfs/trip-journal', async (c) => {
   const runs = await dayRuns(ymd)
   let source = 'db'
 
-  // Az adatbázisba a napló percenként ürül; a mai nap utolsó perce a memóriából
-  // egészíti ki, hogy a frissen elindult menetek se hiányozzanak.
   if (ymd === budapestNow().ymd) {
     for (const [tripId, e] of journalFor(ymd)) {
       const prev = runs.get(tripId)
@@ -850,8 +695,6 @@ app.get('/gtfs/trip-journal', async (c) => {
   return c.json({ date: ymd, count: runs.size, source, trips: out })
 })
 
-// ── Időjárás ─────────────────────────────────────────────────────────────────
-/** WMO időjárás-kódok rövid magyar leírása (a fejléc egysoros kiírásához). */
 const WMO_TEXT: Record<number, string> = {
   0: 'Derült', 1: 'Túlnyomóan derült', 2: 'Részben felhős', 3: 'Borult',
   45: 'Köd', 48: 'Zúzmarás köd',
@@ -865,18 +708,12 @@ const WMO_TEXT: Record<number, string> = {
   95: 'Zivatar', 96: 'Zivatar jégesővel', 99: 'Heves zivatar jégesővel',
 }
 
-/** Miskolc belvárosa — a pult egyetlen városra szól. */
 const WEATHER_LAT = 48.104
 const WEATHER_LON = 20.79
 const WEATHER_TTL_MS = 10 * 60 * 1000
 
 let weatherCache: { at: number; data: Record<string, unknown> } | null = null
 
-/**
- * Aktuális hőmérséklet a fejlécbe. Open-Meteo: ingyenes, API-kulcs nélkül.
- * Tíz percig gyorsítótárazva — a hőmérséklet nem változik gyakrabban, és
- * így a fejléc nem terheli feleslegesen a külső szolgáltatót.
- */
 app.get('/weather', async (c) => {
   if (weatherCache && Date.now() - weatherCache.at < WEATHER_TTL_MS) {
     return c.json(weatherCache.data)
@@ -910,7 +747,6 @@ app.get('/weather', async (c) => {
     weatherCache = { at: Date.now(), data }
     return c.json(data)
   } catch (e) {
-    // Elavult adat is jobb, mint üres fejléc.
     if (weatherCache) return c.json(weatherCache.data)
     return c.json({ error: (e as Error).message }, 502)
   }
@@ -926,7 +762,6 @@ app.get('/live/updates', async (c) => {
   if (status !== 200) return c.json({ error: `get-updates HTTP ${status}` }, 502)
   try { const feed = transit_realtime.FeedMessage.decode(new Uint8Array(buf)); return c.json({ header: { timestamp: Number(feed.header.timestamp || 0) }, count: feed.entity.length }) } catch (e) { return c.json({ error: 'dekód hiba', detail: (e as Error).message }, 500) }
 })
-// Egy konkrét jármű (busz/villamos) élő állapota: bevetésen van-e és hol.
 app.get('/live/vehicle', async (c) => {
   const q = (c.req.query('id') || '').trim().toLowerCase(); if (!q) return c.json({ error: 'hiányzó ?id=' }, 400)
   const { status, buf } = await cachedFeed('/api/v1/gtfs/get-positions')
@@ -942,7 +777,6 @@ app.get('/live/arrivals', async (c) => {
   const limit = Math.min(20, Math.max(1, Number(c.req.query('limit') ?? 10)))
   try { return c.json(await arrivalsForStop(stop, limit)) } catch (e) { return c.json({ error: (e as Error).message }, 500) }
 })
-// Multi-stop érkezések egy hívással (max 6 megálló a multi-megálló figyelőhöz)
 app.get('/live/multi-arrivals', async (c) => {
   const stopsParam = c.req.query('stops'); if (!stopsParam) return c.json({ error: 'hiányzó ?stops=SP1,SP2' }, 400)
   const stopList = stopsParam.split(',').map((s) => s.trim()).filter(Boolean).slice(0, 8)
@@ -959,17 +793,11 @@ app.get('/live/trip-path', async (c) => {
   const vehId = (c.req.query('vehicle') || '').trim()
   if (!trip && !vehId) return c.json({ error: 'hiányzó ?trip= vagy ?vehicle=' }, 400)
   const active = await activeVehicles()
-  // Az MVK trip_id-je megbízhatatlan (lásd fenti komment), ezért ha ismert a konkrét
-  // jármű azonosítója, AZT keressük meg elsőként — ez mindig megbízhatóbb egyezés.
   let veh = vehId ? active.find((v) => v.id === vehId) || null : null
   if (!veh && trip) veh = active.find((v) => v.tripId === trip) || null
-  // Az útvonal geometriáját/fejjelzést a jármű SAJÁT (valós) trip_id-jéből vesszük ha van,
-  // különben a kért trip paraméter menetrendi adatai a fallback.
   const effectiveTripId = veh?.tripId || trip
   const tr = trips.get(effectiveTripId); const r = routes.get(tr?.routeId || '')
   const shape = tr?.shapeId ? shapes.get(tr.shapeId) || [] : []
-  // A menetkövetés alsó sávja ugyanazt a menetrendi eltérést mutatja, mint a
-  // menetrendkönyv haladás-síne — ezért itt is a közös számítás adja.
   const prog = veh ? progressOnTrip(effectiveTripId, veh) : null
   return c.json({ trip: effectiveTripId, route: r?.short || tr?.routeId || '', color: r?.color || '2f6df6', text: r?.text || 'FFFFFF', headsign: tr?.headsign || '', shape, vehicle: veh, nextStop: prog?.nextStop ?? null, scheduleDeviationSec: prog?.scheduleDeviationSec ?? null })
 })
@@ -996,13 +824,11 @@ app.get('/system/info', (c) => {
   })
 })
 
-// DIAGNOSZTIKA: mit tartalmaz a get-updates feed erre a megállóra?
 app.get('/live/debug', async (c) => {
   const stopId = c.req.query('stop') || ''
   const s = stops.get(stopId)
   const result: Record<string, unknown> = { stopId, stopName: s?.name, stopCode: s?.code }
 
-  // 1) get-updates nyers szerkezet
   const up = await mvkFetch('/api/v1/gtfs/get-updates')
   result.updatesStatus = up.status
   if (up.status === 200) {
@@ -1031,12 +857,10 @@ app.get('/live/debug', async (c) => {
     } catch (e) { result.updatesError = (e as Error).message }
   }
 
-  // 2) get-positions: milyen tripId/routeId-k futnak + hány közeli
   const veh = await activeVehicles()
   const near = s ? veh.map((v) => ({ id: v.id, routeId: v.routeId, tripId: v.tripId, km: +haversineKm(s.lat, s.lon, v.lat, v.lon).toFixed(2) })).sort((a, b) => a.km - b.km).slice(0, 8) : []
   result.vehicles = { total: veh.length, nearestToStop: near, sampleTripIds: veh.slice(0, 5).map((v) => v.tripId) }
 
-  // 3) statikus: milyen tripId-k állnak meg itt ma
   const now = budapestNow(); const active = activeServices(now.ymd)
   const staticTrips = (stopSched.get(stopId) || []).filter((x) => { const tr = trips.get(x.trip); return tr && active.has(tr.serviceId) && now.midnightUnix + x.dep >= now.unix - 300 })
     .slice(0, 5).map((x) => ({ tripId: x.trip, schedDep: new Date((now.midnightUnix + x.dep) * 1000).toLocaleTimeString('hu-HU', { timeZone: 'Europe/Budapest' }), routeId: trips.get(x.trip)?.routeId }))
@@ -1064,18 +888,9 @@ app.post('/_ingest', async (c) => {
 })
 app.post('/_renew', async (c) => { const r = await renew('kézi'); return c.json({ triggered: true, result: r, jwt: jwtStatus(readJwt()) }, r?.ok ? 200 : 502) })
 
-// Token kényszerített frissítése a Mac-natív MVK app újraindításával és kiolvasásával
-/**
- * A gateway újraindítása.
- *
- * A folyamat kilép, a manager.mjs pedig újraindítja. Ha a backend kézzel,
- * manager nélkül fut, a kilépés után magától nem jön vissza — ezt a válasz
- * `managed` mezője jelzi előre, hogy a hub ne ígérjen olyat, ami nem történik meg.
- */
 app.post('/system/restart', (c) => {
   const managed = process.env.MVK_MANAGED === '1'
   console.log('[system] ⟳ újraindítási kérés a hubról')
-  // A válasz még kimegy, csak utána lépünk ki.
   setTimeout(() => process.exit(0), 150)
   return c.json({
     ok: true,
@@ -1086,7 +901,6 @@ app.post('/system/restart', (c) => {
   })
 })
 
-/** GTFS menetrend újratöltése a forrásból, a szerver leállítása nélkül. */
 app.post('/system/reload-gtfs', async (c) => {
   try {
     await refreshGtfs()
@@ -1102,7 +916,6 @@ app.post('/system/reload-gtfs', async (c) => {
   }
 })
 
-/** A valós idejű feed-gyorsítótár állapota — ebből látszik, él-e a háttérhurok. */
 app.get('/system/cache', (c) => {
   const now = Date.now()
   const feeds = [...feedCache.entries()].map(([path, e]) => ({
@@ -1185,7 +998,6 @@ async function forward(c: Context, origin: string, inject: boolean): Promise<Res
   return new Response(Buffer.from(await res.arrayBuffer()), { status: res.status, headers: out })
 }
 
-// ── auto-renew ──
 let lastRenew: { at: string; ok: boolean; status?: number; note?: string } | null = null
 let renewing = false
 async function renew(reason: string) {
@@ -1204,7 +1016,6 @@ async function renew(reason: string) {
   } catch (e) { return (lastRenew = { at, ok: false, note: (e as Error).message }) } finally { renewing = false }
 }
 
-// ── GTFS friss ──
 async function refreshGtfs() {
   try {
     const res = await fetch(GTFS_ORIGIN + '/MVK_mobilapp/GTFS/MVK_GTFS.zip'); if (!res.ok) throw new Error('HTTP ' + res.status)
@@ -1214,17 +1025,11 @@ async function refreshGtfs() {
   } catch (e) { console.log('[GTFS] friss letöltés kihagyva:', (e as Error).message) }
 }
 
-// ── start ──
 loadGtfs()
 refreshGtfs()
 setInterval(() => refreshGtfs(), 6 * 3600 * 1000)
 startPushLoop(arrivalsForStop, cancelledTripIds, () => budapestNow().secOfDay)
 
-/**
- * A valós idejű feedeket háttérben tartjuk melegen, hogy a kliens-kérések
- * a memóriából szolgálódjanak ki (~1 ms) az upstream ~150 ms helyett.
- * Csak érvényes token mellett indul, különben feleslegesen hívnánk 401-et.
- */
 function warmFeeds() {
   const st = jwtStatus(readJwt())
   if (!st.present || st.expired) return
@@ -1234,13 +1039,6 @@ function warmFeeds() {
 warmFeeds()
 setInterval(warmFeeds, FEED_TTL_MS)
 
-/**
- * Menetnapló-mintavétel. A gateway 0–24-ben fut, ezért folyamatosan
- * feljegyezhetjük, melyik jármű melyik meneten látszik — így a menetrendkönyv
- * a már LEFUTOTT menetekhez is meg tudja mutatni a járművet, amit az élő feed
- * addigra elfelejtett. A pozíciófeed gyorsítótárazott, tehát ez a hurok
- * mintavételenként legfeljebb egy upstream hívást jelent.
- */
 const JOURNAL_ON = (process.env.JOURNAL ?? '1') !== '0'
 const JOURNAL_INTERVAL_SEC = Number(process.env.JOURNAL_INTERVAL_SEC ?? 15)
 const JOURNAL_FLUSH_SEC = Number(process.env.JOURNAL_FLUSH_SEC ?? 60)
@@ -1251,18 +1049,12 @@ async function sampleJournal() {
   try {
     const now = budapestNow()
     for (const v of await activeVehicles()) {
-      // Csak ismert menetre könyvelünk: az ismeretlen trip_id a feed zaja.
       if (!v.tripId || !trips.has(v.tripId)) continue
       recordSighting(now.ymd, v.tripId, v.id, now.unix)
     }
-  } catch { /* egy kihagyott mintavétel nem gond, a következő pótolja */ }
+  } catch {   }
 }
 
-/**
- * A napló kiírása: a helyi JSON gyorstárba MINDIG, az adatbázisba pedig a
- * legutóbbi kör óta felgyűlt növekmény. Az adatbázis a végleges tár — onnan
- * olvassa vissza a menetrend a múltbeli napok járműveit.
- */
 async function persistJournal() {
   flushJournal()
   const ymd = budapestNow().ymd
@@ -1271,17 +1063,11 @@ async function persistJournal() {
   try {
     if (!(await saveSightings(ymd, rows))) restoreSightings(ymd, rows)
   } catch (e) {
-    // Adatbázis-kimaradás: a köteg visszakerül, a következő kör újra próbálja.
     restoreSightings(ymd, rows)
     console.log('[journal] adatbázis-írás sikertelen:', (e as Error).message)
   }
 }
 
-/**
- * A statikus feed által lefedett NAPOK menetrendjének elrakása. A feed mindig
- * csak a következő pár hetet ismeri, ezért ami kifutna belőle, azt itt mentjük
- * el — így a menetrendkönyv tetszőlegesen messzire vissza tud nézni.
- */
 async function archiveSchedules(reason: string) {
   const today = budapestNow().ymd
   const feedVersion = getFeedVersion()
@@ -1290,12 +1076,10 @@ async function archiveSchedules(reason: string) {
   try {
     stored = await storedFeedVersions()
   } catch {
-    return // nincs adatbázis — a gateway enélkül is teljes értékű
+    return
   }
 
   for (const ymd of feedDays()) {
-    // Ugyanaz a feed ugyanarra a napra ugyanazt a menetrendet adja: felesleges
-    // újraépíteni. Múltbeli napot pedig soha nem írunk felül.
     if (stored.get(ymd) === feedVersion) { counts.unchanged++; continue }
     if (stored.has(ymd) && ymd < today) { counts.past++; continue }
     try {
@@ -1320,14 +1104,6 @@ if (JOURNAL_ON) {
   }
 }
 
-/**
- * Kihúzott menetek háttér-mintavétele. A `/live/cancelled` végpont csak akkor
- * ír az archívumba, ha valaki épp nézi a menetrendkönyvet — enélkül egy olyan
- * nap, amikor senki nem nyitotta meg az appot, örökre üresen maradna, pedig a
- * törlés akkor is megtörtént. Ez a kör az `cancelledTripIds()` 30 mp-es
- * gyorsítótárát követve legfeljebb annyiszor hív upstream-et, ahányszor a lista
- * ténylegesen frissül.
- */
 async function sampleCancelledTrips() {
   const st = jwtStatus(readJwt())
   if (!st.present || st.expired) return
@@ -1336,21 +1112,17 @@ async function sampleCancelledTrips() {
     if (!ids.length) return
     const now = budapestNow()
     await saveCancelledTrips(now.ymd, ids, now.unix)
-  } catch { /* egy kihagyott mintavétel nem gond, a következő pótolja */ }
+  } catch {   }
 }
 sampleCancelledTrips()
 setInterval(sampleCancelledTrips, CANCELLED_TTL_MS)
 
-// Induláskor, majd óránként: a feed napjainak archiválása. A GTFS maga hat
-// óránként frissül, de a naptárfordulót ennél sűrűbben kell lefedni.
 archiveSchedules('indulás').catch(() => {})
 setInterval(() => { archiveSchedules('napi').catch(() => {}) }, 3600 * 1000)
 serve({ fetch: app.fetch, port: PORT, hostname: HOST }, (info) => {
   console.log(`== MVK backend ==  http://${HOST}:${info.port}   (dashboard a /-on)`)
   console.log(`   élő hozzárendelés: ≤${LIVE_MAX_KM} km, ≤${LIVE_MAX_ETA} perc   auto-renew: ${AUTO_RENEW ? 'BE' : 'KI'}`)
   console.log(`   JWT:`, jwtStatus(readJwt()))
-  // Minden cim, amin a gateway elerheto. VPN ujracsatlakozas utan a tunnel
-  // cime valtozhat, ezert hasznos, ha a naplobol mindig kiolvashato.
   if (HOST === '0.0.0.0') {
     const addrs = Object.entries(networkInterfaces()).flatMap(([name, list]) =>
       (list ?? []).filter((a) => a.family === 'IPv4' && !a.internal).map((a) => `${name}=${a.address}`)

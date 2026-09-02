@@ -1,13 +1,5 @@
 import { useEffect } from "react";
 
-/**
- * A tényleges látható magasság CSS-változóban.
- *
- * A `100vh` iOS-en a *legnagyobb* viewportot jelenti, a `100dvh` pedig nem
- * mindig frissül, amikor a lap altatásból tér vissza: ilyenkor a fejléc
- * felcsúszik és alul fekete sáv marad. A `visualViewport` mindig a valóban
- * látható területet adja, és minden ébredésre újramérünk.
- */
 export function useAppHeight() {
   useEffect(() => {
     const apply = () => {
@@ -15,8 +7,6 @@ export function useAppHeight() {
       document.documentElement.style.setProperty("--app-h", `${h}px`);
     };
 
-    // Az ébredés utáni első festés még a régi méretet hozza, ezért kétszer
-    // mérünk: azonnal, majd a következő képkockán.
     const applySoon = () => {
       apply();
       requestAnimationFrame(apply);

@@ -2,17 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CancelledTrip, CancelledTripsResponse } from "@/types";
 import { api } from "@/services/api";
 
-/**
- * A kihúzott menetek listája percekben mérhető ütemben változik (a backend is
- * fél percig gyorsítótárazza), ezért ritkább lekérdezés bőven elég.
- */
 const DEFAULT_POLL_MS = 30000;
 
 export interface CancelledTripsState {
-  /** Gyors tagsági kérdéshez: „ez a tripId törölve van-e?” */
   ids: Set<string>;
   trips: CancelledTrip[];
-  /** Melyik napra vonatkozik a lista (YYYYMMDD) — az upstream csak a mait adja. */
   date: string | null;
   error: string | null;
 }
@@ -24,11 +18,6 @@ const EMPTY: CancelledTripsState = {
   error: null,
 };
 
-/**
- * Egy nap kihúzott menetei. `ymd=null` esetén nem kérdez le semmit. Mai napra
- * (`isToday=true`) rendszeresen újralekérdez, mert a lista élőben változik;
- * múltbeli napra egyszeri lekérdezés elég, mert az archívum onnantól fix.
- */
 export function useCancelledTrips(
   ymd: string | null,
   isToday: boolean,
@@ -59,8 +48,6 @@ export function useCancelledTrips(
         setData(res);
         setError(null);
       } catch (err) {
-        // A korábbi lista megmarad: egy megbicsakló lekérdezés miatt ne
-        // tűnjenek el a jelölések a menetrendből.
         if (mounted.current) setError((err as Error).message);
       }
     };

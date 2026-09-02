@@ -1,16 +1,21 @@
 /**
- * Jelszó nélküli fiók + felhős biztonsági mentés.
+ * Jelszó nélküli fiók + felhős biztonsági mentés — WebAuthn passkey.
  *
- * Nincs jelszó: a "belépés" maga egy 256 bites, a böngészőben generált titkos
- * kulcs, ami csak ezen az eszközön (localStorage) él. Másik eszközön a kulcs
- * (vagy egy QR-kód / másolás) bevitelével lehet ugyanahhoz a fiókhoz
- * kapcsolódni — nincs "csak e-maillel belépés" út, mert az e-mail önmagában
- * nem hitelesít.
+ * Nincs jelszó, nincs saját titkos kulcs: a "belépés" a böngésző/eszköz
+ * platform-hitelesítőjén (Touch ID, Windows Hello, telefon lezárása,
+ * biztonsági kulcs) keresztül történik. Ez a modul csak a HTTP-hívásokat és
+ * a helyi munkamenet-tárolást intézi — a kriptográfiai ceremóniát a
+ * @simplewebauthn/browser könyvtár végzi.
  *
  * A mentés iránya szigorúan egyirányú: ez a modul rendszeresen FELküldi a
  * localStorage app-adatait, de sosem tölt le és ír felül automatikusan —
  * letöltés csak explicit felhasználói kérésre (pullBackup) történik.
  */
+import {
+  startRegistration,
+  startAuthentication,
+  browserSupportsWebAuthn,
+} from "@simplewebauthn/browser";
 
 let API_BASE = import.meta.env.VITE_API_URL ?? "";
 if (!API_BASE && typeof window !== "undefined" && import.meta.env.PROD) {
@@ -19,117 +24,178 @@ if (!API_BASE && typeof window !== "undefined" && import.meta.env.PROD) {
     protocol === "https:" ? `https://${hostname}` : `http://${hostname}:8088`;
 }
 
-const ACCOUNT_KEY_STORAGE = "mvk_account";
+const SESSION_STORAGE = "mvk_account";
 /** Csak ez alatt a névtér alatt élő kulcsokat mentjük/állítjuk vissza — ez maga sosem szerepel a mentésben. */
 const BACKUP_PREFIX = "mvk_";
-const EXCLUDE_FROM_BACKUP = new Set([ACCOUNT_KEY_STORAGE]);
+const EXCLUDE_FROM_BACKUP = new Set([SESSION_STORAGE]);
 
-export type Account = { email: string; key: string };
+export type Session = { email: string; sessionToken: string };
 
-function readAccount(): Account | null {
+function readSession(): Session | null {
   try {
-    const raw = localStorage.getItem(ACCOUNT_KEY_STORAGE);
+    const raw = localStorage.getItem(SESSION_STORAGE);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<Account>;
-    if (!parsed.email || !parsed.key) return null;
-    return { email: parsed.email, key: parsed.key };
+    const parsed = JSON.parse(raw) as Partial<Session>;
+    if (!parsed.email || !parsed.sessionToken) return null;
+    return { email: parsed.email, sessionToken: parsed.sessionToken };
   } catch {
     return null;
   }
 }
 
-function writeAccount(acc: Account | null): void {
+function writeSession(s: Session | null): void {
   try {
-    if (acc) localStorage.setItem(ACCOUNT_KEY_STORAGE, JSON.stringify(acc));
-    else localStorage.removeItem(ACCOUNT_KEY_STORAGE);
+    if (s) localStorage.setItem(SESSION_STORAGE, JSON.stringify(s));
+    else localStorage.removeItem(SESSION_STORAGE);
   } catch {
     /* localStorage megtelt vagy tiltott */
   }
 }
 
-export const getAccount = readAccount;
+export const getSession = readSession;
 
-/** Kijelentkezés — csak ezt az eszközt választja le, a felhős mentés megmarad. */
-export function forgetAccountOnThisDevice(): void {
-  writeAccount(null);
+export function passkeysSupported(): boolean {
+  return browserSupportsWebAuthn();
 }
 
 export type AccountResult<T> =
   | { ok: true; data: T }
   | { ok: false; reason: string };
 
-async function post<T>(path: string, body: unknown): Promise<AccountResult<T>> {
+async function postJson<T>(
+  path: string,
+  body: unknown,
+  session?: Session,
+): Promise<AccountResult<T>> {
   try {
     const res = await fetch(`${API_BASE}${path}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(session ? { "X-Account-Session": session.sessionToken } : {}),
+      },
       body: JSON.stringify(body),
     });
     const data = await res.json().catch(() => null);
-    if (!res.ok) {
-      return { ok: false, reason: data?.error ?? `HTTP ${res.status}` };
-    }
+    if (!res.ok) return { ok: false, reason: data?.error ?? `HTTP ${res.status}` };
     return { ok: true, data: data as T };
   } catch (e) {
     return { ok: false, reason: (e as Error).message };
   }
 }
 
-/** Új fiók létrehozása — a kulcsot a szerver generálja, és csak ITT, egyszer adja vissza. */
-export async function registerAccount(
-  email: string,
-): Promise<AccountResult<Account>> {
-  const res = await post<{ email: string; key: string }>("/account/register", {
-    email,
-  });
-  if (!res.ok) return res;
-  const acc: Account = { email: res.data.email, key: res.data.key };
-  writeAccount(acc);
-  return { ok: true, data: acc };
+/** Passkey-hibák (pl. a felhasználó megszakítja a rendszer-promptot) barátságos szövege. */
+function friendlyPasskeyError(e: unknown): string {
+  const name = (e as { name?: string })?.name;
+  if (name === "NotAllowedError") return "Megszakítva vagy időtúllépés.";
+  if (name === "InvalidStateError") return "Ez a passkey már regisztrálva van ezen az eszközön.";
+  return (e as Error)?.message ?? "Ismeretlen hiba.";
 }
 
-/**
- * Egy meglévő fiók kulcsának bevitele ezen az eszközön (pl. egy másik
- * eszközön korábban létrehozott fiók csatlakoztatása). A kulcsot a szerver
- * ELLENŐRZI (státusz-lekérdezéssel), mielőtt elmentenénk — így egy elgépelt
- * kulcs nem "kapcsolódik csendben".
- */
-export async function connectWithKey(
-  key: string,
-): Promise<AccountResult<Account>> {
+/** Új fiók + új passkey létrehozása. Ha az e-mailhez már van fiók, hibát ad. */
+export async function registerAccount(email: string): Promise<AccountResult<Session>> {
+  const opt = await postJson<{ options: unknown }>("/account/passkey/register-options", { email });
+  if (!opt.ok) return opt;
+  let response;
   try {
-    const res = await fetch(`${API_BASE}/account/status`, {
-      headers: { "X-Account-Key": key },
+    response = await startRegistration({
+      optionsJSON: opt.data.options as Parameters<typeof startRegistration>[0]["optionsJSON"],
     });
-    const data = await res.json().catch(() => null);
-    if (!res.ok) {
-      return {
-        ok: false,
-        reason: res.status === 401 ? "Ismeretlen kulcs." : (data?.error ?? `HTTP ${res.status}`),
-      };
-    }
-    const acc: Account = { email: data.email, key };
-    writeAccount(acc);
-    return { ok: true, data: acc };
   } catch (e) {
-    return { ok: false, reason: (e as Error).message };
+    return { ok: false, reason: friendlyPasskeyError(e) };
+  }
+  const verify = await postJson<{ email: string; sessionToken: string }>(
+    "/account/passkey/register-verify",
+    { email, response },
+  );
+  if (!verify.ok) return verify;
+  const session: Session = { email: verify.data.email, sessionToken: verify.data.sessionToken };
+  writeSession(session);
+  return { ok: true, data: session };
+}
+
+/** Bejelentkezés egy meglévő fiókhoz regisztrált passkey-vel. */
+export async function loginWithPasskey(email: string): Promise<AccountResult<Session>> {
+  const opt = await postJson<{ options: unknown }>("/account/passkey/login-options", { email });
+  if (!opt.ok) return opt;
+  let response;
+  try {
+    response = await startAuthentication({
+      optionsJSON: opt.data.options as Parameters<typeof startAuthentication>[0]["optionsJSON"],
+    });
+  } catch (e) {
+    return { ok: false, reason: friendlyPasskeyError(e) };
+  }
+  const verify = await postJson<{ email: string; sessionToken: string }>(
+    "/account/passkey/login-verify",
+    { email, response },
+  );
+  if (!verify.ok) return verify;
+  const session: Session = { email: verify.data.email, sessionToken: verify.data.sessionToken };
+  writeSession(session);
+  return { ok: true, data: session };
+}
+
+/** Új passkey (pl. másik eszköz) hozzáadása a JELENLEG bejelentkezett fiókhoz. */
+export async function addPasskeyToCurrentAccount(): Promise<AccountResult<true>> {
+  const session = readSession();
+  if (!session) return { ok: false, reason: "Nincs érvényes munkamenet ezen az eszközön." };
+  const opt = await postJson<{ options: unknown }>(
+    "/account/passkey/add-options",
+    {},
+    session,
+  );
+  if (!opt.ok) return opt;
+  let response;
+  try {
+    response = await startRegistration({
+      optionsJSON: opt.data.options as Parameters<typeof startRegistration>[0]["optionsJSON"],
+    });
+  } catch (e) {
+    return { ok: false, reason: friendlyPasskeyError(e) };
+  }
+  return postJson<true>("/account/passkey/add-verify", { response }, session);
+}
+
+/** Kijelentkezés — a szerveren is érvényteleníti a munkamenetet. */
+export async function logout(): Promise<void> {
+  const session = readSession();
+  writeSession(null);
+  if (!session) return;
+  try {
+    await fetch(`${API_BASE}/account/logout`, {
+      method: "POST",
+      headers: { "X-Account-Session": session.sessionToken },
+    });
+  } catch {
+    /* a helyi kijelentkezés enélkül is megtörtént */
   }
 }
 
-export type BackupStatus = { email: string; lastBackupAt: number | null; bytes: number };
+export type BackupStatus = {
+  email: string;
+  lastBackupAt: number | null;
+  bytes: number;
+  credentialCount: number;
+};
 
 export async function getBackupStatus(): Promise<AccountResult<BackupStatus>> {
-  const acc = readAccount();
-  if (!acc) return { ok: false, reason: "Nincs beállított fiók ezen az eszközön." };
+  const session = readSession();
+  if (!session) return { ok: false, reason: "Nincs beállított fiók ezen az eszközön." };
   try {
     const res = await fetch(`${API_BASE}/account/status`, {
-      headers: { "X-Account-Key": acc.key },
+      headers: { "X-Account-Session": session.sessionToken },
     });
     const data = await res.json().catch(() => null);
     if (!res.ok) return { ok: false, reason: data?.error ?? `HTTP ${res.status}` };
     return {
       ok: true,
-      data: { email: data.email, lastBackupAt: data.lastBackupAt, bytes: data.bytes },
+      data: {
+        email: data.email,
+        lastBackupAt: data.lastBackupAt,
+        bytes: data.bytes,
+        credentialCount: data.credentialCount,
+      },
     };
   } catch (e) {
     return { ok: false, reason: (e as Error).message };
@@ -150,12 +216,12 @@ function snapshotLocalData(): Record<string, string> {
 
 /** Rendszeres/automatikus felküldés — soha nem tölt le, csak ment. */
 export async function pushBackup(): Promise<AccountResult<{ bytes: number }>> {
-  const acc = readAccount();
-  if (!acc) return { ok: false, reason: "Nincs beállított fiók ezen az eszközön." };
+  const session = readSession();
+  if (!session) return { ok: false, reason: "Nincs beállított fiók ezen az eszközön." };
   try {
     const res = await fetch(`${API_BASE}/account/backup`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-Account-Key": acc.key },
+      headers: { "Content-Type": "application/json", "X-Account-Session": session.sessionToken },
       body: JSON.stringify(snapshotLocalData()),
     });
     const data = await res.json().catch(() => null);
@@ -174,11 +240,11 @@ export async function pushBackup(): Promise<AccountResult<{ bytes: number }>> {
 export async function pullBackup(): Promise<
   AccountResult<{ updatedAt: number; keysRestored: number }>
 > {
-  const acc = readAccount();
-  if (!acc) return { ok: false, reason: "Nincs beállított fiók ezen az eszközön." };
+  const session = readSession();
+  if (!session) return { ok: false, reason: "Nincs beállított fiók ezen az eszközön." };
   try {
     const res = await fetch(`${API_BASE}/account/backup`, {
-      headers: { "X-Account-Key": acc.key },
+      headers: { "X-Account-Session": session.sessionToken },
     });
     const data = await res.json().catch(() => null);
     if (!res.ok) return { ok: false, reason: data?.error ?? `HTTP ${res.status}` };

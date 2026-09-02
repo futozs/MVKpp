@@ -2,17 +2,8 @@ import { useEffect, useState } from "react";
 import { serviceToday, statsApi } from "@/services/statsApi";
 
 const POLL_MS = 60_000;
-// A worker kb. 5 percenként fut újra (CLOSE_INTERVAL_MS), ezért egy
-// észlelés csak addig számít "élőnek", amíg a legutóbbi futtatási
-// ablaknál nem régebbi — ennél régebbi lezárt esemény már csak történelem.
 const RECENT_WINDOW_S = 15 * 60;
 
-/**
- * Hány üzemzavar-észlelés "él" éppen most: az elmúlt 15 percben indult,
- * vagy még nyitott kiesés (absence). Ez ad indokot arra, hogy a fejlécen
- * megjelenjen egy figyelmeztető jelzés anélkül, hogy be kellene lépni a
- * Statisztika/Üzemzavarok fülre.
- */
 export function useLiveIncidents(): number {
   const [count, setCount] = useState(0);
 

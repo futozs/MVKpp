@@ -45,10 +45,8 @@ export interface TileLayerOption {
   url: string;
   labelsUrl?: string;
   attribution: string;
-  /** Ameddig a szolgáltató valódi csempét ad; efölött a Leaflet nagyítana. */
   maxNativeZoom: number;
   swatch: string;
-  /** CSS-szűrő a csempepanelre — így lesz sötét lapunk natív zoom feláldozása nélkül. */
   filter?: string;
 }
 
@@ -56,17 +54,6 @@ const OSM_ATTRIB =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> közreműködők';
 const OSM_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 
-/**
- * Minden réteg 19-es natív zoomig ad valódi csempét (a domborzat 17-ig). Ez
- * azért számít, mert retina kijelzőn a Leaflet eggyel mélyebbről kéri a
- * csempét, és félakkorán rajzolja ki — ettől lesz éles. Ha a szolgáltató
- * natív maximuma ennél sekélyebb (a korábbi Esri Canvas lapok 16-ig mentek),
- * ugyanez a mechanizmus nagyítássá válik: pont ez pixelesítette el a térképet
- * telefonon, miközben a gépen — ahol nincs retina-korrekció — éles maradt.
- *
- * A sötét és a halvány lap ezért nem külön szolgáltatótól jön, hanem az OSM-lap
- * színszűrt változata: így megmarad a 19-es natív mélység.
- */
 export const TILE_LAYERS: TileLayerOption[] = [
   {
     id: "osm",
@@ -124,18 +111,16 @@ export const TILE_LAYERS: TileLayerOption[] = [
 
 const MAX_MAP_ZOOM = 19;
 
-/** A választott réteg, ismeretlen azonosítóra az elsővel visszaesve. */
 const layerConf = (id: string) =>
   TILE_LAYERS.find((l) => l.id === id) || TILE_LAYERS[0];
 
 function makeTile(conf: TileLayerOption, labels: boolean): L.TileLayer {
   const layer = L.tileLayer(labels ? conf.labelsUrl! : conf.url, {
-    // 20-at adunk meg, mert retina kijelzőn a Leaflet magától eggyel
-    // csökkenti — így a réteg a térkép 19-es maximumáig végig tölt.
     maxZoom: MAX_MAP_ZOOM + 1,
     maxNativeZoom: conf.maxNativeZoom,
     detectRetina: true,
     keepBuffer: 2,
+    crossOrigin: true,
     ...(labels ? { pane: "shadowPane" } : { attribution: conf.attribution }),
   });
 
@@ -148,9 +133,6 @@ function makeTile(conf: TileLayerOption, labels: boolean): L.TileLayer {
   return layer;
 }
 
-/* ── A szűrőpanel építőelemei ────────────────────────────────────────────
-   Egységes ritmus és egyetlen helyen definiált állapotjelzés: a panel így
-   végigpásztázható marad akkor is, ha sok szűrő van egyszerre bekapcsolva. */
 
 function FilterSection({
   title,

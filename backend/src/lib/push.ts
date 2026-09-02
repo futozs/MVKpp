@@ -1,21 +1,11 @@
 import webpush from "web-push";
 
-// .trim(): ha egy env-fájl-szerkesztő vagy a shell trailing szóközt/új sort
-// hagyott a bemásolt kulcsban, az a Push API-nál rejtélyes "The string did
-// not match the expected pattern" hibaként jelentkezne a böngészőben.
 const PUBLIC_KEY = (process.env.VAPID_PUBLIC_KEY ?? "").trim();
 const PRIVATE_KEY = (process.env.VAPID_PRIVATE_KEY ?? "").trim();
 const SUBJECT = (process.env.VAPID_SUBJECT ?? "").trim();
 
-/**
- * Push csak akkor él, ha mindhárom VAPID env változó be van állítva a
- * szerveren. Enélkül a /push végpontok szépen "nincs konfigurálva"
- * választ adnak, és a kliens visszaesik a helyi (nyitott lapos)
- * értesítésre — nincs kőbe vésett titok a forráskódban.
- */
 export const pushConfigured = Boolean(PUBLIC_KEY && PRIVATE_KEY && SUBJECT);
 
-/** A P-256 VAPID publikus kulcs tömörítetlen EC-pont: mindig pontosan 65 byte. */
 function decodedByteLength(base64url: string): number {
   const padded = base64url + "=".repeat((4 - (base64url.length % 4)) % 4);
   return Buffer.from(padded.replace(/-/g, "+").replace(/_/g, "/"), "base64").length;
@@ -53,11 +43,6 @@ export type PushSubscriptionJSON = {
 
 export type PushSendResult = "ok" | "gone" | "error";
 
-/**
- * Egy push üzenet kiküldése. A "gone" visszatérési érték azt jelzi, hogy a
- * böngésző push-szolgáltatása szerint ez a feliratkozás már nem létezik
- * (pl. a felhasználó törölte az appot) — ilyenkor a hívó törölheti a sort.
- */
 export async function sendPush(
   subscription: PushSubscriptionJSON,
   payload: { title: string; body: string; tag: string },

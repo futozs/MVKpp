@@ -4,11 +4,6 @@ import { delayState, delayTone } from "@/components/transit/DelayBar";
 import { delayPastSentence } from "@/lib/tripStatus";
 import { cn } from "@/lib/utils";
 
-/**
- * Egy menet TÉNYLEGES futása: melyik jármű vitte, mennyit késett vagy sietett
- * induláskor és érkezéskor. Múltbeli napoknál ez az egyetlen forrás — az élő
- * feed addigra semmit nem tud a menetről.
- */
 export function RunSummary({
   entry,
   className,
@@ -20,8 +15,6 @@ export function RunSummary({
   const endText = delayPastSentence(entry.endDelaySec, "end");
   if (!startText && !endText && !entry.vehicleId) return null;
 
-  // A worker akkor jelöl `partial`-t, ha a menet közben elvesztette a járművet:
-  // ilyenkor az eltérés csak a látott megállókra igaz.
   const partial =
     entry.status === "partial" &&
     entry.stopsSeen != null &&

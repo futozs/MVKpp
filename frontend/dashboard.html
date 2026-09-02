@@ -989,7 +989,6 @@
           className:'',iconSize:big?[38,28]:[26,20],iconAnchor:big?[19,14]:[13,10]});
       }
 
-      /* ── szűrő állapot mentése / betöltése ── */
       function saveFilter(){try{localStorage.setItem('mvkFilter',JSON.stringify({...FILTER,routes:[...FILTER.routes]}));}catch(e){}}
       function loadFilter(){try{const o=JSON.parse(localStorage.getItem('mvkFilter')||'null');if(!o)return;
         Object.assign(FILTER,o,{routes:new Set(o.routes||[]),watch:Array.isArray(o.watch)?o.watch.slice(0,MAX_WATCH):[]});}catch(e){}}

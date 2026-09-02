@@ -60,7 +60,6 @@ export function StopCarousel({
     setIndex((prev) => Math.min(prev, Math.max(0, stops.length - 1)));
   }, [stops.length]);
 
-  // Ha a legközelebbi megálló változik (mozgás közben), az kerül a képbe.
   useEffect(() => {
     if (!nearestId) return;
     const track = trackRef.current;

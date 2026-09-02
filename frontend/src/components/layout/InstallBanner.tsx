@@ -2,12 +2,6 @@ import { Download, Share, SquarePlus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useInstallPrompt } from "@/hooks/useInstallPrompt";
 
-/**
- * Telepítési ajánlat: a webapp kikerülhet a telefon kezdőképernyőjére, és
- * onnan böngészősáv nélkül, alkalmazásként indul. Androidon a böngésző saját
- * telepítőpárbeszédét nyitja meg, iOS-en — ahol nincs ilyen API — a két
- * kézi lépést mutatja meg.
- */
 export function InstallBanner() {
   const { canOffer, needsManualSteps, install, dismiss } = useInstallPrompt();
   if (!canOffer) return null;

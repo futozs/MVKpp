@@ -17,7 +17,6 @@ function read(): string[] {
   }
 }
 
-/** Kedvenc járművek a statisztika oldalon — kedvenc esetén elöl listázva. */
 export function useFavoriteVehicles() {
   const [favorites, setFavorites] = useState<string[]>(read);
 

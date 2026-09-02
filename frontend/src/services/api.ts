@@ -15,6 +15,8 @@ import type {
   TripJournalResponse,
   TripProgressResponse,
   WeatherResponse,
+  RoutePlanPoint,
+  RoutePlanResponse,
 } from "../types";
 
 let API_BASE = import.meta.env.VITE_API_URL ?? "";
@@ -116,10 +118,6 @@ export const api = {
     );
   },
 
-  /**
-   * Egy nap kihúzott (törölt) menetei — a menetrendkönyv jelöléseihez.
-   * `date` nélkül a mai nap élő listája jön; korábbi nappal az archívumból.
-   */
   async getCancelledTrips(date?: string): Promise<CancelledTripsResponse> {
     const q = date ? `?date=${encodeURIComponent(date)}` : "";
     return handleResponse<CancelledTripsResponse>(
@@ -128,7 +126,6 @@ export const api = {
     );
   },
 
-  /** Melyik jármű teljesítette az adott nap meneteit (gateway-napló). */
   async getTripJournal(date?: string): Promise<TripJournalResponse> {
     const q = date ? `?date=${encodeURIComponent(date)}` : "";
     return handleResponse<TripJournalResponse>(
@@ -248,5 +245,23 @@ export const api = {
   }> {
     const res = await fetch(`${API_BASE}/_renew`, { method: "POST" });
     return handleResponse(res, "/_renew");
+  },
+
+  /**
+   * Az MVK saját, hiteles útvonaltervezője (autó/gyalog/kerékpár/tömegközlekedés
+   * variánsokkal) — a gateway a `/api/*` proxyn keresztül automatikusan
+   * beteszi a Bearer JWT-t, itt nincs külön hitelesítés.
+   */
+  async planRoute(
+    from: RoutePlanPoint,
+    to: RoutePlanPoint,
+    departureTime: string,
+  ): Promise<RoutePlanResponse> {
+    const res = await fetch(`${API_BASE}/api/v1/route/plan`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ points: [from, to], departureTime }),
+    });
+    return handleResponse<RoutePlanResponse>(res, "/api/v1/route/plan");
   },
 };

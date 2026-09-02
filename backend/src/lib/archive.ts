@@ -1,15 +1,3 @@
-/**
- * Menetrend- és futásarchívum (MySQL).
- *
- * A GTFS feed mindig csak a következő pár hetet ismeri: ami kifut belőle, azt
- * semmi nem őrzi meg, ezért egy múltbeli napra utólag nem lehet megmondani,
- * milyen menetrend volt érvényes. Ez a modul minden feed-frissítéskor elrakja
- * az érvényességi tartomány összes napjának menetrendjét, és VÉGLEGESEN tárolja
- * a menet–jármű hozzárendeléseket is.
- *
- * Ha nincs adatbázis, minden művelet csendben kimarad — a gateway attól még
- * teljes értékűen működik, csak nem tud visszanézni a múltba.
- */
 import { createHash } from 'node:crypto'
 import { gzipSync, gunzipSync } from 'node:zlib'
 import { query, isReady } from '../db/pool.ts'
@@ -22,8 +10,6 @@ let ready: boolean | null = null
 let readyCheckedAt = 0
 const READY_TTL_MS = 60_000
 
-/** Elérhető-e az adatbázis. Az eredményt percig megjegyezzük, hogy egy leállt
- *  MySQL ne lassítsa minden kérésnél a menetrendet. */
 export async function archiveReady(): Promise<boolean> {
   if (ready !== null && Date.now() - readyCheckedAt < READY_TTL_MS) return ready
   readyCheckedAt = Date.now()
@@ -31,9 +17,7 @@ export async function archiveReady(): Promise<boolean> {
   return ready
 }
 
-// ── Napi menetrend ───────────────────────────────────────────────────────────
 
-/** A kicsomagolt napok memóriacache-e: egy blob visszaolvasása ~20 ms. */
 const dayCache = new Map<string, DaySchedule>()
 const DAY_CACHE_MAX = 12
 
@@ -44,15 +28,6 @@ function cacheDay(ymd: string, day: DaySchedule) {
 
 export type SaveResult = 'saved' | 'unchanged' | 'past' | 'skipped'
 
-/**
- * Egy nap menetrendjének elrakása.
- *
- * A napi menetrend napról napra szinte azonos, ezért TARTALOM-HASH szerint
- * deduplikálunk: minden hétköznap ugyanarra a blobra mutat.
- *
- * MÚLTBELI napot soha nem írunk felül: a múlt menetrendje az, ami akkor
- * érvényes volt, nem az, amit egy későbbi feed mond róla.
- */
 export async function saveDaySchedule(day: DaySchedule, todayYmd: string): Promise<SaveResult> {
   if (!(await archiveReady())) return 'skipped'
 
@@ -84,7 +59,6 @@ export async function saveDaySchedule(day: DaySchedule, todayYmd: string): Promi
   return 'saved'
 }
 
-/** Egy archivált nap menetrendje, vagy `null` ha nincs elrakva. */
 export async function loadDaySchedule(ymd: string): Promise<DaySchedule | null> {
   const cached = dayCache.get(ymd)
   if (cached) return cached
@@ -106,12 +80,6 @@ export async function loadDaySchedule(ymd: string): Promise<DaySchedule | null> 
   }
 }
 
-/**
- * Melyik naphoz melyik feed-verzió van elrakva. Ha a verzió egyezik az
- * aktuálisan betöltött feeddel, a nap menetrendjét fölösleges újraépíteni —
- * enélkül az óránkénti ellenőrzés minden alkalommal legyártaná mind a
- * tizenöt napot.
- */
 export async function storedFeedVersions(): Promise<Map<string, string>> {
   const out = new Map<string, string>()
   if (!(await archiveReady())) return out
@@ -122,7 +90,6 @@ export async function storedFeedVersions(): Promise<Map<string, string>> {
   return out
 }
 
-/** Meddig ér vissza az archívum. A naptár alsó határa ebből jön. */
 export async function archiveRange(): Promise<{ from: string; to: string; days: number } | null> {
   if (!(await archiveReady())) return null
   const rows = await query<{ mn: string | null; mx: string | null; n: number }>(
@@ -133,11 +100,9 @@ export async function archiveRange(): Promise<{ from: string; to: string; days: 
   return { from: sqlToYmd(r.mn), to: sqlToYmd(r.mx), days: Number(r.n) }
 }
 
-// ── Menet–jármű napló ────────────────────────────────────────────────────────
 
 export type Sighting = { tripId: string; vehicleId: string; firstSeen: number; lastSeen: number; samples: number }
 
-/** Észlelések kiírása. Az `samples` összeadódik, a `last_seen` előre lép. */
 export async function saveSightings(ymd: string, rows: Sighting[]): Promise<boolean> {
   if (!rows.length) return true
   if (!(await archiveReady())) return false
@@ -161,7 +126,6 @@ export type RunRecord = {
   samples: number
   firstSeen: number | null
   lastSeen: number | null
-  /** + = késett, − = sietett (indulás / érkezés). A statisztikai workerből. */
   startDelaySec: number | null
   endDelaySec: number | null
   actualStart: number | null
@@ -171,17 +135,11 @@ export type RunRecord = {
   stopsTotal: number | null
 }
 
-/**
- * Egy nap tényleges futásai menetenként: melyik jármű vitte és milyen
- * késéssel. A jármű a gateway naplójából jön (mindig megvan), a késés a
- * statisztikai worker `trip_run` táblájából (csak ha a worker fut).
- */
 export async function dayRuns(ymd: string): Promise<Map<string, RunRecord>> {
   const out = new Map<string, RunRecord>()
   if (!(await archiveReady())) return out
   const sqlDate = ymdToSql(ymd)
 
-  // 1) Gateway-napló: menetenként a legtöbbször észlelt jármű nyer.
   const log = await query<{ trip_id: string; vehicle_id: string; first_seen: number; last_seen: number; samples: number }>(
     `SELECT trip_id, vehicle_id, first_seen, last_seen, samples
      FROM trip_vehicle_log WHERE service_date = ? AND samples >= 2
@@ -199,7 +157,6 @@ export async function dayRuns(ymd: string): Promise<Map<string, RunRecord>> {
     })
   }
 
-  // 2) Statisztikai worker: tényleges indulás/érkezés és eltérés.
   const runs = await query<{
     trip_id: string; vehicle_id: string; start_delay_s: number | null; end_delay_s: number | null
     actual_start: number | null; actual_end: number | null; status: string; stops_seen: number; stops_total: number
@@ -233,13 +190,7 @@ export async function dayRuns(ymd: string): Promise<Map<string, RunRecord>> {
   return out
 }
 
-// ── Kihúzott menetek napló ───────────────────────────────────────────────────
 
-/**
- * Egy mintavétel eredménye: ami épp kihúzva látszik, azt a mai (vagy a
- * megadott) napra véglegesen elrakjuk. `ON DUPLICATE KEY` miatt biztonságos
- * ugyanazt a menetet többször is beküldeni egy napon belül.
- */
 export async function saveCancelledTrips(ymd: string, tripIds: string[], nowTs: number): Promise<boolean> {
   if (!tripIds.length) return true
   if (!(await archiveReady())) return false
@@ -257,7 +208,6 @@ export async function saveCancelledTrips(ymd: string, tripIds: string[], nowTs: 
   return true
 }
 
-/** Az adott napon (visszamenőleg is) kihúzottnak látott menetek trip_id-jei. */
 export async function dayCancelledTripIds(ymd: string): Promise<string[]> {
   if (!(await archiveReady())) return []
   const rows = await query<{ trip_id: string }>(

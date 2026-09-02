@@ -50,9 +50,7 @@ interface TimetableViewProps {
   stops: Stop[];
   liveVehicles: LiveVehicle[];
   onFocusTrip: (tripId: string, vehicleId?: string) => void;
-  /** A GTFS naptári érvényessége (YYYYMMDD) — ezen kívülre nincs élő menetrend. */
   serviceRange: { from: string; to: string } | null;
-  /** Az elrakott menetrend tartománya — a naptár eddig enged visszalépni. */
   archiveRange: { from: string; to: string; days: number } | null;
 }
 
@@ -60,7 +58,6 @@ function secondsSinceMidnight(d: Date) {
   return d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
 }
 
-/** YYYYMMDD ↔ YYYY-MM-DD: a backend az előbbit, az <input type="date"> az utóbbit érti. */
 const ymdToIso = (ymd: string) =>
   `${ymd.slice(0, 4)}-${ymd.slice(4, 6)}-${ymd.slice(6, 8)}`;
 const isoToYmd = (iso: string) => iso.replace(/-/g, "");
@@ -167,16 +164,12 @@ export function TimetableView({
   const pendingTripRef = useRef<string | null>(restored?.tripId ?? null);
   const { favorites, isFavorite, toggleFavorite } = useFavorites();
 
-  // A naptár addig enged vissza, ameddig elrakott menetrend van: a GTFS feed
-  // csak a következő pár hetet ismeri, a múltat az archívum őrzi.
   const from = [serviceRange?.from, archiveRange?.from].filter(Boolean).sort()[0];
   const to = [serviceRange?.to, archiveRange?.to].filter(Boolean).sort().pop();
   const minIso = from ? ymdToIso(from) : null;
   const maxIso = to ? ymdToIso(to) : null;
   const [date, setDate] = useState(todayIso());
 
-  // A feed betöltése után derül ki, meddig ér az érvényesség — ha a mai nap
-  // kilóg belőle, a legközelebbi érvényes napra igazítunk.
   useEffect(() => {
     setDate((prev) => clampIso(prev, minIso, maxIso));
   }, [minIso, maxIso]);
@@ -184,12 +177,7 @@ export function TimetableView({
   const isToday = date === todayIso();
   const day = dayRelation(date, todayIso());
 
-  // Mai napra élőben az MVK végpontjáról jön a lista, korábbi napra a backend
-  // archívumából — a menetrendkönyv attól függetlenül tudja jelölni a törölt
-  // meneteket, hogy visszalapoztunk-e a múltba.
   const cancelled = useCancelledTrips(isoToYmd(date), isToday);
-  // A napló minden naplózott napra elérhető, nem csak a maira — így egy tegnapi
-  // menetnél is látszik, melyik jármű vitte.
   const journal = useTripJournal(isoToYmd(date), day === "today" ? 60000 : 0);
 
   const [nowSec, setNowSec] = useState(() => secondsSinceMidnight(new Date()));
@@ -299,8 +287,6 @@ export function TimetableView({
     setSelectedDir(withService?.dir ?? "");
   };
 
-  // Egy kihúzott menethez tartozó jármű már nem ezt a menetet teljesíti, ezért
-  // az „elindult” számból kimarad.
   const cancelledTripCount =
     table?.trips.filter((t) => cancelled.ids.has(t.tripId)).length ?? 0;
   const liveTripCount =
@@ -758,11 +744,9 @@ function TripDetail({
   });
   // A naplózott jármű a menet UTÁN is megvan — a térképen ilyenkor már máshol
   // jár, de az utasnak pont az a kérdés, hogy „melyik busz vitte ezt". Egy még
-  // el sem indult menetnél viszont nem mutatjuk: az csak feed-zaj lehetne.
   const pastVehicleId = showsJournalVehicle(state)
     ? (journalEntry?.vehicleId ?? null)
     : null;
-  // Ha a futás-összegző úgyis kiírja a járművet, a fejlécben ne ismételjük.
   const showRunSummary = Boolean(
     !cancelled && journalEntry && state !== "scheduled",
   );

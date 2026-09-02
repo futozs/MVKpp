@@ -1,4 +1,3 @@
-// Legelső import: a lenti ./pool.ts modulbetöltéskor olvassa a process.env-et.
 import "dotenv/config";
 import mysql from "mysql2/promise";
 import { readFileSync } from "node:fs";
@@ -24,21 +23,10 @@ function splitStatements(sql: string): string[] {
     .filter(Boolean);
 }
 
-/**
- * Oszlopok, amelyek egy korábbi sémaverzióban szűkebbek voltak. A séma maga
- * már a végleges típust írja le; ez a lista a meglévő telepítéseket hozza
- * szintre.
- */
 const COLUMN_UPGRADES: [table: string, column: string, type: string][] = [
   ["vehicle_incident", "resolution", "VARCHAR(48) NULL"],
 ];
 
-/**
- * Új oszlopok, amik egy korábbi telepítésen még hiányoznak. A CREATE TABLE
- * IF NOT EXISTS egy már létező táblán nem ad hozzá oszlopot, ezért ez a
- * lista pótolja utólag — a duplikált-oszlop hibát (MySQL 1060) szándékosan
- * elnyeljük, hogy többször futtatva is biztonságos maradjon.
- */
 const NEW_COLUMNS: [table: string, column: string, type: string][] = [
   ["push_watch", "trip_id", "VARCHAR(64) NULL AFTER route_shorts"],
   ["push_watch", "is_departure", "TINYINT(1) NOT NULL DEFAULT 0 AFTER trip_id"],
@@ -74,8 +62,6 @@ async function main() {
     for (const s of stmts) await pool.query(s);
     log(`séma: ${stmts.length} utasítás lefutott`);
 
-    // A CREATE TABLE IF NOT EXISTS meglévő táblán nem csinál semmit, ezért a
-    // már kiadott oszlopok szélesítése külön lépés. A MODIFY idempotens.
     for (const [table, column, type] of COLUMN_UPGRADES) {
       await pool.query(
         `ALTER TABLE \`${table}\` MODIFY COLUMN \`${column}\` ${type}`,
@@ -89,7 +75,7 @@ async function main() {
           `ALTER TABLE \`${table}\` ADD COLUMN \`${column}\` ${type}`,
         );
       } catch (e) {
-        if ((e as { errno?: number }).errno !== 1060) throw e; // 1060 = oszlop már létezik
+        if ((e as { errno?: number }).errno !== 1060) throw e;
       }
     }
     log(`új oszlopok: ${NEW_COLUMNS.length} rendben`);

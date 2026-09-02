@@ -34,9 +34,7 @@ type StopCardProps = {
   onFocusMap: (stop: Stop, vehicleTripId?: string, vehicleId?: string) => void;
   className?: string;
   reorder?: StopCardReorder;
-  /** Távolság a felhasználótól, ha van GPS-jel. */
   distanceKm?: number | null;
-  /** A figyelt megállók közül ez van a legközelebb. */
   isNearest?: boolean;
 };
 

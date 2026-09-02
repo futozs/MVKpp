@@ -91,8 +91,6 @@ export function StopDetailDrawer({
       initial={reduce ? false : { opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-      // Lehúzással is bezárható. A húzás csak a fogantyúról indul, hogy az
-      // indulások listája továbbra is szabadon görgethető maradjon.
       drag="y"
       dragListener={false}
       dragControls={dragControls}

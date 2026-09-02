@@ -33,16 +33,12 @@ export function groupByHour(trips: TimetableTrip[]): HourRow[] {
 interface TimetableGridProps {
   trips: TimetableTrip[];
   vehicleByTrip: Map<string, LiveVehicle>;
-  /** A mai napra kihúzott menetek — ezek az indulások nem lesznek megtartva. */
   cancelledTripIds: Set<string>;
-  /** A gateway naplója: melyik jármű teljesítette az adott menetet. */
   journal: Map<string, TripJournalEntry>;
   selectedTripId: string | null;
   onSelectTrip: (trip: TimetableTrip) => void;
   nowSec: number;
-  /** A nézett nap viszonya a maihoz. */
   day: DayRelation;
-  /** A viszonylat szokásos (leggyakoribb) célállomása — a jelmagyarázathoz. */
   directionHeadsign: string;
 }
 
@@ -59,8 +55,6 @@ export function TimetableGrid({
 }: TimetableGridProps) {
   const rows = useMemo(() => groupByHour(trips), [trips]);
 
-  // A „következő” jelölés a legközelebbi MEGTARTOTT indulásra kerül: egy kihúzott
-  // menet kiemelése azt sugallná, hogy arra még érdemes várni.
   const nextTripId = useMemo(() => {
     if (day !== "today") return null;
     let best: TimetableTrip | null = null;
@@ -72,11 +66,8 @@ export function TimetableGrid({
     return best?.tripId ?? null;
   }, [trips, nowSec, cancelledTripIds, day]);
 
-  // Az „aktuális óra" és a halványítás csak a mai napon jelent bármit.
   const currentHour = day === "today" ? Math.floor(nowSec / 3600) : -1;
 
-  // Belépéskor arra a menetre görgetünk, amelyik épp fut (van hozzá élő
-  // jármű), ha nincs ilyen, a legközelebbi induló menetre.
   const activeTripId = useMemo(() => {
     if (day !== "today") return null;
     let best: TimetableTrip | null = null;
@@ -217,7 +208,6 @@ export function TimetableGrid({
   );
 }
 
-/** A gomb tooltipje: cél, érkezés, és hogy hol tart most ez a menet. */
 function buildTitle({
   trip,
   isCancelled,

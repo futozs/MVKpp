@@ -25,16 +25,8 @@ type WatchBody = {
   stopName?: string;
   thresholdMin?: number;
   routeShorts?: string[];
-  /** Ha megadott, csak ez a pontos menetrendi menet vált ki riasztást (menetrend fül). */
   tripId?: string;
-  /** Az figyelt megálló a menet KIINDULÓ megállója-e (szövegezéshez: "indul" vs "ér ide"). */
   isDeparture?: boolean;
-  /**
-   * "Ismétlődő" figyelés (menetrend fül, checkbox): menetrendi óra:perc
-   * 0-1439 (éjféltől számolt perc), a tripId helyett — mert a GTFS naponta
-   * más trip_id-t ad ugyanarra a mintára. Ha ez meg van adva, a tripId
-   * mezőt figyelmen kívül hagyjuk.
-   */
   schedMin?: number;
 };
 
@@ -57,8 +49,6 @@ push.post("/watch", async (c) => {
     Number.isFinite(body?.schedMin) && body!.schedMin! >= 0 && body!.schedMin! < 1440
       ? Math.round(body!.schedMin!)
       : null;
-  // Ismétlődő figyelésnél nincs értelme egy konkrét tripId-nek — a napi
-  // eltérő trip_id-k helyett a route + óra:perc alapján illesztünk.
   const tripId = schedMin == null ? body?.tripId || null : null;
   const isDeparture = body?.isDeparture ? 1 : 0;
   const now = Math.floor(Date.now() / 1000);
@@ -101,11 +91,6 @@ type DndBody = {
   dndEndMin?: number;
 };
 
-/**
- * "Ne zavarj" időszak mentése egy feliratkozáshoz. Ha `dndEnabled` hamis
- * (vagy nincs megadva), a mezők NULL-ra állnak — a push-hurok ilyenkor a nap
- * minden szakában küld.
- */
 push.post("/dnd", async (c) => {
   const body = await c.req.json<DndBody>().catch(() => null);
   const endpoint = body?.subscription?.endpoint;

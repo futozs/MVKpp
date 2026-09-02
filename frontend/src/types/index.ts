@@ -32,9 +32,7 @@ export interface GtfsMeta {
   routes: number;
   trips: number;
   shapes?: number;
-  /** A feed naptári érvényessége, YYYYMMDD alakban. */
   serviceRange?: { from: string; to: string } | null;
-  /** Meddig ér vissza az elrakott menetrend — a naptár ennyire enged visszalépni. */
   archiveRange?: { from: string; to: string; days: number } | null;
 }
 
@@ -137,7 +135,6 @@ export interface FilterState {
   nearMeKm: number | null;
   sort: VehicleSort;
   stops: boolean;
-  /** Csak a figyelőre felvett megállók látszanak a térképen. */
   onlyWatched: boolean;
   shape: boolean;
   rstops: boolean;
@@ -260,13 +257,11 @@ export interface TimetableTrip {
   departure: string;
   departureSec: number;
   arrival: string;
-  /** A menet vége másodpercben — ebből derül ki, hogy már lefutott-e. */
   arrivalSec: number;
   originName: string;
   destinationName: string;
   stopCount: number;
   deviates: boolean;
-  /** A menet célja eltér a viszonylat szokásos (leggyakoribb) célállomásától. */
   headsignDiffers: boolean;
   times: (string | null)[];
 }
@@ -281,10 +276,8 @@ export interface TimetableResponse {
   note?: string;
 }
 
-/** Egy kihúzott menet a mai napról (MVK `list-cancelled-trips` + GTFS adatok). */
 export interface CancelledTrip {
   tripId: string;
-  /** Hamis, ha a statikus GTFS nem ismeri ezt a menetet (elavult feed). */
   known: boolean;
   routeId: string;
   routeShort: string;
@@ -302,33 +295,22 @@ export interface CancelledTrip {
 export interface CancelledTripsResponse {
   date: string;
   count: number;
-  /** Igaz, ha az upstream épp nem válaszolt és elavult listát kaptunk. */
   stale: boolean;
-  /** Igaz, ha a lista nem élőben jött, hanem a múltbeli archívumból. */
   archived: boolean;
   fetchedAt: string | null;
   tripIds: string[];
   trips: CancelledTrip[];
 }
 
-/**
- * Egy menet TÉNYLEGES futása: melyik jármű vitte és milyen eltéréssel.
- * A jármű a gateway naplójából jön, az eltérés a statisztikai worker
- * menetzárásából — utóbbi csak lezárt menetekre van meg.
- */
 export interface TripJournalEntry {
   vehicleId: string | null;
-  /** Hány mintavételen látszott — a magasabb érték biztosabb hozzárendelés. */
   samples: number;
   firstSeen: number | null;
   lastSeen: number | null;
-  /** + = késve indult, − = korábban indult. */
   startDelaySec: number | null;
-  /** + = késve ért be, − = korábban ért be. */
   endDelaySec: number | null;
   actualStart: number | null;
   actualEnd: number | null;
-  /** `running` | `partial` | `complete` — a menetzárás minősége. */
   status: string | null;
   stopsSeen: number | null;
   stopsTotal: number | null;
@@ -337,7 +319,47 @@ export interface TripJournalEntry {
 export interface TripJournalResponse {
   date: string;
   count: number;
-  /** `db` = adatbázisból, `local` = a gateway helyi naplójából. */
   source: string;
   trips: Record<string, TripJournalEntry>;
+}
+
+// ── Útvonaltervező (MVK /api/v1/route/plan) ────────────────────────────
+
+export interface RoutePlanPoint {
+  lat: number;
+  lon: number;
+}
+
+export interface RoutePlanLeg {
+  mode: string;
+  routeShortName: string | null;
+  routeLongName: string | null;
+  routeColor: string | null;
+  polyline: string | null;
+  fromStopId: string | null;
+  fromName: string;
+  from: RoutePlanPoint;
+  toStopId: string | null;
+  toName: string;
+  to: RoutePlanPoint;
+  start: string;
+  end: string;
+  durationSec: number;
+  distanceMeter: number;
+  intermediateStopNames: string[];
+}
+
+export interface RoutePlanTrip {
+  logDetailsId: number;
+  travelProfile: string;
+  start: string;
+  end: string;
+  durationSec: number;
+  distanceMeter: number;
+  legs: RoutePlanLeg[];
+}
+
+export interface RoutePlanResponse {
+  logHeaderId: number;
+  trips: RoutePlanTrip[];
 }

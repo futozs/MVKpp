@@ -63,11 +63,6 @@ export function MultiStopDashboard({
     .map((id) => stopById.get(id))
     .filter((s): s is Stop => s !== undefined);
 
-  /**
-   * A GPS ismeretében a hozzád legközelebbi figyelt megálló kerül előre — így
-   * tíz felvett megálló mellett is az elsőt látod, amelyikre ténylegesen
-   * ki fogsz állni. Sorrendezés közben a kézi sorrend érvényes.
-   */
   const distances = useMemo(() => {
     const map = new Map<string, number>();
     if (!geo.position) return map;

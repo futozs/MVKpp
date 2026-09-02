@@ -26,14 +26,12 @@ interface NotificationsModalProps {
   onClose: () => void;
 }
 
-/** Percek éjfél óta -> "HH:MM" a <input type="time"> mezőhöz. */
 function minToTime(min: number): string {
   const h = Math.floor(min / 60) % 24;
   const m = min % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
-/** "HH:MM" -> percek éjfél óta. */
 function timeToMin(value: string): number {
   const [h, m] = value.split(":").map(Number);
   return ((h || 0) * 60 + (m || 0)) % 1440;
