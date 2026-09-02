@@ -1,5 +1,4 @@
 import { Hono, type MiddlewareHandler } from "hono";
-import { spawn } from "node:child_process";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import {
   closeSync,
@@ -21,7 +20,6 @@ const STATE_DIR = join(BACKEND_ROOT, "state");
 const LOGS_DIR = join(PROJECT_ROOT, "logs");
 const TOKEN_FILE = join(STATE_DIR, "admin_token.txt");
 const STATUS_FILE = join(STATE_DIR, "deploy-status.json");
-const REDEPLOY_SCRIPT = join(PROJECT_ROOT, "tools", "redeploy.mjs");
 
 const LOG_SOURCES = [
   "backend",
@@ -183,8 +181,21 @@ ops.post("/redeploy", async (c) => {
   if (!(await requireAdmin(c))) {
     return c.json({ error: "Érvénytelen vagy hiányzó admin token." }, 401);
   }
-  if (!existsSync(REDEPLOY_SCRIPT)) {
-    return c.json({ error: "A tools/redeploy.mjs nem található." }, 500);
+
+  // A backendet a manager.mjs fork()-olja, ezért van IPC-csatornája
+  // (process.send) a szülő felé. Az újratelepítés a manager saját
+  // folyamatán BELÜL fut le (lásd manager.mjs performRedeploy) — a manager
+  // sosem lép ki eközben, így az a terminál, amiben a rendszer fut, nem
+  // szakad meg. Ha valaki a backendet a manageren kívül futtatja (pl. `cd
+  // backend && bun run dev`), nincs ilyen csatorna — akkor ezt jelezzük.
+  if (typeof process.send !== "function") {
+    return c.json(
+      {
+        error:
+          "Az újratelepítés csak a manager.mjs (bun run start / bun run dev) alatt futó backendből érhető el.",
+      },
+      500,
+    );
   }
 
   let skipPull = false;
@@ -207,28 +218,13 @@ ops.post("/redeploy", async (c) => {
     );
   } catch {}
 
-  mkdirSync(LOGS_DIR, { recursive: true });
-  const outFd = openSync(join(LOGS_DIR, "redeploy.log"), "a");
+  process.send({ type: "redeploy", skipPull });
+  console.log(`[ops] ⟳ újratelepítés kérve a managertől (skipPull=${skipPull})`);
 
-  const child = spawn(
-    "node",
-    [REDEPLOY_SCRIPT, ...(skipPull ? ["--no-pull"] : [])],
-    {
-      cwd: PROJECT_ROOT,
-      detached: true,
-      stdio: ["ignore", outFd, outFd],
-      env: { ...process.env },
-    },
-  );
-  child.unref();
-
-  console.log(
-    `[ops] ⟳ újratelepítés indítva (pid ${child.pid}, skipPull=${skipPull})`,
-  );
   return c.json({
     ok: true,
-    pid: child.pid,
     skipPull,
-    message: "Az újratelepítés elindult. A folyamat a naplóban követhető.",
+    message:
+      "Az újratelepítés elindult a manager folyamatában — a terminál, amiben a rendszer fut, folyamatosan mutatja a haladást.",
   });
 });

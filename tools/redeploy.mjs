@@ -1,7 +1,15 @@
 #!/usr/bin/env node
 
 /**
- * Újratelepítő futtató — leállít mindent, frissít gitből, buildel, újraindít.
+ * Kézi/vészhelyzeti újratelepítő — leállít mindent, frissít gitből, buildel,
+ * újraindít, egy KÜLÖN, a managertől független folyamatként.
+ *
+ * A hub "Újratelepítés" gombja EZT MÁR NEM HÍVJA — az a manager.mjs saját
+ * belső performRedeploy()-ját futtatja (IPC-üzeneten keresztül), ami sosem
+ * lépteti ki a managert, így a terminál, amiben a rendszer fut, nem szakad
+ * meg. Ez a szkript arra az esetre maradt meg, ha a manager egyáltalán nem
+ * fut (pl. összeomlott), és valakinek kézzel, a terminálból kell egy teljes
+ * hideg újraindítást elvégeznie: `node tools/redeploy.mjs [--no-pull]`.
  *
  * FONTOS: ez a szkript LEÁLLÍTJA azt a folyamatot, ami elindította (a gateway a
  * manageren keresztül). Ezért a backend `detached: true` + `unref()` módon
@@ -252,10 +260,7 @@ async function startManager() {
     cwd: ROOT,
     detached: true,
     stdio: ['ignore', outFd, outFd],
-    // MVK_DAEMON=1: mi magunk már detached+unref módon indítjuk, a manager
-    // saját magát-háttérbe-tevő logikájára itt nincs szükség (az csak a
-    // kézzel, terminálból indított `bun run start` esetén kell).
-    env: { ...process.env, MVK_DAEMON: '1' },
+    env: { ...process.env },
   })
   child.unref()
   log(`manager elindítva (pid ${child.pid}, --prod)`)
