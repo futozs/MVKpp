@@ -75,6 +75,8 @@ state/
 .turbo/
 dist-*
 *.zip
-*.tar.gz
-backend/gtfs
+*.tar.gz.
+./backend/gtfs
+./backend/state
+./backend/state/*
 backend/gtfs/calendar_dates.txt
