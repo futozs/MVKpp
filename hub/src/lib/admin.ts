@@ -6,7 +6,7 @@
  */
 const TOKEN_KEY = 'mvk.adminToken'
 
-/** A telepítő mini állapotszerverének portja (lásd tools/redeploy.mjs). */
+/** A manager beépített állapotszerverének portja (lásd manager.mjs). */
 const DEPLOY_STATUS_PORT = '8089'
 
 /** Rendszer API alapcíme (Cloudflare Tunnel vs. local). */

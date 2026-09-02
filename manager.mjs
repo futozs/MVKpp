@@ -636,9 +636,15 @@ async function performRedeploy(skipPull) {
 
     // Bukott lépés után a rendszer le van állítva. Megpróbáljuk a MEGLÉVŐ
     // (régi) kóddal visszahozni, hogy ne maradjon halott a szerver.
-    if (['install', 'migrate', 'build'].includes(status.currentStep)) {
+    if (['install', 'migrate', 'build', 'start'].includes(status.currentStep)) {
       logLine('REDEPLOY', C.yellow, 'helyreállítási kísérlet: indítás a jelenlegi kóddal…')
       try {
+        if (status.currentStep === 'start') {
+          // Ha maga a 'start' lépés hibázott (pl. a gateway nem válaszolt
+          // időben), lehet, hogy már fut valami a portokon — enélkül a
+          // helyreállítás EADDRINUSE-ba futna.
+          await stopForRedeploy()
+        }
         startAll('helyreállítás az előző kóddal')
         status.error += ' A rendszer a korábbi kóddal visszaindult.'
         logLine('REDEPLOY', C.green, '✓ helyreállítva')
