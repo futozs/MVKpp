@@ -33,10 +33,6 @@ const PID_FILE = join(STATE_DIR, 'manager.pid')
 const STATUS_FILE = join(STATE_DIR, 'deploy-status.json')
 const DEPLOY_STATUS_PORT = 8089
 const GATEWAY_PORT = 8088
-const GATEWAY_PATHS = [
-  '/api', '/live', '/gtfs', '/stats', '/system', '/push',
-  '/_health', '/_jwt', '/_export', '/_ingest', '/_renew', '/weather',
-]
 
 // Check if --prod flag is passed
 const PROD_MODE = process.argv.includes('--prod')
@@ -174,33 +170,29 @@ function startBackend(reason) {
 }
 
 // ── Static file server for prod mode ────────────────────────────────────────
+/**
+ * Statikus fájlkiszolgálás + gateway-továbbítás — ÚJ backend endpoint
+ * felvételekor ide SOSEM kell hozzányúlni.
+ *
+ * A régi verzió egy kézzel karbantartott GATEWAY_PATHS allowlistát nézte meg
+ * először: ha egy útvonal (pl. `/account`) lemaradt róla, csendben az
+ * index.html-t (SPA fallback) adta vissza API-hívásra is — a kliens ilyenkor
+ * HTML-t kapott JSON helyett.
+ *
+ * A helyes sorrend — és ez allowlist nélkül is helyes, mert az app kliens
+ * oldalon KIZÁRÓLAG hash-alapú útvonalakat használ (#map, #timetable stb.),
+ * szerveroldali mélylinkelt útvonal nincs — a következő:
+ *   1. Ha az útvonalhoz VALÓDI fájl tartozik a dist mappában (ide tartozik a
+ *      gyökér is, mert az `index.html`-re képződik le) → azt szolgáljuk ki.
+ *   2. Ha `/assets/` vagy `/public/` alatt nincs ilyen fájl → 404 (biztosan
+ *      hiányzó statikus erőforrás, sosem API-hívás).
+ *   3. Minden más, amihez nincs fájl → nem lehet más, mint egy API-hívás,
+ *      ezért FELTÉTEL NÉLKÜL a gatewayre továbbítjuk. Ha a gateway sem
+ *      ismeri, az ő 404-je (JSON) a helyes válasz — sosem az SPA HTML-je.
+ */
 function startStaticServer(distDir, port, name, basePath = '') {
   const server = createServer((req, res) => {
     const urlPath = req.url.split('?')[0] // remove query string
-
-    // A Cloudflare Tunnel normally points to the frontend port. Forward API
-    // requests here so the public HTTPS URL still reaches the gateway.
-    if (PROD_MODE && GATEWAY_PATHS.some((path) => urlPath === path || urlPath.startsWith(`${path}/`))) {
-      const gatewayReq = httpRequest({
-        hostname: '127.0.0.1',
-        port: GATEWAY_PORT,
-        path: req.url,
-        method: req.method,
-        headers: { ...req.headers, host: `127.0.0.1:${GATEWAY_PORT}` },
-      }, (gatewayRes) => {
-        res.writeHead(gatewayRes.statusCode || 502, gatewayRes.headers)
-        gatewayRes.pipe(res)
-      })
-
-      gatewayReq.on('error', (error) => {
-        if (!res.headersSent) {
-          res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8' })
-          res.end(JSON.stringify({ error: `Gateway unavailable: ${error.message}` }))
-        }
-      })
-      req.pipe(gatewayReq)
-      return
-    }
 
     // A hub `/hub/` base-szel epul, mert a gateway ott szolgalja ki — a sajat
     // portjan viszont a gyokeren fut. A prefixet itt vagjuk le, kulonben a
@@ -238,7 +230,7 @@ function startStaticServer(distDir, port, name, basePath = '') {
       '.ttf': 'font/ttf',
     }
 
-    // If file exists, serve it
+    // If file exists, serve it — a gyökér is ide esik, mert index.html-re képződik le.
     if (existsSync(filePath) && !filePath.endsWith('/')) {
       const ext = filePath.substring(filePath.lastIndexOf('.')).toLowerCase()
       const contentType = mimeTypes[ext] || 'application/octet-stream'
@@ -247,23 +239,37 @@ function startStaticServer(distDir, port, name, basePath = '') {
       return
     }
 
-    // NEVER fallback /assets/ to index.html — return 404
+    // Egy /assets/ vagy /public/ alatti hiányzó fájl biztosan hibás/elavult
+    // hivatkozás, sosem API-hívás — ezt sem a gatewayre, sem az SPA-ra nem
+    // toljuk tovább, egyszerű 404 a helyes válasz.
     if (assetPath.startsWith('/assets/') || assetPath.startsWith('/public/')) {
       res.writeHead(404, { 'Content-Type': 'text/plain' })
       res.end('404 Not Found')
       return
     }
 
-    // SPA routing: all other routes fallback to index.html
-    const indexPath = join(distDir, 'index.html')
-    if (!existsSync(indexPath)) {
-      res.writeHead(500, { 'Content-Type': 'text/plain' })
-      res.end('500 index.html not found')
-      return
-    }
+    // Minden más útvonalhoz nincs statikus fájl — az app hash-routingot
+    // használ, tehát ez csakis egy API-hívás lehet. A Cloudflare Tunnel
+    // jellemzően a frontend portjára mutat, ezért itt kell tovább­adni a
+    // gatewaynek, hogy a publikus HTTPS-cím is elérje.
+    const gatewayReq = httpRequest({
+      hostname: '127.0.0.1',
+      port: GATEWAY_PORT,
+      path: req.url,
+      method: req.method,
+      headers: { ...req.headers, host: `127.0.0.1:${GATEWAY_PORT}` },
+    }, (gatewayRes) => {
+      res.writeHead(gatewayRes.statusCode || 502, gatewayRes.headers)
+      gatewayRes.pipe(res)
+    })
 
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' })
-    createReadStream(indexPath).pipe(res)
+    gatewayReq.on('error', (error) => {
+      if (!res.headersSent) {
+        res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8' })
+        res.end(JSON.stringify({ error: `Gateway unavailable: ${error.message}` }))
+      }
+    })
+    req.pipe(gatewayReq)
   })
 
   server.listen(port, '0.0.0.0', () => {

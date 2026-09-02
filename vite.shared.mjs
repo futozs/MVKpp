@@ -5,19 +5,65 @@
  * elérhetőnek lennie, ezért a beállítás egy helyen él — így nem csúszhat szét,
  * ha az egyiket módosítjuk.
  */
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 
 /** A gateway, amit a dev szerver proxyz. Ugyanazon a gépen fut. */
 export const GATEWAY_TARGET = process.env.VITE_GATEWAY ?? 'http://127.0.0.1:8088'
 
-/** A gateway felé továbbított útvonalak. */
-const PROXY_PATHS = [
-  '/api', '/live', '/gtfs', '/stats', '/system', '/push', '/account',
-  '/_health', '/_jwt', '/_export', '/_ingest', '/_renew', '/weather',
-]
+/**
+ * Gateway-proxy — ÚJ backend endpoint felvételekor SOSEM igényel módosítást
+ * itt.
+ *
+ * A korábbi megoldás egy kézzel karbantartott útvonal-listát (PROXY_PATHS)
+ * adott át a Vite `server.proxy`-jának: ha egy új backend végpont (pl.
+ * `/account`) lemaradt róla, a Vite csendben a saját SPA index.html-jét adta
+ * vissza rá API-hívásra is — a kliens HTML-t kapott JSON helyett.
+ *
+ * Ehelyett EGYETLEN, mindent befogó szabály van (minden útvonalra illeszkedik,
+ * kivéve a Vite `@`-prefixű saját virtuális moduljait — @vite/client,
+ * @react-refresh, @id/, @fs/ —, mert azoknak nincs valódi fájl-megfelelőjük,
+ * a Vite-nak magának kell kiszolgálnia őket). A `bypass` függvény dönti el
+ * kérésenként, hogy a Vite szolgálja-e ki (mert van hozzá valódi fájl a
+ * projektben — forrás, node_modules/.vite optimalizált függőség, vagy egy
+ * public/ alá tett statikus fájl — vagy a gyökér HTML-je), vagy a gateway
+ * (mert ilyen fájl nincs, tehát csakis API-hívás lehet). Így egy vadonatúj
+ * backend prefix AUTOMATIKUSAN működik, mert a döntés a fájlrendszeren
+ * alapul, nem egy karbantartott listán.
+ */
+export function gatewayProxyConfig() {
+  // A Vite dev szerver mindig a saját app-gyökeréből indul (lásd
+  // manager.mjs: `npm run dev --prefix frontend`/`--prefix hub`), tehát a
+  // process.cwd() megbízhatóan az adott app forrásfáját adja.
+  const root = process.cwd()
 
-export const proxyConfig = Object.fromEntries(
-  PROXY_PATHS.map((p) => [p, { target: GATEWAY_TARGET, changeOrigin: true }])
-)
+  return {
+    '^/(?!@).*$': {
+      target: GATEWAY_TARGET,
+      changeOrigin: true,
+      bypass(req) {
+        const urlPath = req.url.split('?')[0]
+        // A gyökér és a build-elt HTML-belépőpont a Vite sajátja.
+        if (urlPath === '/' || urlPath === '/index.html') return req.url
+        try {
+          const decoded = decodeURIComponent(urlPath)
+          // Két hely jöhet szóba: a projekt gyökere (forrásfájlok, a Vite
+          // optimalizált node_modules/.vite/deps gyorsítótára), és a
+          // `public/` mappa (a Vite ennek tartalmát a gyökéren szolgálja ki
+          // — pl. `public/manifest.webmanifest` -> `/manifest.webmanifest`).
+          for (const base of [root, join(root, 'public')]) {
+            const filePath = join(base, decoded)
+            // Path traversal ellen: a feloldott útnak a bázis alatt kell maradnia.
+            if (filePath.startsWith(base) && existsSync(filePath)) return req.url
+          }
+        } catch {
+          // Érvénytelen URL-kódolás — essen át a proxyn, a gateway úgyis 400-at ad rá.
+        }
+        // Nincs visszatérési érték -> a kérés a gatewayre megy.
+      },
+    },
+  }
+}
 
 /**
  * Engedélyezett Host fejlécek.
@@ -65,6 +111,6 @@ export function serverConfig(port) {
     // nem a szerver sajátjára — különben távoli eléréskor a websocket a
     // localhostot próbálná, és az oldal folyamatos újracsatlakozást mutatna.
     hmr: { clientPort: Number(process.env.VITE_HMR_PORT ?? port) },
-    proxy: proxyConfig,
+    proxy: gatewayProxyConfig(),
   }
 }
