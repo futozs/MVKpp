@@ -410,6 +410,10 @@ CREATE TABLE IF NOT EXISTS push_subscription (
   -- éjfélen (pl. 22:00-tól 07:00-ig) — ezt a kiértékelő oldal kezeli.
   dnd_start_min SMALLINT NULL,
   dnd_end_min   SMALLINT NULL,
+  -- Az eszközön globálisan kikapcsolt értesítés (a felhasználó a fő
+  -- kapcsolóval letiltotta) — 0 esetén EGYETLEN push sem mehet erre a
+  -- feliratkozásra, függetlenül a "ne zavarj" ablaktól vagy a figyelésektől.
+  enabled       TINYINT(1) NOT NULL DEFAULT 1,
   PRIMARY KEY (sub_id),
   UNIQUE KEY ux_endpoint (endpoint(255))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

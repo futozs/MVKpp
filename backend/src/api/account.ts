@@ -48,7 +48,7 @@ import { query, isReady } from "../db/pool.ts";
 
 export const account = new Hono();
 
-const RP_NAME = "MVK MobilON+";
+const RP_NAME = "MVK++";
 const MAX_PAYLOAD_BYTES = 1_000_000; // 1 MB bőven elég egy localStorage-mentéshez
 const CHALLENGE_TTL_MS = 5 * 60_000;
 const SESSION_TTL_S = 90 * 24 * 3600; // 90 nap
@@ -70,13 +70,26 @@ account.use("*", async (c, next) => {
 function rpFromRequest(c: {
   req: { header: (k: string) => string | undefined };
 }): { rpID: string; origin: string } | null {
-  const origin = c.req.header("origin");
+  // Az iOS-en a kezdőképernyőről indított ("standalone") PWA-k egy régóta
+  // ismert WebKit-sajátosság miatt bizonyos fetch()-hívásokon nem küldik el
+  // az Origin fejlécet — ilyenkor a Referer még megvan, és ugyanazt az
+  // origint hordozza, mert a kérés ugyanarról az oldalról indul.
+  const origin = c.req.header("origin") ?? refererOrigin(c.req.header("referer"));
   if (!origin) return null;
   try {
     const url = new URL(origin);
-    return { rpID: url.hostname, origin };
+    return { rpID: url.hostname, origin: url.origin };
   } catch {
     return null;
+  }
+}
+
+function refererOrigin(referer: string | undefined): string | undefined {
+  if (!referer) return undefined;
+  try {
+    return new URL(referer).origin;
+  } catch {
+    return undefined;
   }
 }
 

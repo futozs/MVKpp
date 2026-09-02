@@ -1,6 +1,6 @@
 {
-  "name": "MVK MobilON+ — Élő forgalmi pult",
-  "short_name": "MVK Pult",
+  "name": "MVK++ — Élő forgalmi pult",
+  "short_name": "MVK++",
   "description": "Miskolci tömegközlekedés élőben: forgalmi térkép, megállófigyelő és menetrendkönyv.",
   "lang": "hu",
   "start_url": "/?source=pwa",

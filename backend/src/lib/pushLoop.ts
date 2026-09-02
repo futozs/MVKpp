@@ -36,6 +36,7 @@ type WatchRow = {
   last_notified: string | null;
   dnd_start_min: number | null;
   dnd_end_min: number | null;
+  enabled: number;
 };
 
 function isWithinDnd(
@@ -104,9 +105,10 @@ async function checkOnce(
     `SELECT w.watch_id, w.sub_id, s.endpoint, s.p256dh, s.auth,
             w.stop_id, w.stop_name, w.threshold_min, w.route_shorts, w.trip_id,
             w.is_departure, w.sched_min, w.last_notified,
-            s.dnd_start_min, s.dnd_end_min
+            s.dnd_start_min, s.dnd_end_min, s.enabled
        FROM push_watch w
-       JOIN push_subscription s ON s.sub_id = w.sub_id`,
+       JOIN push_subscription s ON s.sub_id = w.sub_id
+      WHERE s.enabled = 1`,
   );
   if (!watches.length) return;
 

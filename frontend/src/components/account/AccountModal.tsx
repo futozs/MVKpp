@@ -151,9 +151,8 @@ export function AccountModal({ isOpen, onClose }: AccountModalProps) {
             <UserRound className="h-4 w-4 text-primary" />
             Fiók és felhős mentés
           </DialogTitle>
-          <DialogDescription>
-            Jelszó nélkül, passkey-vel — a kedvenceid, figyeléseid és
-            beállításaid mentése biztonsági másolatként.
+          <DialogDescription className="sr-only">
+            Fiók bejelentkezés és a beállítások felhős mentése.
           </DialogDescription>
         </DialogHeader>
 
@@ -196,16 +195,11 @@ export function AccountModal({ isOpen, onClose }: AccountModalProps) {
                 <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                   E-mail cím
                 </label>
-                <p className="text-[11px] text-muted-foreground">
-                  {mode === "new"
-                    ? "A böngésző rögtön kér egy passkey-t (ujjlenyomat, arc, PIN vagy biztonsági kulcs) — nincs jelszó, nincs megerősítő levél."
-                    : "A meglévő fiókodhoz regisztrált passkey-vel jelentkezel be — a böngésző felajánlja vagy kéri a hitelesítőt."}
-                </p>
                 <Input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="pl. zsombi@example.com"
+                  placeholder="pl. nev@pelda.hu"
                 />
                 <Button
                   className="w-full"

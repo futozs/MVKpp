@@ -674,6 +674,21 @@ export function TransitMap({
     selectedStopId,
   ]);
 
+  // Amikor a kijelölt megálló máshonnan (megállófigyelő "cél a térképen"
+  // gombja, keresés) érkezik, a térkép ugorjon is oda — eddig csak a pötty
+  // stílusa változott, a nézet nem mozdult.
+  useEffect(() => {
+    if (!mapRef.current || !selectedStopId) return;
+    const stop = stops.find((s) => s.id === selectedStopId);
+    if (!stop) return;
+    mapRef.current.flyTo(
+      [stop.lat, stop.lon],
+      Math.max(mapRef.current.getZoom(), CLOSE_ZOOM),
+      { duration: 0.7 },
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedStopId]);
+
   useEffect(() => {
     if (!mapRef.current || !busLayerRef.current) return;
     const layer = busLayerRef.current;
@@ -864,16 +879,38 @@ export function TransitMap({
         : [...prev.routes, routeId],
     }));
 
+  // A megállók GTFS-azonosítója kocsiállásonként/irányonként külön sor —
+  // ugyanaz a hely (pl. "Villanyrendőr") így sokszor szerepelne egymás
+  // alatt. A kódot senki nem tudja fejből, de a térképen ránézve ki tudja
+  // választani a neki kellő szürke pöttyöt — ezért a keresés a HELY nevére
+  // csoportosít, a kiválasztás pedig csak a közelébe zoomol, nem választ
+  // helyette egy konkrét pöttyöt.
   const stopResults = useMemo(() => {
     const q = normalizeSearchText(stopQuery.trim());
-    if (!q) return stops.slice(0, 60);
-    return stops
-      .filter(
-        (s) =>
-          normalizeSearchText(s.name).includes(q) ||
-          (s.code && normalizeSearchText(s.code).includes(q)) ||
-          s.id.toLowerCase().includes(q),
-      )
+    const source = q
+      ? stops.filter(
+          (s) =>
+            normalizeSearchText(s.name).includes(q) ||
+            (s.code && normalizeSearchText(s.code).includes(q)) ||
+            s.id.toLowerCase().includes(q),
+        )
+      : stops;
+
+    const byName = new Map<string, Stop[]>();
+    for (const s of source) {
+      const list = byName.get(s.name) ?? [];
+      list.push(s);
+      byName.set(s.name, list);
+    }
+
+    return [...byName.entries()]
+      .map(([name, group]) => ({
+        name,
+        group,
+        lat: group.reduce((sum, s) => sum + s.lat, 0) / group.length,
+        lon: group.reduce((sum, s) => sum + s.lon, 0) / group.length,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, "hu"))
       .slice(0, 80);
   }, [stops, stopQuery]);
 
@@ -1325,57 +1362,67 @@ export function TransitMap({
               </p>
             ) : (
               <ul className="divide-y divide-border/60">
-                {stopResults.map((s) => {
-                  const watched = monitoredStopIds.includes(s.id);
+                {stopResults.map((g) => {
+                  const single = g.group.length === 1 ? g.group[0] : null;
+                  const isSelected = g.group.some((s) => s.id === selectedStopId);
+                  const watched = single
+                    ? monitoredStopIds.includes(single.id)
+                    : false;
                   return (
                     <li
-                      key={s.id}
+                      key={g.name}
                       className={cn(
                         "flex items-center gap-1 transition-colors duration-fast",
-                        selectedStopId === s.id
-                          ? "bg-primary/10"
-                          : "hover:bg-accent",
+                        isSelected ? "bg-primary/10" : "hover:bg-accent",
                       )}
                     >
                       <button
                         type="button"
                         onClick={() => {
-                          onSelectStop(s.id);
+                          if (single) {
+                            onSelectStop(single.id);
+                          } else if (mapRef.current) {
+                            mapRef.current.flyTo([g.lat, g.lon], 16, {
+                              duration: 0.7,
+                            });
+                          }
                           setPanelOpen(false);
                         }}
                         className="min-w-0 flex-1 px-4 py-2.5 text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
                       >
                         <span className="block truncate text-xs font-medium">
-                          {s.name}
+                          {g.name}
                         </span>
                         <span className="block font-mono text-[11px] tabular-nums text-muted-foreground">
-                          {s.id}
+                          {single ? single.id : `${g.group.length} megálló`}
                         </span>
                       </button>
 
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant={watched ? "default" : "ghost"}
-                            size="icon"
-                            className="mr-3 h-7 w-7 shrink-0"
-                            onClick={() => onToggleMonitorStop(s.id)}
-                            aria-pressed={watched}
-                            aria-label={
-                              watched
-                                ? `${s.name} levétele a figyelőről`
-                                : `${s.name} felvétele a figyelőre`
-                            }
-                          >
-                            <Plus className={cn(watched && "rotate-45")} />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          {watched
-                            ? "Levétel a figyelőről"
-                            : "Felvétel a figyelőre"}
-                        </TooltipContent>
-                      </Tooltip>
+                      {single ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant={watched ? "default" : "ghost"}
+                              size="icon"
+                              className="mr-3 h-7 w-7 shrink-0"
+                              onClick={() => onToggleMonitorStop(single.id)}
+                              aria-pressed={watched}
+                              aria-label={
+                                watched
+                                  ? `${g.name} levétele a figyelőről`
+                                  : `${g.name} felvétele a figyelőre`
+                              }
+                            >
+                              <Plus className={cn(watched && "rotate-45")} />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            {watched
+                              ? "Levétel a figyelőről"
+                              : "Felvétel a figyelőre"}
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : null}
                     </li>
                   );
                 })}

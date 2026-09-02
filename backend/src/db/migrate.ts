@@ -33,6 +33,7 @@ const NEW_COLUMNS: [table: string, column: string, type: string][] = [
   ["push_watch", "sched_min", "SMALLINT NULL AFTER is_departure"],
   ["push_subscription", "dnd_start_min", "SMALLINT NULL"],
   ["push_subscription", "dnd_end_min", "SMALLINT NULL"],
+  ["push_subscription", "enabled", "TINYINT(1) NOT NULL DEFAULT 1"],
 ];
 
 async function main() {

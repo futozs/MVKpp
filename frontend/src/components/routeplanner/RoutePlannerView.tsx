@@ -20,8 +20,15 @@ const fmtMin = (sec: number) => {
   return `${m} perc`;
 };
 
-/** Az itinerárium ISO időbélyege helyi (nem UTC) idő — a "HH:MM" simán kivágható. */
-const hm = (iso: string) => iso.slice(11, 16);
+/**
+ * Az itinerárium ISO időbélyege UTC-ben érkezik — a nyers karaktereket
+ * kivágni (korábbi megoldás) 2 órával elcsúsztatta a kiírt időt nyáridőben.
+ * A Date-en keresztüli konverzió a böngésző helyi időzónájában adja vissza.
+ */
+const hm = (iso: string) => {
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+};
 
 const MODE_LABEL: Record<string, string> = {
   BUS: "busz",

@@ -124,6 +124,36 @@ push.post("/dnd", async (c) => {
   });
 });
 
+type EnabledBody = {
+  subscription?: { endpoint?: string; keys?: { p256dh?: string; auth?: string } };
+  enabled?: boolean;
+};
+
+push.post("/enabled", async (c) => {
+  const body = await c.req.json<EnabledBody>().catch(() => null);
+  const endpoint = body?.subscription?.endpoint;
+  const p256dh = body?.subscription?.keys?.p256dh;
+  const auth = body?.subscription?.keys?.auth;
+  if (!endpoint || !p256dh || !auth) {
+    return c.json({ error: "Hiányzó mező" }, 400);
+  }
+  const enabled = body?.enabled !== false;
+
+  console.log(
+    `[push] értesítés globális kapcsoló: endpoint=...${endpoint.slice(-16)}, ${enabled ? "bekapcsolva" : "kikapcsolva"}`,
+  );
+
+  await query(
+    `INSERT INTO push_subscription (endpoint, p256dh, auth, created_at, enabled)
+     VALUES (?,?,?,?,?)
+     ON DUPLICATE KEY UPDATE p256dh = VALUES(p256dh), auth = VALUES(auth),
+       enabled = VALUES(enabled)`,
+    [endpoint, p256dh, auth, Math.floor(Date.now() / 1000), enabled ? 1 : 0],
+  );
+
+  return c.json({ ok: true, enabled });
+});
+
 push.delete("/watch", async (c) => {
   const body = await c
     .req.json<{ endpoint?: string; stopId?: string }>()

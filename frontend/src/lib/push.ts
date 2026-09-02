@@ -146,6 +146,22 @@ export async function setDnd(
   }
 }
 
+export async function setPushEnabled(enabled: boolean): Promise<PushDiagnostic> {
+  const sub = await getSubscription();
+  if (!sub) return { ok: false, reason: "Nincs aktív push-feliratkozás." };
+  try {
+    const res = await fetch(`${API_BASE}/push/enabled`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subscription: sub.toJSON(), enabled }),
+    });
+    if (!res.ok) return { ok: false, reason: `A szerver elutasította (${res.status}).` };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, reason: (e as Error).message };
+  }
+}
+
 export async function unregisterPushWatch(stopId: string): Promise<void> {
   const sub = await getSubscription();
   if (!sub) return;

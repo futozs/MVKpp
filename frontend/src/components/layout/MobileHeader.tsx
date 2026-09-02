@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { Bell, Layers, RefreshCw, UserRound } from "lucide-react";
+import { Bell, Layers, UserRound } from "lucide-react";
 import type { ActiveTab } from "@/types";
 import { Button } from "@/components/ui/button";
 import { LiveDot } from "@/components/transit/LiveDot";
@@ -34,7 +34,6 @@ export function MobileHeader({
   vehicleCount,
   lastUpdated,
   isRefreshing,
-  onManualRefresh,
   monitoredStopsCount,
   onOpenMapPicker,
   liveIncidentCount,
@@ -118,19 +117,6 @@ export function MobileHeader({
           aria-label="Értesítések"
         >
           <Bell />
-        </Button>
-
-        <Button
-          variant="outline"
-          size="icon"
-          className="h-9 w-9 shrink-0"
-          onClick={onManualRefresh}
-          disabled={isRefreshing}
-          aria-label="Járműpozíciók azonnali lekérése"
-        >
-          <RefreshCw
-            className={cn(isRefreshing && "animate-spin text-primary")}
-          />
         </Button>
       </div>
 

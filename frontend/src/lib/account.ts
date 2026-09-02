@@ -62,22 +62,46 @@ export type AccountResult<T> =
   | { ok: true; data: T }
   | { ok: false; reason: string };
 
+/**
+ * Néhány mobil böngésző (leginkább az iOS-en, kezdőképernyőre telepített,
+ * "standalone" módban futó PWA) az app hidegindítása utáni első hálózati
+ * kérésnél időnként üres vagy sérült választ ad vissza 2xx státusszal is —
+ * ez korábban egy nyers "null is not an object" JS-hibaként bukott fel a
+ * felületen, mert a hívó kód feltétel nélkül `data.options`-ként próbálta
+ * használni az (ilyenkor null-ra eső) választ. Emiatt itt explicit módon
+ * hibaként kezeljük az érvénytelen JSON-t, és egyszer, csendben újrapróbáljuk
+ * — ez a fajta hiba jellemzően tranziens.
+ */
 async function postJson<T>(
   path: string,
   body: unknown,
   session?: Session,
+  allowRetry = true,
 ): Promise<AccountResult<T>> {
   try {
     const res = await fetch(`${API_BASE}${path}`, {
       method: "POST",
+      cache: "no-store",
       headers: {
         "Content-Type": "application/json",
         ...(session ? { "X-Account-Session": session.sessionToken } : {}),
       },
       body: JSON.stringify(body),
     });
-    const data = await res.json().catch(() => null);
-    if (!res.ok) return { ok: false, reason: data?.error ?? `HTTP ${res.status}` };
+    const raw = await res.text();
+    let data: Record<string, unknown> | null = null;
+    try {
+      data = raw ? (JSON.parse(raw) as Record<string, unknown>) : null;
+    } catch {
+      data = null;
+    }
+    if (!res.ok) {
+      return { ok: false, reason: (data?.error as string) ?? `HTTP ${res.status}` };
+    }
+    if (data == null) {
+      if (allowRetry) return postJson(path, body, session, false);
+      return { ok: false, reason: "A szerver érvénytelen választ adott — próbáld újra." };
+    }
     return { ok: true, data: data as T };
   } catch (e) {
     return { ok: false, reason: (e as Error).message };
