@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { BellOff, CheckCircle2, XCircle } from "lucide-react";
 import type { ArrivalItem } from "@/types";
 import { Button } from "@/components/ui/button";
+import { PermissionNote } from "@/components/notifications/PermissionNote";
 import {
   Dialog,
   DialogContent,
@@ -89,6 +90,7 @@ export function StopNotifyDialog({
     const thresholdMin = Math.max(1, Math.min(60, threshold || DEFAULT_THRESHOLD_MIN));
     const finalRouteShorts = routeShorts.length ? routeShorts : undefined;
     setWatch(stopId, { stopName, thresholdMin, routeShorts: finalRouteShorts });
+    setExisted(true);
     onChanged?.(true);
 
     // Ez teszi lehetővé, hogy lezárt telefonon/bezárt lapnál is jöjjön
@@ -122,13 +124,7 @@ export function StopNotifyDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {permissionDenied ? (
-          <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-            A böngésző letiltotta az értesítéseket ehhez az oldalhoz. Engedélyezd
-            a böngésző beállításaiban (a címsor melletti lakat ikonnál), majd
-            próbáld újra.
-          </p>
-        ) : null}
+        {permissionDenied ? <PermissionNote /> : null}
 
         <div className="space-y-4 py-1">
           <div className="space-y-1.5">

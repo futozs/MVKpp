@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useStorageRefresh } from "./useStorageRefresh";
 
 const STORAGE_KEY = "mvk_stats_favorite_vehicles";
 const MAX_FAVORITES = 40;
@@ -19,6 +20,7 @@ function read(): string[] {
 
 export function useFavoriteVehicles() {
   const [favorites, setFavorites] = useState<string[]>(read);
+  useStorageRefresh(STORAGE_KEY, () => setFavorites(read()));
 
   useEffect(() => {
     try {

@@ -12,7 +12,13 @@ type Shape = { pts: [number, number][]; cum: number[] };
 /** ennél régebbi jelnél nem találgatunk tovább */
 const MAX_EXTRAPOLATE_S = 90;
 /** kis visszaugrás (az új jel a becslés mögött van) helyett a busz megáll */
-const HOLD_BACK_M = 150;
+const HOLD_BACK_M = 40;
+/** ekkora eltérésig a marker nem ugrik, hanem gyorsan odacsúszik (m) */
+const EASE_MAX_M = 400;
+/** egy rajzolási lépésben (250 ms) a hátralévő eltérés ekkora része */
+const EASE_SHARE = 0.3;
+/** ennyi eltérést egy lépésben lekövetünk — a sima haladás nem késik */
+const EASE_MIN_STEP_M = 8;
 
 const shapes = new Map<string, Shape | null>();
 const loading = new Map<string, Promise<void>>();
@@ -62,6 +68,11 @@ export function estimatePosition(m: LiveMotion | null | undefined, nowServer: nu
   if (!shape) return null;
   const dt = Math.max(0, Math.min(MAX_EXTRAPOLATE_S, nowServer - m.t));
   let along = Math.min(m.a + m.v * dt, Math.max(m.a, m.e));
-  if (shown && shown.shape === m.s && along < shown.along && shown.along - along < HOLD_BACK_M) along = shown.along;
+  if (shown && shown.shape === m.s) {
+    const gap = along - shown.along;
+    if (gap < 0 && -gap < HOLD_BACK_M) along = shown.along;
+    // Új jelnél (előre vagy a becslés mögé) nem ugrik, hanem gyorsan odacsúszik.
+    else if (Math.abs(gap) > EASE_MIN_STEP_M && Math.abs(gap) < EASE_MAX_M) along = shown.along + Math.sign(gap) * Math.max(EASE_MIN_STEP_M, Math.abs(gap) * EASE_SHARE);
+  }
   return { latlng: pointAt(shape, along), shown: { shape: m.s, along } };
 }

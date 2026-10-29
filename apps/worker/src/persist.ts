@@ -207,9 +207,10 @@ export class Persister {
       this.stats.errors++;
       log.error("persist", `írás sikertelen (${pings.length} pont, ${events.length} esemény) — újrapróbálom`, errMsg(e));
       // Vissza a sorba, a következő körben újra próbáljuk.
-      this.pings.unshift(...pings);
-      this.events.unshift(...events);
-      this.segments.unshift(...segments);
+      // concat, nem unshift(...): hosszú kiesésnél a több százezres sor szétterítése veremtúlcsordulást okozna.
+      this.pings = pings.concat(this.pings);
+      this.events = events.concat(this.events);
+      this.segments = segments.concat(this.segments);
       for (const r of runs) if (!this.runs.has(r.runKey)) this.runs.set(r.runKey, r);
       for (const [k, v] of vehicles) if (!this.vehicles.has(k)) this.vehicles.set(k, v);
       if (this.pings.length > 200_000) this.pings.splice(0, this.pings.length - 200_000);

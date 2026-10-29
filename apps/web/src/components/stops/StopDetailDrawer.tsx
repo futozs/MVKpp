@@ -54,23 +54,31 @@ export function StopDetailDrawer({
       return;
     }
 
+    // Másik megálló: az előző indulásai egy pillanatig se látszódjanak az új neve alatt,
+    // és egy lassan visszaérő régi válasz se írja felül az újat.
+    let alive = true;
+    setData(null);
+    setError(null);
     const load = async (silent: boolean) => {
       if (!silent) setLoading(true);
       try {
         const res = await api.getArrivals(stopId, 16);
-        if (!mounted.current) return;
+        if (!alive || !mounted.current) return;
         setData(res);
         setError(null);
       } catch (err) {
-        if (mounted.current) setError((err as Error).message);
+        if (alive && mounted.current) setError((err as Error).message);
       } finally {
-        if (mounted.current && !silent) setLoading(false);
+        if (alive && mounted.current && !silent) setLoading(false);
       }
     };
 
     load(false);
     const timer = setInterval(() => load(true), POLL_MS);
-    return () => clearInterval(timer);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
   }, [stopId]);
 
   useEffect(() => {
@@ -242,10 +250,14 @@ export function StopDetailDrawer({
                             {arr.vehicle.id}
                           </span>
                         ) : null}
-                        <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                        <span className={cn("font-mono text-[11px] tabular-nums text-muted-foreground", arr.cancelled && "line-through decoration-destructive/70")}>
                           {arr.time}
                         </span>
-                        <DelayBar delaySec={arr.delaySec} showLabel={false} />
+                        {arr.cancelled ? (
+                          <span className="text-[10.5px] font-bold uppercase tracking-wide text-destructive">törölve</span>
+                        ) : (
+                          <DelayBar delaySec={arr.delaySec} showLabel={false} />
+                        )}
                       </div>
 
                       {arr.progressDesc ? (
@@ -255,7 +267,7 @@ export function StopDetailDrawer({
                       ) : null}
                     </div>
 
-                    <span className="shrink-0 font-mono text-sm font-bold tabular-nums">
+                    <span className={cn("shrink-0 font-mono text-sm font-bold tabular-nums", arr.cancelled && "opacity-40 line-through")}>
                       {arr.etaMin <= 0 ? (
                         <span className="text-live">most</span>
                       ) : (

@@ -5,6 +5,7 @@ import { ChartFrame, StatTile } from "@/components/charts/Charts";
 import { Button } from "@/components/ui/button";
 import { QueryBoundary } from "./PanelState";
 import { PredictionOverview } from "./PredictionOverview";
+import { ForecastModelCard } from "./ForecastModelCard";
 import { useStatsQuery } from "./useStatsQuery";
 
 const nf = new Intl.NumberFormat("hu-HU");
@@ -29,6 +30,7 @@ export function OverviewPanel({
 
   return (
     <div className="space-y-10">
+      <ForecastModelCard />
       <PredictionOverview />
       <QueryBoundary query={q}>
         {(d) => {

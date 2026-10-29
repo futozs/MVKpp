@@ -33,6 +33,22 @@ export interface Ride {
   delayAtBoardS: number | null;
   delayAtAlightS: number | null;
   detected: "auto" | "manual";
+  /** körbeutazás: az egymás után, ülve maradva megtett menetek közös azonosítója */
+  chainId?: string | null;
+}
+
+/**
+ * A busz a végállomáson fordul, és az utas nem szállt le: a menet véget ért,
+ * a következővel (körbeutazás) folytatjuk, amint a busz elindul.
+ */
+export interface RideTurn {
+  /** mikor ért be a végállomásra (unix) */
+  arrivedAt: number;
+  /** a végállomás indexe a befejezett menet megállói között */
+  atIdx: number;
+  terminusName: string;
+  /** „Maradok a buszon” (true) / „Leszálltam” (false); null = nem válaszolt */
+  stay: boolean | null;
 }
 
 export interface ActiveRide {
@@ -52,12 +68,19 @@ export interface ActiveRide {
   /** ahol le akar szállni (a menet megállóinak indexe) */
   destIdx: number | null;
   detected: "auto" | "manual";
+  /** körbeutazás: az első menet azonosítója — a láncolt menetek ezzel kapcsolódnak */
+  chainId?: string | null;
+  /** hányadik menet a körbeutazásban (1-től) */
+  leg?: number;
+  turn?: RideTurn | null;
 }
 
 type StoredRide = Ride & { synced?: boolean };
 
 const RIDES_KEY = "mvk_rides";
 const ACTIVE_KEY = "mvk_ride_active";
+/** törölt, de a szerveren még nem törölt utazások (a szinkron ne hozza vissza őket) */
+const DELETED_KEY = "mvk_ride_deleted";
 const MAX_LOCAL = 5000;
 const BATCH = 200;
 
@@ -81,6 +104,12 @@ function write(key: string, value: unknown) {
 
 let rides: StoredRide[] = read<StoredRide[]>(RIDES_KEY, []);
 let active: ActiveRide | null = read<ActiveRide | null>(ACTIVE_KEY, null);
+let deleted: string[] = read<string[]>(DELETED_KEY, []);
+
+function setDeleted(next: string[]) {
+  deleted = next.slice(-1000);
+  write(DELETED_KEY, deleted.length ? deleted : null);
+}
 const listeners = new Set<() => void>();
 
 function emit() {
@@ -122,6 +151,13 @@ export function startRide(r: Omit<ActiveRide, "id" | "destIdx">): ActiveRide {
   return ride;
 }
 
+type RideEnd = Pick<Ride, "alightedAt" | "toStopId" | "toStopName" | "stops" | "distanceM" | "delayAtAlightS">;
+
+function closedRide(a: ActiveRide, end: RideEnd, chainId: string | null): StoredRide {
+  const { destIdx: _dest, fromIdx: _from, leg: _leg, turn: _turn, ...rest } = a;
+  return { ...rest, ...end, chainId, synced: false };
+}
+
 export function setDestination(idx: number | null) {
   if (active) setActive({ ...active, destIdx: idx });
 }
@@ -132,12 +168,40 @@ export function patchActiveRide(patch: Partial<Omit<ActiveRide, "id">>) {
 }
 
 /** Utazás vége: a napló elejére kerül, és bejelentkezve feltöltődik. */
-export function finishRide(end: Pick<Ride, "alightedAt" | "toStopId" | "toStopName" | "stops" | "distanceM" | "delayAtAlightS">): Ride | null {
+export function finishRide(end: RideEnd): Ride | null {
   if (!active) return null;
-  const { destIdx: _dest, fromIdx: _from, ...rest } = active;
-  const ride: StoredRide = { ...rest, ...end, synced: false };
+  const ride = closedRide(active, end, active.chainId ?? null);
   setActive(null);
   setRides([ride, ...rides.filter((x) => x.id !== ride.id)]);
+  void syncRides();
+  return ride;
+}
+
+export type NextLeg = Pick<ActiveRide, "tripId" | "route" | "headsign" | "color" | "text" | "boardedAt" | "fromStopId" | "fromStopName" | "delayAtBoardS">;
+
+/**
+ * Körbeutazás: a befejezett menet a naplóba kerül, és ugyanazon a buszon a
+ * következő menet indul — a kettőt a közös `chainId` köti össze.
+ */
+export function continueRide(end: RideEnd, next: NextLeg): ActiveRide | null {
+  if (!active) return null;
+  const chainId = active.chainId ?? active.id;
+  const done = closedRide(active, end, chainId);
+  const ride: ActiveRide = {
+    ...next,
+    id: crypto.randomUUID(),
+    serviceDate: active.serviceDate,
+    vehicleId: active.vehicleId,
+    fromIdx: 0,
+    destIdx: null,
+    detected: active.detected,
+    chainId,
+    leg: (active.leg ?? 1) + 1,
+    turn: null,
+  };
+  rides = [done, ...rides.filter((x) => x.id !== done.id)].slice(0, MAX_LOCAL);
+  write(RIDES_KEY, rides);
+  setActive(ride);
   void syncRides();
   return ride;
 }
@@ -148,13 +212,25 @@ export function cancelRide() {
 }
 
 export async function deleteRide(id: string) {
+  const wasSynced = rides.some((r) => r.id === id && r.synced);
   setRides(rides.filter((r) => r.id !== id));
+  if (!wasSynced && !getSession()) return;
+  // Amíg a szerver nem erősíti meg a törlést, megjegyezzük — különben a következő szinkron visszahozná.
+  setDeleted([...deleted.filter((x) => x !== id), id]);
+  await flushDeletes();
+}
+
+async function flushDeletes() {
   const session = getSession();
-  if (!session) return;
-  await fetch(`${API_BASE}/v3/rides/${encodeURIComponent(id)}`, {
-    method: "DELETE",
-    headers: { "X-Account-Session": session.sessionToken },
-  }).catch(() => {});
+  if (!session || !deleted.length) return;
+  for (const id of [...deleted]) {
+    const res = await fetch(`${API_BASE}/v3/rides/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      headers: { "X-Account-Session": session.sessionToken },
+    }).catch(() => null);
+    if (!res?.ok) return; // offline / lejárt munkamenet: a következő szinkron újrapróbálja
+    setDeleted(deleted.filter((x) => x !== id));
+  }
 }
 
 let syncing: Promise<void> | null = null;
@@ -179,15 +255,35 @@ async function doSync() {
     const body = (await res.json().catch(() => null)) as { saved?: string[] } | null;
     for (const id of body?.saved ?? []) saved.add(id);
   }
+  await flushDeletes();
   const res = await fetch(`${API_BASE}/v3/rides`, { headers }).catch(() => null);
-  const remote = res?.ok ? (((await res.json().catch(() => null)) as { rides?: Ride[] } | null)?.rides ?? []) : [];
+  if (!res?.ok) return;
+  const body = (await res.json().catch(() => null)) as { rides?: Ride[] } | null;
+  if (!body || !Array.isArray(body.rides)) return;
+  const remote = body.rides;
+  const gone = new Set(deleted);
+  const remoteIds = new Set(remote.map((r) => r.id));
+  // A teljes lista jött (a szerver legfeljebb 5000-et ad): ami nálunk feltöltöttként
+  // szerepel, de a szerveren már nincs, azt egy másik eszközön törölték.
+  const complete = remote.length < 5000;
   const byId = new Map<string, StoredRide>();
-  for (const r of rides) byId.set(r.id, saved.has(r.id) ? { ...r, synced: true } : r);
-  for (const r of remote) byId.set(r.id, { ...r, synced: true });
+  for (const r of rides) {
+    const synced = r.synced || saved.has(r.id);
+    if (synced && complete && !remoteIds.has(r.id) && !saved.has(r.id)) continue;
+    byId.set(r.id, synced ? { ...r, synced: true } : r);
+  }
+  for (const r of remote) if (!gone.has(r.id)) byId.set(r.id, { ...r, synced: true });
   setRides([...byId.values()].sort((a, b) => b.boardedAt - a.boardedAt));
 }
 
 // Bejelentkezéskor (vagy egy másik fülön történt belépéskor) azonnal szinkronizálunk.
 if (typeof window !== "undefined") {
   window.addEventListener("mvk-session-change", () => void syncRides());
+  // Kijelentkezéskor a fiók (már feltöltött) utazásai lekerülnek az eszközről —
+  // a felhőben megmaradnak. A még fel nem töltöttek itt maradnak, hogy ne vesszenek el.
+  window.addEventListener("mvk-rides-reset", () => {
+    setDeleted([]);
+    setActive(null);
+    setRides(rides.filter((r) => !r.synced));
+  });
 }

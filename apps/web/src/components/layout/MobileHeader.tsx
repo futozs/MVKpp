@@ -1,5 +1,5 @@
 import { motion, useReducedMotion } from "framer-motion";
-import { Bell, Layers } from "lucide-react";
+import { Bell } from "lucide-react";
 import type { ActiveTab } from "@/types";
 import { useWeather } from "@/hooks/useWeather";
 import { cn } from "@/lib/utils";
@@ -19,7 +19,6 @@ interface MobileHeaderProps {
   isRefreshing: boolean;
   onManualRefresh: () => void;
   monitoredStopsCount: number;
-  onOpenMapPicker: () => void;
   liveIncidentCount: number;
   onOpenNotifications: () => void;
   onOpenAccount: () => void;
@@ -45,7 +44,6 @@ export function MobileHeader({
   isRefreshing,
   onManualRefresh,
   monitoredStopsCount,
-  onOpenMapPicker,
   liveIncidentCount,
   onOpenNotifications,
   onOpenAccount,
@@ -74,16 +72,6 @@ export function MobileHeader({
             >
               {Math.round(weather.tempC)}°
             </span>
-          ) : null}
-          {activeTab === "map" ? (
-            <button
-              type="button"
-              onClick={onOpenMapPicker}
-              aria-label="Alaptérkép választása"
-              className={cn(ICON_BUTTON, FOCUS_RING, "h-11 w-11")}
-            >
-              <Layers aria-hidden />
-            </button>
           ) : null}
           <button
             type="button"

@@ -128,6 +128,8 @@ type Run = {
   along: StopAlong[];
   midnight: number;
   lastPing: { ts: number; along: number; lat: number; lon: number } | null;
+  /** a legutóbbi jel szerint áll-e a jármű (megálló, lámpa, dugó) */
+  lastStopped: boolean;
   progressM: number;
   /**
    * Indult-e már a menet. Ha az MVK előre vált a következő menetre, a busz
@@ -161,6 +163,8 @@ export type VehicleMotion = {
   schedSegS: number | null;
   /** a szakasz kezdetének menetrendi ideje (a szolgáltatási nap mp-e) */
   segDepS: number;
+  /** a legutóbbi jelkor állt (megállóban, lámpánál) — a becslés ne vigye tovább */
+  stopped: boolean;
 };
 
 type VehicleState = {
@@ -262,8 +266,14 @@ export class TripMatcher {
    * a legutóbbi jel helye méterben, és a következő megálló a nyomvonalon.
    */
   motion(vehicleId: string): VehicleMotion | null {
-    const r = this.vehicles.get(vehicleId)?.current;
+    const vs = this.vehicles.get(vehicleId);
+    // Az MVK gyakran percekkel korábban kiosztja a következő menetet, miközben
+    // a busz még az előzőn jár: amíg az új el nem indul, a régin becslünk.
+    const r = vs?.current?.started ? vs.current : vs?.closing?.run.out.status === "running" ? vs.closing.run : null;
     if (!r || !r.lastPing || !r.started) return null;
+    // Még a kiinduló megállóban áll (beállt, kiosztották, de nem indult el):
+    // nincs mit becsülni — különben a térképen magától elindulna.
+    if (r.out.actualStart == null && r.progressM <= r.along[0].alongM + MATCH.ZONE_M) return null;
     const a = r.along;
     let next = 0;
     while (next < a.length && a[next].alongM <= r.progressM + 5) next++;
@@ -279,6 +289,7 @@ export class TripMatcher {
       toAlongM: Math.round(a[next].alongM),
       schedSegS: next > 0 ? a[next].arr - a[next - 1].dep : null,
       segDepS: next > 0 ? a[next - 1].dep : a[next].dep,
+      stopped: r.lastStopped,
     };
   }
 
@@ -364,6 +375,7 @@ export class TripMatcher {
       along: r.along,
       midnight: r.midnight,
       lastPing: null,
+      lastStopped: false,
       progressM: 0,
       started: false,
       pending: [],
@@ -381,6 +393,7 @@ export class TripMatcher {
     run.out.lastTs = p.ts;
     if (p.speed != null && p.speed > run.out.maxSpeed) run.out.maxSpeed = p.speed;
     if (run.out.status !== "running") return; // már beért, csak a végállomáson áll
+    run.lastStopped = p.speed != null && p.speed <= MATCH.STOPPED_MPS;
 
     const proj = this.projectRun(run, p);
     if (!proj || proj.distM > MATCH.MAX_OFF_ROUTE_M) {

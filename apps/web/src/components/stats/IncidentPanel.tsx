@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { BadgeCheck, Ban, CircleAlert, Radar } from "lucide-react";
+import { ArrowRight, BadgeCheck, Ban, CircleAlert, Radar } from "lucide-react";
 import { serviceToday, shiftDate, statsV3, type IncidentV3 } from "@/services/statsApi";
 import { BarChart, ChartFrame, StatTile } from "@/components/charts/Charts";
 import { RouteTile } from "@/components/transit/RouteTile";
@@ -43,7 +43,7 @@ const fmtTime = (unix: number) => new Date(unix * 1000).toLocaleTimeString("hu-H
  * Most élőben: a valószínűleg kimaradó menetek (ezeket számolja a fejléc piros
  * jelvénye) és az MVK mai hivatalos törléseinek száma.
  */
-function LiveIncidentsCard({ routes }: { routes: Route[] }) {
+function LiveIncidentsCard({ routes, onOpenDisruptions }: { routes: Route[]; onOpenDisruptions?: () => void }) {
   const live = useLiveIncidentDetails();
   if (!live) return null;
   const byShort = new Map(routes.map((r) => [r.short, r]));
@@ -61,9 +61,21 @@ function LiveIncidentsCard({ routes }: { routes: Route[] }) {
               : "Most nincs valószínűleg kimaradó menet."}
           </p>
         </div>
-        <span className="rounded-md bg-muted px-2 py-1 text-[11.5px] text-muted-foreground">
-          Ma <span className="font-semibold text-foreground">{live.cancelled}</span> hivatalos MVK-törlés
-        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-md bg-muted px-2 py-1 text-[11.5px] text-muted-foreground">
+            Ma <span className="font-semibold text-foreground">{live.cancelled}</span> hivatalos MVK-törlés
+          </span>
+          {onOpenDisruptions ? (
+            <button
+              type="button"
+              onClick={onOpenDisruptions}
+              className="inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-2 py-1 text-[11.5px] font-semibold text-primary transition-colors hover:bg-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              Mi marad ki, mi jön helyette
+              <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+            </button>
+          ) : null}
+        </div>
       </header>
       {live.missing.length ? (
         <ul className="mt-3 divide-y divide-border/60">
@@ -84,7 +96,7 @@ function LiveIncidentsCard({ routes }: { routes: Route[] }) {
   );
 }
 
-export function IncidentPanel({ routes = [] }: { routes?: Route[] }) {
+export function IncidentPanel({ routes = [], onOpenDisruptions }: { routes?: Route[]; onOpenDisruptions?: () => void }) {
   const [range, setRange] = useState<(typeof RANGES)[number]["id"]>("14");
   const [kind, setKind] = useState<(typeof KINDS)[number]["id"]>("all");
   const to = serviceToday();
@@ -97,7 +109,7 @@ export function IncidentPanel({ routes = [] }: { routes?: Route[] }) {
 
   return (
     <div className="space-y-4">
-      <LiveIncidentsCard routes={routes} />
+      <LiveIncidentsCard routes={routes} onOpenDisruptions={onOpenDisruptions} />
       <div className="space-y-2">
         <h2 className="text-lg font-bold tracking-tight sm:text-xl">Üzemzavarok</h2>
         <p className="max-w-3xl text-xs text-muted-foreground">

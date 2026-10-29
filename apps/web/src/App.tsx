@@ -21,7 +21,6 @@ import { StatsView } from "@/components/stats/StatsView";
 import { RideLayer } from "@/components/ride/RideLayer";
 import { useActiveRide } from "@/lib/rides";
 import { ParkingView } from "@/components/parking/ParkingView";
-import { MapSettingsModal } from "@/components/map/MapSettingsModal";
 import { NotificationsModal } from "@/components/notifications/NotificationsModal";
 import { AccountModal } from "@/components/account/AccountModal";
 import { useCloudBackup } from "@/hooks/useCloudBackup";
@@ -31,12 +30,14 @@ import { GeoProvider } from "@/context/GeoContext";
 import { initialView, saveView } from "@/lib/viewState";
 import { useAppHeight } from "@/hooks/useAppHeight";
 import { useLiveIncidents } from "@/hooks/useLiveIncidents";
+import { useStorageRefresh } from "@/hooks/useStorageRefresh";
 import { useFallbackPoll, useTopic } from "@/lib/realtime";
 
 const TAB_IDS: ActiveTab[] = [
   "map",
   "multistop",
   "timetable",
+  "parking",
   "planner",
   "stats",
 ];
@@ -61,6 +62,7 @@ const DEFAULT_FILTERS: FilterState = {
   rstops: false,
   labels: false,
   follow: false,
+  traffic: true,
 };
 
 export function App() {
@@ -83,9 +85,9 @@ export function App() {
   const [tileLayerId, setTileLayerId] = useState<string>(
     () => localStorage.getItem("mvk_map_tile") || "osm",
   );
-  const [isMapPickerOpen, setMapPickerOpen] = useState(false);
   const [isNotificationsOpen, setNotificationsOpen] = useState(false);
   const [isAccountOpen, setAccountOpen] = useState(false);
+  const [isDisruptionsOpen, setDisruptionsOpen] = useState(false);
   useCloudBackup();
 
   const handleSelectTileLayer = (layerId: string) => {
@@ -125,12 +127,21 @@ export function App() {
       );
     } catch {}
   }, [monitoredStopIds]);
+  // Másik eszközről szinkronizált figyelt megállók: azonnal átvesszük.
+  useStorageRefresh("mvk_monitored_stops", () => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("mvk_monitored_stops") ?? "null");
+      if (Array.isArray(saved)) setMonitoredStopIds(saved.filter((x): x is string => typeof x === "string"));
+    } catch {}
+  });
 
   const [filters, setFilters] = useState<FilterState>(() => {
     try {
       const saved = localStorage.getItem("mvk_filter_state");
+      // A régi, gépelés közbeni rendszám-keresés (vq) nem marad bent: már nincs hozzá mező,
+      // így egy elmentett érték láthatatlanul szűrné a térképet.
       return saved
-        ? { ...DEFAULT_FILTERS, ...JSON.parse(saved) }
+        ? { ...DEFAULT_FILTERS, ...JSON.parse(saved), vq: "" }
         : DEFAULT_FILTERS;
     } catch {
       return DEFAULT_FILTERS;
@@ -142,30 +153,59 @@ export function App() {
       localStorage.setItem("mvk_filter_state", JSON.stringify(filters));
     } catch {}
   }, [filters]);
+  useStorageRefresh("mvk_filter_state", () => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("mvk_filter_state") ?? "null");
+      if (saved && typeof saved === "object") setFilters({ ...DEFAULT_FILTERS, ...saved });
+    } catch {}
+  });
 
+  // A menetrend alapadatai. Gyenge térerőnél vagy a worker újraindulása alatt
+  // az első kérés elbukhat — ilyenkor visszalépő várakozással újrapróbáljuk
+  // (és hálózat-visszatéréskor azonnal), különben üres maradna a térkép.
   useEffect(() => {
+    let alive = true;
+    let attempt = 0;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let loaded = false;
     const initGtfs = async () => {
+      if (loaded || !alive) return;
       try {
         const [loadedStops, loadedRoutes, meta] = await Promise.all([
           api.getStops(),
           api.getRoutes(),
           api.getGtfsMeta(),
         ]);
+        if (!alive) return;
+        loaded = true;
         setStops(loadedStops);
         const rMap: Record<string, Route> = {};
         loadedRoutes.forEach((r) => (rMap[r.id] = r));
         setRoutes(rMap);
         setGtfsMeta(meta);
       } catch (err) {
-        console.error("Failed to load GTFS static data:", err);
+        console.warn("A menetrend alapadatai nem töltődtek be, újrapróbálom:", err);
+        if (!alive) return;
+        attempt++;
+        timer = setTimeout(initGtfs, Math.min(30_000, 1500 * 2 ** Math.min(attempt, 5)));
       }
     };
+    const retryNow = () => {
+      if (loaded) return;
+      if (timer) clearTimeout(timer);
+      void initGtfs();
+    };
 
-    initGtfs();
+    void initGtfs();
+    window.addEventListener("online", retryNow);
+    return () => {
+      alive = false;
+      if (timer) clearTimeout(timer);
+      window.removeEventListener("online", retryNow);
+    };
   }, []);
 
   const fetchLivePositions = useCallback(async () => {
-    if (focusTripId) return;
     setIsRefreshing(true);
     try {
       const res = await api.getLivePositions();
@@ -179,14 +219,14 @@ export function App() {
     } finally {
       setIsRefreshing(false);
     }
-  }, [focusTripId]);
+  }, []);
 
   // Élő járművek: a szerver WebSocketen küldi (induláskor a teljes listát,
   // utána csak a változott járműveket). Pollozás csak tartalékként, ha a
   // kapcsolat nem épül fel.
+  // Menetkövetés (és utazás) közben is frissül: a fejléc száma és „utolsó adat”
+  // ideje, a felszállás-felismerő és a Menetrend élő jelzései ebből dolgoznak.
   const vehicleMap = useRef(new Map<string, LiveVehicle>());
-  const focusRef = useRef(focusTripId);
-  focusRef.current = focusTripId;
   useTopic("vehicles", (m) => {
     if (Array.isArray(m.full)) {
       vehicleMap.current = new Map((m.full as LiveVehicle[]).map((v) => [v.id, v]));
@@ -194,11 +234,10 @@ export function App() {
       for (const v of (m.upd as LiveVehicle[]) ?? []) vehicleMap.current.set(v.id, v);
       for (const id of (m.del as string[]) ?? []) vehicleMap.current.delete(id);
     }
-    if (focusRef.current) return;
     setLiveVehicles([...vehicleMap.current.values()].filter((v) => v.lat != null && v.lon != null));
     setLastUpdated(new Date());
   });
-  useFallbackPoll(fetchLivePositions, 3500, !focusTripId);
+  useFallbackPoll(fetchLivePositions, 3500);
 
   useEffect(() => {
     const refreshIfVisible = () => {
@@ -235,28 +274,49 @@ export function App() {
     }
   };
 
-  const handleFocusTrip = (tripId: string, vehicleId?: string) => {
+  // Stabil azonosítójú kezelők: a térkép effektjei ezekre is figyelnek, és egy
+  // minden rendereléskor új függvény miatt minden járműfrissítéskor újraépülne
+  // az összes (~600) megálló-jelölő.
+  const handleFocusTrip = useCallback((tripId: string, vehicleId?: string) => {
     setFocusTripId(tripId);
     setFocusVehicleId(vehicleId ?? null);
-  };
+  }, []);
 
-  const handleFocusTripOnMap = (tripId: string, vehicleId?: string) => {
+  const handleFocusTripOnMap = useCallback((tripId: string, vehicleId?: string) => {
     setActiveTab("map");
-    handleFocusTrip(tripId, vehicleId);
-  };
+    setFocusTripId(tripId);
+    setFocusVehicleId(vehicleId ?? null);
+  }, []);
 
-  const handleExitFocus = () => {
+  const handleExitFocus = useCallback(() => {
     setFocusTripId(null);
     setFocusVehicleId(null);
-  };
+  }, []);
 
-  const handleToggleMonitorStop = (stopId: string) => {
+  const handleSelectStop = useCallback((id: string) => setSelectedStopId(id), []);
+
+  const handleToggleMonitorStop = useCallback((stopId: string) => {
     setMonitoredStopIds((prev) =>
       prev.includes(stopId)
         ? prev.filter((id) => id !== stopId)
         : [...prev, stopId],
     );
-  };
+  }, []);
+
+  // „Élőben a térképen” (Statisztika, Parkoló): ha a jármű épp menetet visz, azt
+  // követjük; különben kiemelve megkeressük a térképen.
+  const handleFocusVehicleOnMap = useCallback((vehicleId: string) => {
+    const v = vehicleMap.current.get(vehicleId);
+    setActiveTab("map");
+    if (v?.tripId) {
+      setFocusTripId(v.tripId);
+      setFocusVehicleId(vehicleId);
+      return;
+    }
+    setFocusTripId(null);
+    setFocusVehicleId(null);
+    setFilters((f) => ({ ...f, watch: f.watch.includes(vehicleId) ? f.watch : [...f.watch, vehicleId], vq: "" }));
+  }, []);
 
   return (
     <GeoProvider>
@@ -271,7 +331,6 @@ export function App() {
             isRefreshing={isRefreshing}
             onManualRefresh={fetchLivePositions}
             monitoredStopsCount={monitoredStopIds.length}
-            onOpenMapPicker={() => setMapPickerOpen(true)}
             liveIncidentCount={liveIncidentCount}
             onOpenNotifications={() => setNotificationsOpen(true)}
             onOpenAccount={() => setAccountOpen(true)}
@@ -284,7 +343,6 @@ export function App() {
             isRefreshing={isRefreshing}
             onManualRefresh={fetchLivePositions}
             monitoredStopsCount={monitoredStopIds.length}
-            onOpenMapPicker={() => setMapPickerOpen(true)}
             liveIncidentCount={liveIncidentCount}
             onOpenNotifications={() => setNotificationsOpen(true)}
             onOpenAccount={() => setAccountOpen(true)}
@@ -305,7 +363,7 @@ export function App() {
                   filters={filters}
                   setFilters={setFilters}
                   onClearFilters={handleClearFilters}
-                  onSelectStop={(id) => setSelectedStopId(id)}
+                  onSelectStop={handleSelectStop}
                   focusTripId={focusTripId}
                   focusVehicleId={focusVehicleId}
                   onExitFocus={handleExitFocus}
@@ -314,7 +372,7 @@ export function App() {
                   selectedStopId={selectedStopId}
                   monitoredStopIds={monitoredStopIds}
                   onToggleMonitorStop={handleToggleMonitorStop}
-                  onOpenMapPicker={() => setMapPickerOpen(true)}
+                  onSelectTileLayer={handleSelectTileLayer}
                 />
 
                 {}
@@ -358,10 +416,11 @@ export function App() {
                 stops={stops}
                 routes={Object.values(routes)}
                 liveIncidents={liveIncidentCount}
-                onFocusVehicle={(id) => {
-                  setFocusVehicleId(id);
-                  setActiveTab("map");
+                onOpenDisruptions={() => {
+                  setDisruptionsOpen(true);
+                  setActiveTab("timetable");
                 }}
+                onFocusVehicle={handleFocusVehicleOnMap}
               />
             )}
 
@@ -372,29 +431,21 @@ export function App() {
                 onFocusTrip={handleFocusTripOnMap}
                 serviceRange={gtfsMeta?.serviceRange ?? null}
                 archiveRange={gtfsMeta?.archiveRange ?? null}
+                disruptionsOpen={isDisruptionsOpen}
+                onDisruptionsOpenChange={setDisruptionsOpen}
               />
             )}
 
             {activeTab === "parking" && (
               <ParkingView
                 routes={Object.values(routes)}
-                onFocusVehicle={(id) => {
-                  setFocusVehicleId(id);
-                  setActiveTab("map");
-                }}
+                onFocusVehicle={handleFocusVehicleOnMap}
               />
             )}
 
             {activeTab === "planner" && <RoutePlannerView stops={stops} />}
           </div>
 
-          {}
-          <MapSettingsModal
-            isOpen={isMapPickerOpen}
-            onClose={() => setMapPickerOpen(false)}
-            currentLayerId={tileLayerId}
-            onSelectLayer={handleSelectTileLayer}
-          />
 
           <NotificationsModal
             isOpen={isNotificationsOpen}

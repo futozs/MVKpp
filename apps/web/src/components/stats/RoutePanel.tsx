@@ -33,20 +33,18 @@ function mergeDirections(days: RouteDay[]) {
   return [...byDate.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, rows]) => {
-      const events = rows.reduce((a, r) => a + r.events_n, 0);
-      const weighted = (pick: (r: RouteDay) => number | null) => {
-        const num = rows.reduce((a, r) => a + (pick(r) ?? 0) * r.events_n, 0);
-        return events ? Math.round(num / events) : null;
-      };
+      // Csak a menetszám irányonkénti; a többi mező (esemény, pontosság, kimaradt,
+      // torlódás) napi érték, ami minden irány sorában ugyanaz — összeadva duplázna.
+      const day = rows[0];
       return {
         date,
         runs: rows.reduce((a, r) => a + r.runs, 0),
-        ghosts: rows.reduce((a, r) => a + r.ghost_runs, 0),
-        bunching: rows.reduce((a, r) => a + r.bunching_n, 0),
-        events,
-        otp: weighted((r) => r.otp_pct),
-        avgDelay: weighted((r) => r.avg_delay_s),
-        p85: weighted((r) => r.p85_delay_s),
+        ghosts: day.ghost_runs,
+        bunching: day.bunching_n,
+        events: day.events_n,
+        otp: day.otp_pct,
+        avgDelay: day.avg_delay_s,
+        p85: day.p85_delay_s,
       };
     });
 }

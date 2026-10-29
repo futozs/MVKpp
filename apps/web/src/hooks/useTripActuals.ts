@@ -8,13 +8,17 @@ export type StopActual = { arr: number; dep: number | null; delay: number; estim
  * késett). A `refreshKey` változásakor (pl. új esemény a WebSocket-naplóban)
  * újratölt, így a futó menetnél megállóról megállóra frissül.
  */
+const EMPTY = new Map<string, StopActual>();
+
 export function useTripActuals(dateYmd: string, tripId: string, enabled: boolean, refreshKey: unknown) {
-  const [byStop, setByStop] = useState<Map<string, StopActual>>(new Map());
+  // A tény-időpontok a menethez (és naphoz) kötöttek: másik menet kiválasztásakor
+  // az előző menet „mért érkezései” nem látszanak az új megállói mellett.
+  const key = `${dateYmd}|${tripId}`;
+  const [state, setState] = useState<{ key: string; byStop: Map<string, StopActual> } | null>(null);
+  const byStop = enabled && state?.key === key ? state.byStop : EMPTY;
+  const setByStop = (m: Map<string, StopActual>) => setState({ key, byStop: m });
   useEffect(() => {
-    if (!enabled) {
-      setByStop(new Map());
-      return;
-    }
+    if (!enabled) return;
     const ctl = new AbortController();
     fetch(`${API_BASE}/engine/trip?date=${dateYmd}&trip=${encodeURIComponent(tripId)}`, { signal: ctl.signal })
       .then((r) => (r.ok ? r.json() : null))
@@ -25,6 +29,7 @@ export function useTripActuals(dateYmd: string, tripId: string, enabled: boolean
       })
       .catch(() => {});
     return () => ctl.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateYmd, tripId, enabled, refreshKey]);
   return byStop;
 }

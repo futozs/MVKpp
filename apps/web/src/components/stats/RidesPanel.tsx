@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Cloud, CloudOff, Map as MapIcon, Trash2 } from "lucide-react";
+import { Cloud, CloudOff, Map as MapIcon, Repeat, Trash2 } from "lucide-react";
 import { StatTile, ChartFrame } from "@/components/charts/Charts";
 import { RouteTile } from "@/components/transit/RouteTile";
 import { delayLabel, delayTone } from "@/components/transit/DelayBar";
@@ -30,6 +30,7 @@ export function RidesPanel() {
   }, []);
 
   const s = useMemo(() => summarize(rides), [rides]);
+  const journeys = useMemo(() => groupJourneys(rides), [rides]);
   const unsynced = (rides as (Ride & { synced?: boolean })[]).filter((r) => !r.synced).length;
 
   return (
@@ -59,7 +60,7 @@ export function RidesPanel() {
       ) : (
         <>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-            <StatTile label="Utazás" value={s.count} />
+            <StatTile label="Utazás" value={journeys.length} sub={s.loops ? `ebből ${s.loops} körbeutazás` : undefined} />
             <StatTile label="Megtett út" value={`${nf.format(s.km)} km`} sub="megállóról megállóra, légvonalban" />
             <StatTile label="Buszon töltött idő" value={formatDuration(s.minutes)} />
             <StatTile label="Begyűjtött rendszám" value={s.vehicles.length} sub={fleetSize ? `a flotta ${fleetSize} járművéből` : undefined} tone="live" />
@@ -100,9 +101,9 @@ export function RidesPanel() {
 
           <ChartFrame title="Utazások" hint="A legutóbbi elöl">
             <ul className="divide-y divide-border/60">
-              {rides.slice(0, 200).map((r) => (
-                <RideRow key={r.id} r={r} />
-              ))}
+              {journeys.slice(0, 200).map((legs) =>
+                legs.length > 1 ? <LoopRow key={legs[0].id} legs={legs} /> : <RideRow key={legs[0].id} r={legs[0]} />,
+              )}
             </ul>
           </ChartFrame>
         </>
@@ -146,6 +147,80 @@ function RideRow({ r }: { r: Ride }) {
   );
 }
 
+/** Körbeutazás: egy buszon, ülve maradva megtett menetek egy sorban. */
+function LoopRow({ legs }: { legs: Ride[] }) {
+  const first = legs[0];
+  const last = legs[legs.length - 1];
+  const mins = last.alightedAt ? Math.max(1, Math.round((last.alightedAt - first.boardedAt) / 60)) : null;
+  const stops = legs.reduce((a, r) => a + (r.stops ?? 0), 0);
+  const meters = legs.reduce((a, r) => a + (r.distanceM ?? 0), 0);
+  const routes = [...new Map(legs.map((r) => [r.route, r])).values()];
+  return (
+    <li className="flex items-center gap-3 py-2.5">
+      <span className="flex shrink-0 flex-col gap-1">
+        {routes.map((r) => (
+          <RouteTile key={r.route} short={r.route} color={r.color} text={r.text} size="sm" />
+        ))}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="flex items-center gap-1 text-[10.5px] font-semibold uppercase tracking-wide text-primary">
+          <Repeat className="h-3 w-3" aria-hidden /> Körbeutazás · {legs.length} menet
+        </p>
+        <p className="line-clamp-2 text-[13px] font-semibold">
+          {first.fromStopName ?? "?"}
+          {legs.slice(0, -1).map((r) => (
+            <span key={r.id}>
+              {" "}
+              <span className="text-muted-foreground">→</span> {r.toStopName ?? "?"}
+            </span>
+          ))}{" "}
+          <span className="text-muted-foreground">→</span> {last.toStopName ?? "?"}
+        </p>
+        <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11.5px] text-muted-foreground">
+          <span>
+            {DAY.format(new Date(first.boardedAt * 1000))} {HM.format(new Date(first.boardedAt * 1000))}
+          </span>
+          <span className="font-mono">{first.vehicleId}</span>
+          {mins != null ? <span>{mins} perc</span> : null}
+          <span>{stops} megálló</span>
+          {meters ? <span>{nf.format(meters / 1000)} km</span> : null}
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={() => {
+          if (confirm("Törlöd ezt a körbeutazást (minden menetét)?")) for (const r of legs) void deleteRide(r.id);
+        }}
+        aria-label="Körbeutazás törlése"
+        className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+      >
+        <Trash2 className="h-4 w-4" />
+      </button>
+    </li>
+  );
+}
+
+/** Utazások csoportosítva: a körbeutazás menetei (közös chainId) egy utazásnak számítanak; legújabb elöl. */
+function groupJourneys(rides: Ride[]): Ride[][] {
+  const chains = new Map<string, Ride[]>();
+  const out: Ride[][] = [];
+  for (const r of rides) {
+    if (!r.chainId) {
+      out.push([r]);
+      continue;
+    }
+    const legs = chains.get(r.chainId);
+    if (legs) legs.push(r);
+    else {
+      const fresh = [r];
+      chains.set(r.chainId, fresh);
+      out.push(fresh);
+    }
+  }
+  for (const legs of chains.values()) legs.sort((a, b) => a.boardedAt - b.boardedAt);
+  return out;
+}
+
 function formatDuration(minutes: number): string {
   if (minutes < 60) return `${minutes} perc`;
   const h = Math.floor(minutes / 60);
@@ -172,6 +247,7 @@ function summarize(rides: Ride[]) {
   }
   return {
     count: rides.length,
+    loops: new Set(rides.map((r) => r.chainId).filter(Boolean)).size,
     km: meters / 1000,
     minutes,
     vehicles: [...vehicles].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "hu", { numeric: true })),

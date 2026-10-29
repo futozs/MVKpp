@@ -4,7 +4,7 @@
  * meglévő mező nem tűnik el és nem változik a típusa.
  */
 import { cacheStatus, cached } from "@mvk/cache";
-import { arrivalsForStop, nowUnix, progressOnTrip, secToHm, serviceClock, tripStopRows, type ServiceDay } from "@mvk/core";
+import { arrivalsForStop, isPlausibleIso, nowUnix, progressOnTrip, secToHm, serviceClock, tripStopRows, type ServiceDay } from "@mvk/core";
 import { sql } from "@mvk/db";
 import { verifyAgentRequest } from "@mvk/db/crypto";
 import { config } from "../config.ts";
@@ -12,6 +12,7 @@ import type { Engine } from "../engine.ts";
 import type { FeedManager } from "../feeds.ts";
 import { mvkFetch } from "../mvk.ts";
 import type { DelayForecaster } from "../forecast.ts";
+import type { TrafficMonitor } from "../traffic.ts";
 import type { Parking } from "../parking.ts";
 import type { VehiclePredictor } from "../predict.ts";
 import { archiveRange, routeIndexFor, tableFor } from "../schedule.ts";
@@ -25,6 +26,7 @@ export type Ctx = {
   predictor: VehiclePredictor;
   parking: Parking;
   forecaster: DelayForecaster;
+  traffic: TrafficMonitor;
   startedAt: number;
   hubStats: () => unknown;
 };
@@ -44,6 +46,7 @@ function requireAdmin(req: Req) {
 function dateParam(req: Req, fallbackYmd: string): string {
   const ymd = (req.query.get("date") || fallbackYmd).trim();
   if (!ymdRe.test(ymd)) throw new HttpError(400, "érvénytelen ?date= (YYYYMMDD kell)");
+  if (!isPlausibleIso(isoOfYmd(ymd), serviceClock().iso)) throw new HttpError(400, "érvénytelen vagy túl távoli ?date=");
   return ymd;
 }
 
@@ -517,6 +520,8 @@ async function proxyMvk(req: Req, res: ServerResponse) {
   const method = req.method ?? "GET";
   if (!PROXY_ALLOW.some(([m, re]) => m === method && re.test(req.path))) throw new HttpError(403, "ez az MVK-végpont nem érhető el a proxyn");
   const now = Date.now();
+  // A lejárt keretek kitakarítása, hogy a sok különböző címtől a Map ne nőjön a végtelenségig.
+  if (rate.size > 5000) for (const [ip, x] of rate) if (now > x.reset) rate.delete(ip);
   const b = rate.get(req.ip) ?? { n: 0, reset: now + 60_000 };
   if (now > b.reset) Object.assign(b, { n: 0, reset: now + 60_000 });
   b.n++;

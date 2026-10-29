@@ -1,10 +1,13 @@
 /** v3 motor-végpontok: menet-részletek, idővonal (múltbeli helyzetek), élő zavarok. */
-import { findMissingTrips, localMidnightUnix, MISSING, nowUnix, secToHm, tripStopRows, type MissingCandidate, type MissingRun } from "@mvk/core";
+import { endsAtLoop, isPlausibleIso, localMidnightUnix, nowUnix, secToHm, terminusKind, tripStopRows } from "@mvk/core";
 import { cached } from "@mvk/cache";
 import { sql } from "@mvk/db";
 import { HttpError, sendJson, type Router } from "./router.ts";
 import type { Ctx } from "./compat.ts";
 import { plan, segmentEstimate } from "../planner.ts";
+import { disruptions, liveMissing } from "../disruptions.ts";
+import { cityHeat, clampHeatQuery, routeHeat } from "../heat.ts";
+import { latestReport } from "../ml/store.ts";
 
 /** ennél régebbi időpont adatai már nem változnak → hosszan gyorsítótárazható */
 const SETTLED_S = 600;
@@ -13,9 +16,9 @@ const DAY_S = 86_400;
 const isoOf = (v: string | null, fallback: string) => {
   const s = (v ?? "").trim();
   if (!s) return fallback;
-  if (/^\d{8}$/.test(s)) return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-  throw new HttpError(400, "érvénytelen dátum");
+  const iso = /^\d{8}$/.test(s) ? `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}` : s;
+  if (!isPlausibleIso(iso, fallback)) throw new HttpError(400, "érvénytelen dátum");
+  return iso;
 };
 
 export function registerV3(r: Router, ctx: Ctx) {
@@ -52,10 +55,12 @@ export function registerV3(r: Router, ctx: Ctx) {
       date: iso,
       tripId,
       known: Boolean(stops),
+      /** a végállomás fordulóhurok: ülve maradva a következő menettel körbe lehet utazni */
+      loopEnd: day ? endsAtLoop(day.feed, tripId) : false,
       stops: (stops ?? []).map((s, i) => ({ ...s, schedTime: secToHm(s.dep), schedTs: midnight + s.dep, idx: i })),
       run: live ?? runs[0] ?? null,
       liveDelaySec: live?.status === "running" ? engine.matcher.liveDelay(tripId, nowUnix()) : null,
-      forecast: iso === engine.today ? ctx.forecaster.forTrip(tripId) : null,
+      forecast: iso === engine.today ? (req.query.get("forecast") === "formula" ? ctx.forecaster.formulaFor(tripId) : ctx.forecaster.forTrip(tripId)) : null,
       events,
       cancelled: iso === engine.today ? engine.cancelled.ids.has(tripId) : Boolean((await sql(`SELECT 1 FROM cancelled_trip WHERE service_date = $1 AND trip_id = $2`, [iso, tripId]))[0]),
       predictedVehicle: iso === engine.today && !live ? predictor.predict(tripId) : null,
@@ -64,7 +69,8 @@ export function registerV3(r: Router, ctx: Ctx) {
 
   /** Idővonal: minden jármű helyzete egy múltbeli pillanatban. */
   r.get("/engine/history/at", async (req, res) => {
-    const at = Number(req.query.get("t"));
+    const raw = req.query.get("t");
+    const at = raw ? Number(raw) : NaN;
     if (!Number.isFinite(at)) throw new HttpError(400, "hiányzó ?t= (unix mp)");
     const load = () =>
       sql(
@@ -109,35 +115,135 @@ export function registerV3(r: Router, ctx: Ctx) {
   /** Élő zavarok a fejléc-jelvényhez: hivatalos törlések + most valószínűleg kimaradó menetek. */
   r.get("/engine/incidents/live", (req, res) => {
     const day = feeds.cachedDay(engine.today);
-    const now = nowUnix();
-    const midnight = localMidnightUnix(engine.today);
     const cancelled = [...engine.cancelled.ids];
-    let missing: { tripId: string; route: string; time: string; headsign: string; lateMin: number }[] = [];
-    if (day && engine.poll.lastOkAt && Date.now() - engine.poll.lastOkAt < 120_000) {
-      const nowS = now - midnight;
-      const candidates: MissingCandidate[] = [];
-      for (const t of day.feed.trips.values()) {
-        if (!day.services.has(t.serviceId) || engine.todayRuns.has(t.id) || engine.cancelled.ids.has(t.id)) continue;
-        const st = day.feed.tripStops.get(t.id);
-        const from = st?.length ? day.feed.stops.get(st[0].stopId) : undefined;
-        if (!st || !from || nowS - st[0].dep < MISSING.MIN_LATE_S || nowS - st[0].dep > MISSING.MAX_LATE_S) continue;
-        const route = day.feed.routes.get(t.routeId)?.short ?? t.routeId;
-        candidates.push({ tripId: t.id, route, headsign: t.headsign, depS: st[0].dep, fromLat: from.lat, fromLon: from.lon });
-      }
-      const runs: MissingRun[] = [];
-      for (const run of engine.todayRuns.values()) {
-        if (run.status === "aborted") continue;
-        const running = run.status === "running";
-        const st = running ? day.feed.tripStops.get(run.tripId) : undefined;
-        const to = st?.length ? day.feed.stops.get(st[st.length - 1].stopId) : undefined;
-        runs.push({ route: run.routeShort, schedStartS: run.schedStartS, schedEndS: run.schedEndS, running, toLat: to?.lat ?? null, toLon: to?.lon ?? null });
-      }
-      missing = findMissingTrips(candidates, runs, nowS).map((m) => ({ tripId: m.tripId, route: m.route, time: secToHm(m.depS), headsign: m.headsign, lateMin: m.lateMin }));
-    }
+    const missing = day
+      ? liveMissing(engine, day, nowUnix()).map((m) => ({ tripId: m.tripId, route: m.route, time: secToHm(m.depS), headsign: m.headsign, lateMin: m.lateMin }))
+      : [];
     sendJson(req, res, 200, { date: engine.today, cancelled: cancelled.length, cancelledTripIds: cancelled, missing, count: cancelled.length + missing.length });
   });
 
+  /**
+   * A mai zavarok összesítve (Menetrend → Mai zavarok): törölt, most kimaradó és
+   * korábban el nem indult menetek, pótló indulással. ?near=SP1,SP2 — a kliens
+   * közelében lévő megállók: az ott megálló menetek ott mikor jöttek volna.
+   */
+  r.get("/engine/disruptions", (req, res) => {
+    const day = feeds.cachedDay(engine.today);
+    if (!day) throw new HttpError(503, "még nincs betöltve a mai menetrend");
+    const near = (req.query.get("near") ?? "")
+      .split(",")
+      .map((x) => x.trim())
+      .filter((x) => /^[\w:.-]{1,32}$/.test(x))
+      .slice(0, 8);
+    sendJson(req, res, 200, disruptions(engine, predictor, day, near), { "cache-control": "no-store" });
+  });
+
+  /**
+   * Körbeutazás: a menet végállomásán hogyan folytatja a busz — melyik menettel,
+   * mikor, és ugyanabból a megállóból indul-e (fordulóhurok). Az élő jármű
+   * menete az elsődleges forrás (az MVK percekkel korábban kiosztja), utána a
+   * forda-terv.
+   */
+  r.get("/engine/continuation", (req, res) => {
+    const tripId = (req.query.get("trip") ?? "").trim();
+    const vehicleId = (req.query.get("vehicle") ?? "").trim();
+    if (!tripId || !vehicleId) throw new HttpError(400, "hiányzó ?trip= és ?vehicle=");
+    const day = feeds.cachedDay(engine.today);
+    if (!day) throw new HttpError(503, "még nincs betöltve a mai menetrend");
+    const feed = day.feed;
+    const st = feed.tripStops.get(tripId);
+    if (!st?.length) throw new HttpError(404, "ismeretlen menet");
+    const midnight = localMidnightUnix(engine.today);
+    const end = st[st.length - 1];
+    const endStop = feed.stops.get(end.stopId);
+    const run = engine.todayRuns.get(tripId);
+    const own = run?.vehicleId === vehicleId ? run : undefined;
+
+    const candidates: { tripId: string; source: "live" | "plan" }[] = [];
+    const live = engine.snapshot.vehicles.find((v) => v.id === vehicleId);
+    if (live?.tripId && live.tripId !== tripId) candidates.push({ tripId: live.tripId, source: "live" });
+    for (const sl of predictor.planSnapshot()?.byVehicle.get(vehicleId) ?? []) {
+      if (sl.tripId !== tripId && sl.startS >= end.arr - 300) {
+        candidates.push({ tripId: sl.tripId, source: "plan" });
+        break;
+      }
+    }
+    let next = null;
+    for (const c of candidates) {
+      const t = feed.trips.get(c.tripId);
+      const nst = feed.tripStops.get(c.tripId);
+      if (!t || !nst?.length || nst[0].dep < end.arr - 300) continue;
+      const route = feed.routes.get(t.routeId);
+      const first = feed.stops.get(nst[0].stopId);
+      const nrun = engine.todayRuns.get(c.tripId);
+      const mine = nrun?.vehicleId === vehicleId ? nrun : undefined;
+      next = {
+        tripId: t.id,
+        route: route?.short ?? t.routeId,
+        color: route?.color ?? "1FB574",
+        text: route?.text ?? "FFFFFF",
+        headsign: t.headsign,
+        firstStopId: nst[0].stopId,
+        firstStopName: first?.name ?? nst[0].stopId,
+        depS: nst[0].dep,
+        depTs: midnight + nst[0].dep,
+        depTime: secToHm(nst[0].dep),
+        kind: terminusKind(feed, end.stopId, nst[0].stopId),
+        source: c.source,
+        cancelled: engine.cancelled.ids.has(t.id),
+        departed: mine?.actualStart != null,
+        departedAt: mine?.actualStart ?? null,
+        startDelayS: mine?.startDelayS ?? null,
+      };
+      break;
+    }
+    sendJson(
+      req,
+      res,
+      200,
+      {
+        tripId,
+        vehicleId,
+        terminus: { stopId: end.stopId, name: endStop?.name ?? end.stopId, idx: st.length - 1 },
+        loop: endsAtLoop(feed, tripId),
+        arrivedAt: own?.actualEnd ?? null,
+        /** a busz most (a fordulás közbeni leszállás-felismeréshez) */
+        vehicle: live?.lat != null && live.lon != null ? { lat: live.lat, lon: live.lon } : null,
+        next,
+      },
+      { "cache-control": "no-store" },
+    );
+  });
+
+  /** Vonal-hőtérkép: megálló × óra — késés és késésnövekmény (lezárt napokból). */
+  r.get("/engine/heat/route", async (req, res) => {
+    const route = (req.query.get("route") ?? "").trim();
+    if (!/^[\w-]{1,8}$/.test(route)) throw new HttpError(400, "hiányzó vagy érvénytelen ?route=");
+    const day = feeds.cachedDay(engine.today);
+    if (!day) throw new HttpError(503, "még nincs betöltve a mai menetrend");
+    const data = await routeHeat(day, route, req.query.get("dir"), clampHeatQuery(req.query.get("days") ?? 28, req.query.get("daytype") ?? 0));
+    if (!data) throw new HttpError(404, "ismeretlen vonal");
+    sendJson(req, res, 200, data, { "cache-control": "public, max-age=600" });
+  });
+
+  /** Városi hőtérkép: megállóközönként, óránként mennyi időt veszít a busz a menetrendhez képest. */
+  r.get("/engine/heat/city", async (req, res) => {
+    const day = feeds.cachedDay(engine.today);
+    if (!day) throw new HttpError(503, "még nincs betöltve a mai menetrend");
+    const data = await cityHeat(day, clampHeatQuery(req.query.get("days") ?? 28, req.query.get("daytype") ?? 0));
+    sendJson(req, res, 200, data, { "cache-control": "public, max-age=600" });
+  });
+
   r.get("/engine/predict/status", (req, res) => sendJson(req, res, 200, predictor.status()));
+
+  /** Élő forgalom: a most torlódott szakaszok (a buszok menetidejéből), nyomvonallal. */
+  r.get("/engine/traffic/live", (req, res) => sendJson(req, res, 200, ctx.traffic.snapshot(), { "cache-control": "no-store" }));
+
+  /** A késés-modell állapota: az utolsó tanítás visszamérése, és mi becsül most. */
+  r.get("/engine/ml/status", async (req, res) => {
+    const last = await latestReport();
+    sendJson(req, res, 200, { inUse: ctx.forecaster.modelInfo(), lastTraining: last }, { "cache-control": "no-store" });
+  });
 
   /**
    * Forda-tábla: buszonként a mai menetek (lefutott / futó) és a forda-terv
@@ -204,7 +310,8 @@ export function registerV3(r: Router, ctx: Ctx) {
     const at = !atRaw ? nowUnix() : /^\d+$/.test(atRaw) ? Number(atRaw) : Math.floor(Date.parse(atRaw) / 1000);
     if (!Number.isFinite(at)) throw new HttpError(400, "érvénytelen ?at=");
     const arriveBy = req.query.get("arriveBy") === "1";
-    const limit = Number(req.query.get("limit") ?? 4);
+    const rawLimit = Number(req.query.get("limit") ?? 4);
+    const limit = Number.isInteger(rawLimit) ? rawLimit : 4;
     const run = () => plan(engine, { from, to, at, arriveBy, limit });
     // A múltbeli tervezés (tényadatokból) már nem változik — a pár órán belüli
     // még kaphat késve beérő adatot, ezért az csak röviden él; az élő mindig friss.

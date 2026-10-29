@@ -27,6 +27,8 @@ import { registerV3 } from "./http/v3.ts";
 import { detectIncidentsForDay } from "./incidents.ts";
 import { errMsg, log } from "./log.ts";
 import { DelayForecaster } from "./forecast.ts";
+import { trainDelayModelInThread } from "./ml/thread.ts";
+import { TrafficMonitor } from "./traffic.ts";
 import { Parking } from "./parking.ts";
 import { VehiclePredictor } from "./predict.ts";
 import { PushEngine } from "./push.ts";
@@ -56,6 +58,8 @@ async function main() {
   const forecaster = new DelayForecaster(engine);
   await forecaster.load().catch((e) => log.warn("forecast", "profilok betöltése sikertelen", errMsg(e)));
   const parking = new Parking(engine, predictor);
+  // a motor indulása előtt: a mai nap visszajátszott eseményeiből is épül
+  const traffic = new TrafficMonitor(engine, forecaster);
   await parking.init().catch((e) => log.warn("parking", "indítás sikertelen", errMsg(e)));
 
   const boss = new PgBoss({ connectionString: databaseUrl(), schema: "pgboss" });
@@ -65,12 +69,18 @@ async function main() {
   const router = new Router();
   const server = createServer();
   const hub = new Hub(server, engine, predictor, parking, forecaster);
-  const ctx = { engine, feeds, predictor, parking, forecaster, startedAt: Date.now(), hubStats: () => hub.status() };
+  const ctx = { engine, feeds, predictor, parking, forecaster, traffic, startedAt: Date.now(), hubStats: () => hub.status() };
   registerCompat(router, ctx);
   registerV3(router, ctx);
 
   server.on("request", async (raw, res) => {
-    const url = new URL(raw.url ?? "/", "http://localhost");
+    let url: URL;
+    try {
+      url = new URL(raw.url ?? "/", "http://localhost");
+    } catch {
+      res.writeHead(400).end();
+      return;
+    }
     const req = raw as Req;
     req.path = url.pathname;
     req.query = url.searchParams;
@@ -104,18 +114,50 @@ async function main() {
   await push.start();
 
   // A webes oldal Postgres NOTIFY-jal szól: szinkron-változás, push-figyelés változott.
-  const listener = new pg.Client({ connectionString: databaseUrl() });
-  await listener.connect();
-  await listener.query("LISTEN mvk_events");
-  listener.on("notification", (n) => {
+  // Ha a kapcsolat megszakad (Postgres újraindul), újrakapcsolódunk — különben a
+  // kezeletlen 'error' leállítaná a workert, és a szinkron-értesítések elnémulnának.
+  let activeListener: pg.Client | null = null;
+  let stopping = false;
+  const listen = async (attempt = 0): Promise<void> => {
+    if (stopping) return;
+    const listener = new pg.Client({ connectionString: databaseUrl() });
+    activeListener = listener;
+    let retried = false;
+    const retry = () => {
+      if (retried || stopping) return;
+      retried = true;
+      const wait = Math.min(60_000, 1000 * 2 ** Math.min(attempt, 6));
+      setTimeout(() => void listen(attempt + 1).catch(() => {}), wait).unref();
+    };
+    listener.on("error", (e) => {
+      log.warn("listen", "a NOTIFY-kapcsolat megszakadt, újrakapcsolódás", errMsg(e));
+      listener.removeAllListeners("end");
+      void listener.end().catch(() => {});
+      retry();
+    });
+    listener.on("end", () => retry());
+    listener.on("notification", (n) => {
+      try {
+        const e = JSON.parse(n.payload ?? "{}") as { type?: string; userId?: string; keys?: string[]; deviceId?: string };
+        if (e.type === "sync" && e.userId) hub.notifySync(e.userId, e.keys ?? [], e.deviceId ?? null);
+        if (e.type === "push_watch") push.reload().catch(() => {});
+      } catch {
+        /* hibás értesítés — figyelmen kívül */
+      }
+    });
     try {
-      const e = JSON.parse(n.payload ?? "{}") as { type?: string; userId?: string; keys?: string[]; deviceId?: string };
-      if (e.type === "sync" && e.userId) hub.notifySync(e.userId, e.keys ?? [], e.deviceId ?? null);
-      if (e.type === "push_watch") push.reload().catch(() => {});
-    } catch {
-      /* hibás értesítés — figyelmen kívül */
+      await listener.connect();
+      await listener.query("LISTEN mvk_events");
+      // Kimaradt értesítések: a push-figyeléseket újratöltjük.
+      if (attempt > 0) push.reload().catch(() => {});
+    } catch (e) {
+      log.warn("listen", "a NOTIFY-kapcsolat nem jött létre", errMsg(e));
+      listener.removeAllListeners("end");
+      void listener.end().catch(() => {});
+      retry();
     }
-  });
+  };
+  await listen();
 
   // Ütemezett feladatok (pg-boss: egy példányban fut, újraindítás után is).
   await boss.createQueue("nightly");
@@ -129,7 +171,17 @@ async function main() {
     await detectIncidentsForDay(feeds, yesterday);
     await predictor.learn();
     await forecaster.load();
+    // A késés-modell újratanítása a friss nappal (külön szálon); csak a bizonyítottan jobb modell él.
+    if (await trainDelayModelInThread()) await forecaster.loadModel();
   });
+  // Első indításkor (még nincs modell) nem várunk az éjszakáig.
+  if (!forecaster.hasModel()) {
+    setTimeout(() => {
+      void trainDelayModelInThread().then(async (saved) => {
+        if (saved) await forecaster.loadModel();
+      });
+    }, 3 * 60_000).unref();
+  }
   await boss.work("minutely", async () => {
     await predictor.recordHorizons();
   });
@@ -145,11 +197,14 @@ async function main() {
     server.close();
     await engine.stop().catch(() => {});
     await boss.stop({ graceful: true, timeout: 5000 }).catch(() => {});
-    await listener.end().catch(() => {});
+    stopping = true;
+    await activeListener?.end().catch(() => {});
     await closeDb();
     await closeCache();
     process.exit(0);
   };
+  // Egy elszabadult ígéret ne állítsa le a teljes élő motort — naplózzuk.
+  process.on("unhandledRejection", (e) => log.error("process", "kezeletlen hiba", errMsg(e)));
   process.on("SIGINT", () => void shutdown("SIGINT"));
   process.on("SIGTERM", () => void shutdown("SIGTERM"));
 }

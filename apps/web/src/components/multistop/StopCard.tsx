@@ -265,7 +265,13 @@ export function StopCard({
               <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 Következő
               </span>
-              <LiveTag live={next.live} />
+              {next.cancelled ? (
+                <span className="rounded-md border border-destructive/50 bg-destructive/12 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-destructive">
+                  Törölve
+                </span>
+              ) : (
+                <LiveTag live={next.live} />
+              )}
             </div>
 
             <div className="flex items-start justify-between gap-3">
@@ -284,19 +290,24 @@ export function StopCard({
                     {next.headsign}
                   </p>
                   <div className="mt-1.5 flex items-center gap-2">
-                    <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                    <span className={cn("font-mono text-xs tabular-nums text-muted-foreground", next.cancelled && "line-through decoration-destructive/70 decoration-2")}>
                       {next.time}
                     </span>
-                    <DelayBar delaySec={next.delaySec ?? next.measuredDelaySec ?? null} />
+                    {next.cancelled ? null : <DelayBar delaySec={next.delaySec ?? next.measuredDelaySec ?? null} />}
                   </div>
                 </div>
               </div>
 
-              <Countdown etaMin={next.etaMin} />
+              {/* Az MVK kihúzta: nem jön, nincs mit visszaszámolni. */}
+              {next.cancelled ? (
+                <span className="shrink-0 pt-1 text-xs font-semibold text-destructive">nem jön</span>
+              ) : (
+                <Countdown etaMin={next.etaMin} />
+              )}
             </div>
 
             {}
-            {!next.vehicle && next.predictedVehicle && showPredicted ? (
+            {!next.vehicle && next.predictedVehicle && showPredicted && !next.cancelled ? (
               <p
                 className="mt-3 text-[11px] text-muted-foreground"
                 title={predictedTitle(next.predictedVehicle)}

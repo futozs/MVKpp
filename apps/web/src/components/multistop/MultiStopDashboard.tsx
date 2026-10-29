@@ -8,7 +8,8 @@ import { StopCard } from "./StopCard";
 import { StopCarousel } from "./StopCarousel";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { cn, normalizeSearchText } from "@/lib/utils";
+import { normalizeSearchText } from "@/lib/utils";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 
 const QUICK_STOPS = [
   { label: "Tiszai pályaudvar", match: "Tiszai" },
@@ -32,6 +33,7 @@ export function MultiStopDashboard({
   setSelectedStopIds,
   onFocusMap,
 }: MultiStopDashboardProps) {
+  const isWide = useMediaQuery("(min-width: 768px)");
   const [isPickerOpen, setPickerOpen] = useState(false);
   const [isReordering, setReordering] = useState(false);
   const geo = useGeo();
@@ -177,8 +179,10 @@ export function MultiStopDashboard({
       </div>
 
       {}
-      {watched.length > 0 ? (
-        <div className="min-h-0 flex-1 overflow-hidden pt-4 md:hidden">
+      {/* Csak az egyik nézet él (a másik nem csak elrejtve): különben minden
+          megálló kétszer kérné le az indulásokat és kétszer értesítene. */}
+      {watched.length > 0 && !isWide ? (
+        <div className="min-h-0 flex-1 overflow-hidden pt-4">
           <StopCarousel
             stops={watched}
             onRemove={removeStop}
@@ -191,12 +195,8 @@ export function MultiStopDashboard({
         </div>
       ) : null}
 
-      <div
-        className={cn(
-          "min-h-0 flex-1 overflow-y-auto p-4",
-          watched.length > 0 && "hidden md:block",
-        )}
-      >
+      {watched.length === 0 || isWide ? (
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">
         {watched.length === 0 ? (
           <Card className="mx-auto max-w-xl p-6 text-center shadow-lg sm:p-8">
             <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-primary/12 text-primary">
@@ -267,6 +267,7 @@ export function MultiStopDashboard({
           </div>
         )}
       </div>
+      ) : null}
 
       <AddStopModal
         isOpen={isPickerOpen}

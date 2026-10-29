@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useStorageRefresh } from "./useStorageRefresh";
 
 const STORAGE_KEY = "mvk_timetable_favorites";
 const MAX_FAVORITES = 24;
@@ -30,6 +31,7 @@ export const favoriteKey = (routeId: string, dir: string) =>
 
 export function useFavorites() {
   const [favorites, setFavorites] = useState<FavoriteLine[]>(read);
+  useStorageRefresh(STORAGE_KEY, () => setFavorites(read()));
 
   useEffect(() => {
     try {

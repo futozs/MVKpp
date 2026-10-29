@@ -29,9 +29,10 @@ import { RouteTile } from "@/components/transit/RouteTile";
 import { LiveDot } from "@/components/transit/LiveDot";
 import { HereChip } from "@/components/transit/HereChip";
 import { RunSummary } from "./RunSummary";
-import { TimetableGrid } from "./TimetableGrid";
+import { isWaitingAtStart, TimetableGrid } from "./TimetableGrid";
 import { TripNotifyDialog } from "./TripNotifyDialog";
 import { TripProgressRail } from "./TripProgressRail";
+import { DisruptionsDialog, type DisruptionTrip } from "./DisruptionsDialog";
 import { useTripActuals } from "@/hooks/useTripActuals";
 import { useCancelledTrips } from "@/hooks/useCancelledTrips";
 import { useTripJournal } from "@/hooks/useTripJournal";
@@ -46,6 +47,7 @@ import {
 import { getWatch } from "@/lib/notifications";
 import { initialTimetableView, saveTimetableView } from "@/lib/viewState";
 import { cn, normalizeSearchText } from "@/lib/utils";
+import { serviceNow } from "@/lib/serviceDay";
 
 interface TimetableViewProps {
   stops: Stop[];
@@ -53,21 +55,17 @@ interface TimetableViewProps {
   onFocusTrip: (tripId: string, vehicleId?: string) => void;
   serviceRange: { from: string; to: string } | null;
   archiveRange: { from: string; to: string; days: number } | null;
-}
-
-function secondsSinceMidnight(d: Date) {
-  return d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
+  /** a „Mai zavarok” ablak (az Üzemzavarok oldalról is megnyitható) */
+  disruptionsOpen: boolean;
+  onDisruptionsOpenChange: (open: boolean) => void;
 }
 
 const ymdToIso = (ymd: string) =>
   `${ymd.slice(0, 4)}-${ymd.slice(4, 6)}-${ymd.slice(6, 8)}`;
 const isoToYmd = (iso: string) => iso.replace(/-/g, "");
 
-function todayIso(): string {
-  const d = new Date();
-  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-  return d.toISOString().slice(0, 10);
-}
+/** A mai SZOLGÁLTATÁSI nap (Budapest, 3:00-kor vált) — éjfél után még a tegnapi menetek futnak. */
+const todayIso = () => serviceNow().iso;
 
 const clampIso = (iso: string, min: string | null, max: string | null) =>
   min && iso < min ? min : max && iso > max ? max : iso;
@@ -78,12 +76,15 @@ function DayPicker({
   min,
   max,
   className,
+  align,
 }: {
   value: string;
   onChange: (iso: string) => void;
   min: string | null;
   max: string | null;
   className?: string;
+  /** a naptár melyik szélhez igazodjon (jobb szélen álló mezőnél jobbra, hogy ne vágódjon le) */
+  align?: "left" | "right";
 }) {
   const shift = (days: number) => {
     const d = new Date(`${value}T12:00:00`);
@@ -117,6 +118,7 @@ function DayPicker({
         min={min}
         max={max}
         aria-label="Menetrend napja"
+        align={align}
         className="h-7 min-w-0 flex-1 justify-center border-none bg-transparent px-1.5 text-xs shadow-none"
       />
 
@@ -140,6 +142,8 @@ export function TimetableView({
   onFocusTrip,
   serviceRange,
   archiveRange,
+  disruptionsOpen,
+  onDisruptionsOpenChange,
 }: TimetableViewProps) {
   const restored = initialTimetableView();
   const [routes, setRoutes] = useState<TimetableRoute[]>([]);
@@ -172,12 +176,10 @@ export function TimetableView({
   const cancelled = useCancelledTrips(isoToYmd(date), isToday);
   const journal = useTripJournal(isoToYmd(date), day === "today" ? 60000 : 0);
 
-  const [nowSec, setNowSec] = useState(() => secondsSinceMidnight(new Date()));
+  // A szolgáltatási nap kezdete óta eltelt idő: éjfél után 24:xx (86 400+ mp).
+  const [nowSec, setNowSec] = useState(() => serviceNow().sec);
   useEffect(() => {
-    const timer = setInterval(
-      () => setNowSec(secondsSinceMidnight(new Date())),
-      15000,
-    );
+    const timer = setInterval(() => setNowSec(serviceNow().sec), 15000);
     return () => clearInterval(timer);
   }, []);
 
@@ -272,6 +274,21 @@ export function TimetableView({
     );
   }, [routes, query]);
 
+  // A zavar-összesítőből választott menet: a mai nap, a vonal és irány, a menet kijelölve.
+  const openDisruptedTrip = (t: DisruptionTrip) => {
+    onDisruptionsOpenChange(false);
+    const today = todayIso();
+    if (date === today && selectedRouteId === t.routeId && selectedDir === t.dir && table) {
+      const hit = table.trips.find((x) => x.tripId === t.tripId);
+      if (hit) setSelectedTrip(hit);
+      return;
+    }
+    pendingTripRef.current = t.tripId;
+    setDate(today);
+    setSelectedRouteId(t.routeId);
+    setSelectedDir(t.dir);
+  };
+
   const selectRoute = (route: TimetableRoute) => {
     setSelectedRouteId(route.id);
     const withService =
@@ -279,12 +296,17 @@ export function TimetableView({
     setSelectedDir(withService?.dir ?? "");
   };
 
+  // A gomb számlálója mindig a mai napot mutatja (az ablak is a mai napról szól).
+  const todayCancelled = isToday ? cancelled.ids.size : 0;
   const cancelledTripCount =
     table?.trips.filter((t) => cancelled.ids.has(t.tripId)).length ?? 0;
   const liveTripCount =
     day === "today"
       ? (table?.trips.filter(
-          (t) => vehicleByTrip.has(t.tripId) && !cancelled.ids.has(t.tripId),
+          (t) =>
+            vehicleByTrip.has(t.tripId) &&
+            !cancelled.ids.has(t.tripId) &&
+            !isWaitingAtStart(journal.get(t.tripId)),
         ).length ?? 0)
       : 0;
   const cancelledByRoute = useMemo(() => {
@@ -311,6 +333,12 @@ export function TimetableView({
 
   return (
     <div className="flex h-full min-w-0 flex-1 overflow-hidden">
+      <DisruptionsDialog
+        open={disruptionsOpen}
+        onOpenChange={onDisruptionsOpenChange}
+        stops={stops}
+        onPickTrip={openDisruptedTrip}
+      />
       {}
       <aside
         className={cn(
@@ -340,6 +368,24 @@ export function TimetableView({
             <HereChip stops={stops} />
           </div>
 
+          <button
+            type="button"
+            onClick={() => onDisruptionsOpenChange(true)}
+            className={cn(
+              "mt-2 flex w-full items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left text-xs font-semibold transition-colors",
+              "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+              todayCancelled > 0
+                ? "border-destructive/40 bg-destructive/[0.07] text-foreground hover:bg-destructive/12"
+                : "border-border text-muted-foreground hover:bg-accent",
+            )}
+          >
+            <Ban aria-hidden className={cn("h-3.5 w-3.5 shrink-0", todayCancelled > 0 ? "text-destructive" : "")} />
+            <span className="min-w-0 flex-1 truncate">Mai zavarok — mi marad ki, mi jön helyette</span>
+            {todayCancelled > 0 ? (
+              <span className="shrink-0 rounded bg-destructive/15 px-1.5 font-mono text-[10.5px] font-bold tabular-nums text-destructive">{todayCancelled}</span>
+            ) : null}
+          </button>
+
           <DayPicker
             value={date}
             onChange={setDate}
@@ -359,7 +405,7 @@ export function TimetableView({
             </p>
           ) : visibleRoutes.length === 0 ? (
             <p className="px-3 py-8 text-center text-sm text-muted-foreground">
-              Nincs „{query}” jelzésű járat.
+              {query.trim() ? `Nincs „${query.trim()}” jelzésű járat.` : routes.length ? "Ezen a napon nem közlekedik járat." : "Járatok betöltése…"}
             </p>
           ) : (
             <>
@@ -458,7 +504,7 @@ export function TimetableView({
                         </span>
                         {cancelledOnRoute > 0 ? (
                           <span
-                            title={`${cancelledOnRoute} kihúzott menet ma ezen a járaton`}
+                            title={`${cancelledOnRoute} kihúzott menet ${isToday ? "ma" : "ezen a napon"} ezen a járaton`}
                             className="inline-flex shrink-0 items-center gap-1 rounded-md border border-destructive/40 bg-destructive/12 px-1.5 py-0.5 font-mono text-[10px] font-bold tabular-nums text-destructive"
                           >
                             <Ban aria-hidden className="h-2.5 w-2.5" />
@@ -569,6 +615,7 @@ export function TimetableView({
                   min={minIso}
                   max={maxIso}
                   className="hidden shrink-0 sm:flex"
+                  align="right"
                 />
               </div>
 
@@ -672,6 +719,8 @@ export function TimetableView({
             {}
             {selectedTrip && table ? (
               <TripDetail
+                // Másik menet = friss állapot (értesítő-cél, előrehaladás, tény-idők).
+                key={selectedTrip.tripId}
                 trip={selectedTrip}
                 stops={table.stops}
                 routeShort={selectedRoute.short}
@@ -737,6 +786,7 @@ function TripDetail({
     arrivalSec: trip.arrivalSec,
     nowSec,
     day,
+    waitingAtStart: isWaitingAtStart(journalEntry ?? undefined),
   });
   // A naplózott jármű a menet UTÁN is megvan — a térképen ilyenkor már máshol
   // jár, de az utasnak pont az a kérdés, hogy „melyik busz vitte ezt". Egy még
@@ -849,8 +899,9 @@ function TripDetail({
 
         {cancelled ? (
           <p className="border-b border-destructive/25 bg-destructive/10 px-3 py-2 text-xs text-destructive sm:px-4">
-            Az MVK kihúzta ezt a menetet — ma nem közlekedik. Válassz másik
-            indulást.
+            {day === "today"
+              ? "Az MVK kihúzta ezt a menetet — ma nem közlekedik. Válassz másik indulást."
+              : "Az MVK kihúzta ezt a menetet — ezen a napon nem közlekedett."}
           </p>
         ) : showRunSummary && journalEntry ? (
           <RunSummary entry={journalEntry} />
@@ -875,6 +926,7 @@ function TripDetail({
 
       {vehicle ? (
         <TripProgressRail
+          key={`${trip.tripId}|${vehicle.id}`}
           trip={trip}
           vehicleId={vehicle.id}
           stopNames={stops.map((s) => s.name)}

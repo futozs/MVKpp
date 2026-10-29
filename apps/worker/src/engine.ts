@@ -69,6 +69,9 @@ export class Engine extends EventEmitter<EngineEvents> {
   poll = { ok: 0, fail: 0, lastOkAt: 0, lastError: null as string | null, lastMs: 0, pingsKept: 0, vehiclesMax: 0 };
   private busy = false;
   private replaying = false;
+  /** a legutóbbi SIKERES pozíció- / előrejelzés-lekérés ideje (ms) — ennyi ideig tartjuk meg a régit */
+  private positionsOkAt = 0;
+  private updatesOkAt = 0;
   private timers: NodeJS.Timeout[] = [];
 
   constructor(feeds: FeedManager) {
@@ -93,7 +96,12 @@ export class Engine extends EventEmitter<EngineEvents> {
 
   private onRun(r: RunOut) {
     this.persister.run(r);
-    if (r.serviceDate === this.todayIso) this.todayRuns.set(r.tripId, { ...r });
+    if (r.serviceDate === this.todayIso) {
+      // Egy menetet egymás után két jármű is vihet (az MVK átosztja): egy másik
+      // jármű lezáruló menete ne írja felül a most futót.
+      const cur = this.todayRuns.get(r.tripId);
+      if (!cur || cur.vehicleId === r.vehicleId || cur.status !== "running" || r.status === "running") this.todayRuns.set(r.tripId, { ...r });
+    }
     this.emit("run", r);
   }
 
@@ -154,8 +162,10 @@ export class Engine extends EventEmitter<EngineEvents> {
 
   async pollOnce(): Promise<void> {
     if (this.busy) return;
-    if (!tokenStatus().present) {
-      this.snapshot = { ...EMPTY, rtError: "nincs MVK token" };
+    const tok = tokenStatus();
+    if (!tok.present || tok.expired) {
+      // Lejárt tokennel az MVK úgyis elutasít — nem terheljük 2,5 mp-enként, és nem mutatunk régi adatot.
+      this.snapshot = { ...EMPTY, rtError: tok.present ? "lejárt az MVK token" : "nincs MVK token" };
       return;
     }
     this.busy = true;
@@ -184,12 +194,17 @@ export class Engine extends EventEmitter<EngineEvents> {
         midnightUnix: clock.midnightUnix,
         rtError: errs.length ? errs.join("; ") : null,
       });
-      if (!positions && this.snapshot.decoded.length && now * 1000 - this.snapshot.fetchedAt < 60_000) {
+      // A régi adatot legfeljebb 60 mp-ig visszük tovább (a `fetchedAt` minden körben frissül,
+      // ezért a legutóbbi sikeres lekéréshez mérünk — különben a befagyott buszok órákig élőnek látszanának).
+      const nowMs = Date.now();
+      if (positions) this.positionsOkAt = nowMs;
+      else if (this.snapshot.decoded.length && nowMs - this.positionsOkAt < 60_000) {
         snap.decoded = this.snapshot.decoded;
         snap.vehicles = this.snapshot.vehicles;
         snap.header = this.snapshot.header;
       }
-      if (!updates && this.snapshot.predByStop.size && now * 1000 - this.snapshot.fetchedAt < 60_000) snap.predByStop = this.snapshot.predByStop;
+      if (updates) this.updatesOkAt = nowMs;
+      else if (this.snapshot.predByStop.size && nowMs - this.updatesOkAt < 60_000) snap.predByStop = this.snapshot.predByStop;
 
       if (positions) {
         let kept = 0;

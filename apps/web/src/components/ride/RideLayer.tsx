@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { LiveVehicle } from "@/types";
 import { useGeo } from "@/context/GeoContext";
+import { serverNow } from "@/lib/realtime";
 import { startRide, syncRides, useActiveRide, type Ride } from "@/lib/rides";
 import { BoardingPrompt, RideSavedNote } from "./BoardingPrompt";
 import { RidePanel } from "./RidePanel";
@@ -23,8 +24,8 @@ const TODAY = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Budapest" });
 export function boardVehicle(info: BoardInfo, detected: "auto" | "manual") {
   startRide({
     ...info,
-    serviceDate: TODAY.format(new Date()),
-    boardedAt: Math.round(Date.now() / 1000),
+    serviceDate: TODAY.format(new Date(serverNow() * 1000)),
+    boardedAt: Math.round(serverNow()),
     fromIdx: null,
     fromStopId: null,
     fromStopName: null,
@@ -73,6 +74,8 @@ export function RideLayer({
     <>
       {ride ? (
         <RidePanel
+          // Körbeutazáskor új menet = új panel: az előző menet állapota nem keveredhet bele.
+          key={ride.id}
           ride={ride}
           position={watching ? geo.position : null}
           onFinished={(r) => {

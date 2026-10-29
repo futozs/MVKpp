@@ -79,6 +79,8 @@ export class VehiclePredictor {
     this.engine = engine;
     engine.on("run", (r) => {
       if (r.status === "running" && !this.resolved.has(r.runKey)) {
+        // A runKey a napot is tartalmazza: napváltáskor a régiek eldobhatók.
+        if (this.resolved.size > 20_000) this.resolved.clear();
         this.resolved.add(r.runKey);
         this.resolve(r).catch((e) => log.warn("predict", "kiértékelés hiba", errMsg(e)));
       }

@@ -1,6 +1,7 @@
 export type TripRunState =
   | "cancelled"
   | "live"
+  | "waiting"
   | "running"
   | "finished"
   | "scheduled"
@@ -19,6 +20,11 @@ export interface TripRunInput {
   arrivalSec: number;
   nowSec: number;
   day: DayRelation;
+  /**
+   * Az élő jármű még a kiinduló megállóban áll: az MVK percekkel az indulás
+   * előtt kiosztja a menetet, de attól még nem indult el.
+   */
+  waitingAtStart?: boolean;
 }
 
 export function tripRunState({
@@ -28,11 +34,12 @@ export function tripRunState({
   arrivalSec,
   nowSec,
   day,
+  waitingAtStart = false,
 }: TripRunInput): TripRunState {
   if (day === "past") return "finished";
   if (day === "future") return "scheduled";
   if (cancelled) return "cancelled";
-  if (hasLiveVehicle) return "live";
+  if (hasLiveVehicle) return waitingAtStart ? "waiting" : "live";
   if (nowSec > arrivalSec) return "finished";
   if (nowSec >= departureSec) return "running";
   return "scheduled";
@@ -51,6 +58,8 @@ export function tripRunLabel(
       return "Törölve";
     case "live":
       return vehicleId ? `Úton · ${vehicleId}` : "Úton";
+    case "waiting":
+      return vehicleId ? `Beállt · ${vehicleId}, indulásra vár` : "Beállt, indulásra vár";
     case "running":
       return vehicleId ? `Úton · ${vehicleId}` : "Nincs élő jel";
     case "finished":

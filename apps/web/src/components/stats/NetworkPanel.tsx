@@ -4,10 +4,11 @@ import { BarChart, ChartFrame, RankBars, StatTile } from "@/components/charts/Ch
 import { QueryBoundary, PillPicker } from "./PanelState";
 import { useStatsQuery } from "./useStatsQuery";
 
+// A ragozott alakok külön: a „vasárnap, ünnep” + „-jai” nem magyar.
 const DAYTYPES = [
-  { id: "0", label: "Munkanap" },
-  { id: "1", label: "Szombat" },
-  { id: "2", label: "Vasárnap, ünnep" },
+  { id: "0", label: "Munkanap", of: "munkanapjai", on: "munkanapjain" },
+  { id: "1", label: "Szombat", of: "szombatjai", on: "szombatjain" },
+  { id: "2", label: "Vasárnap, ünnep", of: "vasár- és ünnepnapjai", on: "vasár- és ünnepnapjain" },
 ] as const;
 
 const PERIODS = [
@@ -53,7 +54,7 @@ export function NetworkPanel() {
     [daytype, period, w.from, w.to],
   );
 
-  const dayLabel = DAYTYPES.find((d) => d.id === daytype)!.label.toLowerCase();
+  const dayType = DAYTYPES.find((d) => d.id === daytype)!;
 
   return (
     <div className="space-y-4">
@@ -77,12 +78,12 @@ export function NetworkPanel() {
                 <StatTile label="Reggeli csúcs (6–9)" value={fmtMin(am?.delay)} sub={am ? `${am.otp}% pontos érkezés` : "nincs adat"} tone="late" />
                 <StatTile label="Délutáni csúcs (14–18)" value={fmtMin(pm?.delay)} sub={pm ? `${pm.otp}% pontos érkezés` : "nincs adat"} tone="late" />
                 <StatTile label="Legrosszabb óra" value={worst ? `${worst.hour % 24}:00–${(worst.hour % 24) + 1}:00` : "—"} sub={worst ? `átlag ${fmtMin(worst.avg_delay_s)}` : undefined} />
-                <StatTile label="Mérések" value={totalN.toLocaleString("hu-HU")} sub={`megálló-érkezés, ${d.days} nap ${dayLabel}jai`} />
+                <StatTile label="Mérések" value={totalN.toLocaleString("hu-HU")} sub={`megálló-érkezés, ${d.days} nap ${dayType.of}`} />
               </div>
 
               <ChartFrame
                 title="Átlagos késés a nap folyamán"
-                hint={`Megállónkénti érkezés a menetrendhez képest, az elmúlt ${d.days} nap ${dayLabel}jain. Pontos = 1 perc sietés és 5 perc késés között.`}
+                hint={`Megállónkénti érkezés a menetrendhez képest, az elmúlt ${d.days} nap ${dayType.on}. Pontos = 1 perc sietés és 5 perc késés között.`}
               >
                 <BarChart
                   unit="p"

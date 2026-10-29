@@ -8,7 +8,7 @@
  *  - múlt: a TÉNYLEGES indulás/érkezés és a jármű a megálló-eseményekből.
  * Miskolc mérete mellett egy keresés néhány ezredmásodperc.
  */
-import { dayInfo, fastDistM, localMidnightUnix, serviceClock, type DaySchedule, type ServiceDay } from "@mvk/core";
+import { budapestOffsetSec, dayInfo, fastDistM, localMidnightUnix, serviceClock, type DaySchedule, type ServiceDay } from "@mvk/core";
 import { sql } from "@mvk/db";
 import type { Engine } from "./engine.ts";
 import { scheduleFor } from "./schedule.ts";
@@ -133,12 +133,15 @@ function netFromLegacy(iso: string, data: DaySchedule, fallback: string | null):
 }
 
 export async function netFor(engine: Engine, iso: string): Promise<Net | null> {
-  const hit = netCache.get(iso);
-  if (hit) return hit;
   const src = await scheduleFor(engine.feeds, iso);
   if (!src) return null;
+  // A kulcsban a feed is: ha közben megjön az igazi menetrend (a holnapi napra
+  // eddig a sablon-nap élt), a régi hálózat ne ragadjon be.
+  const key = src.kind === "feed" ? `${iso}|${src.day.feed.hash}|${src.day.fallback?.templateIso ?? ""}` : `${iso}|legacy`;
+  const hit = netCache.get(key);
+  if (hit) return hit;
   const net = src.kind === "feed" ? netFromFeed(src.day) : netFromLegacy(iso, src.data, src.fallbackFrom);
-  netCache.set(iso, net);
+  netCache.set(key, net);
   if (netCache.size > 4) netCache.delete(netCache.keys().next().value!);
   return net;
 }
@@ -531,7 +534,7 @@ const histCache = new Map<string, { at: number; v: { avg: number | null; p85: nu
 
 async function historyDelay(route: string, stop: string, iso: string, unix: number) {
   const info = dayInfo(iso);
-  const hour = new Date((unix + 3600) * 1000).getUTCHours();
+  const hour = new Date((unix + budapestOffsetSec(unix)) * 1000).getUTCHours();
   const key = `${route}|${stop}|${info.daytype}|${hour}`;
   const hit = histCache.get(key);
   if (hit && Date.now() - hit.at < 30 * 60_000) return hit.v;

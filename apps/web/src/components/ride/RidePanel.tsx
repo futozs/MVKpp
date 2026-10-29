@@ -1,14 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { ChevronDown, ChevronUp, Flag, LogOut, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Flag, LogOut, Repeat, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { RouteTile } from "@/components/transit/RouteTile";
 import { delayLabel, delayTone } from "@/components/transit/DelayBar";
 import { cn } from "@/lib/utils";
-import { cancelRide, finishRide, patchActiveRide, setDestination, type ActiveRide, type Ride } from "@/lib/rides";
+import { cancelRide, continueRide, finishRide, patchActiveRide, setDestination, type ActiveRide, type Ride } from "@/lib/rides";
 import type { GeoPosition } from "@/hooks/useGeolocation";
 import { useAlightingDetector } from "./useBoardingDetector";
-import { pathLengthM, useTripLive, type TripLive } from "./useTripLive";
+import { TurnCard, useContinuation, type Continuation } from "./RideTurn";
+import { distM, pathLengthM, useTripLive, type TripLive } from "./useTripLive";
+import { turnDecision } from "@mvk/core/loops";
+import { serverNow } from "@/lib/realtime";
+
+/** az indulás pillanatában ennyire lehet a telefon a busztól, hogy vele maradt (m) */
+const WITH_BUS_M = 200;
 
 const HM = new Intl.DateTimeFormat("hu-HU", { timeZone: "Europe/Budapest", hour: "2-digit", minute: "2-digit" });
 const hm = (unix: number) => HM.format(new Date(unix * 1000));
@@ -19,6 +25,13 @@ const hm = (unix: number) => HM.format(new Date(unix * 1000));
  */
 export function RidePanel({ ride, position, onFinished }: { ride: ActiveRide; position: GeoPosition | null; onFinished: (r: Ride) => void }) {
   const trip = useTripLive(ride.tripId);
+  const turn = ride.turn ?? null;
+  const cont = useContinuation(ride.tripId, ride.vehicleId, Boolean(turn));
+  // Fordulás közben a busz már a következő menetén van: a helyét a folytatás adja.
+  const live = turn ? (cont?.vehicle ?? null) : (trip?.vehicle ?? null);
+  const vLat = live?.lat ?? null;
+  const vLon = live?.lon ?? null;
+  const busPos = useMemo(() => (vLat != null && vLon != null ? { lat: vLat, lon: vLon } : null), [vLat, vLon]);
   const reduce = useReducedMotion();
   const [collapsed, setCollapsed] = useState(false);
   const listRef = useRef<HTMLOListElement>(null);
@@ -33,21 +46,41 @@ export function RidePanel({ ride, position, onFinished }: { ride: ActiveRide; po
   }, [trip, ride.fromIdx, ride.serviceDate]);
 
   // Vége: a menet befejeződött, vagy a busz elhagyta a kijelölt leszállóhelyet.
+  // Ha végállomásig utazott, és nem jelölt ki leszállóhelyet, a busz fordul:
+  // innen a körbeutazás dönt (lásd lent).
   useEffect(() => {
-    if (!trip?.run || ride.fromIdx == null) return;
+    if (!trip?.run || ride.fromIdx == null || turn) return;
     // Lezárt menetnél csak akkor, ha közben haladt is (épp véget ért menetre szállva ne zárjon azonnal).
     const done = trip.run.status !== "running" && passed > ride.fromIdx;
     const pastDest = ride.destIdx != null && passed >= ride.destIdx;
     if (!done && !pastDest) return;
-    const at = pastDest ? ride.destIdx! : Math.max(passed, trip.stops.length - 1);
+    const lastIdx = trip.stops.length - 1;
+    if (!pastDest && ride.destIdx == null && passed >= lastIdx) {
+      const arrivedAt = trip.run.actualEnd ?? Math.round(serverNow());
+      patchActiveRide({ turn: { arrivedAt, atIdx: lastIdx, terminusName: trip.stops[lastIdx]?.name ?? "végállomás", stay: null } });
+      return;
+    }
+    const at = pastDest ? ride.destIdx! : Math.max(passed, lastIdx);
     const r = endRide(ride, trip, at);
     if (r) onFinished(r);
-  }, [trip, passed, ride, onFinished]);
+  }, [trip, passed, ride, turn, onFinished]);
 
-  // Ha a telefon tartósan eltávolodik a busztól: leszállt az utolsó elhagyott megállónál.
-  useAlightingDetector(Boolean(trip), position, trip?.vehicle ?? null, () => {
+  // Körbeutazás: a végállomáson a busz a következő menettel folytatja.
+  useEffect(() => {
+    if (!turn || !trip) return;
+    const withBus = position && busPos ? distM(position, busPos) <= WITH_BUS_M : null;
+    const decision = turnDecision(turn, cont, Math.round(serverNow()), withBus);
+    if (decision === "alight") {
+      const r = endRide(ride, trip, turn.atIdx, turn.arrivedAt);
+      if (r) onFinished(r);
+    } else if (decision === "continue" && cont?.next) chainNext(ride, trip, turn, cont.next);
+  }, [turn, cont, trip, ride, position, busPos, onFinished]);
+
+  // Ha a telefon tartósan eltávolodik a busztól: leszállt az utolsó elhagyott megállónál
+  // (fordulás közben a végállomáson).
+  useAlightingDetector(Boolean(trip), position, busPos, () => {
     if (!trip) return;
-    const r = endRide(ride, trip, Math.max(passed, ride.fromIdx ?? 0));
+    const r = turn ? endRide(ride, trip, turn.atIdx, turn.arrivedAt) : endRide(ride, trip, Math.max(passed, ride.fromIdx ?? 0));
     if (r) onFinished(r);
   });
 
@@ -70,6 +103,11 @@ export function RidePanel({ ride, position, onFinished }: { ride: ActiveRide; po
       <header className="flex items-start gap-3 px-4 pb-3 pt-3.5">
         <RouteTile short={ride.route} color={ride.color} text={ride.text} size="lg" />
         <div className="min-w-0 flex-1">
+          {(ride.leg ?? 1) > 1 ? (
+            <p className="mb-0.5 flex items-center gap-1 text-[10.5px] font-semibold uppercase tracking-wide text-primary">
+              <Repeat className="h-3 w-3" aria-hidden /> Körbeutazás · {ride.leg}. menet
+            </p>
+          ) : null}
           <p className="truncate text-sm font-bold tracking-tight">{ride.headsign}</p>
           <p className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs">
             <span className="rounded bg-primary/15 px-1.5 py-0.5 font-mono font-bold text-primary">{ride.vehicleId}</span>
@@ -83,7 +121,14 @@ export function RidePanel({ ride, position, onFinished }: { ride: ActiveRide; po
         </Button>
       </header>
 
-      {dest ? (
+      {turn ? (
+        <TurnCard
+          turn={turn}
+          cont={cont}
+          onStay={() => patchActiveRide({ turn: { ...turn, stay: true } })}
+          onAlight={() => patchActiveRide({ turn: { ...turn, stay: false } })}
+        />
+      ) : dest ? (
         <div className="mx-4 mb-3 rounded-xl border border-primary/35 bg-primary/10 px-3 py-2.5">
           <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-primary">
             <Flag className="h-3.5 w-3.5" /> Leszállás
@@ -104,10 +149,18 @@ export function RidePanel({ ride, position, onFinished }: { ride: ActiveRide; po
       ) : (
         <p className="mx-4 mb-3 rounded-xl border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
           Koppints arra a megállóra, ahol leszállsz — megmutatom, mikorra érsz oda.
+          {trip?.loopEnd ? (
+            <span className="mt-1 flex items-start gap-1.5 text-foreground">
+              <Repeat className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
+              <span>
+                {trip.stops.at(-1)?.name} fordulóhurok: ha ülve maradsz, a busszal együtt automatikusan folytatom a következő menettel (körbeutazás).
+              </span>
+            </span>
+          ) : null}
         </p>
       )}
 
-      {collapsed || !trip ? null : (
+      {collapsed || !trip || turn ? null : (
         <ol ref={listRef} className="min-h-0 flex-1 overflow-y-auto border-t border-border/70 px-2 py-2">
           {trip.stops.map((s) => (
             <StopRow key={s.idx} s={s} trip={trip} passed={passed} ride={ride} />
@@ -120,11 +173,11 @@ export function RidePanel({ ride, position, onFinished }: { ride: ActiveRide; po
           className="flex-1"
           onClick={() => {
             if (!trip) return;
-            const r = endRide(ride, trip, Math.max(passed, ride.fromIdx ?? 0));
+            const r = turn ? endRide(ride, trip, turn.atIdx, turn.arrivedAt) : endRide(ride, trip, Math.max(passed, ride.fromIdx ?? 0));
             if (r) onFinished(r);
           }}
         >
-          <LogOut /> Leszálltam
+          <LogOut /> {turn ? `Leszálltam (${turn.terminusName})` : "Leszálltam"}
         </Button>
         <Button variant="ghost" onClick={cancelRide} title="Mégsem ezen a buszon vagyok">
           <X /> Mégse
@@ -173,16 +226,35 @@ function StopRow({ s, trip, passed, ride }: { s: TripLive["stops"][number]; trip
   );
 }
 
-/** Az utazás lezárása a megadott megállónál (a napló elejére kerül). */
-function endRide(ride: ActiveRide, trip: TripLive, atIdx: number): Ride | null {
+function endFields(ride: ActiveRide, trip: TripLive, atIdx: number, alightedAt?: number) {
   const to = trip.stops[Math.min(atIdx, trip.stops.length - 1)];
   const from = ride.fromIdx ?? 0;
-  return finishRide({
-    alightedAt: Math.round(Date.now() / 1000),
+  return {
+    alightedAt: alightedAt ?? Math.round(serverNow()),
     toStopId: to?.id ?? null,
     toStopName: to?.name ?? null,
     stops: to ? Math.max(0, to.idx - from) : null,
     distanceM: to ? pathLengthM(trip.stops, from, to.idx) : null,
     delayAtAlightS: trip.delayS,
+  };
+}
+
+/** Az utazás lezárása a megadott megállónál (a napló elejére kerül). */
+function endRide(ride: ActiveRide, trip: TripLive, atIdx: number, alightedAt?: number): Ride | null {
+  return finishRide(endFields(ride, trip, atIdx, alightedAt));
+}
+
+/** Körbeutazás: ez a menet a végállomáson lezárul, és ugyanazon a buszon a következő folytatódik. */
+function chainNext(ride: ActiveRide, trip: TripLive, turn: NonNullable<ActiveRide["turn"]>, next: NonNullable<Continuation["next"]>) {
+  continueRide(endFields(ride, trip, turn.atIdx, turn.arrivedAt), {
+    tripId: next.tripId,
+    route: next.route,
+    headsign: next.headsign,
+    color: next.color,
+    text: next.text,
+    boardedAt: next.departedAt ?? Math.round(serverNow()),
+    fromStopId: next.firstStopId,
+    fromStopName: next.firstStopName,
+    delayAtBoardS: next.startDelayS,
   });
 }

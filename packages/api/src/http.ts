@@ -1,5 +1,6 @@
 /** Web-szabványos (Request → Response) segédek; Next.js route handlerből és tesztből is hívható. */
 import { cached as sharedCached } from "@mvk/cache";
+import { isPlausibleIso, serviceClock } from "@mvk/core";
 
 export class ApiError extends Error {
   status: number;
@@ -32,7 +33,11 @@ export async function dispatch(routes: Route[], req: Request): Promise<Response>
     const m = r.re.exec(url.pathname);
     if (!m) continue;
     const p: Record<string, string> = {};
-    r.keys.forEach((k, i) => (p[k] = decodeURIComponent(m[i + 1])));
+    try {
+      r.keys.forEach((k, i) => (p[k] = decodeURIComponent(m[i + 1])));
+    } catch {
+      return json({ error: "érvénytelen útvonal-kódolás" }, 400);
+    }
     try {
       return await r.fn(req, p, url);
     } catch (e) {
@@ -61,4 +66,11 @@ export function cached<T>(key: string, ttlMs: number, fn: () => Promise<T>): Pro
   return sharedCached(`api:${key}`, ttlMs / 1000, fn);
 }
 
-export const isoDate = (s: string | null | undefined): string | null => (s && /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null);
+/** Valódi, a mai naptól ±400 napon belüli dátum — különben null (a hívó az alapértéket használja). */
+export const isoDate = (s: string | null | undefined): string | null => (s && isPlausibleIso(s, serviceClock().iso) ? s : null);
+
+/** Egész szám lekérdezési paraméter, korlátok közé szorítva; hiányzó / hibás → alapérték (nem 500-as hiba). */
+export function intParam(v: string | null, fallback: number, min: number, max: number): number {
+  const n = v == null || v === "" ? NaN : Number(v);
+  return Number.isFinite(n) ? Math.max(min, Math.min(max, Math.round(n))) : fallback;
+}

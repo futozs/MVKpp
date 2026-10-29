@@ -1,4 +1,5 @@
 import type { ArrivalItem } from "@/types";
+import { budapestMinuteOfDay } from "@/lib/serviceDay";
 import { withHungarianSuffix } from "@/lib/utils";
 
 const STORAGE_KEY = "mvk_notify_watches";
@@ -168,11 +169,10 @@ export function checkAndNotify(
   if (!watch) return;
   if (watch.pushRegistered) return;
 
-  const nowMin = (() => {
-    const d = new Date();
-    return d.getHours() * 60 + d.getMinutes();
-  })();
+  const nowMin = budapestMinuteOfDay();
   const matches = arrivals.filter((a) => {
+    // A törölt menet nem érkezik meg — arra nem szólunk (a push-oldal is így szűr).
+    if (a.cancelled) return false;
     if (watch.schedMin != null) {
       if (watch.routeShorts?.length && !watch.routeShorts.includes(a.route)) return false;
       const delayMin = Math.round((a.delaySec ?? 0) / 60);

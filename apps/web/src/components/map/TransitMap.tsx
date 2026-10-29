@@ -7,113 +7,73 @@ import React, {
 } from "react";
 import L from "leaflet";
 import {
-  CornerDownLeft,
-  Crosshair,
-  Hash,
+  ArrowLeft,
   History,
-  Layers,
   LocateFixed,
+  Minus,
   Plus,
-  Search,
   SlidersHorizontal,
   X,
 } from "lucide-react";
 import type { FilterState, LiveVehicle, Route, Stop } from "@/types";
 import { api } from "@/services/api";
-import { RouteChips } from "@/components/fleet/RouteChips";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { RouteTile } from "@/components/transit/RouteTile";
-import { LiveDot } from "@/components/transit/LiveDot";
 import { useGeo } from "@/context/GeoContext";
 import { distanceKm, nearest } from "@/lib/geo";
 import { initialMapView, saveMapView } from "@/lib/viewState";
 import { token } from "@/lib/theme";
 import { cn, normalizeSearchText } from "@/lib/utils";
 import { MapTimeline } from "./MapTimeline";
-import { createVehicleIcon } from "./vehicleIcon";
+import { createVehicleIcon, escapeHtml, safeHex } from "./vehicleIcon";
 import { estimatePosition, type Shown } from "./liveMotion";
+import { trafficColor } from "./trafficColor";
+import { API_BASE } from "@/lib/apiBase";
 import { boardVehicle } from "@/components/ride/RideLayer";
 import { serverNow } from "@/lib/realtime";
+import { TILE_LAYERS, type TileLayerOption } from "./tileLayers";
+import { MapControl, MapControlGroup, MapCorner, MapGroupButton } from "./controls/MapControl";
+import { MapLayersControl } from "./controls/MapLayersControl";
+import { MapSearch } from "./controls/MapSearch";
+import { FilterPanel } from "./filter/FilterPanel";
+import { activeFilterCount, filterSummary, MAX_WATCHED } from "./filter/filterState";
 
-export interface TileLayerOption {
-  id: string;
-  name: string;
-  note: string;
-  url: string;
-  labelsUrl?: string;
-  attribution: string;
-  maxNativeZoom: number;
-  swatch: string;
-  filter?: string;
+/** a forgalom-réteg frissítése (ms) */
+const TRAFFIC_POLL_MS = 30_000;
+
+type TrafficSegment = { from: string; to: string; routes: string[]; path: [number, number][]; ratio: number; excessS: number; n: number; stuck: number; level: number; lastTs: number };
+
+/** A dugó-szakasz buborékja: mennyire lassú, és miből tudjuk. */
+function trafficPopupHtml(seg: TrafficSegment): string {
+  const mins = Math.floor(seg.excessS / 60);
+  const secs = String(seg.excessS % 60).padStart(2, "0");
+  const ago = Math.max(0, Math.round((serverNow() - seg.lastTs) / 60));
+  const evidence = [seg.n ? `${seg.n} átért busz` : "", seg.stuck ? `${seg.stuck} most bent ragadt` : ""].filter(Boolean).join(", ");
+  const level = seg.level >= 0.75 ? "Beállt" : seg.level >= 0.4 ? "Torlódik" : "Lassul";
+  return `
+    <div style="min-width:200px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span style="width:10px;height:10px;border-radius:999px;background:${trafficColor(seg.level)}"></span>
+        <strong style="font-size:13px">${level} a forgalom</strong>
+      </div>
+      <div style="font-size:12.5px;font-weight:600">${escapeHtml(seg.from)} → ${escapeHtml(seg.to)}</div>
+      <div style="margin-top:4px;font-size:12px;color:hsl(var(--muted-foreground))">
+        <b style="color:hsl(var(--foreground));font-family:var(--font-mono)">${String(seg.ratio).replace(".", ",")}×</b> lassabb a szokásosnál
+        (<span style="font-family:var(--font-mono)">+${mins}:${secs}</span>)
+      </div>
+      <div style="margin-top:4px;font-size:11px;color:hsl(var(--muted-foreground))">${escapeHtml(evidence)} · ${ago ? `${ago} perce` : "most"} · ${escapeHtml(seg.routes.slice(0, 6).join(", "))}</div>
+    </div>`;
 }
 
-const OSM_ATTRIB =
-  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> közreműködők';
-const OSM_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+/** a szűrőpanel nyitott állapota asztalon (eszközönként) */
+const PANEL_KEY = "mvk_map_panel";
 
-export const TILE_LAYERS: TileLayerOption[] = [
-  {
-    id: "osm",
-    name: "Utcatérkép",
-    note: "OpenStreetMap",
-    url: OSM_URL,
-    attribution: OSM_ATTRIB,
-    maxNativeZoom: 19,
-    swatch: "#E8E0D8",
-  },
-  {
-    id: "dark",
-    name: "Sötét",
-    note: "Sötétített OpenStreetMap",
-    url: OSM_URL,
-    attribution: OSM_ATTRIB,
-    maxNativeZoom: 19,
-    swatch: "#20241F",
-    filter:
-      "invert(1) hue-rotate(180deg) brightness(0.86) contrast(0.92) saturate(0.65)",
-  },
-  {
-    id: "light",
-    name: "Halvány",
-    note: "Kifakított OpenStreetMap",
-    url: OSM_URL,
-    attribution: OSM_ATTRIB,
-    maxNativeZoom: 19,
-    swatch: "#DEDEDC",
-    filter: "grayscale(0.85) brightness(1.06) contrast(0.9)",
-  },
-  {
-    id: "satellite",
-    name: "Műhold",
-    note: "Esri World Imagery",
-    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    labelsUrl:
-      "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
-    attribution:
-      '&copy; <a href="https://www.esri.com/">Esri</a>, Maxar, Earthstar Geographics',
-    maxNativeZoom: 19,
-    swatch: "#3F5B3C",
-  },
-  {
-    id: "topo",
-    name: "Domborzat",
-    note: "OpenTopoMap",
-    url: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
-    attribution:
-      'Csempe: <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA), adat: &copy; OpenStreetMap',
-    maxNativeZoom: 17,
-    swatch: "#CBD3B0",
-  },
-];
+/** A csempék forrásmegjelölése (a licenc kéri; kicsiben, a térkép alján). */
+const TILE_CREDIT: Record<string, { text: string; href: string }> = {
+  osm: { text: "© OpenStreetMap közreműködők", href: "https://www.openstreetmap.org/copyright" },
+  dark: { text: "© OpenStreetMap közreműködők", href: "https://www.openstreetmap.org/copyright" },
+  light: { text: "© OpenStreetMap közreműködők", href: "https://www.openstreetmap.org/copyright" },
+  satellite: { text: "© Esri, Maxar, Earthstar Geographics", href: "https://www.esri.com/" },
+  topo: { text: "© OpenTopoMap (CC-BY-SA), OpenStreetMap", href: "https://opentopomap.org" },
+};
 
 const MAX_MAP_ZOOM = 19;
 
@@ -139,143 +99,6 @@ function makeTile(conf: TileLayerOption, labels: boolean): L.TileLayer {
   return layer;
 }
 
-
-function FilterSection({
-  title,
-  aside,
-  last,
-  children,
-}: {
-  title: string;
-  aside?: React.ReactNode;
-  last?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <section
-      className={cn(
-        "space-y-2.5 px-4 py-3.5",
-        !last && "border-b border-border",
-      )}
-    >
-      <div className="flex items-baseline justify-between gap-2">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-          {title}
-        </h3>
-        {typeof aside === "string" ? (
-          <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
-            {aside}
-          </span>
-        ) : (
-          aside
-        )}
-      </div>
-      {children}
-    </section>
-  );
-}
-
-function Segmented<T extends string>({
-  label,
-  value,
-  onChange,
-  options,
-}: {
-  label: string;
-  value: T;
-  onChange: (v: T) => void;
-  options: { id: T; label: string }[];
-}) {
-  return (
-    <div className="space-y-1.5">
-      <span className="block text-[11px] font-medium text-muted-foreground">
-        {label}
-      </span>
-      <div
-        role="group"
-        aria-label={label}
-        className="grid grid-cols-3 gap-1 rounded-lg border border-border bg-muted/60 p-1"
-      >
-        {options.map((o) => (
-          <button
-            key={o.id}
-            type="button"
-            onClick={() => onChange(o.id)}
-            aria-pressed={value === o.id}
-            className={cn(
-              "rounded-md py-1.5 text-xs font-semibold transition-all duration-fast",
-              "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-              value === o.id
-                ? "bg-primary text-primary-foreground shadow-sm"
-                : "text-muted-foreground hover:bg-accent hover:text-foreground",
-            )}
-          >
-            {o.label}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function ChipRow<T>({
-  options,
-  value,
-  onChange,
-  disabled,
-}: {
-  options: { value: T; label: string }[];
-  value: T;
-  onChange: (v: T) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {options.map((o) => (
-        <button
-          key={String(o.value)}
-          type="button"
-          disabled={disabled && o.value !== null}
-          onClick={() => onChange(o.value)}
-          aria-pressed={value === o.value}
-          className={cn(
-            "rounded-md border px-2.5 py-1.5 text-xs font-semibold transition-all duration-fast",
-            "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-            "disabled:cursor-not-allowed disabled:opacity-40",
-            value === o.value
-              ? "border-primary bg-primary text-primary-foreground"
-              : "border-border bg-secondary text-muted-foreground hover:bg-accent hover:text-foreground",
-          )}
-        >
-          {o.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function ToggleRow({
-  id,
-  label,
-  checked,
-  onChange,
-}: {
-  id: string;
-  label: string;
-  checked: boolean;
-  onChange: (v: boolean) => void;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-3 rounded-lg px-1 py-2 transition-colors duration-fast hover:bg-accent">
-      <Label htmlFor={id} className="cursor-pointer text-xs font-medium">
-        {label}
-      </Label>
-      <Switch id={id} checked={checked} onCheckedChange={onChange} />
-    </div>
-  );
-}
-
-const MAX_WATCHED = 12;
 
 const NEAR_STOP_KM = 0.4;
 const CLOSE_ZOOM = 17;
@@ -309,7 +132,7 @@ interface TransitMapProps {
   selectedStopId: string | null;
   monitoredStopIds: string[];
   onToggleMonitorStop: (stopId: string) => void;
-  onOpenMapPicker: () => void;
+  onSelectTileLayer: (layerId: string) => void;
 }
 
 const MOTION_TICK_MS = 250;
@@ -317,8 +140,18 @@ const MOTION_TICK_MS = 250;
 type LiveMarker = { marker: L.Marker; iconKey: string; v: LiveVehicle; shown: Shown | undefined };
 
 /** A jármű buborékja (megnyitáskor készül, így mindig a friss adatot mutatja). */
-function vehiclePopupHtml(v: LiveVehicle): string {
-      const speed = v.speed != null ? `${Math.round(v.speed * 3.6)} km/h` : "—";
+function vehiclePopupHtml(raw: LiveVehicle): string {
+  // A feed szövegei HTML-be kerülnek: escape-elve (egy „<” vagy „&” a célállomásban ne törje szét).
+  const v = {
+    ...raw,
+    routeShort: escapeHtml(raw.routeShort ?? ""),
+    headsign: escapeHtml(raw.headsign ?? ""),
+    id: escapeHtml(raw.id),
+    tripId: raw.tripId ? escapeHtml(raw.tripId) : raw.tripId,
+    routeColor: safeHex(raw.routeColor, "1FB574"),
+    routeText: safeHex(raw.routeText, "FFFFFF"),
+  };
+  const speed = v.speed != null ? `${Math.round(v.speed * 3.6)} km/h` : "—";
   return `
         <div style="min-width:210px">
           <div style="display:flex;align-items:center;gap:9px;margin-bottom:10px">
@@ -362,7 +195,7 @@ export function TransitMap({
   selectedStopId,
   monitoredStopIds,
   onToggleMonitorStop,
-  onOpenMapPicker,
+  onSelectTileLayer,
 }: TransitMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -372,25 +205,34 @@ export function TransitMap({
   const busLayerRef = useRef<L.LayerGroup | null>(null);
   const liveMarkersRef = useRef(new Map<string, LiveMarker>());
   const routeLayerRef = useRef<L.LayerGroup | null>(null);
+  const trafficLayerRef = useRef<L.LayerGroup | null>(null);
   const focusLayerRef = useRef<L.LayerGroup | null>(null);
   const geoCacheRef = useRef<Record<string, [number, number][][]>>({});
   const lastFocusKeyRef = useRef<string>("");
 
-  const [isPanelOpen, setPanelOpen] = useState(false);
+  // A szűrőpanel asztalon nyitva maradhat (eszközönként megjegyezzük); telefonon mindig zárva indul.
+  const [isPanelOpen, setPanelOpenState] = useState(() => {
+    try {
+      return window.matchMedia("(min-width: 768px)").matches && localStorage.getItem(PANEL_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const setPanelOpen = (open: boolean) => {
+    setPanelOpenState(open);
+    try {
+      if (window.matchMedia("(min-width: 768px)").matches) localStorage.setItem(PANEL_KEY, open ? "1" : "0");
+    } catch {
+      /* privát mód */
+    }
+  };
   const geo = useGeo();
   const autoZoomRef = useRef<"none" | "stale" | "done">("none");
   const geoLayerRef = useRef<L.LayerGroup | null>(null);
-  const [stopQuery, setStopQuery] = useState("");
-  const [typedId, setTypedId] = useState("");
-
-  const [codeOpen, setCodeOpen] = useState(false);
-  const [codeValue, setCodeValue] = useState("");
-  const [codeError, setCodeError] = useState<string | null>(null);
-  const [codeBusy, setCodeBusy] = useState(false);
-  const codeInputRef = useRef<HTMLInputElement>(null);
 
   // Idővonal: amíg él, az élő járművek helyett a visszajátszás látszik.
   const [historyOn, setHistoryOn] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [timelineInset, setTimelineInset] = useState(0);
 
   const openHistory = () => {
@@ -427,6 +269,8 @@ export function TransitMap({
     }
 
     routeLayerRef.current = L.layerGroup().addTo(map);
+    // a dugók a járatnyomvonal fölött, a megállók és buszok alatt
+    trafficLayerRef.current = L.layerGroup().addTo(map);
     stopLayerRef.current = L.layerGroup().addTo(map);
     busLayerRef.current = L.layerGroup().addTo(map);
     focusLayerRef.current = L.layerGroup().addTo(map);
@@ -624,6 +468,9 @@ export function TransitMap({
     layer.clearLayers();
     if (!filters.shape || filters.routes.length === 0) return;
 
+    // Ha a nyomvonal letöltése közben a szűrés változott, a régi kör ne rajzoljon
+    // (különben egy közben kikapcsolt vonal nyomvonala ottmaradna).
+    let alive = true;
     const render = async () => {
       const missing = filters.routes.filter((id) => !geoCacheRef.current[id]);
       if (missing.length > 0) {
@@ -634,6 +481,7 @@ export function TransitMap({
           });
         } catch {}
       }
+      if (!alive) return;
 
       const halo = token("--background");
       filters.routes.forEach((id) => {
@@ -658,7 +506,45 @@ export function TransitMap({
     };
 
     render();
+    return () => {
+      alive = false;
+    };
   }, [filters.routes, filters.shape, routes]);
+
+  // Élő forgalom: a most torlódott szakaszok citromsárgától sötétvörösig (félpercenként frissül).
+  useEffect(() => {
+    const layer = trafficLayerRef.current;
+    if (!layer) return;
+    layer.clearLayers();
+    if (!filters.traffic || historyOn) return;
+    let alive = true;
+    const draw = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/engine/traffic/live`, { cache: "no-store" });
+        if (!res.ok || !alive) return;
+        const data = (await res.json()) as { segments: TrafficSegment[] };
+        if (!alive) return;
+        layer.clearLayers();
+        const halo = token("--background");
+        for (const seg of data.segments) {
+          const color = trafficColor(seg.level);
+          const weight = 5 + Math.round(seg.level * 3);
+          L.polyline(seg.path, { color: halo, weight: weight + 4, opacity: 0.55, interactive: false, lineCap: "round" }).addTo(layer);
+          L.polyline(seg.path, { color, weight, opacity: 0.95, lineCap: "round", lineJoin: "round" })
+            .bindPopup(() => trafficPopupHtml(seg))
+            .addTo(layer);
+        }
+      } catch {
+        /* a következő kör újrapróbálja */
+      }
+    };
+    void draw();
+    const t = setInterval(draw, TRAFFIC_POLL_MS);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, [filters.traffic, historyOn]);
 
   useEffect(() => {
     if (!mapRef.current || !stopLayerRef.current) return;
@@ -770,7 +656,11 @@ export function TransitMap({
           entry.marker.setZIndexOffset(tracked ? 1000 : 500);
           entry.iconKey = iconKey;
         }
-        if (!v.motion) entry.marker.setLatLng([v.lat, v.lon]);
+        if (!v.motion) {
+          // Nincs becslés (áll a kiinduló megállóban, vagy nincs menete): a valós jel helye.
+          entry.shown = undefined;
+          entry.marker.setLatLng([v.lat, v.lon]);
+        }
         return;
       }
 
@@ -925,64 +815,6 @@ export function TransitMap({
     };
   }, [focusTripId, focusVehicleId]);
 
-  const addWatch = (value?: string) => {
-    const target = (value ?? typedId).trim();
-    if (!target || filters.watch.length >= MAX_WATCHED) return;
-    if (filters.watch.some((x) => x.toLowerCase() === target.toLowerCase()))
-      return;
-    setFilters((prev) => ({ ...prev, watch: [...prev.watch, target], vq: "" }));
-    setTypedId("");
-  };
-
-  const removeWatch = (value: string) =>
-    setFilters((prev) => ({
-      ...prev,
-      watch: prev.watch.filter((x) => x.toLowerCase() !== value.toLowerCase()),
-    }));
-
-  const toggleRoute = (routeId: string) =>
-    setFilters((prev) => ({
-      ...prev,
-      routes: prev.routes.includes(routeId)
-        ? prev.routes.filter((id) => id !== routeId)
-        : [...prev.routes, routeId],
-    }));
-
-  // A megállók GTFS-azonosítója kocsiállásonként/irányonként külön sor —
-  // ugyanaz a hely (pl. "Villanyrendőr") így sokszor szerepelne egymás
-  // alatt. A kódot senki nem tudja fejből, de a térképen ránézve ki tudja
-  // választani a neki kellő szürke pöttyöt — ezért a keresés a HELY nevére
-  // csoportosít, a kiválasztás pedig csak a közelébe zoomol, nem választ
-  // helyette egy konkrét pöttyöt.
-  const stopResults = useMemo(() => {
-    const q = normalizeSearchText(stopQuery.trim());
-    const source = q
-      ? stops.filter(
-          (s) =>
-            normalizeSearchText(s.name).includes(q) ||
-            (s.code && normalizeSearchText(s.code).includes(q)) ||
-            s.id.toLowerCase().includes(q),
-        )
-      : stops;
-
-    const byName = new Map<string, Stop[]>();
-    for (const s of source) {
-      const list = byName.get(s.name) ?? [];
-      list.push(s);
-      byName.set(s.name, list);
-    }
-
-    return [...byName.entries()]
-      .map(([name, group]) => ({
-        name,
-        group,
-        lat: group.reduce((sum, s) => sum + s.lat, 0) / group.length,
-        lon: group.reduce((sum, s) => sum + s.lon, 0) / group.length,
-      }))
-      .sort((a, b) => a.name.localeCompare(b.name, "hu"))
-      .slice(0, 80);
-  }, [stops, stopQuery]);
-
   const vehicleResults = useMemo(() => {
     const list = getVisibleVehicles();
     if (filters.sort === "id")
@@ -996,665 +828,143 @@ export function TransitMap({
     );
   }, [vehicles, filters, geo.position]);
 
-  /**
-   * Megállókód → megálló. A GTFS-azonosító `SP` + kód alakú, a kiírt tábla
-   * viszont csak a számot mutatja, ezért mindkettőt elfogadjuk.
-   */
-  const findByCode = (raw: string): Stop | null => {
-    const code = raw.trim().replace(/^sp/i, "");
-    if (!code) return null;
-    const lower = code.toLowerCase();
-    return (
-      stops.find((s) => s.id.toLowerCase() === `sp${lower}`) ??
-      stops.find((s) => s.id.toLowerCase() === lower) ??
-      null
-    );
-  };
-
-  const closeCodeSearch = () => {
-    setCodeOpen(false);
-    setCodeValue("");
-    setCodeError(null);
-  };
-
-  const jumpToCode = async () => {
-    const raw = codeValue.trim();
-    if (!raw) return;
-
-    const local = findByCode(raw);
-    if (local) {
-      mapRef.current?.flyTo([local.lat, local.lon], CLOSE_ZOOM, {
-        duration: 0.7,
-      });
-      onSelectStop(local.id);
-      closeCodeSearch();
-      return;
-    }
-
-    // Nincs a betöltött listában — az arrivals végpont még ismerheti.
-    setCodeBusy(true);
-    setCodeError(null);
-    try {
-      const id = `SP${raw.replace(/^sp/i, "")}`;
-      const res = await api.getArrivals(id, 16);
-      if (res.stop?.lat != null && res.stop?.lon != null) {
-        mapRef.current?.flyTo([res.stop.lat, res.stop.lon], CLOSE_ZOOM, {
-          duration: 0.7,
-        });
-      }
-      onSelectStop(res.stop?.id ?? id);
-      closeCodeSearch();
-    } catch {
-      setCodeError(`Nincs ${raw} kódú megálló.`);
-    } finally {
-      setCodeBusy(false);
-    }
-  };
-
   const flyToVehicle = (v: LiveVehicle) => {
     if (v.lat != null && v.lon != null && mapRef.current) {
       mapRef.current.flyTo([v.lat, v.lon], 16, { duration: 0.5 });
     }
   };
 
-  const filterActive =
-    filters.vq.trim() !== "" ||
-    filters.watch.length > 0 ||
-    filters.routes.length > 0 ||
-    filters.type !== "all" ||
-    filters.speed !== "all" ||
-    filters.nearMeKm != null ||
-    filters.onlyWatched ||
-    !filters.stops;
+  const activeFilters = activeFilterCount(filters);
+  const summary = activeFilters ? filterSummary(filters, routes, vehicleResults.length) : "";
+  const credit = TILE_CREDIT[tileLayerId] ?? TILE_CREDIT.osm;
 
-  const filterSummary = filters.watch.length
-    ? `${filters.watch.join(", ")} követése`
-    : filters.routes.length
-      ? `${filters.routes.length} járat · ${vehicleResults.length} jármű`
-      : filters.nearMeKm != null
-        ? `${filters.nearMeKm < 1 ? `${filters.nearMeKm * 1000} m` : `${filters.nearMeKm} km`} sugarú körben`
-        : filters.speed === "moving"
-          ? "Csak mozgó járművek"
-          : filters.speed === "idle"
-            ? "Csak álló járművek"
-            : filters.onlyWatched
-              ? `Csak a figyelt megállók (${monitoredStopIds.length})`
-              : `Szűrés aktív · ${vehicleResults.length} jármű`;
-
-  const LAYER_TOGGLES = [
-    { key: "stops", label: "Megállók" },
-    { key: "onlyWatched", label: `Csak a figyeltek (${monitoredStopIds.length})` },
-    { key: "shape", label: "Járatnyomvonal" },
-    { key: "labels", label: "Rendszámok a csempéken" },
-  ] as const;
-
-  const RADIUS_OPTIONS: { value: number | null; label: string }[] = [
-    { value: null, label: "Nincs" },
-    { value: 0.5, label: "500 m" },
-    { value: 1.5, label: "1,5 km" },
-    { value: 5, label: "5 km" },
-  ];
+  const pickStop = (stop: Stop) => {
+    mapRef.current?.flyTo([stop.lat, stop.lon], Math.max(mapRef.current.getZoom(), CLOSE_ZOOM), { duration: 0.7 });
+    onSelectStop(stop.id);
+  };
 
   return (
     <div className="relative flex h-full w-full min-w-0 flex-1 overflow-hidden">
-      {}
-      {isPanelOpen ? (
-        <button
-          type="button"
-          aria-label="Vezérlőpanel bezárása"
-          onClick={() => setPanelOpen(false)}
-          className="absolute inset-0 z-drawer bg-background/70 backdrop-blur-sm md:hidden"
-        />
-      ) : null}
-
-      {}
-      <Tabs
-        defaultValue="filter"
-        className={cn(
-          "absolute inset-y-0 left-0 z-drawer flex w-[86%] max-w-[340px] flex-col overflow-hidden",
-          "border-r border-border bg-card shadow-xl transition-transform duration-normal ease-out",
-          "md:static md:z-overlay md:w-[340px] md:max-w-none md:shrink-0 md:translate-x-0 md:shadow-none lg:w-[380px]",
-          isPanelOpen ? "translate-x-0" : "-translate-x-full",
-        )}
-      >
-        <div className="shrink-0 border-b border-border p-2">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="filter" className="text-xs">
-              Szűrés
-            </TabsTrigger>
-            <TabsTrigger value="fleet" className="gap-1.5 text-xs">
-              Járművek
-              <span className="rounded bg-primary/15 px-1 font-mono text-[10px] font-bold tabular-nums text-primary">
-                {vehicleResults.length}
-              </span>
-            </TabsTrigger>
-            <TabsTrigger value="stops" className="text-xs">
-              Megállók
-            </TabsTrigger>
-          </TabsList>
-        </div>
-
-        {}
-        <TabsContent
-          value="filter"
-          className="mt-0 min-h-0 flex-1 overflow-y-auto data-[state=inactive]:hidden focus-visible:outline-none"
-        >
-          {/* Követés — ez a leggyakoribb művelet, ezért ez van legfelül. */}
-          <FilterSection
-            title="Jármű követése"
-            aside={
-              filters.watch.length > 0
-                ? `${filters.watch.length}/${MAX_WATCHED}`
-                : undefined
-            }
-          >
-            <div className="flex items-center gap-2">
-              <Input
-                value={typedId}
-                onChange={(e) => {
-                  const digits = e.target.value.replace(/[^0-9]/g, "");
-                  setTypedId(digits);
-                  setFilters((prev) => ({ ...prev, vq: digits }));
-                }}
-                onKeyDown={(e) => e.key === "Enter" && addWatch()}
-                inputMode="numeric"
-                pattern="[0-9]*"
-                autoComplete="off"
-                enterKeyHint="done"
-                placeholder="Rendszám, pl. 1641"
-                aria-label="Jármű rendszáma"
-                className="h-10 font-mono tabular-nums"
-              />
-              <Button
-                size="icon"
-                className="h-10 w-10 shrink-0"
-                onClick={() => addWatch()}
-                disabled={
-                  !typedId.trim() || filters.watch.length >= MAX_WATCHED
-                }
-                aria-label="Jármű hozzáadása a követési listához"
-              >
-                <Plus />
-              </Button>
-            </div>
-
-            {filters.watch.length > 0 ? (
-              <ul className="flex flex-wrap gap-1.5">
-                {filters.watch.map((id) => (
-                  <li key={id}>
-                    <button
-                      type="button"
-                      onClick={() => removeWatch(id)}
-                      aria-label={`${id} eltávolítása a követésből`}
-                      className={cn(
-                        "inline-flex h-8 items-center gap-1.5 rounded-md border border-primary/35 bg-primary/12 px-2.5",
-                        "font-mono text-xs font-bold tabular-nums text-primary",
-                        "transition-colors duration-fast hover:border-destructive/50 hover:bg-destructive/12 hover:text-destructive",
-                        "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-                      )}
-                    >
-                      {id}
-                      <X className="h-3 w-3" />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-
-            <ToggleRow
-              id="follow-toggle"
-              label="Térkép kövesse a járművet"
-              checked={filters.follow}
-              onChange={(v) => setFilters((prev) => ({ ...prev, follow: v }))}
-            />
-          </FilterSection>
-
-          {/* Két egysoros választó egymás mellett — kevesebb görgetés. */}
-          <FilterSection title="Mit mutasson">
-            <div className="grid gap-2.5 sm:grid-cols-2">
-              <Segmented
-                label="Típus"
-                value={filters.type}
-                onChange={(v) => setFilters((prev) => ({ ...prev, type: v }))}
-                options={[
-                  { id: "all", label: "Mind" },
-                  { id: "bus", label: "Busz" },
-                  { id: "tram", label: "Villamos" },
-                ]}
-              />
-              <Segmented
-                label="Mozgás"
-                value={filters.speed}
-                onChange={(v) => setFilters((prev) => ({ ...prev, speed: v }))}
-                options={[
-                  { id: "all", label: "Mind" },
-                  { id: "moving", label: "Mozgó" },
-                  { id: "idle", label: "Álló" },
-                ]}
-              />
-            </div>
-          </FilterSection>
-
-          <FilterSection
-            title="A közelemben"
-            aside={
-              !geo.position ? (
-                <button
-                  type="button"
-                  onClick={geo.start}
-                  className="text-[11px] font-semibold text-primary underline underline-offset-4"
-                >
-                  GPS bekapcsolása
-                </button>
-              ) : undefined
-            }
-          >
-            <ChipRow
-              options={RADIUS_OPTIONS}
-              value={filters.nearMeKm}
-              disabled={!geo.position}
-              onChange={(v) =>
-                setFilters((prev) => ({ ...prev, nearMeKm: v }))
-              }
-            />
-          </FilterSection>
-
-          <FilterSection
-            title="Járatok"
-            aside={
-              filters.routes.length > 0
-                ? `${filters.routes.length} kiválasztva`
-                : "mind"
-            }
-          >
-            <RouteChips
-              routes={routes}
-              selectedRoutes={filters.routes}
-              onToggleRoute={toggleRoute}
-              onSetRoutes={(ids) =>
-                setFilters((prev) => ({ ...prev, routes: ids }))
-              }
-              liveVehicles={vehicles}
-            />
-          </FilterSection>
-
-          <FilterSection title="Megjelenítés" last>
-            <div className="space-y-0.5">
-              {LAYER_TOGGLES.map(({ key, label }) => (
-                <ToggleRow
-                  key={key}
-                  id={`layer-${key}`}
-                  label={label}
-                  checked={filters[key] as boolean}
-                  onChange={(v) =>
-                    setFilters((prev) => ({ ...prev, [key]: v }))
-                  }
-                />
-              ))}
-            </div>
-
-            <Button
-              variant="outline"
-              className="mt-1 w-full justify-start"
-              onClick={onOpenMapPicker}
-            >
-              <Layers />
-              Alaptérkép
-            </Button>
-          </FilterSection>
-
-          {filterActive ? (
-            <div className="sticky bottom-0 border-t border-border bg-card/95 p-3 backdrop-blur-sm">
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={onClearFilters}
-              >
-                Szűrők törlése
-              </Button>
-            </div>
-          ) : null}
-        </TabsContent>
-
-        {}
-        <TabsContent
-          value="fleet"
-          className="mt-0 min-h-0 flex-1 overflow-y-auto data-[state=inactive]:hidden focus-visible:outline-none"
-        >
-          {}
-          <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-card px-4 py-2">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Rendezés
-            </span>
-            <div className="flex gap-1">
-              {(
-                [
-                  { id: "route", label: "Járat" },
-                  { id: "id", label: "Rendszám" },
-                  { id: "speed", label: "Sebesség" },
-                ] as const
-              ).map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  onClick={() =>
-                    setFilters((prev) => ({ ...prev, sort: option.id }))
-                  }
-                  aria-pressed={filters.sort === option.id}
-                  className={cn(
-                    "rounded-md px-2 py-1 text-[11px] font-semibold transition-colors duration-fast",
-                    "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-                    filters.sort === option.id
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-accent hover:text-foreground",
-                  )}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {vehicleResults.length === 0 ? (
-            <p className="px-4 py-8 text-center text-sm text-muted-foreground">
-              A jelenlegi szűrésnek egy jármű sem felel meg.
-            </p>
-          ) : (
-            <ul className="divide-y divide-border/60">
-              {vehicleResults.map((v) => (
-                <li key={v.id}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      flyToVehicle(v);
-                      setPanelOpen(false);
-                    }}
-                    className={cn(
-                      "flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-fast hover:bg-accent",
-                      "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
-                    )}
-                  >
-                    <RouteTile
-                      short={v.routeShort}
-                      color={v.routeColor}
-                      text={v.routeText}
-                    />
-
-                    <span className="min-w-0 flex-1">
-                      {}
-                      <span className="flex items-center gap-1.5 font-mono text-sm font-bold tabular-nums">
-                        {v.id}
-                        <LiveDot />
-                      </span>
-                      <span className="block truncate text-[11px] text-muted-foreground">
-                        {v.headsign}
-                      </span>
-                    </span>
-
-                    <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-muted-foreground">
-                      {v.speed != null
-                        ? `${Math.round(v.speed * 3.6)} km/h`
-                        : "—"}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </TabsContent>
-
-        {}
-        <TabsContent
-          value="stops"
-          className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden data-[state=inactive]:hidden focus-visible:outline-none"
-        >
-          <div className="shrink-0 border-b border-border px-4 py-3">
-            <div className="relative">
-              <Search
-                aria-hidden
-                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-              />
-              <Input
-                value={stopQuery}
-                onChange={(e) => setStopQuery(e.target.value)}
-                placeholder="Megálló neve vagy kódja"
-                aria-label="Megálló keresése"
-                className="pl-9"
-              />
-            </div>
-          </div>
-
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            {stopResults.length === 0 ? (
-              <p className="px-4 py-8 text-center text-sm text-muted-foreground">
-                Nincs „{stopQuery}” nevű megálló.
-              </p>
-            ) : (
-              <ul className="divide-y divide-border/60">
-                {stopResults.map((g) => {
-                  const single = g.group.length === 1 ? g.group[0] : null;
-                  const isSelected = g.group.some((s) => s.id === selectedStopId);
-                  const watched = single
-                    ? monitoredStopIds.includes(single.id)
-                    : false;
-                  return (
-                    <li
-                      key={g.name}
-                      className={cn(
-                        "flex items-center gap-1 transition-colors duration-fast",
-                        isSelected ? "bg-primary/10" : "hover:bg-accent",
-                      )}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (single) {
-                            onSelectStop(single.id);
-                          } else if (mapRef.current) {
-                            mapRef.current.flyTo([g.lat, g.lon], 16, {
-                              duration: 0.7,
-                            });
-                          }
-                          setPanelOpen(false);
-                        }}
-                        className="min-w-0 flex-1 px-4 py-2.5 text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
-                      >
-                        <span className="block truncate text-xs font-medium">
-                          {g.name}
-                        </span>
-                        <span className="block font-mono text-[11px] tabular-nums text-muted-foreground">
-                          {single ? single.id : `${g.group.length} megálló`}
-                        </span>
-                      </button>
-
-                      {single ? (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant={watched ? "default" : "ghost"}
-                              size="icon"
-                              className="mr-3 h-7 w-7 shrink-0"
-                              onClick={() => onToggleMonitorStop(single.id)}
-                              aria-pressed={watched}
-                              aria-label={
-                                watched
-                                  ? `${g.name} levétele a figyelőről`
-                                  : `${g.name} felvétele a figyelőre`
-                              }
-                            >
-                              <Plus className={cn(watched && "rotate-45")} />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            {watched
-                              ? "Levétel a figyelőről"
-                              : "Felvétel a figyelőre"}
-                          </TooltipContent>
-                        </Tooltip>
-                      ) : null}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
-        </TabsContent>
-      </Tabs>
-
-      {}
       <div className="relative h-full w-full min-w-0 flex-1 bg-background">
         <div ref={mapContainerRef} className="z-map h-full w-full" />
 
-        {}
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => setPanelOpen(true)}
-          className="absolute left-3 top-3 z-overlay shadow-lg md:hidden"
-        >
-          <SlidersHorizontal />
-          Szűrés
-        </Button>
-
-        {}
-        <Button
-          variant="secondary"
-          size="icon"
-          onClick={() => {
-            setCodeOpen(true);
-            setCodeError(null);
-            requestAnimationFrame(() => codeInputRef.current?.focus());
+        <FilterPanel
+          open={isPanelOpen}
+          onClose={() => setPanelOpen(false)}
+          filters={filters}
+          setFilters={setFilters}
+          onClearFilters={onClearFilters}
+          routes={routes}
+          vehicles={vehicles}
+          visibleVehicles={vehicleResults}
+          hasPosition={Boolean(geo.position)}
+          onStartGeo={geo.start}
+          onPickVehicle={(v) => {
+            flyToVehicle(v);
+            if (!window.matchMedia("(min-width: 768px)").matches) setPanelOpen(false);
           }}
-          aria-label="Ugrás megállókód alapján"
-          className={cn(
-            "absolute bottom-3 left-3 z-overlay h-11 w-11 shadow-lg mb-[env(safe-area-inset-bottom)]",
-            historyOn && "hidden",
-          )}
-        >
-          <Hash />
-        </Button>
+        />
 
-        {}
-        {codeOpen ? (
-          <div className="absolute inset-0 z-drawer flex items-center justify-center px-6">
-            <button
-              type="button"
-              aria-label="Megállókód-kereső bezárása"
-              onClick={closeCodeSearch}
-              className="absolute inset-0 bg-background/60 backdrop-blur-sm"
-            />
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                jumpToCode();
-              }}
-              className="relative w-full max-w-[260px] rounded-2xl border border-border bg-card p-3 shadow-2xl"
-            >
-              <label
-                htmlFor="stop-code"
-                className="block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
-              >
-                Megállókód
-              </label>
-              <div className="mt-2 flex items-center gap-2">
-                <Input
-                  id="stop-code"
-                  ref={codeInputRef}
-                  value={codeValue}
-                  onChange={(e) => {
-                    setCodeValue(e.target.value.replace(/[^0-9]/g, ""));
-                    setCodeError(null);
-                  }}
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  autoComplete="off"
-                  enterKeyHint="go"
-                  placeholder="pl. 1"
-                  aria-label="Megálló kódja"
-                  className="h-12 text-center font-mono text-xl font-bold tabular-nums"
-                />
-                <Button
-                  type="submit"
-                  size="icon"
-                  className="h-12 w-12 shrink-0"
-                  disabled={!codeValue.trim() || codeBusy}
-                  aria-label="Ugrás a megállóhoz"
-                >
-                  <CornerDownLeft />
-                </Button>
-              </div>
-              {codeError ? (
-                <p role="alert" className="mt-2 text-[11px] text-destructive">
-                  {codeError}
-                </p>
+        {/* Bal fent: szűrés (vagy menetkövetéskor a kilépés). A nyitott panel alatt nem látszik. */}
+        <MapCorner corner="top-left" row className={cn("max-w-[calc(100%-5.5rem)]", isPanelOpen && "hidden")}>
+          {focusTripId ? (
+            <MapControl icon={ArrowLeft} label="Követés vége" showLabel="always" active onClick={onExitFocus} />
+          ) : (
+            <>
+              <MapControl
+                icon={SlidersHorizontal}
+                label="Szűrés"
+                showLabel="always"
+                badge={activeFilters || null}
+                active={activeFilters > 0}
+                aria-expanded={isPanelOpen}
+                onClick={() => setPanelOpen(true)}
+              />
+              {activeFilters ? (
+                <div className="pointer-events-auto flex h-11 min-w-0 items-center gap-1 rounded-xl border border-primary/40 bg-card/90 pl-3 pr-1 shadow-md backdrop-blur-md">
+                  <button type="button" onClick={() => setPanelOpen(true)} className="min-w-0 truncate text-left text-[12.5px] font-semibold text-primary" title={summary}>
+                    {summary}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onClearFilters}
+                    aria-label="Szűrők törlése"
+                    title="Szűrők törlése"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
               ) : null}
-            </form>
-          </div>
-        ) : null}
-
-        {/* Jobb alsó oszlop; az idővonal-sáv alatt nem bújhat el, ezért fölé emelkedik. */}
-        <div
-          className="absolute bottom-3 right-3 z-overlay mb-[env(safe-area-inset-bottom)] flex flex-col items-end gap-2"
-          style={
-            historyOn && timelineInset > 0
-              ? { bottom: timelineInset + 8 }
-              : undefined
-          }
-        >
-          {historyOn ? null : (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="secondary"
-                  className="h-11 gap-2 px-3.5 shadow-lg"
-                  onClick={openHistory}
-                  aria-label="Idővonal: korábbi járműmozgások visszajátszása"
-                >
-                  <History />
-                  Idővonal
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="left">
-                Visszanézhető, merre jártak a járművek
-              </TooltipContent>
-            </Tooltip>
+            </>
           )}
+        </MapCorner>
 
+        {/* Jobb fent: alaptérkép és rétegek. */}
+        <MapCorner corner="top-right">
+          <MapLayersControl
+            tileLayerId={tileLayerId}
+            onSelectTileLayer={onSelectTileLayer}
+            filters={filters}
+            setFilters={setFilters}
+            watchedStops={monitoredStopIds.length}
+          />
+        </MapCorner>
+
+        {/* Bal lent: keresés (megálló, kód, rendszám) — hüvelykujjal elérhető. */}
+        {historyOn ? null : (
+          <MapCorner corner="bottom-left" className={cn(isPanelOpen && "hidden md:flex md:left-[384px]", searchOpen && "z-drawer")}>
+            <MapSearch
+              onOpenChange={setSearchOpen}
+              stops={stops}
+              vehicles={vehicles}
+              position={geo.position}
+              monitoredStopIds={monitoredStopIds}
+              watched={filters.watch}
+              onToggleMonitorStop={onToggleMonitorStop}
+              onPickStop={pickStop}
+              onPickPlace={(lat, lon) => mapRef.current?.flyTo([lat, lon], 16, { duration: 0.7 })}
+              onPickVehicle={flyToVehicle}
+              onToggleWatch={(id) =>
+                setFilters((prev) => ({
+                  ...prev,
+                  watch: prev.watch.includes(id) ? prev.watch.filter((x) => x !== id) : prev.watch.length < MAX_WATCHED ? [...prev.watch, id] : prev.watch,
+                }))
+              }
+            />
+          </MapCorner>
+        )}
+
+        {/* Jobb lent: idővonal, nagyítás (asztalon), helyzetem; az idővonal-sáv fölé emelkedik. */}
+        <MapCorner corner="bottom-right" style={historyOn && timelineInset > 0 ? { bottom: timelineInset + 8 } : undefined}>
           {geo.error && (geoAsked || geo.status !== "denied") ? (
-            <p
-              role="status"
-              className="max-w-[220px] rounded-lg border border-border bg-card/95 px-2.5 py-1.5 text-[11px] text-muted-foreground shadow-lg backdrop-blur-sm"
-            >
+            <p role="status" className="pointer-events-auto max-w-[220px] rounded-xl border border-border/80 bg-card/90 px-3 py-2 text-[11.5px] text-muted-foreground shadow-md backdrop-blur-md">
               {geo.error}
             </p>
           ) : null}
+          {historyOn ? null : <MapControl icon={History} label="Idővonal" showLabel="wide" title="Visszanézhető, merre jártak a járművek" onClick={openHistory} />}
+          <MapControlGroup label="Nagyítás" className="hidden md:flex">
+            <MapGroupButton icon={Plus} label="Nagyítás" onClick={() => mapRef.current?.zoomIn()} />
+            <MapGroupButton icon={Minus} label="Kicsinyítés" onClick={() => mapRef.current?.zoomOut()} />
+          </MapControlGroup>
+          <MapControl
+            icon={LocateFixed}
+            label={geo.position ? "Ugrás a helyzetemre" : "Helymeghatározás bekapcsolása"}
+            active={geo.isActive}
+            busy={geo.status === "requesting"}
+            disabled={geo.status === "requesting"}
+            onClick={handleLocate}
+          />
+        </MapCorner>
 
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant={geo.isActive ? "default" : "secondary"}
-                size="icon"
-                className="h-11 w-11 shadow-lg"
-                onClick={handleLocate}
-                disabled={geo.status === "requesting"}
-                aria-label={
-                  geo.position
-                    ? "Ugrás a helyzetemre"
-                    : "Helymeghatározás bekapcsolása"
-                }
-              >
-                <LocateFixed
-                  className={cn(geo.status === "requesting" && "animate-pulse")}
-                />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="left">
-              {geo.position
-                ? "Helyzetem és a közeli megállók"
-                : "Helymeghatározás bekapcsolása"}
-            </TooltipContent>
-          </Tooltip>
-        </div>
+        <a
+          href={credit.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="absolute bottom-0.5 left-1/2 z-overlay -translate-x-1/2 whitespace-nowrap rounded px-1.5 text-[9px] text-foreground/55 hover:text-foreground"
+        >
+          {credit.text}
+        </a>
 
         {historyOn ? (
           <MapTimeline
@@ -1666,50 +976,6 @@ export function TransitMap({
           />
         ) : null}
 
-        {focusTripId ? (
-          <div className="absolute left-3 top-[3.4rem] z-overlay md:left-4 md:top-4">
-            <Button onClick={onExitFocus} className="shadow-xl">
-              Menetkövetés vége
-            </Button>
-          </div>
-        ) : null}
-
-        {}
-        {filterActive && !focusTripId ? (
-          <button
-            type="button"
-            onClick={onClearFilters}
-            aria-label={`${filterSummary} — szűrők törlése`}
-            title={filterSummary}
-            className={cn(
-              "absolute right-3 top-3 z-overlay inline-flex h-9 items-center gap-1 rounded-lg px-2",
-              "border border-primary/40 bg-primary/15 text-primary shadow-lg backdrop-blur-sm",
-              "transition-colors duration-fast active:bg-primary/25",
-              "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring md:hidden",
-            )}
-          >
-            <SlidersHorizontal aria-hidden className="h-4 w-4" />
-            <X aria-hidden className="h-3.5 w-3.5" />
-          </button>
-        ) : null}
-
-        {}
-        {filterActive && !focusTripId ? (
-          <div className="absolute right-4 top-4 z-overlay hidden max-w-sm items-center gap-3 rounded-xl border border-border bg-card/95 px-3.5 py-2.5 shadow-xl backdrop-blur-sm md:flex">
-            <Crosshair aria-hidden className="h-4 w-4 shrink-0 text-primary" />
-            <span className="min-w-0 truncate text-xs font-medium">
-              {filterSummary}
-            </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 shrink-0 px-2 text-xs"
-              onClick={onClearFilters}
-            >
-              Alaphelyzet
-            </Button>
-          </div>
-        ) : null}
       </div>
     </div>
   );

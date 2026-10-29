@@ -37,19 +37,25 @@ export function arrivalsForStop(
   const s = feed?.stops.get(stopId);
   const pred = snap.predByStop.get(stopId) ?? new Map();
 
-  type Cand = { unix: number; delay: number | null; hasRT: boolean; dc: DayCtx };
+  // A menet-azonosítók napról napra ismétlődnek: ugyanaz a trip_id ma és holnap is
+  // közlekedhet. Ezért a jelöltek kulcsa nap + menet — különben este a holnapi
+  // (hajnali) indulások kiesnének, mert a mai, már elment példány foglalja a helyet.
+  // Az élő adat (előrejelzés, jármű, törlés) csak a mai szolgáltatási napra vonatkozik.
+  type Cand = { tripId: string; unix: number; delay: number | null; hasRT: boolean; dc: DayCtx; primary: boolean };
   const cand = new Map<string, Cand>();
-  for (const dc of days) {
+  days.forEach((dc, di) => {
+    const isPrimary = dc === primary;
     for (const { trip, dep } of dc.day.feed.stopSched.get(stopId) || []) {
       const tr = dc.day.feed.trips.get(trip);
       if (!tr || !dc.day.services.has(tr.serviceId)) continue;
-      if (cand.has(trip)) continue;
-      const p = pred.get(trip);
-      cand.set(trip, { unix: p?.unix ?? dc.midnightUnix + dep, delay: p?.delay ?? null, hasRT: !!p, dc });
+      const key = `${di}|${trip}`;
+      if (cand.has(key)) continue;
+      const p = isPrimary ? pred.get(trip) : undefined;
+      cand.set(key, { tripId: trip, unix: p?.unix ?? dc.midnightUnix + dep, delay: p?.delay ?? null, hasRT: !!p, dc, primary: isPrimary });
     }
-  }
+  });
   if (primary) {
-    for (const [trip, p] of pred) if (!cand.has(trip)) cand.set(trip, { unix: p.unix, delay: p.delay, hasRT: true, dc: primary });
+    for (const [trip, p] of pred) if (!cand.has(`0|${trip}`)) cand.set(`0|${trip}`, { tripId: trip, unix: p.unix, delay: p.delay, hasRT: true, dc: primary, primary: true });
   }
 
   const tripOf = (tripId: string, dc: DayCtx) => dc.day.feed.trips.get(tripId);
@@ -58,10 +64,10 @@ export function arrivalsForStop(
   for (const v of snap.vehicles) if (v.tripId) vehByTrip.set(v.tripId, v);
 
   const seen = new Set<string>();
-  const rows = [...cand.entries()]
-    .map(([tripId, x]) => {
-      const t = tripOf(tripId, x.dc);
-      return { tripId, ...x, routeId: t?.routeId || "", headsign: t?.headsign || "" };
+  const rows = [...cand.values()]
+    .map((x) => {
+      const t = tripOf(x.tripId, x.dc);
+      return { ...x, routeId: t?.routeId || "", headsign: t?.headsign || "" };
     })
     .filter((x) => x.unix >= nowUnix - 60)
     .sort((a, b) => a.unix - b.unix || (b.hasRT ? 1 : 0) - (a.hasRT ? 1 : 0))
@@ -93,9 +99,9 @@ export function arrivalsForStop(
     const f = x.dc.day.feed;
     const tr = f.trips.get(x.tripId);
     const r = f.routes.get(tr?.routeId || "");
-    let veh = vehByTrip.get(x.tripId) || null;
+    let veh = x.primary ? vehByTrip.get(x.tripId) || null : null;
     if (veh) usedVehicleIds.add(veh.id);
-    if (!veh) {
+    if (!veh && x.primary) {
       const routeVehs = snap.vehicles.filter((v) => {
         if (v.routeId !== tr?.routeId || usedVehicleIds.has(v.id)) return false;
         const vDir = v.tripId ? f.trips.get(v.tripId)?.dir : undefined;
@@ -167,9 +173,9 @@ export function arrivalsForStop(
       currentStopName,
       distanceToStopKm,
       progressDesc,
-      measuredDelaySec: extras.measuredDelay?.(x.tripId) ?? null,
-      predictedVehicle: veh ? null : (extras.predictedVehicle?.(x.tripId) ?? null),
-      cancelled: extras.cancelled?.has(x.tripId) ?? false,
+      measuredDelaySec: x.primary ? (extras.measuredDelay?.(x.tripId) ?? null) : null,
+      predictedVehicle: veh || !x.primary ? null : (extras.predictedVehicle?.(x.tripId) ?? null),
+      cancelled: x.primary ? (extras.cancelled?.has(x.tripId) ?? false) : false,
       forecastDelaySec: fc?.delayS ?? null,
       forecastUpperSec: fc?.upperS ?? null,
     });

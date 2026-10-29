@@ -7,22 +7,26 @@
  * saját lebegő súgója — érték elöl, felirat utána. A súgó kiegészít, nem
  * kapuőr: a lényeg a tengelyről és a feliratokból is leolvasható.
  */
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { formatServiceHour } from "@/services/statsApi";
 
+/**
+ * A diagram szélessége. Visszahívó ref: ha a diagram üres állapotban jelenik meg
+ * először (nincs még elem), az adat megérkezésekor is felcsatol a figyelő, és a
+ * diagram nem ragad 240 px-en.
+ */
 export function useMeasure<T extends HTMLElement>() {
-  const ref = useRef<T>(null);
+  const [el, setEl] = useState<T | null>(null);
   const [width, setWidth] = useState(0);
   useEffect(() => {
-    const el = ref.current;
     if (!el) return;
     const ro = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
     ro.observe(el);
     setWidth(el.getBoundingClientRect().width);
     return () => ro.disconnect();
-  }, []);
-  return { ref, width };
+  }, [el]);
+  return { ref: setEl, width };
 }
 
 export function ChartFrame({

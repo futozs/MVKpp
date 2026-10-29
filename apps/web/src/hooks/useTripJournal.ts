@@ -28,17 +28,24 @@ export function useTripJournal(ymd: string | null, pollMs = FALLBACK_POLL_MS): M
     };
   }, []);
 
+  // A legutóbb kért nap: egy előző napra szóló, későn visszaérő válasz ne írja felül.
+  const wanted = useRef(ymd);
+  wanted.current = ymd;
+  const [retry, setRetry] = useState(0);
+
   const load = async () => {
     if (!ymd) return;
+    const asked = ymd;
     try {
-      const res: TripJournalResponse = await api.getTripJournal(ymd);
-      if (!mounted.current || res.date !== ymd) return;
+      const res: TripJournalResponse = await api.getTripJournal(asked);
+      if (!mounted.current || wanted.current !== asked || res.date !== asked) return;
       setTrips(new Map(Object.entries(res.trips)));
-      setLoadedFor(ymd);
+      setLoadedFor(asked);
       // A szerver "live" forrással jelzi, hogy ez a mai nap — erre él a WebSocket-téma.
-      if ((res as { source?: string }).source === "live") setLiveDay(ymd);
+      if ((res as { source?: string }).source === "live") setLiveDay(asked);
     } catch {
-      /* a következő frissítés újrapróbálja */
+      // Ha még semmi nincs betöltve erre a napra, pár másodperc múlva újra (különben üres maradna).
+      if (mounted.current && wanted.current === asked) setTimeout(() => mounted.current && wanted.current === asked && setRetry((n) => n + 1), 5000);
     }
   };
 
@@ -46,9 +53,13 @@ export function useTripJournal(ymd: string | null, pollMs = FALLBACK_POLL_MS): M
     setTrips(EMPTY);
     setLoadedFor(null);
     setLiveDay(null);
-    load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ymd]);
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ymd, retry]);
 
   useTopic(liveDay ? `runs:${liveDay}` : null, (m) => {
     if (m.date !== ymd) return;

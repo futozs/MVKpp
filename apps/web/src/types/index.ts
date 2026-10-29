@@ -164,6 +164,8 @@ export interface FilterState {
   rstops: boolean;
   labels: boolean;
   follow: boolean;
+  /** élő forgalom (dugók) réteg */
+  traffic: boolean;
 }
 
 export interface JwtStatus {

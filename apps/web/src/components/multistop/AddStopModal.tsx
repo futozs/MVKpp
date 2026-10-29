@@ -75,7 +75,7 @@ export function AddStopModal({
         <ScrollArea className="min-h-0 flex-1">
           {results.length === 0 ? (
             <p className="px-5 py-8 text-center text-sm text-muted-foreground">
-              Nincs „{query}” nevű megálló a menetrendben.
+              {query.trim() ? `Nincs „${query.trim()}” nevű megálló a menetrendben.` : "Megállók betöltése…"}
             </p>
           ) : (
             <ul className="divide-y divide-border/60">

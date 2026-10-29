@@ -18,7 +18,8 @@ async function upsertSub(req: Request, s: Sub | undefined, extra: { dndStart?: n
   const p256dh = s?.keys?.p256dh;
   const auth = s?.keys?.auth;
   if (!endpoint || !p256dh || !auth) throw new ApiError(400, "Hiányzó mező");
-  if (!/^https:\/\//.test(endpoint) || endpoint.length > 1000) throw new ApiError(400, "Érvénytelen push végpont");
+  if (endpoint.length > 1000 || !validPushEndpoint(endpoint)) throw new ApiError(400, "Érvénytelen push végpont");
+  if (p256dh.length > 200 || auth.length > 100) throw new ApiError(400, "Érvénytelen push kulcs");
   const user = await sessionUser(req).catch(() => null);
   const r = await sqlOne<{ id: number }>(
     `INSERT INTO push_subscription (endpoint, p256dh, auth, user_id, user_agent) VALUES ($1, $2, $3, $4, $5)
@@ -33,6 +34,23 @@ async function upsertSub(req: Request, s: Sub | undefined, extra: { dndStart?: n
 }
 
 const validMin = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && n >= 0 && n < 1440;
+
+/**
+ * Csak a böngészők valódi push-szolgáltatásaira küldünk (Chrome/Edge/Samsung/Opera: FCM,
+ * Firefox: Mozilla, régi Edge: WNS, Safari/iOS: Apple). Egy tetszőleges https-cím
+ * különben a worker nevében hívatna meg belső címeket (SSRF).
+ */
+const PUSH_HOSTS = [/^fcm\.googleapis\.com$/, /(^|\.)googleapis\.com$/, /(^|\.)push\.services\.mozilla\.com$/, /(^|\.)notify\.windows\.com$/, /(^|\.)push\.apple\.com$/];
+function validPushEndpoint(endpoint: string): boolean {
+  try {
+    const u = new URL(endpoint);
+    return u.protocol === "https:" && !u.port && PUSH_HOSTS.some((re) => re.test(u.hostname));
+  } catch {
+    return false;
+  }
+}
+const STOP_ID_RE = /^[\w:.-]{1,32}$/;
+const MAX_WATCHES_PER_SUB = 60;
 
 const routes: Route[] = [
   route("GET", "/push/vapid-public-key", () => json({ publicKey: configured() ? publicKey() : null })),
@@ -51,9 +69,16 @@ const routes: Route[] = [
       slot?: string;
     }>(req);
     if (!b?.stopId || !b.stopName) throw new ApiError(400, "Hiányzó mező");
+    if (!STOP_ID_RE.test(b.stopId) || (b.tripId != null && (typeof b.tripId !== "string" || b.tripId.length > 80))) throw new ApiError(400, "Érvénytelen megálló vagy menet");
     const subId = await upsertSub(req, b.subscription);
+    const count = await sqlOne<{ n: number; same: boolean }>(
+      `SELECT count(*)::int AS n, bool_or(stop_id = $2 AND slot = $3) AS same FROM push_watch WHERE subscription_id = $1`,
+      [subId, b.stopId, (b.slot ?? "default").slice(0, 64)],
+    );
+    // Meglévő figyelés módosítása mindig mehet; újat csak a korlátig.
+    if ((count?.n ?? 0) >= MAX_WATCHES_PER_SUB && !count?.same) throw new ApiError(429, `Egy eszközön legfeljebb ${MAX_WATCHES_PER_SUB} figyelés lehet`);
     const threshold = Math.max(1, Math.min(60, Number(b.thresholdMin) || 5));
-    const routes = Array.isArray(b.routeShorts) && b.routeShorts.length ? b.routeShorts.map(String).slice(0, 30) : null;
+    const routes = Array.isArray(b.routeShorts) && b.routeShorts.length ? b.routeShorts.map((r) => String(r).slice(0, 8)).slice(0, 30) : null;
     const schedMin = validMin(b.schedMin) ? Math.round(b.schedMin) : null;
     const tripId = schedMin == null ? (b.tripId ?? null) : null;
     const slot = (b.slot ?? "default").slice(0, 64);

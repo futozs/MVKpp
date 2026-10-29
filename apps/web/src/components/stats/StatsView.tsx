@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   Activity,
   Bus,
+  Flame,
   MapPinned,
   Route as RouteIcon,
   Wrench,
@@ -17,6 +18,7 @@ import { RoutePanel } from "./RoutePanel";
 import { StopPanel } from "./StopPanel";
 import { NetworkPanel } from "./NetworkPanel";
 import { RidesPanel } from "./RidesPanel";
+import { HeatPanel } from "./HeatPanel";
 import { cn } from "@/lib/utils";
 
 type PanelId =
@@ -26,6 +28,7 @@ type PanelId =
   | "route"
   | "stop"
   | "network"
+  | "heat"
   | "rides";
 
 const OVERVIEW_PANEL: { id: PanelId; label: string; short: string; icon: LucideIcon } = {
@@ -46,6 +49,7 @@ const PANELS: {
   { id: "route", label: "Vonalak", short: "Vonalak", icon: RouteIcon },
   { id: "stop", label: "Megállók", short: "Megállók", icon: MapPinned },
   { id: "network", label: "Hálózat", short: "Hálózat", icon: TrendingUp },
+  { id: "heat", label: "Hőtérkép", short: "Hőtérkép", icon: Flame },
   { id: "rides", label: "Utazásaim", short: "Utazásaim", icon: Ticket },
 ];
 
@@ -53,11 +57,14 @@ export function StatsView({
   stops,
   routes,
   onFocusVehicle,
+  onOpenDisruptions,
   liveIncidents = 0,
 }: {
   stops: Stop[];
   routes: Route[];
   onFocusVehicle?: (vehicleId: string) => void;
+  /** a Menetrend „Mai zavarok” ablaka */
+  onOpenDisruptions?: () => void;
   /** van élő zavar (piros jelvény) → az Üzemzavarok nyíljon meg elsőként */
   liveIncidents?: number;
 }) {
@@ -137,10 +144,11 @@ export function StatsView({
           {panel === "vehicle" && (
             <VehiclePanel onFocusVehicle={onFocusVehicle} />
           )}
-          {panel === "incident" && <IncidentPanel routes={routes} />}
+          {panel === "incident" && <IncidentPanel routes={routes} onOpenDisruptions={onOpenDisruptions} />}
           {panel === "route" && <RoutePanel routes={routes} />}
           {panel === "stop" && <StopPanel stops={stops} />}
           {panel === "network" && <NetworkPanel />}
+          {panel === "heat" && <HeatPanel routes={routes} />}
           {panel === "rides" && <RidesPanel />}
         </div>
       </div>

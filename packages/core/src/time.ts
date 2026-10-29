@@ -52,6 +52,18 @@ export function shiftIso(iso: string, days: number): string {
   return isoOfUtcDate(d);
 }
 
+/**
+ * Valódi naptári nap ("YYYY-MM-DD"), legfeljebb `maxDays` nappal a `today`-től
+ * (a 2026-02-31-féle és a több évvel arrébb eső dátumok kiszűrésére az API-határon).
+ */
+export function isPlausibleIso(iso: string, today: string, maxDays = 400): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false;
+  const d = new Date(`${iso}T12:00:00Z`);
+  if (Number.isNaN(d.getTime()) || isoOfUtcDate(d) !== iso) return false;
+  const t = new Date(`${today}T12:00:00Z`).getTime();
+  return Math.abs(d.getTime() - t) <= maxDays * 86_400_000;
+}
+
 /** A hét napja ISO szerint (hétfő = 1 … vasárnap = 7). */
 export function isoDow(iso: string): number {
   const js = new Date(`${iso}T12:00:00Z`).getUTCDay();

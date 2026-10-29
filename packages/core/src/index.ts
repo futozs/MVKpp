@@ -15,3 +15,8 @@ export * from "./rotation.ts";
 export * from "./parking.ts";
 export * from "./forecast.ts";
 export * from "./missing.ts";
+export * from "./loops.ts";
+export * from "./heat.ts";
+export * from "./ml/gbdt.ts";
+export * from "./ml/delayFeatures.ts";
+export * from "./traffic.ts";

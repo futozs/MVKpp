@@ -60,6 +60,8 @@ interface DateFieldProps {
   id?: string;
   className?: string;
   "aria-label"?: string;
+  /** a felugró naptár igazítása a mezőhöz */
+  align?: "left" | "right";
 }
 
 export function DateField({
@@ -69,6 +71,7 @@ export function DateField({
   max,
   id,
   className,
+  align = "left",
   ...aria
 }: DateFieldProps) {
   const [open, setOpen] = useState(false);
@@ -150,7 +153,10 @@ export function DateField({
         <div
           role="dialog"
           aria-label="Dátum választása"
-          className="absolute left-0 top-[calc(100%+0.375rem)] z-50 w-64 rounded-lg border border-border bg-card p-2.5 shadow-lg"
+          className={cn(
+            "absolute top-[calc(100%+0.375rem)] z-50 w-64 rounded-lg border border-border bg-card p-2.5 shadow-lg",
+            align === "right" ? "right-0" : "left-0",
+          )}
         >
           <div className="mb-2 flex items-center justify-between">
             <button

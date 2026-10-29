@@ -13,7 +13,7 @@
  *                 és NEM ismert térerő-hiányos helyen (ahol ugyanez a minta
  *                 más napokon is rendszeresen elhallgat)
  */
-import { isOnDemandTrip, localMidnightUnix, secToHm, type ServiceDay } from "@mvk/core";
+import { budapestOffsetSec, isOnDemandTrip, localMidnightUnix, secToHm, type ServiceDay } from "@mvk/core";
 import { getPool, sql } from "@mvk/db";
 import type { FeedManager } from "./feeds.ts";
 import { log } from "./log.ts";
@@ -202,7 +202,7 @@ async function breakdowns(day: ServiceDay, iso: string): Promise<IncidentIn[]> {
     else if (silentMin > 60) confidence += 10;
     if (progress < 0.5) confidence += 5;
     // Késő este a végleges elnémulás inkább műszakvég (garázsmenet), mint hiba.
-    const localHour = new Date((r.last_seen + 3600) * 1000).getUTCHours();
+    const localHour = new Date((r.last_seen + budapestOffsetSec(r.last_seen)) * 1000).getUTCHours();
     if (silentMin == null && (localHour >= 20 || localHour < 4)) confidence -= 25;
     confidence -= Math.round(share * 150);
     out.push({

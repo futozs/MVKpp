@@ -41,25 +41,31 @@ export function useCancelledTrips(
       return;
     }
 
+    // Gyors napváltásnál egy előző napra szóló, későn visszaérő válasz ne írja felül a mostanit.
+    let alive = true;
     const load = async () => {
       try {
         const res = await api.getCancelledTrips(isToday ? undefined : ymd);
-        if (!mounted.current) return;
+        if (!alive || !mounted.current) return;
         setData(res);
         setError(null);
       } catch (err) {
-        if (mounted.current) setError((err as Error).message);
+        if (alive && mounted.current) setError((err as Error).message);
       }
     };
 
     load();
-    if (!isToday) return;
-    const timer = setInterval(load, pollMs);
-    return () => clearInterval(timer);
+    const timer = isToday ? setInterval(load, pollMs) : null;
+    return () => {
+      alive = false;
+      if (timer) clearInterval(timer);
+    };
   }, [ymd, isToday, pollMs]);
 
   return useMemo(() => {
-    if (!ymd || !data) return error ? { ...EMPTY, error } : EMPTY;
+    // Csak a kért nap adata számít (a válasz `date` mezője YYYYMMDD vagy ISO lehet).
+    const matches = data && data.date.replace(/-/g, "") === ymd?.replace(/-/g, "");
+    if (!ymd || !data || !matches) return error ? { ...EMPTY, error } : EMPTY;
     return {
       ids: new Set(data.tripIds),
       trips: data.trips,

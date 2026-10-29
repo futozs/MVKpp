@@ -31,7 +31,16 @@ const MAX_BACKUP_BYTES = 1_000_000;
 const g = globalThis as unknown as { __mvkChallenges?: Map<string, { challenge: string; expiresAt: number }> };
 const challenges = (g.__mvkChallenges ??= new Map());
 
-const setChallenge = (k: string, c: string) => challenges.set(k.toLowerCase(), { challenge: c, expiresAt: Date.now() + CHALLENGE_TTL_MS });
+const MAX_CHALLENGES = 5000;
+function setChallenge(k: string, c: string) {
+  // A lejártak kitakarítása (a hitelesítés nélküli kérések különben a végtelenségig növelnék).
+  if (challenges.size >= MAX_CHALLENGES) {
+    const now = Date.now();
+    for (const [key, e] of challenges) if (e.expiresAt <= now) challenges.delete(key);
+    while (challenges.size >= MAX_CHALLENGES) challenges.delete(challenges.keys().next().value!);
+  }
+  challenges.set(k.toLowerCase(), { challenge: c, expiresAt: Date.now() + CHALLENGE_TTL_MS });
+}
 function takeChallenge(k: string): string | null {
   const e = challenges.get(k.toLowerCase());
   challenges.delete(k.toLowerCase());
@@ -136,7 +145,13 @@ const routes: Route[] = [
     if (!v.verified || !v.registrationInfo) throw new ApiError(400, "A passkey ellenőrzése sikertelen.");
     const user = await sqlOne<User>(`INSERT INTO app_user (email) VALUES ($1) RETURNING id, email::text AS email`, [email]);
     if (!user) throw new ApiError(500, "A fiók létrehozása sikertelen");
-    await storeCredential(user.id, v.registrationInfo, b.deviceName?.slice(0, 64) ?? null);
+    try {
+      await storeCredential(user.id, v.registrationInfo, b.deviceName?.slice(0, 64) ?? null);
+    } catch (e) {
+      // Passkey nélkül a fiók használhatatlan lenne (az e-mail foglalt, belépni nem lehet): visszavonjuk.
+      await getPool().query(`DELETE FROM app_user WHERE id = $1`, [user.id]).catch(() => {});
+      throw e;
+    }
     return json({ ok: true, email, sessionToken: await createSession(user.id, req) });
   }),
 
@@ -267,29 +282,39 @@ const routes: Route[] = [
     const u = await requireUser(req);
     const raw = await req.text();
     if (!raw || raw.length > MAX_BACKUP_BYTES) throw new ApiError(400, "Hiányzó vagy túl nagy mentés");
-    let obj: Record<string, unknown>;
+    let parsed: unknown;
     try {
-      obj = JSON.parse(raw);
+      parsed = JSON.parse(raw);
     } catch {
       throw new ApiError(400, "A mentés nem érvényes JSON");
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new ApiError(400, "A mentésnek kulcs–érték objektumnak kell lennie");
+    const obj = parsed as Record<string, unknown>;
+    const prevRow = await sqlOne<{ payload: Buffer }>(`SELECT payload FROM legacy_backup WHERE user_id = $1`, [u.id]);
+    let prev: Record<string, unknown> = {};
+    try {
+      const p = prevRow ? JSON.parse(prevRow.payload.toString("utf8")) : {};
+      if (p && typeof p === "object" && !Array.isArray(p)) prev = p as Record<string, unknown>;
+    } catch {
+      /* sérült régi mentés — mintha nem lenne */
     }
     await getPool().query(
       `INSERT INTO legacy_backup (user_id, payload, bytes, updated_at) VALUES ($1, $2, $3, now())
        ON CONFLICT (user_id) DO UPDATE SET payload = EXCLUDED.payload, bytes = EXCLUDED.bytes, updated_at = now()`,
       [u.id, Buffer.from(raw), raw.length],
     );
-    // A v2-kliens teljes pillanatképet küld "most" időbélyeggel — ez felülírná
-    // a többi eszközön időközben mentett, frissebb értékeket. Ezért innen csak
-    // a még hiányzó kulcsokat vesszük át; a kétirányú szinkron a /v3/sync.
+    // A v2-kliens teljes pillanatképet küld "most" időbélyeggel. Csak azt vesszük
+    // át, ami az előző mentése óta TÉNYLEG változott (vagy még nincs a szinkronban):
+    // így a régi app módosításai átérnek, de a többi eszközön közben mentett
+    // frissebb értékeket nem írja felül a változatlan pillanatkép.
     const known = new Set((await sql<{ key: string }>(`SELECT key FROM user_state WHERE user_id = $1`, [u.id])).map((r) => r.key));
     const now = new Date().toISOString();
-    await applyState(
-      u.id,
-      Object.entries(obj)
-        .filter(([k, v]) => typeof v === "string" && !known.has(k))
-        .map(([key, value]) => ({ key, value, deleted: false, updatedAt: now })),
-      req.headers.get("x-device-id"),
-    );
+    const items = Object.entries(obj)
+      .filter(([k, v]) => typeof v === "string" && (!known.has(k) || prev[k] !== v))
+      .map(([key, value]) => ({ key, value, deleted: false, updatedAt: now }));
+    // Amit az előző mentés még tartalmazott, de ez már nem: törölte az appban.
+    for (const k of Object.keys(prev)) if (!(k in obj) && known.has(k)) items.push({ key: k, value: null, deleted: true, updatedAt: now });
+    await applyState(u.id, items, req.headers.get("x-device-id"));
     return json({ ok: true, bytes: raw.length, updatedAt: Math.floor(Date.now() / 1000) });
   }),
 

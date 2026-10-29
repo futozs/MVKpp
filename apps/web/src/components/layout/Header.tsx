@@ -1,5 +1,5 @@
 import { motion, useReducedMotion } from "framer-motion";
-import { Bell, Layers, UserRound } from "lucide-react";
+import { Bell, UserRound } from "lucide-react";
 import type { ReactNode } from "react";
 import type { ActiveTab } from "@/types";
 import {
@@ -25,7 +25,6 @@ interface HeaderProps {
   isRefreshing: boolean;
   onManualRefresh: () => void;
   monitoredStopsCount: number;
-  onOpenMapPicker: () => void;
   liveIncidentCount: number;
   onOpenNotifications: () => void;
   onOpenAccount: () => void;
@@ -46,7 +45,6 @@ export function Header({
   isRefreshing,
   onManualRefresh,
   monitoredStopsCount,
-  onOpenMapPicker,
   liveIncidentCount,
   onOpenNotifications,
   onOpenAccount,
@@ -81,12 +79,6 @@ export function Header({
           <span aria-hidden className="mx-1 hidden h-6 w-px shrink-0 bg-border lg:block" />
 
           <div className="flex items-center gap-0.5">
-            {activeTab === "map" ? (
-              <HeaderAction label="Alaptérkép választása" onClick={onOpenMapPicker} hasText>
-                <Layers aria-hidden />
-                <span className="hidden 2xl:inline">Alaptérkép</span>
-              </HeaderAction>
-            ) : null}
             <HeaderAction label="Értesítések" onClick={onOpenNotifications}>
               <Bell aria-hidden />
             </HeaderAction>

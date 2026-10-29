@@ -5,13 +5,18 @@
  */
 import { budapestOffsetSec, dayInfo, serviceClock, shiftIso } from "@mvk/core";
 import { sql, sqlOne } from "@mvk/db";
-import { ApiError, body, cached, dispatch, isoDate, json, route, type Route } from "./http.ts";
+import { ApiError, body, cached, dispatch, intParam, isoDate, json, route, type Route } from "./http.ts";
 
 const today = () => serviceClock().iso;
 const yesterday = () => shiftIso(today(), -1);
 
-/** Az idővonalon a szolgáltatási nap határai (3:00 → 3:00) helyi időben. */
-const dayBounds = `($1::date::timestamp AT TIME ZONE 'Europe/Budapest') + interval '3 hours'`;
+/**
+ * Az idővonalon a szolgáltatási nap határai (3:00 → másnap 3:00) helyi időben.
+ * A helyi falióra-időt váltjuk át (nem az éjfélhez adunk órákat), így az
+ * óraátállítás napján is pontosan 3:00 a határ.
+ */
+const dayStart = (p: string) => `((${p}::date + time '03:00') AT TIME ZONE 'Europe/Budapest')`;
+const dayEnd = (p: string) => `((${p}::date + 1 + time '03:00') AT TIME ZONE 'Europe/Budapest')`;
 
 const routes: Route[] = [
   route("GET", "/stats/health", async () => {
@@ -64,7 +69,7 @@ const routes: Route[] = [
       ? await sqlOne(
           `WITH r AS (SELECT * FROM trip_run WHERE vehicle_id = $1 AND service_date = $2 AND status <> 'aborted'),
                 e AS (SELECT delay_s, dwell_s FROM stop_event WHERE vehicle_id = $1 AND service_date = $2 AND src <> 3),
-                p AS (SELECT min(ts) AS t0, max(ts) AS t1 FROM veh_ping WHERE vehicle_id = $1 AND ts >= ${dayBounds.replace("$1", "$2")} AND ts < ${dayBounds.replace("$1", "$2")} + interval '1 day')
+                p AS (SELECT min(ts) AS t0, max(ts) AS t1 FROM veh_ping WHERE vehicle_id = $1 AND ts >= ${dayStart("$2")} AND ts < ${dayEnd("$2")})
            SELECT (SELECT count(*) FROM r)::int AS runs, (SELECT count(DISTINCT route_short) FROM r)::int AS routes_n,
                   coalesce((SELECT sum(dist_m) FROM r), 0)::int AS dist_m,
                   coalesce((SELECT sum(extract(epoch FROM actual_end - actual_start)) FROM r WHERE actual_end > actual_start), 0)::int AS service_s,
@@ -83,10 +88,10 @@ const routes: Route[] = [
 
   route("GET", "/stats/vehicle/:id/track", async (_req, p, url) => {
     const date = isoDate(url.searchParams.get("date")) ?? yesterday();
-    const every = Math.max(1, Number(url.searchParams.get("every") ?? 3) || 3);
+    const every = intParam(url.searchParams.get("every"), 3, 1, 60);
     const rows = await sql<{ ts: number; lat: number; lon: number; sp: number | null; tr: string | null }>(
       `SELECT extract(epoch FROM ts)::int AS ts, lat, lon, round(speed * 10)::int AS sp, trip_id AS tr
-         FROM veh_ping WHERE vehicle_id = $1 AND ts >= ${dayBounds.replace("$1", "$2")} AND ts < ${dayBounds.replace("$1", "$2")} + interval '1 day'
+         FROM veh_ping WHERE vehicle_id = $1 AND ts >= ${dayStart("$2")} AND ts < ${dayEnd("$2")}
         ORDER BY ts`,
       [p.id, date],
     );
@@ -155,7 +160,7 @@ const routes: Route[] = [
   route("GET", "/stats/incidents", async (_req, _p, url) => {
     const to = isoDate(url.searchParams.get("to")) ?? today();
     const from = isoDate(url.searchParams.get("from")) ?? shiftIso(to, -29);
-    const minConf = Number(url.searchParams.get("minConfidence") ?? 50);
+    const minConf = intParam(url.searchParams.get("minConfidence"), 50, 0, 100);
     const kind = url.searchParams.get("kind");
     if (kind && kind !== "mid_trip_stop") return json({ from, to, minConfidence: minConf, incidents: [] });
     return json({ from, to, minConfidence: minConf, incidents: await legacyIncidents(from, to, minConf, null) });
@@ -164,7 +169,7 @@ const routes: Route[] = [
   route("GET", "/stats/incidents/summary", async (_req, _p, url) => {
     const to = isoDate(url.searchParams.get("to")) ?? today();
     const from = isoDate(url.searchParams.get("from")) ?? shiftIso(to, -89);
-    const minConf = Number(url.searchParams.get("minConfidence") ?? 50);
+    const minConf = intParam(url.searchParams.get("minConfidence"), 50, 0, 100);
     const fleet = await sql(
       `WITH p AS (SELECT vehicle_id, count(DISTINCT service_date) AS days_active, count(*) AS runs,
                          round((sum(extract(epoch FROM actual_end - actual_start)) FILTER (WHERE actual_end > actual_start) / 3600.0)::numeric, 1) AS service_h
@@ -255,7 +260,7 @@ const routes: Route[] = [
   route("GET", "/stats/network/slow", async (_req, _p, url) => {
     const bf = Math.max(0, Math.min(95, Number(url.searchParams.get("from") ?? 28) || 0));
     const bt = Math.max(bf, Math.min(95, Number(url.searchParams.get("to") ?? 36) || 0));
-    const daytype = Number(url.searchParams.get("daytype") ?? 0);
+    const daytype = intParam(url.searchParams.get("daytype"), 0, 0, 2);
     const segments = await cached(`slow:${bf}:${bt}:${daytype}`, 10 * 60_000, () =>
       sql(
         `WITH s AS (

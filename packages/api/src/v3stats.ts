@@ -1,7 +1,7 @@
 /** /v3/* statisztika az új felülethez: egyértelmű, napra / napszakra szűrhető mutatók. */
 import { serviceClock, shiftIso } from "@mvk/core";
 import { sql, sqlOne } from "@mvk/db";
-import { cached, dispatch, isoDate, json, route, type Route } from "./http.ts";
+import { cached, dispatch, intParam, isoDate, json, route, type Route } from "./http.ts";
 
 const today = () => serviceClock().iso;
 
@@ -49,10 +49,10 @@ const routes: Route[] = [
    * pontosság egy időszak átlagában, naptípus szerint, + a leglassabb szakaszok.
    */
   route("GET", "/v3/stats/network", async (_req, _p, url) => {
-    const daytype = Math.max(0, Math.min(2, Number(url.searchParams.get("daytype") ?? 0) || 0));
-    const days = Math.max(7, Math.min(365, Number(url.searchParams.get("days") ?? 30) || 30));
-    const fromHour = Math.max(0, Math.min(26, Number(url.searchParams.get("fromHour") ?? 7)));
-    const toHour = Math.max(fromHour + 1, Math.min(27, Number(url.searchParams.get("toHour") ?? 9)));
+    const daytype = intParam(url.searchParams.get("daytype"), 0, 0, 2);
+    const days = intParam(url.searchParams.get("days"), 30, 7, 365);
+    const fromHour = intParam(url.searchParams.get("fromHour"), 7, 0, 26);
+    const toHour = Math.max(fromHour + 1, intParam(url.searchParams.get("toHour"), 9, 1, 27));
     const data = await cached(`net:${daytype}:${days}:${fromHour}:${toHour}`, 10 * 60_000, async () => {
       const hourly = await sql(
         `SELECT floor(extract(epoch FROM h.bucket - (h.service_date::timestamp AT TIME ZONE 'Europe/Budapest')) / 3600)::int AS hour,
@@ -91,7 +91,7 @@ const routes: Route[] = [
     const to = isoDate(url.searchParams.get("to")) ?? today();
     const from = isoDate(url.searchParams.get("from")) ?? shiftIso(to, -13);
     const kind = url.searchParams.get("kind");
-    const minConf = Number(url.searchParams.get("minConfidence") ?? 50);
+    const minConf = intParam(url.searchParams.get("minConfidence"), 50, 0, 100);
     const rows = await sql(
       `SELECT i.id, i.service_date::text, i.kind, i.source, i.confidence, i.route_short, ro.color, ro.text_color, i.trip_id, i.vehicle_id, i.stop_id, s.name AS stop_name,
               extract(epoch FROM i.started_at)::int AS started_ts, extract(epoch FROM i.ended_at)::int AS ended_ts, i.lat, i.lon, i.title, i.detail, i.evidence

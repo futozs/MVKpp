@@ -169,16 +169,23 @@ export class PushEngine {
   private async enqueue(w: WatchRow, date: string, tripId: string, kind: "arrival" | "cancelled", msg: { title: string; body: string }) {
     const key = `${w.id}|${date}|${tripId}|${kind}`;
     if (this.sent.has(key)) return;
+    // Előre jelöljük (a következő kör ne küldje kétszer), de hiba esetén visszavesszük,
+    // hogy egy átmeneti adatbázis- vagy sorhiba ne némítsa el végleg ezt az értesítést.
     this.sent.add(key);
-    const payload = { ...msg, tag: `mvk-${w.stop_id}-${tripId}`.slice(0, 60), url: `/?stop=${encodeURIComponent(w.stop_id)}#multistop` };
-    const r = await sql<{ id: number }>(
-      `INSERT INTO push_delivery (watch_id, service_date, trip_id, kind, status, payload) VALUES ($1, $2, $3, $4, 'queued', $5)
-       ON CONFLICT (watch_id, service_date, trip_id, kind) DO NOTHING RETURNING id`,
-      [w.id, date, tripId, kind, JSON.stringify(payload)],
-    );
-    if (!r[0]) return;
-    this.stats.queued++;
-    await this.boss.send(QUEUE, { deliveryId: r[0].id });
+    try {
+      const payload = { ...msg, tag: `mvk-${w.stop_id}-${tripId}`.slice(0, 60), url: `/?stop=${encodeURIComponent(w.stop_id)}#multistop` };
+      const r = await sql<{ id: number }>(
+        `INSERT INTO push_delivery (watch_id, service_date, trip_id, kind, status, payload) VALUES ($1, $2, $3, $4, 'queued', $5)
+         ON CONFLICT (watch_id, service_date, trip_id, kind) DO NOTHING RETURNING id`,
+        [w.id, date, tripId, kind, JSON.stringify(payload)],
+      );
+      if (!r[0]) return;
+      this.stats.queued++;
+      await this.boss.send(QUEUE, { deliveryId: r[0].id });
+    } catch (e) {
+      this.sent.delete(key);
+      throw e;
+    }
   }
 
   private async deliver(deliveryId: number, lastAttempt: boolean): Promise<void> {

@@ -32,20 +32,27 @@ export function useTripPath(
       return;
     }
 
+    let alive = true;
+    // Másik menet: a régi nyomvonal ne maradjon kint, amíg az új betölt.
+    setData(null);
+    setLost(false);
     const load = async () => {
       try {
         const res = await api.getTripPath(tripId, vehicleId ?? undefined);
-        if (!mounted.current) return;
+        if (!alive || !mounted.current) return;
         setData(res);
         setLost(!res.vehicle);
       } catch {
-        if (mounted.current) setLost(true);
+        if (alive && mounted.current) setLost(true);
       }
     };
 
     load();
     const timer = setInterval(load, pollMs);
-    return () => clearInterval(timer);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
   }, [tripId, vehicleId, pollMs]);
 
   return { data, lost };

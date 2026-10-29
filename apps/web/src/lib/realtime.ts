@@ -70,6 +70,8 @@ class RealtimeClient {
       for (const l of this.listeners.get(topic) ?? []) l(m);
     };
     ws.onclose = () => {
+      // Egy már lecserélt (újraélesztett) kapcsolat késve érkező lezárása ne bontsa az élőt.
+      if (this.ws !== ws) return;
       this.setConnected(false);
       this.ws = null;
       if (this.listeners.size || this.globalListeners.size) this.schedule();

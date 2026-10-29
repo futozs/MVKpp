@@ -129,6 +129,8 @@ export function TimetableGrid({
                 // Az élő GPS-jelzés napfüggetlenül a tripId alapján érkezik, ezért
                 // csak a mai napon jelentheti azt, hogy EZ a menet fut éppen.
                 const isLive = day === "today" && vehicle !== null;
+                // Kiosztva, de még a kiinduló megállóban áll — nem „elindult”.
+                const isWaiting = isLive && isWaitingAtStart(journal.get(trip.tripId));
                 const isNext = trip.tripId === nextTripId;
                 const isSelected = trip.tripId === selectedTripId;
                 const isPast =
@@ -160,7 +162,9 @@ export function TimetableGrid({
                       "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
                       isCancelled
                         ? "border-destructive/60 bg-destructive/12 text-destructive line-through decoration-2"
-                        : isLive
+                        : isWaiting
+                          ? "border-primary bg-primary/20 text-foreground"
+                          : isLive
                           ? "border-primary bg-primary text-primary-foreground"
                           : isSelected
                             ? "border-primary bg-primary/15 text-foreground"
@@ -193,7 +197,7 @@ export function TimetableGrid({
                         aria-hidden
                         className={cn(
                           "absolute right-1 top-1 h-1.5 w-1.5 rounded-full",
-                          isLive ? "bg-primary-foreground" : "bg-early",
+                          isLive && !isWaiting ? "bg-primary-foreground" : "bg-early",
                         )}
                       />
                     ) : null}
@@ -235,6 +239,7 @@ function buildTitle({
     arrivalSec: trip.arrivalSec,
     nowSec,
     day,
+    waitingAtStart: isWaitingAtStart(journal.get(trip.tripId)),
   });
   const vehicleId =
     liveVehicleId ??
@@ -250,4 +255,9 @@ function buildTitle({
   ]
     .filter(Boolean)
     .join(" · ");
+}
+
+/** A menet élő, de a jármű még nem hagyta el a kiinduló megállót. */
+export function isWaitingAtStart(entry: TripJournalEntry | undefined): boolean {
+  return entry?.status === "running" && entry.actualStart == null;
 }

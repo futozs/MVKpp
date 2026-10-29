@@ -222,3 +222,8 @@
     padding-top: calc(env(safe-area-inset-top) + 14px);
   }
 }
+
+/* Városi hőtérkép: szürke, sötétített alaptérkép, hogy a színek beszéljenek. */
+.heat-base-tiles {
+  filter: grayscale(1) invert(1) brightness(0.7) contrast(0.9);
+}

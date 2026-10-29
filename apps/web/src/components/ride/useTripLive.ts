@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { API_BASE } from "@/lib/apiBase";
 import { useFallbackPoll, useTopic } from "@/lib/realtime";
 
@@ -29,9 +29,14 @@ export interface TripRun {
   lastDelayS: number | null;
   stopsTotal: number;
   closeReason: string | null;
+  /** beérkezés a végállomásra (unix) */
+  actualEnd?: number | null;
 }
 
 export interface TripLive {
+  tripId: string;
+  /** a végállomás fordulóhurok (ülve maradva körbe lehet utazni) */
+  loopEnd: boolean;
   stops: TripStop[];
   run: TripRun | null;
   delayS: number | null;
@@ -39,30 +44,44 @@ export interface TripLive {
   vehicle: { id: string; lat: number; lon: number; speed: number | null } | null;
 }
 
-type TripDetail = { stops: TripStop[]; run: TripRun | null; liveDelaySec: number | null; forecast: { stops: ForecastStop[] } | null };
+type TripDetail = { stops: TripStop[]; loopEnd?: boolean; run: TripRun | null; liveDelaySec: number | null; forecast: { stops: ForecastStop[] } | null };
 type TripMsg = { vehicle: TripLive["vehicle"]; run: TripRun | null; measuredDelaySec: number | null; forecast: { stops: ForecastStop[] } | null };
 
 /** Egy menet élőben: megállók (egyszer), helyzet, késés és előrejelzés (WebSocket). */
-export function useTripLive(tripId: string): TripLive | null {
-  const [stops, setStops] = useState<TripStop[] | null>(null);
-  const [live, setLive] = useState<Omit<TripLive, "stops"> | null>(null);
+type LiveState = Omit<TripLive, "stops" | "loopEnd">;
 
-  const apply = useCallback((m: TripMsg | TripDetail) => {
-    const fc = m.forecast?.stops ?? [];
-    setLive((prev) => ({
-      run: m.run ?? prev?.run ?? null,
-      delayS: ("measuredDelaySec" in m ? m.measuredDelaySec : m.liveDelaySec) ?? m.run?.lastDelayS ?? prev?.delayS ?? null,
-      forecast: fc.length ? new Map(fc.map((s) => [s.idx, s])) : (prev?.forecast ?? new Map()),
-      vehicle: "vehicle" in m ? m.vehicle : (prev?.vehicle ?? null),
-    }));
-  }, []);
+export function useTripLive(tripId: string): TripLive | null {
+  // Az állapot a menethez kötött: menetváltáskor (körbeutazás) az előző
+  // menet adata egy pillanatra sem keveredhet az újéval.
+  const [meta, setMeta] = useState<{ tripId: string; stops: TripStop[]; loopEnd: boolean } | null>(null);
+  const [live, setLive] = useState<LiveState | null>(null);
+  const current = useRef(tripId);
+  current.current = tripId;
+
+  const apply = useCallback(
+    (m: TripMsg | TripDetail) => {
+      const fc = m.forecast?.stops ?? [];
+      setLive((p) => {
+        const prev = p?.tripId === tripId ? p : null;
+        return {
+          tripId,
+          run: m.run ?? prev?.run ?? null,
+          delayS: ("measuredDelaySec" in m ? m.measuredDelaySec : m.liveDelaySec) ?? m.run?.lastDelayS ?? prev?.delayS ?? null,
+          forecast: fc.length ? new Map(fc.map((s) => [s.idx, s])) : (prev?.forecast ?? new Map()),
+          vehicle: "vehicle" in m ? m.vehicle : (prev?.vehicle ?? null),
+        };
+      });
+    },
+    [tripId],
+  );
 
   const load = useCallback(() => {
     fetch(`${API_BASE}/engine/trip?trip=${encodeURIComponent(tripId)}`, { cache: "no-store" })
       .then((r) => (r.ok ? (r.json() as Promise<TripDetail>) : null))
       .then((d) => {
-        if (!d) return;
-        setStops(d.stops);
+        // Egy lassan visszaérő, előző menetre szóló válasz ne írja felül az újat.
+        if (!d || current.current !== tripId) return;
+        setMeta({ tripId, stops: d.stops, loopEnd: Boolean(d.loopEnd) });
         apply(d);
       })
       .catch(() => {});
@@ -72,8 +91,8 @@ export function useTripLive(tripId: string): TripLive | null {
   useTopic(`trip:${tripId}`, (m) => apply(m.data as TripMsg));
   useFallbackPoll(load, 15_000);
 
-  if (!stops || !live) return null;
-  return { stops, ...live };
+  if (meta?.tripId !== tripId || live?.tripId !== tripId) return null;
+  return { ...live, stops: meta.stops, loopEnd: meta.loopEnd };
 }
 
 /** légvonalbeli távolság (m) */

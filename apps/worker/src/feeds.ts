@@ -36,6 +36,8 @@ export class FeedManager {
   private loaded = new Map<number, Feed>();
   private meta: FeedRow[] = [];
   private dayCache = new Map<string, ServiceDay | null>();
+  /** új feed betöltése közben a korábbi napok (hogy addig se maradjon üresen az élő motor) */
+  private warming: Map<string, ServiceDay | null> | null = null;
   private recorded = new Set<string>();
   lastCheck: { at: string; result: string } | null = null;
 
@@ -110,9 +112,16 @@ export class FeedManager {
         if (status === "ok") {
           await this.reloadMeta();
           this.loaded.set(this.meta.find((m) => m.sha256 === feed.hash)!.id, feed);
-          this.dayCache.clear();
+          // Csere, nem ürítés: a betöltés alatt az illesztő és a megállófigyelő a régi napokkal dolgozik tovább.
+          const prev = this.dayCache;
+          this.dayCache = new Map();
           this.recorded.clear();
-          await this.warmToday();
+          this.warming = prev;
+          try {
+            await this.warmToday();
+          } finally {
+            this.warming = null;
+          }
         }
       }
     } catch (e) {
@@ -179,14 +188,20 @@ export class FeedManager {
       day = resolveServiceDay(feeds, iso);
     }
     this.dayCache.set(iso, day);
-    if (this.dayCache.size > 40) this.dayCache.delete(this.dayCache.keys().next().value!);
-    if (day && iso >= today && !this.recorded.has(iso)) await this.record(day);
+    // A tegnap/ma/holnap sosem eshet ki: a menetrend-lekérdezések (?date=) nem szoríthatják ki az élő motor napjait.
+    if (this.dayCache.size > 40) {
+      const pinned = new Set([shiftIso(today, -1), today, shiftIso(today, 1)]);
+      const victim = [...this.dayCache.keys()].find((k) => !pinned.has(k));
+      if (victim) this.dayCache.delete(victim);
+    }
+    // Csak a mai és a holnapi döntést rögzítjük (egy távoli jövőbeli kérés ne írjon a service_day-be).
+    if (day && (iso === today || iso === shiftIso(today, 1)) && !this.recorded.has(iso)) await this.record(day);
     return day;
   }
 
   /** Szinkron változat a forró úthoz (csak a már feloldott napokra). */
   cachedDay(iso: string): ServiceDay | null {
-    return this.dayCache.get(iso) ?? null;
+    return this.dayCache.get(iso) ?? this.warming?.get(iso) ?? null;
   }
 
   private async record(day: ServiceDay) {

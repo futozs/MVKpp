@@ -2,7 +2,8 @@
  * /v3/sync — kétirányú, kulcsonkénti felhős szinkron.
  *
  * Minden mvk_* localStorage-kulcs külön sor; a később módosított nyer
- * (last-write-wins, a kliens óráját a szerveridőhöz igazítva). Új eszközön
+ * (last-write-wins a szerkesztés ideje szerint; a letöltés kurzora a szerver
+ * írási ideje, így a késő órájú vagy offline eszköz módosítása is átér). Új eszközön
  * bejelentkezve az összes kedvenc és beállítás letöltődik; változáskor a
  * többi bejelentkezett eszköz WebSocketen azonnal értesül.
  */
@@ -19,7 +20,26 @@ const MAX_USER_BYTES = 4 * 1024 * 1024;
 /** Eszközhöz kötött kulcsok: ezeket nem szinkronizáljuk (pl. a telepítési banner elrejtése). */
 // Ugyanaz a lista, mint a kliensen (apps/web/src/lib/sync.ts). Az mvk_account
 // a munkamenet-tokent tartalmazza: az SOHA nem kerülhet a szerverre.
-export const DEVICE_ONLY = new Set(["mvk_account", "mvk_device_id", "mvk_sync_meta", "mvk_install_dismissed", "mvk_geo_last_fix", "mvk_view_state", "mvk_map_view", "mvk_timetable_view", "mvk_rides", "mvk_ride_active"]);
+// Az értesítés-figyelések az adott eszköz push-feliratkozásához tartoznak, a
+// helymeghatározás engedélye is eszközönkénti — ezek sem utazhatnak át.
+export const DEVICE_ONLY = new Set([
+  "mvk_account",
+  "mvk_device_id",
+  "mvk_sync_meta",
+  "mvk_install_dismissed",
+  "mvk_geo_last_fix",
+  "mvk_geo_enabled",
+  "mvk_notify_watches",
+  "mvk_notify_settings",
+  "mvk_view_state",
+  "mvk_map_view",
+  "mvk_timetable_view",
+  "mvk_rides",
+  "mvk_ride_active",
+  "mvk_ride_deleted",
+  "mvk_heat_route",
+  "mvk_map_panel",
+]);
 
 export async function applyState(userId: string, items: StateItem[], deviceId: string | null): Promise<{ applied: string[]; stale: StateItem[] }> {
   const applied: string[] = [];
@@ -35,7 +55,8 @@ export async function applyState(userId: string, items: StateItem[], deviceId: s
     if (t > now + 60_000) t = now;
     const r = await getPool().query<{ key: string }>(
       `INSERT INTO user_state (user_id, key, value, deleted, updated_at, device_id) VALUES ($1, $2, $3, $4, to_timestamp($5 / 1000.0), $6)
-       ON CONFLICT (user_id, key) DO UPDATE SET value = EXCLUDED.value, deleted = EXCLUDED.deleted, updated_at = EXCLUDED.updated_at, device_id = EXCLUDED.device_id
+       ON CONFLICT (user_id, key) DO UPDATE SET value = EXCLUDED.value, deleted = EXCLUDED.deleted, updated_at = EXCLUDED.updated_at,
+         device_id = EXCLUDED.device_id, synced_at = now()
          WHERE user_state.updated_at < EXCLUDED.updated_at
        RETURNING key`,
       [userId, it.key, JSON.stringify(it.value ?? null), Boolean(it.deleted), t, deviceId],
@@ -56,12 +77,16 @@ const routes: Route[] = [
   route("GET", "/v3/sync", async (req, _p, url) => {
     const u = await requireUser(req);
     const since = url.searchParams.get("since");
+    const sinceOk = since && Number.isFinite(Date.parse(since)) ? since : null;
+    // A kurzor a szerver írási ideje (synced_at): amit a kliens a legutóbbi
+    // `serverTime` óta nem látott, az mind jön — a szerkesztő eszköz órájától függetlenül.
+    const serverTime = new Date().toISOString();
     const rows = await sql<{ key: string; value: unknown; deleted: boolean; updated_at: Date }>(
-      `SELECT key, value, deleted, updated_at FROM user_state WHERE user_id = $1 ${since ? "AND updated_at > $2::timestamptz" : ""} ORDER BY updated_at`,
-      since ? [u.id, since] : [u.id],
+      `SELECT key, value, deleted, updated_at FROM user_state WHERE user_id = $1 ${sinceOk ? "AND synced_at > $2::timestamptz - interval '5 seconds'" : ""} ORDER BY synced_at`,
+      sinceOk ? [u.id, sinceOk] : [u.id],
     );
     return json({
-      serverTime: new Date().toISOString(),
+      serverTime,
       email: u.email,
       items: rows.map((r) => ({ key: r.key, value: r.value, deleted: r.deleted, updatedAt: r.updated_at.toISOString() })),
     });

@@ -14,7 +14,12 @@ export function useStatsQuery<T>(
   deps: unknown[],
   enabled = true,
 ): QueryState<T> {
-  const [data, setData] = useState<T | null>(null);
+  // Az adat a lekérdezés kulcsához kötött: másik jármű / megálló / időszak
+  // választásakor a régi számok nem maradnak kint az új cím alatt (amíg az új
+  // betölt, a töltésjelző látszik); ugyanarra a kulcsra frissítéskor viszont igen.
+  const key = JSON.stringify(deps);
+  const [stored, setStored] = useState<{ key: string; data: T } | null>(null);
+  const data = stored?.key === key ? stored.data : null;
   const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<string | null>(null);
   const [unavailable, setUnavailable] = useState(false);
@@ -33,7 +38,7 @@ export function useStatsQuery<T>(
     fetcher()
       .then((d) => {
         if (!alive) return;
-        setData(d);
+        setStored({ key, data: d });
         setUnavailable(false);
       })
       .catch((e: unknown) => {

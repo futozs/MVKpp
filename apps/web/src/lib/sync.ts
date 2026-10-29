@@ -15,7 +15,25 @@ import { realtime } from "@/lib/realtime";
 const DEVICE_KEY = "mvk_device_id";
 const META_KEY = "mvk_sync_meta";
 /** Eszközhöz kötött kulcsok — ezek nem utaznak. */
-const DEVICE_ONLY = new Set(["mvk_account", DEVICE_KEY, META_KEY, "mvk_install_dismissed", "mvk_geo_last_fix", "mvk_view_state", "mvk_map_view", "mvk_timetable_view", "mvk_rides", "mvk_ride_active"]);
+const DEVICE_ONLY = new Set([
+  "mvk_account",
+  DEVICE_KEY,
+  META_KEY,
+  "mvk_install_dismissed",
+  "mvk_geo_last_fix",
+  // eszközönkénti engedély és push-feliratkozás
+  "mvk_geo_enabled",
+  "mvk_notify_watches",
+  "mvk_notify_settings",
+  "mvk_view_state",
+  "mvk_map_view",
+  "mvk_timetable_view",
+  "mvk_rides",
+  "mvk_ride_active",
+  "mvk_ride_deleted",
+  "mvk_heat_route",
+  "mvk_map_panel",
+]);
 const PUSH_DEBOUNCE_MS = 1500;
 const PULL_INTERVAL_MS = 5 * 60_000;
 
@@ -28,6 +46,9 @@ let original: { set: Storage["setItem"]; remove: Storage["removeItem"] } | null 
 let pushTimer: ReturnType<typeof setTimeout> | null = null;
 let started = false;
 let pulling = false;
+/** futó letöltés közben újabb kérés jött (pl. WebSocket-jelzés): utána még egyszer */
+let pullAgain = false;
+const SYNC_TIMEOUT_MS = 15_000;
 const listeners = new Set<(s: SyncStatus) => void>();
 
 export type SyncStatus = { state: "off" | "idle" | "syncing" | "error"; lastSyncAt: string | null; pendingRemote: boolean; error?: string };
@@ -110,6 +131,8 @@ async function api<T>(method: "GET" | "PUT", path: string, body?: unknown): Prom
     method,
     headers: { "content-type": "application/json", "x-account-session": s.sessionToken, "x-device-id": deviceId() },
     body: body ? JSON.stringify(body) : undefined,
+    // Egy beragadt mobil-kérés ne tartsa „szinkronizál” állapotban a végtelenségig.
+    signal: AbortSignal.timeout(SYNC_TIMEOUT_MS),
   });
   if (res.status === 401) throw new Error("A munkamenet lejárt — jelentkezz be újra.");
   if (!res.ok) throw new Error(`szinkron HTTP ${res.status}`);
@@ -163,7 +186,11 @@ function applyRemote(items: Item[], m: Meta): string[] {
 }
 
 export async function pull(opts: { full?: boolean } = {}): Promise<string[]> {
-  if (!getSession() || pulling) return [];
+  if (!getSession()) return [];
+  if (pulling) {
+    pullAgain = true;
+    return [];
+  }
   pulling = true;
   setStatus({ state: "syncing" });
   try {
@@ -193,6 +220,10 @@ export async function pull(opts: { full?: boolean } = {}): Promise<string[]> {
     return [];
   } finally {
     pulling = false;
+    if (pullAgain) {
+      pullAgain = false;
+      void pull().then((c) => c.length && announce(c));
+    }
   }
 }
 
@@ -214,11 +245,22 @@ export function startSync(): void {
     if (getSession()) void onLoggedIn();
     else onLoggedOut();
   });
+  // Az élő szinkron (WebSocket, időzítő, háttérbe kerülés) bejelentkezés nélkül is
+  // fel van iratkozva — a kezelők maguk nézik a munkamenetet. Így egy menet közbeni
+  // bejelentkezés után is azonnal él, nem csak az app következő indításakor.
+  const refresh = () => void pull().then((c) => c.length && announce(c));
+  realtime.subscribe("sync", refresh);
+  setInterval(refresh, PULL_INTERVAL_MS);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") refresh();
+    else void push();
+  });
+  window.addEventListener("pagehide", () => void push());
+
   const s = getSession();
   if (!s) return;
   setStatus({ state: "idle" });
   realtime.authenticate(s.sessionToken, deviceId());
-  realtime.subscribe("sync", () => void pull().then((c) => c.length && announce(c)));
   const first = !readMeta().lastPull;
   if (first) writeMeta({ lastPull: null, stamps: {}, dirty: [] });
   void pull({ full: first }).then((changed) => {
@@ -226,12 +268,6 @@ export function startSync(): void {
     if (first && changed.length) location.reload();
     else if (changed.length) announce(changed);
   });
-  setInterval(() => void pull().then((c) => c.length && announce(c)), PULL_INTERVAL_MS);
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") void pull().then((c) => c.length && announce(c));
-    else void push();
-  });
-  window.addEventListener("pagehide", () => void push());
 }
 
 /** Bejelentkezés után: teljes szinkron + valós idejű értesítés. */
@@ -251,4 +287,6 @@ export function onLoggedOut(): void {
   realtime.authenticate(null, deviceId());
   writeMeta({ lastPull: null, stamps: {}, dirty: [] });
   setStatus({ state: "off", lastSyncAt: null, pendingRemote: false });
+  // Közös eszközön a következő felhasználó ne lássa (és ne töltse fel a saját fiókjába) az előző utazásait.
+  window.dispatchEvent(new CustomEvent("mvk-rides-reset"));
 }

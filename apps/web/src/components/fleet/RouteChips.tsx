@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import type { LiveVehicle, Route } from "@/types";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn, normalizeSearchText } from "@/lib/utils";
 
@@ -9,7 +8,6 @@ interface RouteChipsProps {
   routes: Record<string, Route>;
   selectedRoutes: string[];
   onToggleRoute: (routeId: string) => void;
-  onSetRoutes: (routeIds: string[]) => void;
   liveVehicles: LiveVehicle[];
 }
 
@@ -17,7 +15,6 @@ export function RouteChips({
   routes,
   selectedRoutes,
   onToggleRoute,
-  onSetRoutes,
   liveVehicles,
 }: RouteChipsProps) {
   const [query, setQuery] = useState("");
@@ -42,70 +39,59 @@ export function RouteChips({
     [routes],
   );
 
+  // Alapból csak a most futó járatok (rövidebb lista); a kiválasztottak mindig látszanak.
+  const [onlyLive, setOnlyLive] = useState(true);
+  const selected = new Set(selectedRoutes);
+
+  // A kiválasztottak elöl (látszódjon, mi van bekapcsolva), utána sorszám szerint.
   const visible = useMemo(() => {
     const q = normalizeSearchText(query.trim());
-    if (!q) return ordered;
-    return ordered.filter(
+    const list = ordered.filter(
       (r) =>
-        normalizeSearchText(r.short).includes(q) ||
-        (r.long && normalizeSearchText(r.long).includes(q)),
+        (!q || normalizeSearchText(r.short).includes(q) || (r.long && normalizeSearchText(r.long).includes(q))) &&
+        (!onlyLive || liveCountByRoute[r.id] || selectedRoutes.includes(r.id)),
     );
-  }, [ordered, query]);
+    return [...list.filter((r) => selectedRoutes.includes(r.id)), ...list.filter((r) => !selectedRoutes.includes(r.id))];
+  }, [ordered, query, onlyLive, liveCountByRoute, selectedRoutes]);
 
-  const selected = new Set(selectedRoutes);
-  const runningRouteIds = Object.keys(liveCountByRoute).filter(
-    (id) => routes[id],
-  );
+  const liveRoutes = Object.keys(liveCountByRoute).filter((id) => routes[id]).length;
 
   return (
     <div className="space-y-2.5">
-      <div className="flex flex-wrap gap-1.5">
-        <Button
-          variant="secondary"
-          size="sm"
-          className="h-7 px-2.5 text-[11px]"
-          onClick={() => onSetRoutes(runningRouteIds)}
-          disabled={runningRouteIds.length === 0}
+      <div className="flex items-center gap-1.5">
+        <div className="relative min-w-0 flex-1">
+          <Search
+            aria-hidden
+            className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+          />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Járatszám vagy útvonal"
+            aria-label="Járat keresése"
+            className="h-9 pl-8 text-xs"
+          />
+        </div>
+        <button
+          type="button"
+          onClick={() => setOnlyLive((v) => !v)}
+          aria-pressed={onlyLive}
+          title="Csak azok a járatok, amelyeken most busz közlekedik"
+          className={cn(
+            "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-[11px] font-semibold transition-colors duration-fast",
+            "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+            onlyLive ? "border-primary bg-primary/12 text-primary" : "border-border text-muted-foreground hover:bg-accent hover:text-foreground",
+          )}
         >
-          Csak a futók ({runningRouteIds.length})
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 px-2.5 text-[11px]"
-          onClick={() => onSetRoutes(Object.keys(routes))}
-        >
-          Mind
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 px-2.5 text-[11px]"
-          onClick={() => onSetRoutes([])}
-          disabled={selectedRoutes.length === 0}
-        >
-          Egy sem
-        </Button>
-      </div>
-
-      <div className="relative">
-        <Search
-          aria-hidden
-          className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
-        />
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Járatszám vagy útvonal"
-          aria-label="Járat keresése"
-          className="h-8 pl-8 text-xs"
-        />
+          <span className={cn("h-1.5 w-1.5 rounded-full", onlyLive ? "bg-primary" : "bg-muted-foreground/60")} />
+          Csak futó ({liveRoutes})
+        </button>
       </div>
 
       <div className="flex max-h-56 flex-wrap gap-1.5 overflow-y-auto pr-1">
         {visible.length === 0 ? (
           <p className="py-1 text-xs text-muted-foreground">
-            Nincs „{query}” jelzésű járat.
+            {query.trim() ? `Nincs „${query.trim()}” jelzésű járat.` : "Járatok betöltése…"}
           </p>
         ) : (
           visible.map((route) => {

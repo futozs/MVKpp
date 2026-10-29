@@ -150,6 +150,8 @@ export class Hub {
   private motionOf(id: string, gpsSpeed: number | null) {
     const m = this.engine.matcher.motion(id);
     if (!m) return null;
+    // Álló busznál (megálló, lámpa) nincs becslés: a jel helyén marad, amíg újra el nem indul.
+    if (m.stopped) return { s: m.shapeId, a: m.alongM, t: m.ts, e: m.toAlongM, v: 0 };
     const run = this.engine.todayRuns.get(m.tripId);
     const v = this.forecaster.segmentSpeed(m, run?.serviceDate ?? this.engine.today) ?? gpsSpeed ?? 6;
     return { s: m.shapeId, a: m.alongM, t: m.ts, e: m.toAlongM, v: Math.round(Math.min(22, Math.max(1.5, v)) * 10) / 10 };

@@ -3,7 +3,7 @@ import { Bus, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { RouteTile } from "@/components/transit/RouteTile";
 import type { LiveVehicle } from "@/types";
-import type { Ride } from "@/lib/rides";
+import { useRides, type Ride } from "@/lib/rides";
 
 /** „Éppen erre a buszra szálltál fel?” — a felismerő kérdése a térkép tetején. */
 export function BoardingPrompt({ vehicle, onYes, onNo }: { vehicle: LiveVehicle; onYes: () => void; onNo: () => void }) {
@@ -40,15 +40,20 @@ export function BoardingPrompt({ vehicle, onYes, onNo }: { vehicle: LiveVehicle;
 
 const fmtKm = (m: number | null) => (m == null ? null : `${(m / 1000).toLocaleString("hu-HU", { maximumFractionDigits: 1 })} km`);
 
-/** Utazás után: rövid összegzés, néhány másodpercig. */
-export function RideSavedNote({ ride, onClose }: { ride: Ride; onClose: () => void }) {
+/** Utazás után: rövid összegzés, néhány másodpercig (körbeutazásnál az egész útról). */
+export function RideSavedNote({ ride: last, onClose }: { ride: Ride; onClose: () => void }) {
+  const all = useRides();
+  const legs = last.chainId ? all.filter((r) => r.chainId === last.chainId).sort((a, b) => a.boardedAt - b.boardedAt) : [last];
+  const first = legs[0] ?? last;
+  const sum = (pick: (r: Ride) => number | null) => (legs.some((r) => pick(r) != null) ? legs.reduce((a, r) => a + (pick(r) ?? 0), 0) : null);
+  const ride = { ...last, fromStopName: first.fromStopName, stops: sum((r) => r.stops), distanceM: sum((r) => r.distanceM), boardedAt: first.boardedAt };
   const mins = ride.alightedAt ? Math.max(1, Math.round((ride.alightedAt - ride.boardedAt) / 60)) : null;
   return (
     <div role="status" className="absolute inset-x-3 bottom-3 z-drawer mx-auto max-w-md rounded-2xl border border-border bg-card p-4 shadow-xl md:inset-x-auto md:right-4 md:w-[380px]">
       <div className="flex items-start gap-3">
         <RouteTile short={ride.route} color={ride.color} text={ride.text} />
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-bold">Utazás elmentve</p>
+          <p className="text-sm font-bold">{legs.length > 1 ? `Körbeutazás elmentve · ${legs.length} menet` : "Utazás elmentve"}</p>
           <p className="mt-0.5 truncate text-xs text-muted-foreground">
             {ride.fromStopName ?? "?"} → {ride.toStopName ?? "?"}
           </p>

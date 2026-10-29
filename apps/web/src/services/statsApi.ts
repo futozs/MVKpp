@@ -1,4 +1,5 @@
 import { API_BASE } from "@/lib/apiBase";
+import { serviceNow } from "@/lib/serviceDay";
 
 export class StatsUnavailableError extends Error {
   constructor(message: string) {
@@ -498,9 +499,9 @@ export function fmtKm(meters: number | null | undefined): string {
   return `${(meters / 1000).toFixed(1)} km`;
 }
 
+/** A mai szolgáltatási nap (Budapest szerint, 3:00-kor vált — a készülék időzónájától függetlenül). */
 export function serviceToday(): string {
-  const d = new Date(Date.now() - 3 * 3600_000);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return serviceNow().iso;
 }
 
 export function shiftDate(iso: string, days: number): string {
