@@ -107,6 +107,17 @@ const routes: Route[] = [
     return json({ from, to, incidents: rows, byDay });
   }),
 
+  /**
+   * Rendszám-jóslás pontossága: a 30 / 15 / 5 perccel az indulás előtt
+   * rögzített jóslatok, ahogy a menet tényleges indulásakor kiértékeltük őket.
+   */
+  route("GET", "/v3/stats/predictions", async (_req, _p, url) => {
+    const to = isoDate(url.searchParams.get("to")) ?? today();
+    const from = isoDate(url.searchParams.get("from")) ?? shiftIso(to, -13);
+    const data = await cached(`predictions:${from}:${to}`, to >= today() ? 60_000 : 30 * 60_000, () => predictionOverview(from, to));
+    return json(data);
+  }),
+
   /** Melyik napokra van adat (a dátumválasztók csak ezeket kínálják). */
   route("GET", "/v3/stats/days", async () =>
     json(await cached("days", 5 * 60_000, async () => ({ days: (await sql<{ d: string }>(`SELECT DISTINCT service_date::text AS d FROM trip_run ORDER BY 1`)).map((x) => x.d) }))),
@@ -114,3 +125,75 @@ const routes: Route[] = [
 ];
 
 export const handleV3Stats = (req: Request) => dispatch(routes, req);
+
+/** a kiértékelt jóslatok egy időszakban; $1 = from, $2 = to */
+const RESOLVED = `SELECT * FROM vehicle_prediction WHERE correct IS NOT NULL AND service_date BETWEEN $1 AND $2`;
+const RECENT_TRIPS = 500;
+
+async function predictionOverview(from: string, to: string) {
+  const args = [from, to];
+  const [byHorizon, pending, calibration, byMethod, signals, weights, daily, byHour, byRoute, byVehicle, trips] = await Promise.all([
+    sql(
+      `SELECT horizon_min AS horizon, count(*)::int AS n, count(*) FILTER (WHERE correct)::int AS hits, round(avg(confidence)::numeric, 3)::float8 AS avg_conf
+         FROM (${RESOLVED}) p GROUP BY 1 ORDER BY 1 DESC`,
+      args,
+    ),
+    sqlOne<{ n: number }>(`SELECT count(*)::int AS n FROM vehicle_prediction WHERE correct IS NULL AND service_date = $1`, [today()]),
+    sql(
+      `SELECT least(floor(confidence * 10), 9)::int AS bucket, count(*)::int AS n, count(*) FILTER (WHERE correct)::int AS hits,
+              round(avg(confidence)::numeric, 3)::float8 AS avg_conf
+         FROM (${RESOLVED}) p GROUP BY 1 ORDER BY 1`,
+      args,
+    ),
+    sql(
+      `SELECT method, count(*)::int AS n, count(*) FILTER (WHERE correct)::int AS hits, round(avg(confidence)::numeric, 3)::float8 AS avg_conf
+         FROM (${RESOLVED}) p GROUP BY 1 ORDER BY n DESC`,
+      args,
+    ),
+    // Jelzésenként: ha egyedül ez döntött volna, hányszor lett volna igaza.
+    sql(
+      `SELECT f.key AS signal, count(*)::int AS n, count(*) FILTER (WHERE f.value = p.actual_vehicle)::int AS hits
+         FROM (${RESOLVED}) p, jsonb_each_text(p.features) f GROUP BY 1 ORDER BY n DESC`,
+      args,
+    ),
+    sql(`SELECT signal, weight::float8 AS weight, hits, misses FROM vehicle_model_weight ORDER BY signal`),
+    sql(
+      `SELECT service_date::text AS date, count(*)::int AS n, count(*) FILTER (WHERE correct)::int AS hits
+         FROM (${RESOLVED}) p GROUP BY 1 ORDER BY 1`,
+      args,
+    ),
+    sql(
+      `SELECT (sched_start_s / 3600)::int AS hour, count(*)::int AS n, count(*) FILTER (WHERE correct)::int AS hits
+         FROM (${RESOLVED}) p GROUP BY 1 ORDER BY 1`,
+      args,
+    ),
+    sql(
+      `SELECT p.route_short, ro.color, ro.text_color, count(*)::int AS n, count(*) FILTER (WHERE p.correct)::int AS hits
+         FROM (${RESOLVED}) p LEFT JOIN route ro USING (route_short) GROUP BY 1, 2, 3 ORDER BY n DESC`,
+      args,
+    ),
+    // Rendszámonként: hányszor vitte a jósolt menetet, ebből hányat találtunk
+    // el, és hányszor jelöltük tévesen egy más által vitt menetre.
+    sql(
+      `WITH p AS (${RESOLVED})
+       SELECT vehicle_id, sum(carried)::int AS n, sum(hit)::int AS hits, sum(wrong_pick)::int AS wrong_picks
+         FROM (SELECT actual_vehicle AS vehicle_id, 1 AS carried, correct::int AS hit, 0 AS wrong_pick FROM p
+               UNION ALL
+               SELECT predicted_vehicle, 0, 0, 1 FROM p WHERE NOT correct) x
+        GROUP BY 1 ORDER BY n DESC, vehicle_id`,
+      args,
+    ),
+    sql(
+      `SELECT p.service_date::text AS date, p.trip_id, p.route_short, ro.color, ro.text_color, p.sched_start_s,
+              max(p.actual_vehicle) AS actual, max(r.headsign) AS headsign,
+              jsonb_agg(jsonb_build_object('h', p.horizon_min, 'v', p.predicted_vehicle, 'ok', p.correct, 'c', p.confidence, 'm', p.method)
+                        ORDER BY p.horizon_min DESC) AS guesses
+         FROM (${RESOLVED}) p
+         LEFT JOIN route ro USING (route_short)
+         LEFT JOIN trip_run r ON r.service_date = p.service_date AND r.trip_id = p.trip_id AND r.vehicle_id = p.actual_vehicle
+        GROUP BY 1, 2, 3, 4, 5, 6 ORDER BY 1 DESC, 6 DESC LIMIT ${RECENT_TRIPS}`,
+      args,
+    ),
+  ]);
+  return { from, to, pendingToday: pending?.n ?? 0, byHorizon, calibration, byMethod, signals, weights, daily, byHour, byRoute, byVehicle, trips };
+}

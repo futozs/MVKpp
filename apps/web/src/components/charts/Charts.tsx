@@ -498,7 +498,14 @@ export function HourHeat({ cells, legend }: { cells: { hour: number; value: numb
 
 /* ── rangsor ────────────────────────────────────────────────────────────── */
 
-export function RankBars({ rows, unit = "" }: { rows: { label: string; sub?: string; value: number; display?: string }[]; unit?: string }) {
+export function RankBars({
+  rows,
+  unit = "",
+}: {
+  /** barClass: a sáv színe, ha nem késést mutat (alapból „late”) */
+  rows: { label: ReactNode; sub?: ReactNode; value: number; display?: string; barClass?: string }[];
+  unit?: string;
+}) {
   if (!rows.length) return <EmptyChart />;
   const max = Math.max(...rows.map((r) => Math.abs(r.value)), 1);
   return (
@@ -513,7 +520,7 @@ export function RankBars({ rows, unit = "" }: { rows: { label: string; sub?: str
           {/* Az érték szövegszínű; a színt a sáv viseli. */}
           <span className="shrink-0 text-[12.5px] font-semibold tabular-nums text-foreground">{r.display ?? `${r.value}${unit}`}</span>
           <div className="col-span-2 h-1.5 overflow-hidden rounded-full bg-muted">
-            <div className="h-full rounded-full bg-late/80" style={{ width: `${(Math.abs(r.value) / max) * 100}%` }} />
+            <div className={cn("h-full rounded-full", r.barClass ?? "bg-late/80")} style={{ width: `${(Math.abs(r.value) / max) * 100}%` }} />
           </div>
         </li>
       ))}

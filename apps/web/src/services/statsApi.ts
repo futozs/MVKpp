@@ -341,6 +341,38 @@ export type IncidentV3 = {
 };
 export type IncidentsV3 = { from: string; to: string; incidents: IncidentV3[]; byDay: { service_date: string; kind: string; n: number }[] };
 
+/** egy kiértékelt csoport: hány jóslat, ebből hány talált */
+export type HitCount = { n: number; hits: number };
+export type PredictionGuess = { h: number; v: string; ok: boolean; c: number; m: string };
+export type PredictionTrip = {
+  date: string;
+  trip_id: string;
+  route_short: string;
+  color: string | null;
+  text_color: string | null;
+  sched_start_s: number;
+  actual: string;
+  headsign: string | null;
+  /** a legkorábbi horizont elöl (30 → 15 → 5 perc) */
+  guesses: PredictionGuess[];
+};
+export type PredictionOverviewData = {
+  from: string;
+  to: string;
+  pendingToday: number;
+  byHorizon: (HitCount & { horizon: number; avg_conf: number })[];
+  /** bucket: a bizonyosság tizede (0 = 0–10%, 9 = 90–100%) */
+  calibration: (HitCount & { bucket: number; avg_conf: number })[];
+  byMethod: (HitCount & { method: string; avg_conf: number })[];
+  signals: (HitCount & { signal: string })[];
+  weights: { signal: string; weight: number; hits: number; misses: number }[];
+  daily: (HitCount & { date: string })[];
+  byHour: (HitCount & { hour: number })[];
+  byRoute: (HitCount & { route_short: string; color: string | null; text_color: string | null })[];
+  byVehicle: (HitCount & { vehicle_id: string; wrong_picks: number })[];
+  trips: PredictionTrip[];
+};
+
 async function getRoot<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`);
   if (res.status === 503) throw new StatsUnavailableError("Az adatraktár nem érhető el.");
@@ -354,6 +386,7 @@ export const statsV3 = {
   incidents: (from: string, to: string, kind?: string, minConfidence = 50) =>
     getRoot<IncidentsV3>(`/v3/incidents?from=${from}&to=${to}&minConfidence=${minConfidence}${kind ? `&kind=${kind}` : ""}`),
   days: () => getRoot<{ days: string[] }>(`/v3/stats/days`),
+  predictions: (from: string, to: string) => getRoot<PredictionOverviewData>(`/v3/stats/predictions?from=${from}&to=${to}`),
 };
 
 export const statsApi = {

@@ -115,7 +115,7 @@ export function StatsView({
           type="button"
           onClick={() => setPanel("overview")}
           aria-current={panel === "overview" ? "page" : undefined}
-          title="Áttekintés (összefoglaló nézet)"
+          title="Áttekintés: rendszám-jóslás pontossága és adatraktár"
           className={cn(
             "flex shrink-0 items-center gap-1.5 self-center whitespace-nowrap rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-colors",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
