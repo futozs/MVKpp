@@ -1,5 +1,5 @@
 /** v3 motor-végpontok: menet-részletek, idővonal (múltbeli helyzetek), élő zavarok. */
-import { localMidnightUnix, nowUnix, secToHm, tripStopRows } from "@mvk/core";
+import { findMissingTrips, localMidnightUnix, MISSING, nowUnix, secToHm, tripStopRows, type MissingCandidate, type MissingRun } from "@mvk/core";
 import { cached } from "@mvk/cache";
 import { sql } from "@mvk/db";
 import { HttpError, sendJson, type Router } from "./router.ts";
@@ -112,20 +112,27 @@ export function registerV3(r: Router, ctx: Ctx) {
     const now = nowUnix();
     const midnight = localMidnightUnix(engine.today);
     const cancelled = [...engine.cancelled.ids];
-    const missing: { tripId: string; route: string; time: string; headsign: string; lateMin: number }[] = [];
+    let missing: { tripId: string; route: string; time: string; headsign: string; lateMin: number }[] = [];
     if (day && engine.poll.lastOkAt && Date.now() - engine.poll.lastOkAt < 120_000) {
-      const started = new Map<string, number>();
-      for (const run of engine.todayRuns.values()) started.set(run.routeShort, (started.get(run.routeShort) ?? 0) + 1);
+      const nowS = now - midnight;
+      const candidates: MissingCandidate[] = [];
       for (const t of day.feed.trips.values()) {
         if (!day.services.has(t.serviceId) || engine.todayRuns.has(t.id) || engine.cancelled.ids.has(t.id)) continue;
         const st = day.feed.tripStops.get(t.id);
-        if (!st?.length) continue;
-        const late = now - (midnight + st[0].dep);
-        if (late < 15 * 60 || late > 90 * 60) continue;
+        const from = st?.length ? day.feed.stops.get(st[0].stopId) : undefined;
+        if (!st || !from || nowS - st[0].dep < MISSING.MIN_LATE_S || nowS - st[0].dep > MISSING.MAX_LATE_S) continue;
         const route = day.feed.routes.get(t.routeId)?.short ?? t.routeId;
-        if ((started.get(route) ?? 0) < 3) continue; // ezen a vonalon ma alig látunk járművet → nem gyanakszunk
-        missing.push({ tripId: t.id, route, time: secToHm(st[0].dep), headsign: t.headsign, lateMin: Math.round(late / 60) });
+        candidates.push({ tripId: t.id, route, headsign: t.headsign, depS: st[0].dep, fromLat: from.lat, fromLon: from.lon });
       }
+      const runs: MissingRun[] = [];
+      for (const run of engine.todayRuns.values()) {
+        if (run.status === "aborted") continue;
+        const running = run.status === "running";
+        const st = running ? day.feed.tripStops.get(run.tripId) : undefined;
+        const to = st?.length ? day.feed.stops.get(st[st.length - 1].stopId) : undefined;
+        runs.push({ route: run.routeShort, schedStartS: run.schedStartS, schedEndS: run.schedEndS, running, toLat: to?.lat ?? null, toLon: to?.lon ?? null });
+      }
+      missing = findMissingTrips(candidates, runs, nowS).map((m) => ({ tripId: m.tripId, route: m.route, time: secToHm(m.depS), headsign: m.headsign, lateMin: m.lateMin }));
     }
     sendJson(req, res, 200, { date: engine.today, cancelled: cancelled.length, cancelledTripIds: cancelled, missing, count: cancelled.length + missing.length });
   });

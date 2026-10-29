@@ -13,7 +13,7 @@
  *                 és NEM ismert térerő-hiányos helyen (ahol ugyanez a minta
  *                 más napokon is rendszeresen elhallgat)
  */
-import { localMidnightUnix, secToHm, type ServiceDay } from "@mvk/core";
+import { isOnDemandTrip, localMidnightUnix, secToHm, type ServiceDay } from "@mvk/core";
 import { getPool, sql } from "@mvk/db";
 import type { FeedManager } from "./feeds.ts";
 import { log } from "./log.ts";
@@ -110,6 +110,8 @@ async function missedTrips(day: ServiceDay, iso: string): Promise<IncidentIn[]> 
   const out: IncidentIn[] = [];
   for (const t of day.feed.trips.values()) {
     if (!day.services.has(t.serviceId) || ranIds.has(t.id) || cancelled.has(t.id)) continue;
+    // „igény esetén” menet kérés nélkül el sem indul — nem kimaradás
+    if (isOnDemandTrip(t.headsign)) continue;
     const st = day.feed.tripStops.get(t.id);
     if (!st || st.length < 2) continue;
     const route = day.feed.routes.get(t.routeId)?.short ?? t.routeId;

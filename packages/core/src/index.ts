@@ -14,3 +14,4 @@ export * from "./matcher.ts";
 export * from "./rotation.ts";
 export * from "./parking.ts";
 export * from "./forecast.ts";
+export * from "./missing.ts";
