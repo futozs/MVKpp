@@ -96,7 +96,7 @@ export class Hub {
 
   /** Feliratkozáskor azonnal a teljes állapot. */
   private async initial(c: Client, topic: string) {
-    if (topic === "vehicles") return this.send(c, { t: "vehicles", full: this.engine.snapshot.decoded, at: this.engine.snapshot.fetchedAt });
+    if (topic === "vehicles") return this.send(c, { t: "vehicles", full: this.engine.snapshot.decoded.map((v) => this.withMotion(v)), at: this.engine.snapshot.fetchedAt });
     if (topic === "parking") return this.send(c, { t: "parking", id: "", data: this.parking.snapshot() });
     if (topic.startsWith("stop:")) return this.send(c, { t: "stop", id: topic.slice(5), data: this.stopData(topic.slice(5)) });
     if (topic.startsWith("trip:")) return this.send(c, { t: "trip", id: topic.slice(5), data: this.tripData(topic.slice(5)) });
@@ -142,16 +142,33 @@ export class Hub {
     return out;
   }
 
+  /**
+   * A jármű mozgásállapota a térképi becsléshez (rövid kulcsokkal):
+   * s = nyomvonal, a = hol tart (m), t = a jel ideje, e = a következő megálló (m),
+   * v = várható sebesség (m/s). A kliens ezzel viszi tovább a buszt két jel között.
+   */
+  private motionOf(id: string, gpsSpeed: number | null) {
+    const m = this.engine.matcher.motion(id);
+    if (!m) return null;
+    const run = this.engine.todayRuns.get(m.tripId);
+    const v = this.forecaster.segmentSpeed(m, run?.serviceDate ?? this.engine.today) ?? gpsSpeed ?? 6;
+    return { s: m.shapeId, a: m.alongM, t: m.ts, e: m.toAlongM, v: Math.round(Math.min(22, Math.max(1.5, v)) * 10) / 10 };
+  }
+
+  private withMotion(v: DecodedVehicle) {
+    return { ...v, motion: this.motionOf(v.id, v.speed) };
+  }
+
   private onTick() {
     // Járművek: csak a változott sorok.
     const vehSubs = this.subscribers("vehicles");
     const cur = new Map<string, DecodedVehicle>();
     for (const v of this.engine.snapshot.decoded) cur.set(v.id, v);
-    const upd: DecodedVehicle[] = [];
+    const upd: (DecodedVehicle & { motion: unknown })[] = [];
     for (const [id, v] of cur) {
       const sig = `${v.timestamp}|${v.lat}|${v.lon}|${v.tripId}|${v.bearing}`;
       if (this.lastVehicles.get(id) !== sig) {
-        upd.push(v);
+        upd.push(this.withMotion(v));
         this.lastVehicles.set(id, sig);
       }
     }

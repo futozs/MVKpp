@@ -36,7 +36,21 @@ export interface GtfsMeta {
   archiveRange?: { from: string; to: string; days: number } | null;
 }
 
+/**
+ * A jármű helyzete a nyomvonalán (a WebSocket küldi): s = nyomvonal, a = hol tart (m),
+ * t = a jel ideje (unix), e = a következő megálló (m), v = várható sebesség (m/s).
+ */
+export interface LiveMotion {
+  s: string;
+  a: number;
+  t: number;
+  e: number;
+  v: number;
+}
+
 export interface LiveVehicle {
+  /** v3: a térképi becsléshez (csak WebSocketen) */
+  motion?: LiveMotion | null;
   id: string;
   label: string;
   routeId: string;

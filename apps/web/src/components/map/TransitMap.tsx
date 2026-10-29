@@ -40,6 +40,8 @@ import { token } from "@/lib/theme";
 import { cn, normalizeSearchText } from "@/lib/utils";
 import { MapTimeline } from "./MapTimeline";
 import { createVehicleIcon } from "./vehicleIcon";
+import { estimatePosition, type Shown } from "./liveMotion";
+import { serverNow } from "@/lib/realtime";
 
 export interface TileLayerOption {
   id: string;
@@ -309,6 +311,38 @@ interface TransitMapProps {
   onOpenMapPicker: () => void;
 }
 
+const MOTION_TICK_MS = 250;
+
+type LiveMarker = { marker: L.Marker; iconKey: string; v: LiveVehicle; shown: Shown | undefined };
+
+/** A jármű buborékja (megnyitáskor készül, így mindig a friss adatot mutatja). */
+function vehiclePopupHtml(v: LiveVehicle): string {
+      const speed = v.speed != null ? `${Math.round(v.speed * 3.6)} km/h` : "—";
+  return `
+        <div style="min-width:210px">
+          <div style="display:flex;align-items:center;gap:9px;margin-bottom:10px">
+            <span style="display:inline-flex;align-items:center;justify-content:center;min-width:40px;height:26px;padding:0 8px;border-radius:8px;font-weight:800;font-size:14px;background:#${v.routeColor || "1FB574"};color:#${v.routeText || "FFFFFF"}">${v.routeShort}</span>
+            <strong style="font-size:13px">${v.headsign || "Járat"}</strong>
+          </div>
+          <div style="border-radius:10px;background:hsl(var(--primary)/0.09);border:1px solid hsl(var(--primary)/0.25);padding:9px 11px;margin-bottom:8px">
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:hsl(var(--muted-foreground))">Rendszám</div>
+            <div style="font-family:var(--font-mono);font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;color:hsl(var(--foreground))">${v.id}</div>
+          </div>
+          <div style="font-family:var(--font-mono);font-size:12px;color:hsl(var(--muted-foreground));display:grid;gap:3px">
+            <div>Sebesség <strong style="color:hsl(var(--foreground))">${speed}</strong></div>
+          </div>
+          ${
+            v.tripId
+              ? `<div style="margin-top:10px">
+                   <a href="#" data-trip="${v.tripId}" data-veh="${v.id}"
+                      style="display:block;text-align:center;padding:7px;border-radius:8px;background:hsl(var(--primary));color:hsl(var(--primary-foreground));font-size:12px;font-weight:700;text-decoration:none">Követés a térképen</a>
+                 </div>`
+              : ""
+          }
+        </div>
+      `;
+}
+
 export function TransitMap({
   stops,
   routes,
@@ -333,6 +367,7 @@ export function TransitMap({
   const labelLayerRef = useRef<L.TileLayer | null>(null);
   const stopLayerRef = useRef<L.LayerGroup | null>(null);
   const busLayerRef = useRef<L.LayerGroup | null>(null);
+  const liveMarkersRef = useRef(new Map<string, LiveMarker>());
   const routeLayerRef = useRef<L.LayerGroup | null>(null);
   const focusLayerRef = useRef<L.LayerGroup | null>(null);
   const geoCacheRef = useRef<Record<string, [number, number][][]>>({});
@@ -691,56 +726,53 @@ export function TransitMap({
   useEffect(() => {
     if (!mapRef.current || !busLayerRef.current) return;
     const layer = busLayerRef.current;
-    layer.clearLayers();
-    if (focusTripId || historyOn) return;
+    const live = liveMarkersRef.current;
+    if (focusTripId || historyOn) {
+      layer.clearLayers();
+      live.clear();
+      return;
+    }
 
     const visible = getVisibleVehicles();
     const watchSet = new Set(filters.watch.map((w) => w.toLowerCase()));
     const activeQ = filters.vq.trim().toLowerCase();
+    const seen = new Set<string>();
 
+    // A markerek megmaradnak (csak a változás frissül), így a becslés
+    // folyamatosan mozgathatja őket két GPS-jel között.
     visible.forEach((v) => {
       if (v.lat == null || v.lon == null) return;
+      seen.add(v.id);
 
       const tracked =
         watchSet.has(v.id.toLowerCase()) ||
         (activeQ ? v.id.toLowerCase().includes(activeQ) : false);
-
-      const marker = L.marker([v.lat, v.lon], {
-        icon: createVehicleIcon(
+      const showId = filters.labels || tracked;
+      const iconKey = `${v.routeShort}|${v.routeColor}|${v.routeText}|${tracked}|${showId}`;
+      const icon = () =>
+        createVehicleIcon(
           v.routeShort || "?",
           v.routeColor || "1FB574",
           v.routeText || "FFFFFF",
           tracked,
-          filters.labels || tracked ? v.id : null,
-        ),
-        zIndexOffset: tracked ? 1000 : 500,
-      });
+          showId ? v.id : null,
+        );
 
-      const speed = v.speed != null ? `${Math.round(v.speed * 3.6)} km/h` : "—";
-      marker.bindPopup(`
-        <div style="min-width:210px">
-          <div style="display:flex;align-items:center;gap:9px;margin-bottom:10px">
-            <span style="display:inline-flex;align-items:center;justify-content:center;min-width:40px;height:26px;padding:0 8px;border-radius:8px;font-weight:800;font-size:14px;background:#${v.routeColor || "1FB574"};color:#${v.routeText || "FFFFFF"}">${v.routeShort}</span>
-            <strong style="font-size:13px">${v.headsign || "Járat"}</strong>
-          </div>
-          <div style="border-radius:10px;background:hsl(var(--primary)/0.09);border:1px solid hsl(var(--primary)/0.25);padding:9px 11px;margin-bottom:8px">
-            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:hsl(var(--muted-foreground))">Rendszám</div>
-            <div style="font-family:var(--font-mono);font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;color:hsl(var(--foreground))">${v.id}</div>
-          </div>
-          <div style="font-family:var(--font-mono);font-size:12px;color:hsl(var(--muted-foreground));display:grid;gap:3px">
-            <div>Sebesség <strong style="color:hsl(var(--foreground))">${speed}</strong></div>
-          </div>
-          ${
-            v.tripId
-              ? `<div style="margin-top:10px">
-                   <a href="#" data-trip="${v.tripId}" data-veh="${v.id}"
-                      style="display:block;text-align:center;padding:7px;border-radius:8px;background:hsl(var(--primary));color:hsl(var(--primary-foreground));font-size:12px;font-weight:700;text-decoration:none">Követés a térképen</a>
-                 </div>`
-              : ""
-          }
-        </div>
-      `);
+      const entry = live.get(v.id);
+      if (entry) {
+        entry.v = v;
+        if (entry.iconKey !== iconKey) {
+          entry.marker.setIcon(icon());
+          entry.marker.setZIndexOffset(tracked ? 1000 : 500);
+          entry.iconKey = iconKey;
+        }
+        if (!v.motion) entry.marker.setLatLng([v.lat, v.lon]);
+        return;
+      }
 
+      const marker = L.marker([v.lat, v.lon], { icon: icon(), zIndexOffset: tracked ? 1000 : 500 });
+      const created: LiveMarker = { marker, iconKey, v, shown: undefined };
+      marker.bindPopup(() => vehiclePopupHtml(created.v));
       marker.on("popupopen", (e) => {
         const link = e.popup.getElement()?.querySelector("a[data-trip]");
         link?.addEventListener("click", (ev) => {
@@ -750,9 +782,15 @@ export function TransitMap({
           if (tId) onFocusTrip(tId, vId || undefined);
         });
       });
-
       marker.addTo(layer);
+      live.set(v.id, created);
     });
+
+    for (const [id, entry] of live) {
+      if (seen.has(id)) continue;
+      layer.removeLayer(entry.marker);
+      live.delete(id);
+    }
 
     if (filters.watch.length > 0 || activeQ) {
       const key = `${filters.watch.join(",")}|${activeQ}`;
@@ -777,6 +815,24 @@ export function TransitMap({
       lastFocusKeyRef.current = key;
     }
   }, [vehicles, filters, focusTripId, historyOn, routes, onFocusTrip]);
+
+  // Élő becslés: negyed másodpercenként a nyomvonalon továbbvisszük a buszokat
+  // (a szakasz szokásos sebességével, legfeljebb a következő megállóig).
+  useEffect(() => {
+    if (focusTripId || historyOn) return;
+    const tick = () => {
+      const now = serverNow();
+      for (const entry of liveMarkersRef.current.values()) {
+        const est = estimatePosition(entry.v.motion, now, entry.shown);
+        if (!est) continue;
+        entry.shown = est.shown;
+        entry.marker.setLatLng(est.latlng);
+      }
+    };
+    tick();
+    const t = setInterval(tick, MOTION_TICK_MS);
+    return () => clearInterval(t);
+  }, [focusTripId, historyOn]);
 
   useEffect(() => {
     if (!mapRef.current || !focusLayerRef.current) return;

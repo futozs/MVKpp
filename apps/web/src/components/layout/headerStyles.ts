@@ -5,7 +5,7 @@
 
 /** Különálló vezérlő (gomb, fül): gyűrű a kártya-háttértől elválasztva. */
 export const FOCUS_RING =
-  "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card";
+  "outline-none focus-visible:bg-accent/70 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring/70";
 
 /** Csoporton belüli szegmens: a gyűrű befelé rajzolódik, így nem vágja le a keret. */
 export const FOCUS_RING_INSET =

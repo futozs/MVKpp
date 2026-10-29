@@ -207,6 +207,21 @@ export function registerCompat(r: Router, ctx: Ctx) {
     sendJson(req, res, 200, [...feed.routes.values()].map((x) => [x.id, x.short, x.long, x.type, x.color, x.text]), { "cache-control": "public, max-age=300" });
   });
 
+  /**
+   * Egy nyomvonal pontjai és a pontokig mért hossz (m) — a térkép ezen viszi
+   * tovább a buszt két GPS-jel között. A hossz ugyanabból a vetítésből jön,
+   * mint az illesztőé, így a worker `along` értékei közvetlenül használhatók.
+   */
+  r.get("/gtfs/shape", (req, res) => {
+    const id = (req.query.get("id") ?? "").trim();
+    if (!id) throw new HttpError(400, "hiányzó ?id=");
+    const shape = feeds.cachedDay(engine.today)?.feed.shapes.get(id) ?? feeds.latest()?.shapes.get(id);
+    if (!shape) throw new HttpError(404, "ismeretlen nyomvonal");
+    const pts = shape.points.map(([lat, lon]) => [Math.round(lat * 1e6) / 1e6, Math.round(lon * 1e6) / 1e6]);
+    const cum = Array.from(shape.cum, (c) => Math.round(c * 10) / 10);
+    sendJson(req, res, 200, { id, pts, cum }, { "cache-control": "public, max-age=3600" });
+  });
+
   r.get("/gtfs/route-geo", (req, res) => {
     const want = (req.query.get("route") || "").split(",").map((x) => x.trim()).filter(Boolean).slice(0, 16);
     if (!want.length) throw new HttpError(400, "hiányzó ?route=");

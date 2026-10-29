@@ -11,6 +11,39 @@ type BlockRow = { id: string; kind: FleetKind; runs: BlockRun[]; plan: BlockPlan
 type Blocks = { date: string; midnight: number; now: number; vehicles: BlockRow[] };
 
 const REFRESH_MS = 60_000;
+type SortMode = "route" | "first" | "id";
+const SORTS: { id: SortMode; label: string }[] = [
+  { id: "route", label: "Vonal szerint" },
+  { id: "first", label: "Kiállás szerint" },
+  { id: "id", label: "Rendszám" },
+];
+const byNumeric = (a: string, b: string) => a.localeCompare(b, "hu", { numeric: true });
+
+/** A jármű „mostani” menete: ami fut, különben a következő tipp, különben az utolsó lefutott. */
+function anchorOf(v: BlockRow): { route: string; start: number } {
+  const running = v.runs.find((r) => r.st === "running");
+  if (running) return { route: running.r, start: running.as ?? running.s };
+  const next = v.plan[0];
+  if (next) return { route: next.r, start: next.s };
+  const last = v.runs[v.runs.length - 1];
+  return last ? { route: last.r, start: last.s } : { route: "?", start: Infinity };
+}
+
+type Group = { route: string | null; rows: BlockRow[] };
+
+/** Vonal szerint csoportosítva, a csoporton belül a mostani menet indulása szerint — mint egy menetrend. */
+function groupRows(rows: BlockRow[], sort: SortMode): Group[] {
+  if (sort === "id") return [{ route: null, rows: [...rows].sort((a, b) => byNumeric(a.id, b.id)) }];
+  if (sort === "first") return [{ route: null, rows }];
+  const groups = new Map<string, BlockRow[]>();
+  for (const v of rows) {
+    const k = anchorOf(v).route;
+    groups.set(k, [...(groups.get(k) ?? []), v]);
+  }
+  return [...groups]
+    .sort((a, b) => byNumeric(a[0], b[0]))
+    .map(([route, list]) => ({ route, rows: list.sort((a, b) => anchorOf(a).start - anchorOf(b).start) }));
+}
 const ROW_H = 30;
 const LEFT_W = 64;
 const HOUR = 3600;
@@ -44,6 +77,7 @@ export function BlockChart({ lookup, kind, query, onSelect }: { lookup: RouteLoo
   const { data, error } = useBlocks();
   const scroller = useRef<HTMLDivElement>(null);
   const [ppm, setPpm] = useState(() => (window.innerWidth < 640 ? 2 : 3));
+  const [sort, setSort] = useState<SortMode>("route");
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
     return (data?.vehicles ?? []).filter(
@@ -63,6 +97,7 @@ export function BlockChart({ lookup, kind, query, onSelect }: { lookup: RouteLoo
     return [Math.floor(lo / HOUR) * HOUR, Math.min(27 * HOUR, Math.ceil(hi / HOUR) * HOUR)];
   }, [data]);
   const x = (sec: number) => ((sec - t0) / 60) * ppm;
+  const groups = useMemo(() => groupRows(rows, sort), [rows, sort]);
   const width = x(t1);
 
   // Első betöltéskor a „most” legyen középen.
@@ -85,12 +120,21 @@ export function BlockChart({ lookup, kind, query, onSelect }: { lookup: RouteLoo
           <span className="flex items-center gap-1.5"><span className="h-2.5 w-5 rounded-sm border border-dashed border-foreground/70" /> tipp (forda-terv)</span>
           <span className="flex items-center gap-1.5"><span className="h-3 w-0.5 bg-primary" /> most</span>
         </div>
+        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1 rounded-lg border border-border bg-muted/60 p-0.5" role="group" aria-label="Rendezés">
+          {SORTS.map((o) => (
+            <button key={o.id} type="button" aria-pressed={sort === o.id} onClick={() => setSort(o.id)} className={cn("rounded-md px-2 py-1 text-xs font-semibold", sort === o.id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent")}>
+              {o.label}
+            </button>
+          ))}
+        </div>
         <div className="flex items-center gap-1 rounded-lg border border-border bg-muted/60 p-0.5" role="group" aria-label="Nagyítás">
           {[2, 3, 5].map((p) => (
             <button key={p} type="button" aria-pressed={ppm === p} onClick={() => setPpm(p)} className={cn("rounded-md px-2 py-1 text-xs font-semibold", ppm === p ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent")}>
               {p === 2 ? "Nap" : p === 3 ? "Félnap" : "Közeli"}
             </button>
           ))}
+        </div>
         </div>
       </header>
       <div ref={scroller} className="max-h-[70dvh] overflow-auto">
@@ -106,7 +150,10 @@ export function BlockChart({ lookup, kind, query, onSelect }: { lookup: RouteLoo
               ))}
             </div>
           </div>
-          {rows.map((v) => (
+          {groups.map((g) => (
+            <div key={g.route ?? "all"}>
+              {g.route ? <GroupHeader route={g.route} count={g.rows.length} lookup={lookup} width={width} /> : null}
+              {g.rows.map((v) => (
             <div key={v.id} className="flex border-b border-border/40" style={{ height: ROW_H }}>
               <button
                 type="button"
@@ -127,6 +174,8 @@ export function BlockChart({ lookup, kind, query, onSelect }: { lookup: RouteLoo
                 ))}
               </div>
             </div>
+              ))}
+            </div>
           ))}
           {/* most-vonal */}
           <div className="pointer-events-none absolute bottom-0 top-7 z-[5] w-0.5 bg-primary/80" style={{ left: LEFT_W + x(data.now) }} />
@@ -134,6 +183,24 @@ export function BlockChart({ lookup, kind, query, onSelect }: { lookup: RouteLoo
         {!rows.length ? <p className="px-4 py-8 text-center text-sm text-muted-foreground">Nincs ilyen jármű.</p> : null}
       </div>
     </section>
+  );
+}
+
+/** Csoportfejléc: a vonal csempéje balra rögzítve, mellette a járművek száma. */
+function GroupHeader({ route, count, lookup, width }: { route: string; count: number; lookup: RouteLookup; width: number }) {
+  const r = lookup(route);
+  return (
+    <div className="flex h-7 items-center border-b border-border bg-muted/40" style={{ width: width + LEFT_W }}>
+      <div className="sticky left-0 z-10 flex h-full items-center gap-2 bg-muted/90 px-2 backdrop-blur" style={{ minWidth: LEFT_W }}>
+        <span
+          className="flex h-[18px] min-w-[26px] items-center justify-center rounded-[5px] px-1 font-mono text-[11px] font-bold leading-none"
+          style={{ background: hex(r?.color, "3A4A44"), color: hex(r?.text, "FFFFFF") }}
+        >
+          {route}
+        </span>
+        <span className="whitespace-nowrap text-[11px] text-muted-foreground">{count} jármű</span>
+      </div>
+    </div>
   );
 }
 

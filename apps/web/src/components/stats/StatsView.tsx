@@ -53,12 +53,15 @@ export function StatsView({
   stops,
   routes,
   onFocusVehicle,
+  liveIncidents = 0,
 }: {
   stops: Stop[];
   routes: Route[];
   onFocusVehicle?: (vehicleId: string) => void;
+  /** van élő zavar (piros jelvény) → az Üzemzavarok nyíljon meg elsőként */
+  liveIncidents?: number;
 }) {
-  const [panel, setPanel] = useState<PanelId>("vehicle");
+  const [panel, setPanel] = useState<PanelId>(() => (liveIncidents ? "incident" : "vehicle"));
   const navRef = useRef<HTMLUListElement>(null);
 
   useEffect(() => {
@@ -134,7 +137,7 @@ export function StatsView({
           {panel === "vehicle" && (
             <VehiclePanel onFocusVehicle={onFocusVehicle} />
           )}
-          {panel === "incident" && <IncidentPanel />}
+          {panel === "incident" && <IncidentPanel routes={routes} />}
           {panel === "route" && <RoutePanel routes={routes} />}
           {panel === "stop" && <StopPanel stops={stops} />}
           {panel === "network" && <NetworkPanel />}

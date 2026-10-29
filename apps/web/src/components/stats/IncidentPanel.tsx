@@ -6,6 +6,8 @@ import { RouteTile } from "@/components/transit/RouteTile";
 import { cn } from "@/lib/utils";
 import { QueryBoundary, PillPicker } from "./PanelState";
 import { useStatsQuery } from "./useStatsQuery";
+import { useLiveIncidentDetails } from "@/hooks/useLiveIncidents";
+import type { Route } from "@/types";
 
 const RANGES = [
   { id: "7", label: "7 nap" },
@@ -37,7 +39,52 @@ const fmtTime = (unix: number) => new Date(unix * 1000).toLocaleTimeString("hu-H
  *    és NEM ismert térerő-hiányos szakaszon — bizonyítékkal és megbízhatósággal.
  * A v2 itt minden félbeszakadt menetet meghibásodásnak mutatott.
  */
-export function IncidentPanel() {
+/**
+ * Most élőben: a valószínűleg kimaradó menetek (ezeket számolja a fejléc piros
+ * jelvénye) és az MVK mai hivatalos törléseinek száma.
+ */
+function LiveIncidentsCard({ routes }: { routes: Route[] }) {
+  const live = useLiveIncidentDetails();
+  if (!live) return null;
+  const byShort = new Map(routes.map((r) => [r.short, r]));
+  return (
+    <section className={cn("rounded-2xl border p-4 sm:p-5", live.missing.length ? "border-late/40 bg-late/[0.06]" : "border-border bg-card")}>
+      <header className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h3 className="flex items-center gap-2 text-sm font-semibold tracking-tight">
+            <span className={cn("h-2 w-2 rounded-full", live.missing.length ? "bg-late motion-safe:animate-live-pulse" : "bg-ontime")} />
+            Most élőben
+          </h3>
+          <p className="mt-0.5 text-[11.5px] text-muted-foreground">
+            {live.missing.length
+              ? "Ezek a menetek 15–90 perce esedékesek, és egyetlen busz sem kezdte el őket (a vonalat közben követjük)."
+              : "Most nincs valószínűleg kimaradó menet."}
+          </p>
+        </div>
+        <span className="rounded-md bg-muted px-2 py-1 text-[11.5px] text-muted-foreground">
+          Ma <span className="font-semibold text-foreground">{live.cancelled}</span> hivatalos MVK-törlés
+        </span>
+      </header>
+      {live.missing.length ? (
+        <ul className="mt-3 divide-y divide-border/60">
+          {live.missing.map((m) => {
+            const r = byShort.get(m.route);
+            return (
+              <li key={m.tripId} className="flex items-center gap-3 py-2">
+                <RouteTile short={m.route} color={r?.color} text={r?.text} />
+                <span className="font-mono text-sm font-semibold tabular-nums">{m.time}</span>
+                <span className="min-w-0 flex-1 truncate text-[13px]">{m.headsign}</span>
+                <span className="shrink-0 text-[12px] font-semibold text-late">{m.lateMin} perce esedékes</span>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+    </section>
+  );
+}
+
+export function IncidentPanel({ routes = [] }: { routes?: Route[] }) {
   const [range, setRange] = useState<(typeof RANGES)[number]["id"]>("14");
   const [kind, setKind] = useState<(typeof KINDS)[number]["id"]>("all");
   const to = serviceToday();
@@ -50,6 +97,7 @@ export function IncidentPanel() {
 
   return (
     <div className="space-y-4">
+      <LiveIncidentsCard routes={routes} />
       <div className="space-y-2">
         <h2 className="text-lg font-bold tracking-tight sm:text-xl">Üzemzavarok</h2>
         <p className="max-w-3xl text-xs text-muted-foreground">

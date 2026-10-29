@@ -8,7 +8,13 @@ export function useAppHeight() {
       // (scale = 1 mellett) továbbra is csökkenti.
       const vv = window.visualViewport;
       const h = vv ? Math.round(vv.height * vv.scale) : window.innerHeight;
-      document.documentElement.style.setProperty("--app-h", `${h}px`);
+      // iOS-en a billentyűzet nyitásakor az oldal fel is gördül (offsetTop):
+      // az app a látható terület tetejéhez igazodik, különben alul üres sáv
+      // marad. Nagyítás közbeni görgetést nem követünk.
+      const top = vv && vv.scale < 1.01 ? Math.max(0, Math.round(vv.offsetTop)) : 0;
+      const root = document.documentElement.style;
+      root.setProperty("--app-h", `${h}px`);
+      root.setProperty("--app-top", `${top}px`);
     };
 
     const applySoon = () => {

@@ -19,6 +19,13 @@ function wsUrl(): string {
   return `${protocol === "https:" ? "wss" : "ws"}://${host}/ws`;
 }
 
+let serverOffsetS = 0;
+
+/** A szerver órája most (unix mp) — a kapcsolódáskor kapott „hello” alapján. */
+export function serverNow(): number {
+  return Date.now() / 1000 + serverOffsetS;
+}
+
 class RealtimeClient {
   private ws: WebSocket | null = null;
   private listeners = new Map<string, Set<Listener>>();
@@ -55,6 +62,8 @@ class RealtimeClient {
       } catch {
         return;
       }
+      // A szerver órája (pl. egy visszajátszott napon a kliensétől eltér): a „hello”-ból.
+      if (m.t === "hello" && typeof m.now === "number") serverOffsetS = m.now - Date.now() / 1000;
       for (const l of this.globalListeners) l(m);
       const topic = topicOf(m);
       if (!topic) return;

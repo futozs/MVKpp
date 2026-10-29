@@ -260,7 +260,7 @@ export function App() {
 
   return (
     <GeoProvider>
-      <TooltipProvider delayDuration={300}>
+      <TooltipProvider>
         <div className="flex h-full w-full flex-col overflow-hidden bg-background text-foreground">
           {}
           <Header
@@ -357,6 +357,7 @@ export function App() {
               <StatsView
                 stops={stops}
                 routes={Object.values(routes)}
+                liveIncidents={liveIncidentCount}
                 onFocusVehicle={(id) => {
                   setFocusVehicleId(id);
                   setActiveTab("map");

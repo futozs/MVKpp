@@ -144,6 +144,25 @@ type Run = {
   offRoute: number;
 };
 
+/** A jármű helyzete a nyomvonalon (lásd `motion`). */
+export type VehicleMotion = {
+  tripId: string;
+  shapeId: string;
+  /** a legutóbbi jel helye a nyomvonalon (m) */
+  alongM: number;
+  /** a legutóbbi jel ideje (unix) */
+  ts: number;
+  fromStopId: string | null;
+  toStopId: string;
+  fromAlongM: number;
+  /** a következő megálló helye a nyomvonalon (m) — a becslés eddig mehet */
+  toAlongM: number;
+  /** a mostani szakasz menetrendi ideje (mp) */
+  schedSegS: number | null;
+  /** a szakasz kezdetének menetrendi ideje (a szolgáltatási nap mp-e) */
+  segDepS: number;
+};
+
 type VehicleState = {
   current: Run | null;
   /** váltás után még figyelt menet: beér-e a végállomásra */
@@ -236,6 +255,31 @@ export class TripMatcher {
   runOfTrip(tripId: string): RunOut | null {
     for (const vs of this.vehicles.values()) if (vs.current?.out.tripId === tripId) return vs.current.out;
     return null;
+  }
+
+  /**
+   * Hol tart most a jármű a menete nyomvonalán (a térképi becsléshez):
+   * a legutóbbi jel helye méterben, és a következő megálló a nyomvonalon.
+   */
+  motion(vehicleId: string): VehicleMotion | null {
+    const r = this.vehicles.get(vehicleId)?.current;
+    if (!r || !r.lastPing || !r.started) return null;
+    const a = r.along;
+    let next = 0;
+    while (next < a.length && a[next].alongM <= r.progressM + 5) next++;
+    if (next >= a.length) return null;
+    return {
+      tripId: r.out.tripId,
+      shapeId: r.trip.shapeId,
+      alongM: Math.round(r.progressM),
+      ts: r.lastPing.ts,
+      fromStopId: next > 0 ? a[next - 1].stopId : null,
+      toStopId: a[next].stopId,
+      fromAlongM: next > 0 ? Math.round(a[next - 1].alongM) : 0,
+      toAlongM: Math.round(a[next].alongM),
+      schedSegS: next > 0 ? a[next].arr - a[next - 1].dep : null,
+      segDepS: next > 0 ? a[next - 1].dep : a[next].dep,
+    };
   }
 
   /**

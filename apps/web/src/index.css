@@ -21,6 +21,10 @@
   }
 
   #root {
+    /* A látható területhez rögzítve (billentyűzet mellett is kitölti a helyet). */
+    position: fixed;
+    inset-inline: 0;
+    top: var(--app-top, 0px);
     height: var(--app-h, 100dvh);
   }
 

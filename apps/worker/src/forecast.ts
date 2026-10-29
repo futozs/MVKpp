@@ -4,7 +4,7 @@
  * A profilokat induláskor és éjszakánként töltjük be; menetenként 15 mp-ig
  * gyorsítótárazzuk az eredményt.
  */
-import { dayInfo, forecastDelays, nowUnix, type ForecastStop, type SegmentProfile } from "@mvk/core";
+import { dayInfo, forecastDelays, nowUnix, type ForecastStop, type SegmentProfile, type VehicleMotion } from "@mvk/core";
 import { sql } from "@mvk/db";
 import type { Engine } from "./engine.ts";
 import { log } from "./log.ts";
@@ -41,6 +41,20 @@ export class DelayForecaster {
     this.profiles = profiles;
     this.cache.clear();
     log.info("forecast", `${profiles.size} szakaszprofil betöltve (${Date.now() - t0} ms)`);
+  }
+
+  /**
+   * A busz várható sebessége (m/s) a mostani szakaszán, a térképi becsléshez:
+   * a szakasz hossza a múltbeli menetidő mediánjával (megállás, gyorsítás benne),
+   * ennek híján a menetrendi idővel. `null`, ha egyik sem ismert.
+   */
+  segmentSpeed(m: VehicleMotion, serviceDate: string): number | null {
+    const len = m.toAlongM - m.fromAlongM;
+    if (len <= 0) return null;
+    const hour = Math.floor((((m.segDepS % 86_400) + 86_400) % 86_400) / 3600);
+    const p = m.fromStopId ? this.profiles.get(`${m.fromStopId}|${m.toStopId}|${dayInfo(serviceDate).daytype}|${hour}`) : undefined;
+    const secs = p?.p50 ?? m.schedSegS;
+    return secs && secs > 0 ? len / secs : null;
   }
 
   /** Egy élő menet hátralévő megállói várható és legrosszabb esetben várható késéssel. */

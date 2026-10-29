@@ -116,6 +116,21 @@ describe("illesztő", () => {
     expect(c.arrTs).toBeLessThan(at("08:06:30"));
   });
 
+  it("menet közben megadja, hol tart a nyomvonalon és melyik a következő megálló", () => {
+    const { mt } = run([
+      { t: "08:00:30", m: 0, speed: 0, trip: T1 },
+      { t: "08:01:00", m: 200, speed: 9, trip: T1 },
+      { t: "08:02:00", m: 900, speed: 9, trip: T1 },
+    ]);
+    const m = mt.motion("1641")!;
+    expect(m.tripId).toBe(T1);
+    expect(m.shapeId).toBe("SH1");
+    expect(Math.abs(m.alongM - 900)).toBeLessThan(30);
+    expect(m.toStopId).toBe("B");
+    expect(m.toAlongM).toBeGreaterThan(m.alongM);
+    expect(m.schedSegS).toBe(180);
+  });
+
   it("újraküldött / régi pont nem okoz semmit", () => {
     const { events } = run([
       { t: "08:00:30", m: 0, speed: 0, trip: T1 },
