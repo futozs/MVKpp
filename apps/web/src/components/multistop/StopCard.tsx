@@ -20,7 +20,13 @@ import { checkAndNotify, getWatch } from "@/lib/notifications";
 import { StopNotifyDialog } from "./StopNotifyDialog";
 import { useFallbackPoll, useTopic } from "@/lib/realtime";
 import { PREF_PREDICTED_VEHICLE, usePreference } from "@/hooks/usePreference";
+import { describeApiError, type FriendlyError } from "@/lib/apiError";
 import { ForecastLine } from "@/components/transit/ForecastLine";
+import { RefreshCw } from "lucide-react";
+
+/** hiba után ennyi idő múlva próbáljuk újra (duplázva, legfeljebb 30 mp-ig) */
+const RETRY_BASE_MS = 3000;
+const RETRY_MAX_MS = 30_000;
 
 const POLL_MS = 4000;
 
@@ -56,7 +62,8 @@ export function StopCard({
   isNearest,
 }: StopCardProps) {
   const [data, setData] = useState<StopArrivalsResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<FriendlyError | null>(null);
+  const retryRef = useRef<{ timer: ReturnType<typeof setTimeout> | null; delay: number }>({ timer: null, delay: RETRY_BASE_MS });
   const [notifyOpen, setNotifyOpen] = useState(false);
   const [isWatching, setIsWatching] = useState(() => Boolean(getWatch(stop.id)));
   const mounted = useRef(true);
@@ -74,16 +81,33 @@ export function StopCard({
     if (!mounted.current) return;
     setData(res);
     setError(null);
+    retryRef.current.delay = RETRY_BASE_MS;
     checkAndNotify(stop.id, stop.name, res.arrivals);
   };
 
+  // Hiba esetén nem a nyers hibaszöveg: rövid ok a kódból, és magától újrapróbálja.
   const load = async () => {
     try {
       apply(await api.getArrivals(stop.id, 8));
     } catch (err) {
-      if (mounted.current) setError((err as Error).message);
+      if (!mounted.current) return;
+      setError(describeApiError(err));
+      const r = retryRef.current;
+      if (r.timer) clearTimeout(r.timer);
+      r.timer = setTimeout(() => {
+        r.timer = null;
+        void load();
+      }, r.delay);
+      r.delay = Math.min(RETRY_MAX_MS, r.delay * 2);
     }
   };
+
+  useEffect(
+    () => () => {
+      if (retryRef.current.timer) clearTimeout(retryRef.current.timer);
+    },
+    [],
+  );
 
   // A szerver magától küldi, amint a tábla változik (busz beért, elindult,
   // új késés) — nincs 4 mp-es várakozás. Pollozás csak kapcsolat nélkül.
@@ -216,16 +240,21 @@ export function StopCard({
       {}
       <div className="border-b border-border bg-muted/30 px-4 py-3.5">
         {error ? (
-          <p
-            role="alert"
-            className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive"
-          >
-            {error}
+          <p role="status" className="mb-2.5 flex items-center gap-2 rounded-lg border border-late/30 bg-late/10 px-3 py-2 text-xs">
+            <RefreshCw aria-hidden className="h-3.5 w-3.5 shrink-0 text-late motion-safe:animate-spin" />
+            <span className="min-w-0 flex-1">
+              <span className="font-semibold text-foreground">Hiba, újracsatlakozás…</span>{" "}
+              <span className="text-muted-foreground">{error.reason}</span>
+            </span>
+            {error.code ? <span className="shrink-0 rounded bg-muted px-1.5 py-px font-mono text-[10px] text-muted-foreground">{error.code}</span> : null}
           </p>
-        ) : !data ? (
+        ) : null}
+        {!data ? (
+          error ? null : (
           <p className="py-6 text-center font-mono text-xs text-muted-foreground">
             Indulások lekérése…
           </p>
+          )
         ) : !next ? (
           <p className="py-6 text-center text-sm text-muted-foreground">
             Ebben az órában nincs több indulás.
@@ -279,7 +308,7 @@ export function StopCard({
                 jön
               </p>
             ) : null}
-            <ForecastLine className="mt-2.5" delayS={next.forecastDelaySec} upperS={next.forecastUpperSec} />
+            <ForecastLine className="mt-2.5" mode="worst" delayS={next.forecastDelaySec} upperS={next.forecastUpperSec} />
             <VehicleTrack
               className="mt-3"
               vehicle={next.vehicle}

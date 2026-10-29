@@ -9,11 +9,22 @@ export function ForecastLine({
   delayS,
   upperS,
   className,
+  mode = "full",
 }: {
   delayS: number | null | undefined;
   upperS?: number | null;
   className?: string;
+  /** "worst": csak a legrosszabb eset („Legrosszabb esetben +3 perc”), ha az legalább +1 perc */
+  mode?: "full" | "worst";
 }) {
+  if (mode === "worst") {
+    if (upperS == null || delayState(upperS) !== "late") return null;
+    return (
+      <p className={cn("text-[11px] text-muted-foreground", className)} title="A 85%-os felső becslés: ennél ritkán késik többet (a mostani késésből és az elmúlt 8 hét menetidejeiből)">
+        Legrosszabb esetben <span className="font-mono font-semibold text-late">{delayLabel(upperS)}</span>
+      </p>
+    );
+  }
   if (delayS == null) return null;
   const state = delayState(delayS);
   const min = Math.max(1, Math.round(Math.abs(delayS) / 60));

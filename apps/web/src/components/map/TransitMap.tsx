@@ -41,6 +41,7 @@ import { cn, normalizeSearchText } from "@/lib/utils";
 import { MapTimeline } from "./MapTimeline";
 import { createVehicleIcon } from "./vehicleIcon";
 import { estimatePosition, type Shown } from "./liveMotion";
+import { boardVehicle } from "@/components/ride/RideLayer";
 import { serverNow } from "@/lib/realtime";
 
 export interface TileLayerOption {
@@ -333,9 +334,11 @@ function vehiclePopupHtml(v: LiveVehicle): string {
           </div>
           ${
             v.tripId
-              ? `<div style="margin-top:10px">
+              ? `<div style="margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:6px">
                    <a href="#" data-trip="${v.tripId}" data-veh="${v.id}"
-                      style="display:block;text-align:center;padding:7px;border-radius:8px;background:hsl(var(--primary));color:hsl(var(--primary-foreground));font-size:12px;font-weight:700;text-decoration:none">Követés a térképen</a>
+                      style="display:block;text-align:center;padding:8px 6px;border-radius:8px;border:1px solid hsl(var(--border));background:hsl(var(--secondary));color:hsl(var(--foreground));font-size:12px;font-weight:700;text-decoration:none">Követés</a>
+                   <a href="#" data-board="${v.tripId}" data-veh="${v.id}"
+                      style="display:block;text-align:center;padding:8px 6px;border-radius:8px;background:hsl(var(--primary));color:hsl(var(--primary-foreground));font-size:12px;font-weight:700;text-decoration:none">Felszálltam</a>
                  </div>`
               : ""
           }
@@ -758,8 +761,9 @@ export function TransitMap({
           showId ? v.id : null,
         );
 
+      // Ha a térkép közben újraépült, a régi marker már nincs a rétegen: újat teszünk ki.
       const entry = live.get(v.id);
-      if (entry) {
+      if (entry && layer.hasLayer(entry.marker)) {
         entry.v = v;
         if (entry.iconKey !== iconKey) {
           entry.marker.setIcon(icon());
@@ -774,12 +778,22 @@ export function TransitMap({
       const created: LiveMarker = { marker, iconKey, v, shown: undefined };
       marker.bindPopup(() => vehiclePopupHtml(created.v));
       marker.on("popupopen", (e) => {
-        const link = e.popup.getElement()?.querySelector("a[data-trip]");
-        link?.addEventListener("click", (ev) => {
+        const el = e.popup.getElement();
+        const follow = el?.querySelector("a[data-trip]");
+        follow?.addEventListener("click", (ev) => {
           ev.preventDefault();
-          const tId = link.getAttribute("data-trip");
-          const vId = link.getAttribute("data-veh");
+          const tId = follow.getAttribute("data-trip");
+          const vId = follow.getAttribute("data-veh");
           if (tId) onFocusTrip(tId, vId || undefined);
+        });
+        // Felszállás egyből a buborékból: az utazás indul, a térkép a buszt követi.
+        const board = el?.querySelector("a[data-board]");
+        board?.addEventListener("click", (ev) => {
+          ev.preventDefault();
+          const cur = created.v;
+          if (!cur.tripId) return;
+          boardVehicle({ tripId: cur.tripId, vehicleId: cur.id, route: cur.routeShort, color: cur.routeColor, text: cur.routeText, headsign: cur.headsign }, "manual");
+          marker.closePopup();
         });
       });
       marker.addTo(layer);

@@ -127,7 +127,7 @@ function Featured({ a, showPredicted }: { a: ArrivalItem; showPredicted: boolean
           <Vehicle a={a} showPredicted={showPredicted} />
         </p>
       ) : null}
-      <ForecastLine className="mt-[0.45em] text-[0.72em]" delayS={a.forecastDelaySec} upperS={a.forecastUpperSec} />
+      <ForecastLine className="mt-[0.45em] text-[0.72em]" mode="worst" delayS={a.forecastDelaySec} upperS={a.forecastUpperSec} />
     </div>
   );
 }
