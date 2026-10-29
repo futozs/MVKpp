@@ -1,0 +1,25 @@
+# Automatikus HTTPS (Let's Encrypt). A valós idejű és a v2-kompatibilis
+# végpontok közvetlenül a workerhez mennek (egy ugrással kevesebb, és a
+# WebSocket így Next nélkül, közvetlenül él); minden más a Next.js-é.
+{$DOMAIN} {
+	encode zstd gzip
+
+	@worker path /ws /live/* /gtfs/* /weather /engine/* /_health /_jwt /_export /_ingest /_renew /system/* /agent/* /api/* /MVK_mobilapp/*
+	handle @worker {
+		reverse_proxy worker:8090 {
+			flush_interval -1
+		}
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		Permissions-Policy "camera=(), microphone=(), geolocation=(self)"
+		-Server
+	}
+}

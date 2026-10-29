@@ -1,0 +1,437 @@
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated"
+  previewFeatures     = ["partialIndexes"]
+  importFileExtension = "ts"
+  moduleFormat        = "esm"
+  runtime             = "nodejs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model migration {
+  name       String   @id
+  applied_at DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("_migration")
+}
+
+model agent_heartbeat {
+  agent_id     String   @id
+  last_seen_at DateTime @db.Timestamptz(6)
+  info         Json     @default("{}")
+}
+
+model app_user {
+  id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email             String              @unique @db.Citext
+  created_at        DateTime            @default(now()) @db.Timestamptz(6)
+  legacy_account_id Int?                @unique
+  legacy_backup     legacy_backup?
+  passkey           passkey[]
+  push_subscription push_subscription[]
+  user_session      user_session[]
+  user_state        user_state[]
+}
+
+model calendar_day {
+  service_date DateTime @id @db.Date
+  dow          Int      @db.SmallInt
+  daytype      Int      @db.SmallInt
+  school       Boolean
+  holiday      String?
+  note         String?
+}
+
+model cancelled_trip {
+  service_date DateTime @db.Date
+  trip_id      String
+  first_seen   DateTime @db.Timestamptz(6)
+  last_seen    DateTime @db.Timestamptz(6)
+  samples      Int      @default(1)
+
+  @@id([service_date, trip_id])
+}
+
+model feed_health {
+  service_date DateTime @id @db.Date
+  polls_ok     Int      @default(0)
+  polls_fail   Int      @default(0)
+  pings_kept   Int      @default(0)
+  vehicles_max Int      @default(0)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model gtfs_feed {
+  id            Int           @id @default(autoincrement())
+  version       String
+  sha256        String        @unique
+  fetched_at    DateTime      @default(now()) @db.Timestamptz(6)
+  start_date    DateTime?     @db.Date
+  end_date      DateTime?     @db.Date
+  first_service DateTime?     @db.Date
+  last_service  DateTime?     @db.Date
+  n_stops       Int
+  n_routes      Int
+  n_trips       Int
+  n_stop_times  Int
+  status        String
+  validation    Json
+  zip           Bytes
+  service_day   service_day[]
+
+  @@index([status, version(sort: Desc)], map: "gtfs_feed_status_idx")
+}
+
+/// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
+model incident {
+  id           BigInt    @id @default(autoincrement())
+  service_date DateTime  @db.Date
+  kind         String
+  source       String
+  confidence   Int       @db.SmallInt
+  route_short  String?
+  trip_id      String?
+  vehicle_id   String?
+  stop_id      String?
+  started_at   DateTime  @db.Timestamptz(6)
+  ended_at     DateTime? @db.Timestamptz(6)
+  lat          Float?
+  lon          Float?
+  title        String
+  detail       String?
+  evidence     Json      @default("{}")
+  created_at   DateTime  @default(now()) @db.Timestamptz(6)
+
+  @@index([service_date(sort: Desc), kind], map: "incident_day_idx")
+  @@index([vehicle_id, service_date(sort: Desc)], map: "incident_vehicle_idx")
+}
+
+model job_state {
+  job           String    @id
+  last_ok_at    DateTime? @db.Timestamptz(6)
+  last_error    String?
+  last_error_at DateTime? @db.Timestamptz(6)
+  info          Json      @default("{}")
+}
+
+model legacy_backup {
+  user_id    String   @id @db.Uuid
+  payload    Bytes
+  bytes      Int
+  updated_at DateTime @db.Timestamptz(6)
+  app_user   app_user @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model legacy_schedule_day {
+  service_date DateTime @id @db.Date
+  feed_version String
+  n_trips      Int
+  payload      Bytes
+  imported_at  DateTime @default(now()) @db.Timestamptz(6)
+}
+
+model mvk_token {
+  id              Int       @id @default(autoincrement())
+  jwt_enc         String
+  installation_id String?
+  iat             DateTime? @db.Timestamptz(6)
+  exp             DateTime  @db.Timestamptz(6)
+  source          String
+  agent_id        String?
+  received_at     DateTime  @default(now()) @db.Timestamptz(6)
+  rejected_at     DateTime? @db.Timestamptz(6)
+
+  @@index([exp(sort: Desc)])
+}
+
+model passkey {
+  credential_id String    @id
+  user_id       String    @db.Uuid
+  public_key    Bytes
+  counter       BigInt    @default(0)
+  transports    String?
+  device_type   String?
+  backed_up     Boolean   @default(false)
+  device_name   String?
+  created_at    DateTime  @default(now()) @db.Timestamptz(6)
+  last_used_at  DateTime? @db.Timestamptz(6)
+  app_user      app_user  @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([user_id], map: "passkey_user_idx")
+}
+
+model push_delivery {
+  id           BigInt     @id @default(autoincrement())
+  watch_id     Int
+  service_date DateTime   @db.Date
+  trip_id      String
+  kind         String
+  status       String
+  attempts     Int        @default(0) @db.SmallInt
+  last_error   String?
+  payload      Json?
+  created_at   DateTime   @default(now()) @db.Timestamptz(6)
+  sent_at      DateTime?  @db.Timestamptz(6)
+  push_watch   push_watch @relation(fields: [watch_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([watch_id, service_date, trip_id, kind])
+  @@index([created_at(sort: Desc)], map: "push_delivery_recent_idx")
+}
+
+model push_subscription {
+  id              Int          @id @default(autoincrement())
+  endpoint        String       @unique
+  p256dh          String
+  auth            String
+  user_id         String?      @db.Uuid
+  created_at      DateTime     @default(now()) @db.Timestamptz(6)
+  enabled         Boolean      @default(true)
+  dnd_start_min   Int?         @db.SmallInt
+  dnd_end_min     Int?         @db.SmallInt
+  last_success_at DateTime?    @db.Timestamptz(6)
+  fail_count      Int          @default(0)
+  user_agent      String?
+  app_user        app_user?    @relation(fields: [user_id], references: [id], onUpdate: NoAction)
+  push_watch      push_watch[]
+}
+
+model push_watch {
+  id                Int               @id @default(autoincrement())
+  subscription_id   Int
+  slot              String            @default("default")
+  stop_id           String
+  stop_name         String
+  threshold_min     Int               @default(5) @db.SmallInt
+  route_shorts      String[]
+  trip_id           String?
+  sched_min         Int?              @db.SmallInt
+  is_departure      Boolean           @default(false)
+  created_at        DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime          @default(now()) @db.Timestamptz(6)
+  push_delivery     push_delivery[]
+  push_subscription push_subscription @relation(fields: [subscription_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([subscription_id, stop_id, slot])
+  @@index([stop_id], map: "push_watch_stop_idx")
+}
+
+model route {
+  route_short   String   @id
+  gtfs_route_id String?
+  long_name     String?
+  kind          String   @default("BUS")
+  color         String?
+  text_color    String?
+  first_seen    DateTime @db.Date
+  last_seen     DateTime @db.Date
+}
+
+model segment_run {
+  ts            DateTime @db.Timestamptz(6)
+  service_date  DateTime @db.Date
+  from_stop     String
+  to_stop       String
+  route_short   String
+  run_key       String
+  travel_s      Int
+  sched_s       Int
+  dwell_s       Int?
+  entry_delay_s Int?
+  tod_bucket    Int      @db.SmallInt
+  daytype       Int      @db.SmallInt
+  school        Boolean
+
+  @@unique([run_key, from_stop, ts], map: "segment_run_uq")
+  @@index([from_stop, to_stop, ts(sort: Desc)], map: "segment_run_pair_idx")
+  @@index([ts(sort: Desc)])
+}
+
+model service_day {
+  service_date      DateTime   @id @db.Date
+  feed_id           Int?
+  feed_version      String
+  fallback_template DateTime?  @db.Date
+  fallback_reason   String?
+  n_trips           Int
+  decided_at        DateTime   @default(now()) @db.Timestamptz(6)
+  gtfs_feed         gtfs_feed? @relation(fields: [feed_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model spatial_ref_sys {
+  srid      Int     @id
+  auth_name String? @db.VarChar(256)
+  auth_srid Int?
+  srtext    String? @db.VarChar(2048)
+  proj4text String? @db.VarChar(2048)
+}
+
+model stop {
+  stop_id    String                    @id
+  code       String?
+  name       String
+  lat        Float
+  lon        Float
+  geom       Unsupported("geography")? @default(dbgenerated("(st_setsrid(st_makepoint(lon, lat), 4326))::geography"))
+  first_seen DateTime                  @db.Date
+  last_seen  DateTime                  @db.Date
+
+  @@index([geom], type: Gist)
+}
+
+model stop_event {
+  ts              DateTime  @db.Timestamptz(6)
+  service_date    DateTime  @db.Date
+  run_key         String
+  trip_id         String
+  vehicle_id      String
+  route_short     String
+  stop_id         String
+  stop_seq        Int       @db.SmallInt
+  stop_idx        Int       @db.SmallInt
+  is_first        Boolean
+  is_last         Boolean
+  sched_arr_s     Int
+  sched_dep_s     Int
+  dep_ts          DateTime? @db.Timestamptz(6)
+  delay_s         Int
+  dwell_s         Int?
+  headway_s       Int?
+  sched_headway_s Int?
+  src             Int       @db.SmallInt
+
+  @@unique([run_key, stop_idx, ts], map: "stop_event_uq")
+  @@index([route_short, ts(sort: Desc)], map: "stop_event_route_idx")
+  @@index([stop_id, ts(sort: Desc)], map: "stop_event_stop_idx")
+  @@index([service_date, trip_id], map: "stop_event_trip_idx")
+  @@index([ts(sort: Desc)])
+  @@index([vehicle_id, ts(sort: Desc)], map: "stop_event_vehicle_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model trip_run {
+  run_id        BigInt    @id @default(autoincrement())
+  run_key       String    @unique
+  service_date  DateTime  @db.Date
+  trip_id       String
+  vehicle_id    String
+  route_short   String
+  route_id      String?
+  direction     Int       @db.SmallInt
+  pattern       String
+  headsign      String?
+  feed_version  String?
+  sched_start_s Int
+  sched_end_s   Int
+  stops_total   Int       @db.SmallInt
+  stops_seen    Int       @default(0) @db.SmallInt
+  opened_at     DateTime  @db.Timestamptz(6)
+  last_seen_at  DateTime? @db.Timestamptz(6)
+  actual_start  DateTime? @db.Timestamptz(6)
+  actual_end    DateTime? @db.Timestamptz(6)
+  start_delay_s Int?
+  end_delay_s   Int?
+  last_delay_s  Int?
+  last_stop_idx Int?      @db.SmallInt
+  dist_m        Int?
+  max_speed     Float?    @db.Real
+  status        String
+  close_reason  String?
+  source        String    @default("live")
+  updated_at    DateTime  @default(now()) @db.Timestamptz(6)
+
+  @@index([service_date, route_short], map: "trip_run_day_route_idx")
+  @@index([service_date, trip_id], map: "trip_run_day_trip_idx")
+  @@index([pattern, sched_start_s], map: "trip_run_pattern_idx")
+  @@index([service_date, status], map: "trip_run_status_idx")
+  @@index([vehicle_id, service_date], map: "trip_run_vehicle_idx")
+}
+
+model user_session {
+  token_hash   String    @id
+  user_id      String    @db.Uuid
+  created_at   DateTime  @default(now()) @db.Timestamptz(6)
+  expires_at   DateTime  @db.Timestamptz(6)
+  last_seen_at DateTime? @db.Timestamptz(6)
+  user_agent   String?
+  app_user     app_user  @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([user_id], map: "user_session_user_idx")
+}
+
+model user_state {
+  user_id    String   @db.Uuid
+  key        String
+  value      Json?
+  deleted    Boolean  @default(false)
+  updated_at DateTime @db.Timestamptz(6)
+  device_id  String?
+  app_user   app_user @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([user_id, key])
+  @@index([user_id, updated_at], map: "user_state_updated_idx")
+}
+
+model veh_ping {
+  ts           DateTime  @db.Timestamptz(6)
+  vehicle_id   String
+  lat          Float
+  lon          Float
+  speed        Float?    @db.Real
+  bearing      Int?      @db.SmallInt
+  rt_trip_id   String?
+  trip_id      String?
+  route_short  String?
+  service_date DateTime? @db.Date
+
+  @@unique([vehicle_id, ts], map: "veh_ping_uq")
+  @@index([trip_id, ts], map: "veh_ping_trip_idx", where: raw("(trip_id IS NOT NULL)"))
+  @@index([ts(sort: Desc)])
+}
+
+model vehicle {
+  vehicle_id String   @id
+  label      String?
+  kind       String?
+  first_seen DateTime @db.Timestamptz(6)
+  last_seen  DateTime @db.Timestamptz(6)
+}
+
+model vehicle_model_weight {
+  signal     String   @id
+  weight     Float    @db.Real
+  hits       Int      @default(0)
+  misses     Int      @default(0)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+}
+
+model vehicle_prediction {
+  id                BigInt    @id @default(autoincrement())
+  service_date      DateTime  @db.Date
+  trip_id           String
+  route_short       String
+  sched_start_s     Int
+  horizon_min       Int       @db.SmallInt
+  made_at           DateTime  @db.Timestamptz(6)
+  predicted_vehicle String
+  confidence        Float     @db.Real
+  method            String
+  features          Json      @default("{}")
+  actual_vehicle    String?
+  correct           Boolean?
+  resolved_at       DateTime? @db.Timestamptz(6)
+
+  @@unique([service_date, trip_id, horizon_min])
+  @@index([service_date], map: "vehicle_prediction_open_idx", where: raw("(correct IS NULL)"))
+}
+
+model weather_hour {
+  hour     DateTime @id @db.Timestamptz(6)
+  temp_c   Float?   @db.Real
+  feels_c  Float?   @db.Real
+  wind_kmh Float?   @db.Real
+  wmo_code Int?     @db.SmallInt
+}

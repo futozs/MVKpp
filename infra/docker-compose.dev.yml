@@ -1,0 +1,28 @@
+# Fejlesztői adatbázis (ugyanaz az image, mint élesben) + opcionális helyi Redis.
+#   docker compose -f infra/docker-compose.dev.yml up -d
+#   (.env.dev: REDIS_URL=redis://127.0.0.1:6380 — vagy egy Upstash-kapcsolati szöveg)
+services:
+  db:
+    image: timescale/timescaledb-ha:pg17.11-ts2.31.0  # rögzítve: a mentés-visszaállítás azonos verziót kér
+    environment:
+      POSTGRES_USER: mvk
+      POSTGRES_PASSWORD: mvk
+      POSTGRES_DB: mvk
+    ports:
+      - "5433:5432"
+    volumes:
+      - mvk-dev-db:/home/postgres/pgdata
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mvk -d mvk"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    ports:
+      - "6380:6379"
+
+volumes:
+  mvk-dev-db:

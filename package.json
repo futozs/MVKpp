@@ -1,19 +1,26 @@
 {
-  "name": "mvk-mobilon-saas",
-  "version": "2.0.0",
+  "name": "mvk",
+  "version": "3.0.0",
   "private": true,
   "type": "module",
-  "description": "MVK MobilON+ valós idejű tranzit SaaS rendszer, multi-megálló figyelő, backend gateway és folyamatkezelő.",
+  "description": "MVK valós idejű buszkövető — Next.js web, realtime worker, macOS token-agent.",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "tools/*"
+  ],
   "scripts": {
-    "start": "git pull && bun run migrate && bun run build && node manager.mjs -- --prod",
-    "dev": "node manager.mjs",
-    "migrate": "cd backend && bun run db:migrate",
-    "build:frontend": "cd frontend && bun run build",
-    "build:hub": "cd hub && bun run build",
-    "build:backend": "cd backend && bun run build",
-    "build": "bun run build:frontend && bun run build:hub && bun run build:backend"
+    "dev": "bun run --filter './apps/*' dev",
+    "dev:web": "bun run --cwd apps/web dev",
+    "dev:worker": "bun run --cwd apps/worker dev",
+    "build": "bun run --cwd packages/db generate && bun run --cwd apps/web build",
+    "db:migrate": "bun run --cwd packages/db migrate",
+    "db:generate": "bun run --cwd packages/db generate",
+    "import:mysql": "bun run --cwd tools/import-mysql start",
+    "typecheck": "bun run --filter '*' typecheck",
+    "test": "bun run --filter '*' test"
   },
-  "dependencies": {
-    "typescript": "^7.0.2"
+  "engines": {
+    "node": ">=22"
   }
 }

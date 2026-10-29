@@ -1,0 +1,19 @@
+{
+  "name": "@mvk/import-mysql",
+  "version": "3.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --experimental-strip-types src/main.ts"
+  },
+  "dependencies": {
+    "@mvk/core": "workspace:*",
+    "@mvk/db": "workspace:*",
+    "mysql2": "^3.24.2",
+    "gtfs-realtime-bindings": "^2.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.3"
+  }
+}

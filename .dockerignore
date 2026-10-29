@@ -1,0 +1,15 @@
+**/node_modules
+**/.next
+**/dist
+.git
+.claude
+data
+docs
+apps/token-agent/.build
+/*.sql
+*.sql.gz
+**/.env
+**/.env.*
+!infra/.env.example
+**/.DS_Store
+packages/db/src/generated

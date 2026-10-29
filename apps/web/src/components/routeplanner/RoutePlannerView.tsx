@@ -1,0 +1,139 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { Stop } from "@/types";
+import { api, type JourneyMode, type JourneyPlanResponse } from "@/services/api";
+import { nowLocalTime, todayLocalIso } from "./format";
+import { PlanForm, type PlanFormValue } from "./PlanForm";
+import { PlanResults, ResultsSkeleton } from "./PlanResults";
+
+/** A backend is így dönt: 10 percnél későbbi időpont már „jövő”. */
+const NOW_WINDOW_SEC = 600;
+const RESULT_LIMIT = 4;
+
+type Result =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "error"; message: string }
+  | { status: "done"; plan: JourneyPlanResponse };
+
+function usePlaces(stops: Stop[]) {
+  return useMemo(() => {
+    const byName = new Map<string, Stop>();
+    for (const s of stops) if (!byName.has(s.name)) byName.set(s.name, s);
+    return [...byName.values()].sort((a, b) =>
+      a.name.localeCompare(b.name, "hu"),
+    );
+  }, [stops]);
+}
+
+function toUnix(date: string, time: string): number {
+  return Math.floor(new Date(`${date}T${time}:00`).getTime() / 1000);
+}
+
+function clientMode(date: string, time: string): JourneyMode {
+  if (date < todayLocalIso()) return "past";
+  return toUnix(date, time) > Date.now() / 1000 + NOW_WINDOW_SEC ? "future" : "now";
+}
+
+function scrollIntoViewIfHidden(el: HTMLElement | null) {
+  if (!el) return;
+  const { top } = el.getBoundingClientRect();
+  if (top < window.innerHeight - 120) return;
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  el.scrollIntoView({ block: "start", behavior: reduce ? "auto" : "smooth" });
+}
+
+/**
+ * Útvonaltervező a saját /engine/plan végpontunkra építve. Egy kérésből jön a
+ * menetrendi itinerárium és mellé: múltbeli napnál a ténylegesen mért
+ * indulás/érkezés (igazolásként másolható), mára és jövőre a várható késés
+ * (élő adat vagy korábbi mérések) és az átszállások kockázata.
+ */
+export function RoutePlannerView({ stops }: { stops: Stop[] }) {
+  const places = usePlaces(stops);
+  const [form, setForm] = useState<PlanFormValue>(() => ({
+    from: "",
+    to: "",
+    arriveBy: false,
+    date: todayLocalIso(),
+    time: nowLocalTime(),
+  }));
+  const [result, setResult] = useState<Result>({ status: "idle" });
+  const abortRef = useRef<AbortController | null>(null);
+  const resultsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => () => abortRef.current?.abort(), []);
+
+  const mode = clientMode(form.date, form.time);
+  const update = (patch: Partial<PlanFormValue>) => setForm((f) => ({ ...f, ...patch }));
+  const setNow = () => update({ date: todayLocalIso(), time: nowLocalTime() });
+
+  const run = async () => {
+    if (!form.from || !form.to) return;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setResult({ status: "loading" });
+    requestAnimationFrame(() => scrollIntoViewIfHidden(resultsRef.current));
+    try {
+      const plan = await api.planJourney({
+        from: `stop:${form.from}`,
+        to: `stop:${form.to}`,
+        at: toUnix(form.date, form.time),
+        arriveBy: form.arriveBy,
+        limit: RESULT_LIMIT,
+        signal: controller.signal,
+      });
+      if (!controller.signal.aborted) setResult({ status: "done", plan });
+    } catch (e) {
+      if (controller.signal.aborted) return;
+      const message =
+        e instanceof TypeError
+          ? "Nem sikerült elérni a szervert. Ellenőrizd a kapcsolatot, és próbáld újra."
+          : e instanceof Error
+            ? e.message
+            : "Ismeretlen hiba történt.";
+      setResult({ status: "error", message });
+    }
+  };
+
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="mx-auto w-full max-w-3xl space-y-4 px-3 py-4 sm:px-4 sm:py-6">
+        <div className="px-1">
+          <h1 className="text-lg font-bold tracking-tight sm:text-xl">Útvonaltervező</h1>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Mikor érsz be valójában? Menetrend, élő adat és mért késések egy
+            helyen — múltbeli napra azt is megmutatja, mi történt.
+          </p>
+        </div>
+
+        <PlanForm
+          places={places}
+          value={form}
+          onChange={update}
+          onNow={setNow}
+          onSubmit={run}
+          mode={mode}
+          isLoading={result.status === "loading"}
+        />
+
+        <div ref={resultsRef} className="scroll-mt-3" aria-busy={result.status === "loading"}>
+          <p className="sr-only" aria-live="polite">
+            {result.status === "loading"
+              ? "Keresés…"
+              : result.status === "done"
+                ? `${result.plan.trips.length} útvonal`
+                : ""}
+          </p>
+          {result.status === "loading" ? <ResultsSkeleton /> : null}
+          {result.status === "error" ? (
+            <p role="alert" className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-xs text-destructive">
+              {result.message}
+            </p>
+          ) : null}
+          {result.status === "done" ? <PlanResults plan={result.plan} /> : null}
+        </div>
+      </div>
+    </div>
+  );
+}

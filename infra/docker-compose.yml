@@ -1,0 +1,82 @@
+# MVK v3 — éles telepítés egy VPS-en.
+#   cp infra/.env.example infra/.env && (töltsd ki)
+#   docker compose -f infra/docker-compose.yml --env-file infra/.env up -d --build
+name: mvk
+
+services:
+  db:
+    image: timescale/timescaledb-ha:pg17.11-ts2.31.0  # rögzítve: a mentés-visszaállítás azonos verziót kér
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-mvk}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD kell}
+      POSTGRES_DB: ${POSTGRES_DB:-mvk}
+      TIMESCALEDB_TELEMETRY: "off"
+    command: >
+      postgres -c shared_buffers=${PG_SHARED_BUFFERS:-512MB} -c effective_cache_size=${PG_CACHE:-1536MB}
+               -c max_connections=60 -c timescaledb.max_background_workers=8 -c wal_compression=on
+    volumes:
+      - db:/home/postgres/pgdata
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mvk} -d ${POSTGRES_DB:-mvk}"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    # A port szándékosan NINCS kinyitva; mentéshez: docker compose exec db pg_dump …
+
+  worker:
+    build: { context: .., dockerfile: infra/Dockerfile, target: worker }
+    restart: unless-stopped
+    depends_on: { db: { condition: service_healthy } }
+    # Csak a gépen belülről: ha a token-agent ugyanezen a gépen fut, ide küld
+    # (http://127.0.0.1:8090). Kívülről minden a Caddyn át megy.
+    ports: ["127.0.0.1:8090:8090"]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-mvk}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-mvk}
+      APP_SECRET: ${APP_SECRET:?APP_SECRET kell}
+      ADMIN_KEY: ${ADMIN_KEY:?ADMIN_KEY kell}
+      AGENT_SECRET: ${AGENT_SECRET:?AGENT_SECRET kell}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-}
+      REDIS_URL: ${REDIS_URL:-}
+      DB_POOL: "12"
+    stop_grace_period: 20s
+
+  web:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+      target: web
+      args:
+        WORKER_URL: http://worker:8090
+    restart: unless-stopped
+    depends_on: [worker]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-mvk}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-mvk}
+      WORKER_URL: http://worker:8090
+      APP_SECRET: ${APP_SECRET}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-}
+      # A passkey ehhez a domainhez kötődik — ugyanaz legyen, mint a régi rendszeré.
+      RP_ORIGINS: https://${DOMAIN:?DOMAIN kell}
+      REDIS_URL: ${REDIS_URL:-}
+      DB_POOL: "8"
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    depends_on: [web, worker]
+    ports: ["80:80", "443:443", "443:443/udp"]
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  db:
+  caddy-data:
+  caddy-config:
