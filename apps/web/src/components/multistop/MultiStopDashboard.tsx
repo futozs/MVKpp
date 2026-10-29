@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { ArrowLeftRight, Check, LocateFixed, Plus, Radar } from "lucide-react";
+import { ArrowLeftRight, Check, LocateFixed, MonitorPlay, Plus, Radar } from "lucide-react";
 import type { Stop } from "@/types";
 import { useGeo } from "@/context/GeoContext";
 import { distanceKm } from "@/lib/geo";
@@ -152,6 +152,15 @@ export function MultiStopDashboard({
               <span className="hidden sm:inline">
                 {isReordering ? "Kész" : "Sorrend"}
               </span>
+            </Button>
+          ) : null}
+
+          {watched.length ? (
+            <Button asChild variant="outline" size="sm" className="h-10" title="Utastájékoztató kijelző tévére vagy tabletre (legfeljebb 3 megálló)">
+              <a href={`/kijelzo?m=${encodeURIComponent(watched.slice(0, 3).map((s) => s.id).join(","))}`}>
+                <MonitorPlay />
+                <span className="hidden sm:inline">Kijelző</span>
+              </a>
             </Button>
           ) : null}
 
