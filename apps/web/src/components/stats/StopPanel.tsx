@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { Search } from "lucide-react";
+import { Search, Star } from "lucide-react";
 import type { Stop } from "@/types";
 import {
   fmtDelay,
@@ -20,6 +20,52 @@ import { Input } from "@/components/ui/input";
 import { QueryBoundary } from "./PanelState";
 import { useStatsQuery } from "./useStatsQuery";
 import { cn, normalizeSearchText } from "@/lib/utils";
+import { usePreference } from "@/hooks/usePreference";
+
+/** Kedvenc megállók a statisztikában — localStorage, így a felhős szinkron is viszi. */
+const FAVORITE_STOPS_KEY = "mvk_stats_favorite_stops";
+const MAX_FAVORITES = 40;
+
+/** Megálló-pill csillaggal (a csillag külön gomb: a kiválasztás és a kedvencezés nem keveredik). */
+function StopPill({
+  stop,
+  active,
+  favorite,
+  onSelect,
+  onToggleFavorite,
+}: {
+  stop: Stop;
+  active: boolean;
+  favorite: boolean;
+  onSelect: () => void;
+  onToggleFavorite: () => void;
+}) {
+  return (
+    <span
+      className={cn(
+        "flex max-w-64 shrink-0 items-center gap-1 rounded-lg border py-1 pl-2.5 pr-1 text-xs font-semibold transition-colors",
+        active ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground",
+      )}
+    >
+      <button type="button" onClick={onSelect} aria-pressed={active} className="flex min-w-0 items-center focus-visible:outline-none">
+        <span className="truncate">{stop.name}</span>
+        <span className="ml-1.5 font-mono text-[10px] opacity-60">{stop.id}</span>
+      </button>
+      <button
+        type="button"
+        onClick={onToggleFavorite}
+        aria-pressed={favorite}
+        aria-label={favorite ? `${stop.name}: eltávolítás a kedvencekből` : `${stop.name}: kedvencnek jelölés`}
+        className={cn(
+          "flex h-5 w-5 shrink-0 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+          favorite ? (active ? "text-primary-foreground" : "text-early") : "opacity-40 hover:opacity-100",
+        )}
+      >
+        <Star className="h-3.5 w-3.5" fill={favorite ? "currentColor" : "none"} />
+      </button>
+    </span>
+  );
+}
 
 function byHour(hours: StopHour[]) {
   const map = new Map<
@@ -66,14 +112,24 @@ function byHour(hours: StopHour[]) {
 
 export function StopPanel({ stops }: { stops: Stop[] }) {
   const [search, setSearch] = useState("");
-  const [stopId, setStopId] = useState<string | null>(null);
+  const [favoriteIds, setFavoriteIds] = usePreference<string[]>(FAVORITE_STOPS_KEY, []);
+  // Megnyitáskor az első kedvenc töltődik be.
+  const [stopId, setStopId] = useState<string | null>(() => favoriteIds[0] ?? null);
+  const isFavorite = (id: string) => favoriteIds.includes(id);
+  const toggleFavorite = (id: string) =>
+    setFavoriteIds(isFavorite(id) ? favoriteIds.filter((x) => x !== id) : [...favoriteIds, id].slice(-MAX_FAVORITES));
+  const favorites = useMemo(() => {
+    const byId = new Map(stops.map((s) => [s.id, s]));
+    return favoriteIds.map((id) => byId.get(id)).filter((s): s is Stop => Boolean(s));
+  }, [favoriteIds, stops]);
 
   const to = serviceToday();
   const from = shiftDate(to, -13);
 
   const matches = useMemo(() => {
     const t = normalizeSearchText(search.trim());
-    if (!t) return stops.slice(0, 12);
+    // Kereső nélkül a kedvencek külön sorban vannak — itt a többi.
+    if (!t) return stops.filter((s) => !favoriteIds.includes(s.id)).slice(0, 12);
     return stops
       .filter(
         (s) =>
@@ -81,7 +137,7 @@ export function StopPanel({ stops }: { stops: Stop[] }) {
           s.id.toLowerCase().includes(t),
       )
       .slice(0, 12);
-  }, [search, stops]);
+  }, [search, stops, favoriteIds]);
 
   const q = useStatsQuery(
     useCallback(() => statsApi.stop(stopId!, from, to), [stopId, from, to]),
@@ -107,27 +163,31 @@ export function StopPanel({ stops }: { stops: Stop[] }) {
             aria-label="Megálló keresése"
           />
         </div>
+        {favorites.length ? (
+          <div className="flex items-center gap-2">
+            <span className="flex shrink-0 items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <Star className="h-3 w-3 text-early" fill="currentColor" /> Kedvencek
+            </span>
+            <div className="min-w-0 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div className="flex min-w-max gap-1.5">
+                {favorites.map((s) => (
+                  <StopPill key={s.id} stop={s} active={s.id === stopId} favorite onSelect={() => setStopId(s.id)} onToggleFavorite={() => toggleFavorite(s.id)} />
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : null}
         <div className="overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <div className="flex min-w-max gap-1.5">
             {matches.map((s) => (
-              <button
+              <StopPill
                 key={s.id}
-                type="button"
-                onClick={() => setStopId(s.id)}
-                aria-pressed={s.id === stopId}
-                className={cn(
-                  "max-w-56 truncate rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-colors",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
-                  s.id === stopId
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground",
-                )}
-              >
-                {s.name}
-                <span className="ml-1.5 font-mono text-[10px] opacity-60">
-                  {s.id}
-                </span>
-              </button>
+                stop={s}
+                active={s.id === stopId}
+                favorite={isFavorite(s.id)}
+                onSelect={() => setStopId(s.id)}
+                onToggleFavorite={() => toggleFavorite(s.id)}
+              />
             ))}
             {!matches.length ? (
               <span className="px-2 py-1.5 text-xs text-muted-foreground">
@@ -161,8 +221,21 @@ export function StopPanel({ stops }: { stops: Stop[] }) {
             return (
               <div className="space-y-4">
                 <header>
-                  <h3 className="text-base font-semibold">
+                  <h3 className="flex items-center gap-2 text-base font-semibold">
                     {selected?.name ?? d.name ?? stopId}
+                    <button
+                      type="button"
+                      onClick={() => toggleFavorite(stopId)}
+                      aria-pressed={isFavorite(stopId)}
+                      aria-label={isFavorite(stopId) ? "Eltávolítás a kedvencekből" : "Kedvencnek jelölés"}
+                      title={isFavorite(stopId) ? "Kedvenc — a felhőbe is mentve" : "Kedvencnek jelölés"}
+                      className={cn(
+                        "flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+                        isFavorite(stopId) ? "text-early" : "text-muted-foreground",
+                      )}
+                    >
+                      <Star className="h-4 w-4" fill={isFavorite(stopId) ? "currentColor" : "none"} />
+                    </button>
                   </h3>
                   <p className="text-xs text-muted-foreground">
                     {from} – {to} · {totalEvents.toLocaleString("hu-HU")}{" "}
