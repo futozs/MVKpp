@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -251,6 +251,9 @@ export function VehiclePanel({
     [vehicleId],
     Boolean(vehicleId),
   );
+  // a válasz havonta és vonalanként sorol: a kör a legutóbbi hónapé (különben egy vonal többször szerepelne)
+  const allRoutes = routesQ.data?.routes;
+  const latestRoutes = useMemo(() => (allRoutes?.length ? allRoutes.filter((r) => r.period_ym === allRoutes[0].period_ym) : []), [allRoutes]);
 
   // A jármű saját üzemzavar-előélete: ez teszi teljessé a képet arról,
   // mennyire megbízható ez a konkrét kocsi.
@@ -348,7 +351,7 @@ export function VehiclePanel({
           <QueryBoundary query={detailQ}>
             {(d) => {
               const s = d.summary;
-              const stopped = s ? Math.max(0, s.service_s - s.moving_s) : 0;
+              const stopped = s ? (s.moving_s != null ? Math.max(0, s.service_s - s.moving_s) : Math.min(s.service_s, s.dwell_s)) : 0;
               return (
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
@@ -516,11 +519,11 @@ export function VehiclePanel({
             title="Milyen vonalakon jár?"
             action={<Gauge className="h-4 w-4 text-muted-foreground" />}
           >
-            {routesQ.data?.routes.length ? (
+            {latestRoutes.length ? (
               <Donut
-                centerLabel={`${routesQ.data.routes[0].share_pct}%`}
-                centerSub={`Összesen ${routesQ.data.routes.reduce((a, r) => a + r.runs, 0)} menet, ${routesQ.data.routes[0].days_active} aktív nap`}
-                slices={routesQ.data.routes.map((r) => ({
+                centerLabel={`${latestRoutes[0].share_pct}%`}
+                centerSub={`${latestRoutes.reduce((a, r) => a + r.runs, 0)} menet ebben a hónapban, ${latestRoutes[0].days_active} aktív nap`}
+                slices={latestRoutes.map((r) => ({
                   label: `${r.route_short} — ${r.runs} menet`,
                   value: r.runs,
                   color: r.color,

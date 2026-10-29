@@ -54,11 +54,14 @@ const TRIP_ID_RE = /^[\w:.-]{1,80}$/;
 const MAX_WATCHES_PER_SUB = 60;
 const KINDS = new Set(["arrival", "leave", "traffic", "transfer"]);
 
-type WatchParams = { walkS?: number; days?: string | number[]; fromTrip?: string; alightStopId?: string; fromRoute?: string; toRoute?: string; boardStopName?: string };
+type WatchParams = { date?: string; walkS?: number; days?: string | number[]; fromTrip?: string; alightStopId?: string; fromRoute?: string; toRoute?: string; boardStopName?: string };
 
 /** A fajtához tartozó paraméterek ellenőrzése (csak az ismert mezők, korlátozva). */
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
 function cleanParams(kind: string, p: WatchParams | undefined): WatchParams | null {
-  if (kind === "arrival") return null;
+  // egyszeri menet-figyelés: csak erre a szolgáltatási napra (a menetazonosítók naponta ismétlődnek)
+  if (kind === "arrival") return typeof p?.date === "string" && DATE_RE.test(p.date) ? { date: p.date } : null;
   const out: WatchParams = {};
   if (p?.walkS != null) {
     const w = Number(p.walkS);

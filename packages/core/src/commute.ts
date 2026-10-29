@@ -168,7 +168,8 @@ export function upcomingCommute(commutes: readonly Commute[], nowUnix: number, t
   let bestD = Infinity;
   for (const c of commutes) {
     if (!commuteToday(c, todayIso)) continue;
-    const d = c.minute - now;
+    // éjfélen át is: 23:30-kor a 00:20-as szokás 50 perc múlva van, nem 23 óra 10 perce volt
+    const d = ((c.minute - now + 2160) % 1440) - 720;
     if (d > COMMUTE.SHOW_BEFORE_MIN || d < -COMMUTE.SHOW_AFTER_MIN) continue;
     if (Math.abs(d) < bestD) {
       best = c;

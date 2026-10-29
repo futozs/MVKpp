@@ -9,6 +9,7 @@ import {
 import { getSession } from "@/lib/account";
 import { HEADER_PREFS, useToggle, WATCH_FEATURES, type PrefItem } from "@/lib/watchPrefs";
 import { cn } from "@/lib/utils";
+import { useGeo } from "@/context/GeoContext";
 import { HeaderPopover } from "./HeaderPopover";
 import { FOCUS_RING, FOCUS_RING_INSET, ICON_BUTTON } from "./headerStyles";
 
@@ -62,6 +63,39 @@ function ToggleRow({ item }: { item: PrefItem<string> }) {
         className="relative mt-0.5 after:absolute after:-inset-3 after:content-[''] focus-visible:ring-offset-popover"
       />
     </div>
+  );
+}
+
+/** A helymeghatározás ki-be kapcsolása (eszközönként; a helyzet sosem megy fel a felhőbe). */
+function LocationRow() {
+  const geo = useGeo();
+  const switchId = useId();
+  const descriptionId = useId();
+  const on = geo.status === "watching" || geo.status === "requesting";
+  return (
+    <section className="p-1.5">
+      <h3 className="px-2.5 pb-0.5 pt-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground">Helyzet</h3>
+      <div className="flex items-start gap-3 rounded-md px-2.5 py-2">
+        <div className="min-w-0 flex-1">
+          <label htmlFor={switchId} className="block cursor-pointer text-[13px] font-semibold text-foreground">
+            Helymeghatározás
+          </label>
+          <p id={descriptionId} className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+            {geo.status === "denied"
+              ? "A böngésző letiltotta ehhez az oldalhoz — a böngésző beállításaiban engedélyezheted."
+              : "Ebből számoljuk a sétát, az „Elérem?”-et és a felszállás felismerését. Csak ezen az eszközön marad."}
+          </p>
+        </div>
+        <Switch
+          id={switchId}
+          checked={on}
+          disabled={geo.status === "denied" || geo.status === "unavailable"}
+          onCheckedChange={(v) => (v ? geo.start() : geo.stop())}
+          aria-describedby={descriptionId}
+          className="relative mt-0.5 after:absolute after:-inset-3 after:content-[''] focus-visible:ring-offset-popover"
+        />
+      </div>
+    </section>
   );
 }
 
@@ -128,6 +162,7 @@ export function SettingsMenu({ onOpenAccount, accountItemClassName, isTouch }: S
             <Group title="Megállófigyelő" items={WATCH_FEATURES} />
             <div className="border-t border-border" />
             <Group title="Fejléc" items={HEADER_PREFS} />
+            <LocationRow />
           </div>
 
           {onOpenAccount ? (

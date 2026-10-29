@@ -2,6 +2,7 @@
 import type { ServiceDay } from "./gtfs/service.ts";
 import type { Route, Trip } from "./gtfs/feed.ts";
 import { secToHm } from "./time.ts";
+import { tripVariants, type TripVariant } from "./tripVariants.ts";
 
 export type TimetableTripRow = {
   tripId: string;
@@ -15,6 +16,8 @@ export type TimetableTripRow = {
   stopCount: number;
   deviates: boolean;
   headsignDiffers: boolean;
+  /** v3: útvonal-változat betűjele (az alaptól eltérő menetnél), lásd `variants` */
+  variant?: string;
   times: (string | null)[];
 };
 
@@ -26,6 +29,8 @@ export type TimetableTable = {
   stops: { id: string; code: string; name: string; lat: number | null; lon: number | null }[];
   trips: TimetableTripRow[];
   note?: string;
+  /** v3: a betűjelek magyarázata — miben más az a menet (melyik megállót érinti / hagyja ki, meddig megy) */
+  variants?: TripVariant[];
 };
 
 export type TimetableRouteRow = {
@@ -124,7 +129,9 @@ export function buildTable(day: ServiceDay, routeId: string, dir: string): Timet
 
   const longest = list.reduce((a, b) => (b.stopsOfTrip.length > a.stopsOfTrip.length ? b : a), list[0]);
   const stopOrder = longest.stopsOfTrip.map((x) => x.stopId);
-  const indexOfStop = new Map(stopOrder.map((id, i) => [id, i]));
+  // Egy megálló egy menetben kétszer is szerepelhet (pl. 20-as, 903-as): a k-adik érintés a k-adik oszlop.
+  const indexOfStop = new Map<string, number[]>();
+  stopOrder.forEach((id, i) => indexOfStop.set(id, [...(indexOfStop.get(id) ?? []), i]));
   const stopList = stopOrder.map((id) => {
     const s = feed.stops.get(id);
     return { id, code: s?.code || "", name: s?.name || id, lat: s?.lat ?? null, lon: s?.lon ?? null };
@@ -140,15 +147,24 @@ export function buildTable(day: ServiceDay, routeId: string, dir: string): Timet
       headsign = h;
     }
 
+  const { variants, codeOf } = tripVariants(
+    list.map((x) => ({ tripId: x.tripId, headsign: x.trip.headsign || headsign, stops: x.stopsOfTrip.map((st) => st.stopId) })),
+    (id) => feed.stops.get(id)?.name || id,
+  );
+
   const trips: TimetableTripRow[] = list.map((x) => {
     const times: (string | null)[] = new Array(stopOrder.length).fill(null);
     let extra = 0;
+    const visits = new Map<string, number>();
     for (const st of x.stopsOfTrip) {
-      const i = indexOfStop.get(st.stopId);
-      if (i == null) {
+      const cols = indexOfStop.get(st.stopId);
+      if (!cols) {
         extra++;
         continue;
       }
+      const k = visits.get(st.stopId) ?? 0;
+      visits.set(st.stopId, k + 1);
+      const i = cols[Math.min(k, cols.length - 1)];
       if (times[i] == null) times[i] = secToHm(st.dep);
     }
     const first = x.stopsOfTrip[0];
@@ -166,10 +182,11 @@ export function buildTable(day: ServiceDay, routeId: string, dir: string): Timet
       stopCount: x.stopsOfTrip.length,
       deviates: extra > 0,
       headsignDiffers: headsign.length > 0 && tripHeadsign !== headsign,
+      ...(codeOf.has(x.tripId) ? { variant: codeOf.get(x.tripId) } : {}),
       times,
     };
   });
-  return { route, dir, date: day.ymd, headsign, stops: stopList, trips };
+  return { route, dir, date: day.ymd, headsign, stops: stopList, trips, ...(variants.length ? { variants } : {}) };
 }
 
 export function buildDaySchedule(day: ServiceDay): DaySchedule {

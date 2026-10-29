@@ -114,6 +114,9 @@ export function AccountModal({ isOpen, onClose }: AccountModalProps) {
     const s = await getBackupStatus();
     setStatus(s.ok ? s.data : null);
     setStatusBusy(false);
+    // A letöltött beállításokat a képernyő is lássa (különben a következő helyi módosítás
+    // a régi, memóriában lévő értékkel írná felül a frissen érkezettet).
+    if (changed.length) window.setTimeout(() => location.reload(), 900);
   };
 
   const handlePull = async () => {

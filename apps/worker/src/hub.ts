@@ -13,7 +13,7 @@
  */
 import type { IncomingMessage, Server } from "node:http";
 import { WebSocketServer, type WebSocket } from "ws";
-import { nowUnix, progressOnTrip, serviceClock, type DecodedVehicle, type RunOut } from "@mvk/core";
+import { nowUnix, progressOnTrip, serviceClock, type DecodedVehicle, type RunOut, type VehicleMotion } from "@mvk/core";
 import { sql } from "@mvk/db";
 import { sha256Hex } from "@mvk/db/crypto";
 import type { Engine } from "./engine.ts";
@@ -30,6 +30,11 @@ const MAX_TOPICS = 40;
 const STOP_LIMIT = 10;
 /** ha a jármű legutóbbi jele ennyivel frissebb, mint amit az illesztő felhasznált, nincs becslés (mp) */
 const MOTION_STALE_S = 45;
+/** a térképi pálya: ennyi megállón át, legfeljebb ennyi másodpercre előre */
+const TRAJ_STOPS = 5;
+const TRAJ_HORIZON_S = 240;
+/** álló busznál (megálló, lámpa) a pálya ennyi várakozással indul — a következő jel úgyis jön */
+const TRAJ_STOPPED_HOLD_S = 12;
 
 export class Hub {
   private wss: WebSocketServer;
@@ -40,6 +45,8 @@ export class Hub {
   private predictor: VehiclePredictor;
   private parking: Parking;
   private forecaster: DelayForecaster;
+  /** járművenként az utolsó jel helye/ideje és a simított tempó (a pályához) */
+  private pace = new Map<string, { trip: string; a: number; t: number; pace: number }>();
   private insights: TripInsights;
   stats = { connections: 0, messages: 0 };
 
@@ -153,11 +160,64 @@ export class Hub {
     // a becslés a következő megállónál tartaná a buszt — inkább a valós helye látszik.
     if (veh.timestamp && veh.timestamp - offset - m.ts > MOTION_STALE_S) return null;
     const gpsSpeed = veh.speed;
-    // Álló busznál (megálló, lámpa) nincs becslés: a jel helyén marad, amíg újra el nem indul.
-    if (m.stopped) return { s: m.shapeId, a: m.alongM, t: m.ts, e: m.toAlongM, v: 0 };
     const run = this.engine.todayRuns.get(m.tripId);
-    const v = this.forecaster.segmentSpeed(m, run?.serviceDate ?? this.engine.today) ?? gpsSpeed ?? 6;
-    return { s: m.shapeId, a: m.alongM, t: m.ts, e: m.toAlongM, v: Math.round(Math.min(22, Math.max(1.5, v)) * 10) / 10 };
+    const serviceDate = run?.serviceDate ?? this.engine.today;
+    const segV = this.forecaster.segmentSpeed(m, serviceDate);
+    const k = this.trajectoryOf(veh.id, m, serviceDate, segV);
+    // Álló busznál (megálló, lámpa) a régi kliens a jel helyén tartja; a pálya (k) ilyenkor egy rövid várakozással indul.
+    if (m.stopped) return { s: m.shapeId, a: m.alongM, t: m.ts, e: m.toAlongM, v: 0, k };
+    const v = segV ?? gpsSpeed ?? 6;
+    return { s: m.shapeId, a: m.alongM, t: m.ts, e: m.toAlongM, v: Math.round(Math.min(22, Math.max(1.5, v)) * 10) / 10, k };
+  }
+
+  /**
+   * A busz várható pályája a következő megállókon át: [hely a nyomvonalon (m), idő a jel óta (mp)].
+   * Szakaszonként a mért szokásos menetsebesség a busz saját mostani tempójával, és megállónként az
+   * átlagos álldogálás (ahol gyakran nem áll meg, ott kevés). A térkép ezt követi sima gyorsulással —
+   * a visszamérés szerint így nem marad le rendszeresen (a régi „minden megállóban megáll” 22 m-t késett).
+   */
+  private trajectoryOf(vehicleId: string, m: VehicleMotion, serviceDate: string, segV: number | null): [number, number][] | null {
+    const stops = this.engine.feeds.cachedDay(serviceDate)?.feed.tripStopsAlong(m.tripId);
+    if (!stops?.length) return null;
+    const pace = this.paceOf(vehicleId, m, segV);
+    let n = 0;
+    while (n < stops.length && stops[n].alongM <= m.alongM + 5) n++;
+    const k: [number, number][] = [[m.alongM, 0]];
+    let pos = m.alongM;
+    let t = 0;
+    if (m.stopped) {
+      t += TRAJ_STOPPED_HOLD_S;
+      k.push([pos, t]);
+    }
+    for (let i = n; i < stops.length && i < n + TRAJ_STOPS && t < TRAJ_HORIZON_S; i++) {
+      const a = stops[i - 1];
+      const b = stops[i];
+      const base = a ? this.forecaster.speedBetween(a, b, serviceDate) : segV;
+      const v = Math.min(22, Math.max(2, (base ?? 8) * pace));
+      t += Math.max(0, b.alongM - pos) / v;
+      k.push([b.alongM, t]);
+      pos = b.alongM;
+      const d = i === stops.length - 1 ? 0 : this.forecaster.expectedDwell(b.stopId, serviceDate, b.dep);
+      if (d >= 1) {
+        t += d;
+        k.push([pos, t]);
+      }
+    }
+    return k.map(([x, s]) => [Math.round(x), Math.round(s * 10) / 10]);
+  }
+
+  /** A busz tempója a szokásos menetsebességhez képest (0,7–1,3), az utolsó jelek közötti haladásból simítva. */
+  private paceOf(vehicleId: string, m: VehicleMotion, segV: number | null): number {
+    const prev = this.pace.get(vehicleId);
+    if (prev && prev.t === m.ts) return prev.pace;
+    let pace = prev?.pace ?? 1;
+    if (prev && prev.trip === m.tripId && m.ts > prev.t && m.ts - prev.t <= 60 && !m.stopped && segV && segV > 1) {
+      const obs = (m.alongM - prev.a) / (m.ts - prev.t);
+      if (obs > 0.5) pace = 0.5 * pace + 0.5 * Math.min(1.3, Math.max(0.7, obs / segV));
+    } else if (!prev || prev.trip !== m.tripId) pace = 1;
+    this.pace.set(vehicleId, { trip: m.tripId, a: m.alongM, t: m.ts, pace });
+    if (this.pace.size > 2000) this.pace.clear();
+    return pace;
   }
 
   /** `offset`: a feed helyi idős időbélyegeinek eltolása (egy körön belül állandó) */
@@ -251,8 +311,12 @@ export class Hub {
 
   private sendRaw(c: Client, msg: string) {
     if (c.ws.readyState !== c.ws.OPEN) return;
-    // Lassú kliensnél (nagy puffer) kihagyunk egy kört, nem fojtjuk meg a szervert.
-    if (c.ws.bufferedAmount > 1_000_000) return;
+    // Lassú kliens (nagy puffer): a kihagyott különbség-üzenet örökre elveszne (szellem-buszok),
+    // ezért bontjuk — újracsatlakozáskor a teljes állapotot kapja.
+    if (c.ws.bufferedAmount > 1_000_000) {
+      c.ws.terminate();
+      return;
+    }
     c.ws.send(msg);
     this.stats.messages++;
   }

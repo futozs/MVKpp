@@ -32,6 +32,11 @@ export type EngineEvents = {
   cancelled: [Set<string>];
 };
 
+/** ennél hosszabb szünet a sikeres pozíció-lekérések között kiesésnek számít (ms) */
+const FEED_GAP_MS = 60_000;
+/** éjfél után ennyi ideig még a tegnapi törléslista jöhet vissza (mp) */
+const CANCELLED_SETTLE_S = 180;
+
 const EMPTY: RealtimeSnapshot = {
   fetchedAt: 0,
   header: { version: "", timestamp: 0 },
@@ -72,6 +77,10 @@ export class Engine extends EventEmitter<EngineEvents> {
   /** a legutóbbi SIKERES pozíció- / előrejelzés-lekérés ideje (ms) — ennyi ideig tartjuk meg a régit */
   private positionsOkAt = 0;
   private updatesOkAt = 0;
+  /** a mai napon az MVK-kiesésekkel elveszett idő (mp) — a csend miatti lezárás ennyivel később jár */
+  private feedGapS = 0;
+  /** éjfél után érkezett MVK-törléslista a következő szolgáltatási napra (napváltáskor lesz élő) */
+  private nextCancelled: { iso: string; state: Engine["cancelled"] } | null = null;
   private timers: NodeJS.Timeout[] = [];
 
   constructor(feeds: FeedManager) {
@@ -107,6 +116,18 @@ export class Engine extends EventEmitter<EngineEvents> {
 
   async start(): Promise<void> {
     await this.replayToday();
+    // Napközbeni újraindításkor a mai gyűjtés-számlálók folytatódnak (különben a nap egészségét
+    // csak az újraindítás utáni szeletből ítélnénk meg).
+    const health = await getPool()
+      .query<{ polls_ok: number; polls_fail: number; pings_kept: number; vehicles_max: number }>(
+        `SELECT polls_ok, polls_fail, pings_kept, vehicles_max FROM feed_health WHERE service_date = $1`,
+        [this.todayIso],
+      )
+      .catch(() => null);
+    const h = health?.rows[0];
+    if (h) {
+      this.poll = { ...this.poll, ok: h.polls_ok, fail: h.polls_fail, pingsKept: h.pings_kept, vehiclesMax: h.vehicles_max };
+    }
     const every = (ms: number, fn: () => unknown) => {
       const t = setInterval(() => {
         Promise.resolve(fn()).catch((e) => log.error("engine", "időzített feladat hiba", errMsg(e)));
@@ -165,7 +186,12 @@ export class Engine extends EventEmitter<EngineEvents> {
     const tok = tokenStatus();
     if (!tok.present || tok.expired) {
       // Lejárt tokennel az MVK úgyis elutasít — nem terheljük 2,5 mp-enként, és nem mutatunk régi adatot.
+      const clock = serviceClock(nowUnix());
+      if (clock.iso !== this.todayIso) this.rollDay(clock.iso);
+      const wasLive = this.snapshot.vehicles.length > 0 || this.snapshot.decoded.length > 0;
       this.snapshot = { ...EMPTY, rtError: tok.present ? "lejárt az MVK token" : "nincs MVK token" };
+      // a feliratkozók (térkép, megállótáblák, push) is lássák, hogy nincs élő adat — ne ragadjanak a régin
+      if (wasLive) this.emit("tick", this.snapshot);
       return;
     }
     this.busy = true;
@@ -193,12 +219,18 @@ export class Engine extends EventEmitter<EngineEvents> {
         days,
         midnightUnix: clock.midnightUnix,
         rtError: errs.length ? errs.join("; ") : null,
+        now,
       });
       // A régi adatot legfeljebb 60 mp-ig visszük tovább (a `fetchedAt` minden körben frissül,
       // ezért a legutóbbi sikeres lekéréshez mérünk — különben a befagyott buszok órákig élőnek látszanának).
       const nowMs = Date.now();
-      if (positions) this.positionsOkAt = nowMs;
-      else if (this.snapshot.decoded.length && nowMs - this.positionsOkAt < 60_000) {
+      if (positions) {
+        // Az MVK-kiesés ideje nem a buszok csendje: a csend miatti lezárás ennyivel később jár
+        // (különben egy 20 perces kiesés után minden futó menetet lezárnánk, majd újranyitnánk).
+        const gapMs = this.positionsOkAt ? nowMs - this.positionsOkAt : 0;
+        if (gapMs > FEED_GAP_MS) this.feedGapS += Math.round(gapMs / 1000);
+        this.positionsOkAt = nowMs;
+      } else if (this.snapshot.decoded.length && nowMs - this.positionsOkAt < 60_000) {
         snap.decoded = this.snapshot.decoded;
         snap.vehicles = this.snapshot.vehicles;
         snap.header = this.snapshot.header;
@@ -234,6 +266,12 @@ export class Engine extends EventEmitter<EngineEvents> {
       this.poll.fail++;
       this.poll.lastError = errMsg(e);
       log.warn("poll", "hiba", errMsg(e));
+      // tartósan hibás válasz (pl. 200-as karbantartási oldal protobuf helyett): a 60 mp-nél
+      // régebbi pozíciókat nem adjuk tovább élőként
+      if (this.snapshot.decoded.length && Date.now() - this.positionsOkAt > 60_000) {
+        this.snapshot = { ...EMPTY, rtError: errMsg(e) };
+        this.emit("tick", this.snapshot);
+      }
     } finally {
       this.poll.lastMs = Date.now() - t0;
       this.busy = false;
@@ -244,8 +282,13 @@ export class Engine extends EventEmitter<EngineEvents> {
     log.info("engine", `új szolgáltatási nap: ${iso}`);
     this.todayIso = iso;
     this.todayRuns.clear();
-    this.cancelled = { ids: new Set(), raw: [], at: 0, stale: false, error: null };
+    // éjfél után már megjött az új nap MVK-listája: azt vesszük át
+    const next = this.nextCancelled?.iso === iso ? this.nextCancelled.state : null;
+    this.cancelled = next ?? { ids: new Set(), raw: [], at: 0, stale: false, error: null };
+    this.nextCancelled = null;
     this.poll = { ...this.poll, ok: 0, fail: 0, pingsKept: 0, vehiclesMax: 0 };
+    this.feedGapS = 0;
+    if (next) this.emit("cancelled", next.ids);
   }
 
   get today() {
@@ -258,20 +301,29 @@ export class Engine extends EventEmitter<EngineEvents> {
       const res = await mvkFetch("/api/v1/gtfs/list-cancelled-trips");
       if (res.status !== 200) throw new Error(`list-cancelled-trips HTTP ${res.status}`);
       const raw = parseCancelledIds(JSON.parse(res.buf.toString("utf8").trim() || "[]"));
-      const day = this.feeds.cachedDay(this.todayIso);
+      // Az MVK listája naptári napra szól (éjfélkor vált), a szolgáltatási nap 03:00-kor:
+      // éjfél után már a holnapi lista jön — azt félretesszük a napváltásig, nem a mainak mutatjuk.
+      const clock = serviceClock(nowUnix());
+      const listIso = clock.calendarIso;
+      const early = listIso !== this.todayIso;
+      // éjfél utáni első percekben még a tegnapi lista jöhet vissza: azt nem tesszük el holnapinak
+      if (early && clock.secOfDay - 86_400 < CANCELLED_SETTLE_S) return;
+      const day = this.feeds.cachedDay(listIso) ?? this.feeds.cachedDay(this.todayIso);
       const ids = new Set<string>();
       for (const id of raw) ids.add((day && resolveTrip(day, id)?.id) || id);
-      this.cancelled = { ids, raw, at: Date.now(), stale: false, error: null };
+      const state = { ids, raw, at: Date.now(), stale: false, error: null };
+      if (early) this.nextCancelled = { iso: listIso, state };
+      else this.cancelled = state;
       if (ids.size) {
         const list = [...ids];
         await getPool().query(
           `INSERT INTO cancelled_trip (service_date, trip_id, first_seen, last_seen, samples)
            SELECT $1::date, t, now(), now(), 1 FROM unnest($2::text[]) AS t
            ON CONFLICT (service_date, trip_id) DO UPDATE SET last_seen = now(), samples = cancelled_trip.samples + 1`,
-          [this.todayIso, list],
+          [listIso, list],
         );
       }
-      this.emit("cancelled", ids);
+      if (!early) this.emit("cancelled", ids);
     } catch (e) {
       this.cancelled = { ...this.cancelled, stale: true, error: errMsg(e) };
     }
@@ -279,7 +331,8 @@ export class Engine extends EventEmitter<EngineEvents> {
 
   private async minute() {
     const now = nowUnix();
-    this.matcher.sweep(now);
+    // Kiesés közben nem zárunk csend miatt (nem a buszok hallgatnak, hanem az adatforrás).
+    if (Date.now() - this.positionsOkAt < FEED_GAP_MS) this.matcher.sweep(now - this.feedGapS);
     await this.feeds.warmToday();
     await getPool().query(
       `INSERT INTO feed_health (service_date, polls_ok, polls_fail, pings_kept, vehicles_max) VALUES ($1, $2, $3, $4, $5)

@@ -63,8 +63,11 @@ export type ArrivalItem = {
   progressDesc: string | null;
   /** v3: a saját illesztőnk által mért aktuális késés (mp), ha van */
   measuredDelaySec?: number | null;
-  /** v3: előre jelzett rendszám, ha még nincs élő jármű a menethez */
-  predictedVehicle?: { id: string; confidence: number } | null;
+  /**
+   * v3: előre jelzett rendszám, ha még nincs élő jármű a menethez. `method: "loop"`:
+   * nem tipp — a fordulóhurkon ugyanaz a busz fordul vissza, ami most odafelé jár.
+   */
+  predictedVehicle?: { id: string; confidence: number; method?: string } | null;
   /** v3: az MVK törölte a menetet */
   cancelled?: boolean;
   /** v3: várható késés ennél a megállónál (szakaszprofilokból) és a 85%-os felső becslés */

@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import type { LiveVehicle } from "@/types";
 import type { GeoPosition } from "@/hooks/useGeolocation";
 import { distM } from "./useTripLive";
+import { estimatePosition } from "@/components/map/liveMotion";
+import { serverNow } from "@/lib/realtime";
 
 /** két minta között legalább ennyi idő teljen el (a GPS másodpercenként jelezhet) */
 const SAMPLE_MS = 10_000;
@@ -16,7 +18,9 @@ const MOVED_M = 30;
 /** „Nem” után ennyi ideig nem kérdezünk újra ugyanarra a buszra */
 const SNOOZE_MS = 30 * 60_000;
 
-export type BoardingCandidate = LiveVehicle;
+/** a busz mellett az utolsó álló minta, mielőtt együtt elindultak: a felszállás helye és ideje (készülékidő, ms) */
+export type BoardingSpot = { at: number; lat: number; lon: number };
+export type BoardingCandidate = LiveVehicle & { since: BoardingSpot };
 
 /**
  * Felszállás-felismerés: ha a telefon több mintán át együtt mozog egy busszal,
@@ -26,7 +30,7 @@ export type BoardingCandidate = LiveVehicle;
 export function useBoardingDetector(enabled: boolean, position: GeoPosition | null, vehicles: LiveVehicle[]) {
   const [candidate, setCandidate] = useState<BoardingCandidate | null>(null);
   const last = useRef<{ at: number; lat: number; lon: number } | null>(null);
-  const hits = useRef(new Map<string, { n: number; first: number }>());
+  const hits = useRef(new Map<string, { n: number; first: number; spot: BoardingSpot }>());
   const snoozed = useRef(new Map<string, number>());
   const vehiclesRef = useRef(vehicles);
   vehiclesRef.current = vehicles;
@@ -43,18 +47,26 @@ export function useBoardingDetector(enabled: boolean, position: GeoPosition | nu
     for (const v of vehiclesRef.current) {
       if (v.lat == null || v.lon == null || !v.tripId) continue;
       if ((snoozed.current.get(v.id) ?? 0) > now) continue;
-      const d = distM(position, { lat: v.lat, lon: v.lon });
+      // A busz jele 0–15 mp-es (gyors szakaszon 150+ m lemaradás): a becsült mostani helyéhez mérünk.
+      const est = estimatePosition(v.motion, serverNow(), undefined);
+      const d = distM(position, est ? { lat: est.latlng[0], lon: est.latlng[1] } : { lat: v.lat, lon: v.lon });
       const h = hits.current.get(v.id);
       if (d > FAR_M) {
         if (h) hits.current.delete(v.id);
         continue;
       }
-      if (d > near || !moved) continue;
-      const next = h ? { n: h.n + 1, first: h.first } : { n: 1, first: position.at };
+      if (d > near) continue;
+      const here = { at: position.at, lat: position.lat, lon: position.lon };
+      if (!moved) {
+        // Együtt állnak (a megállóban, felszálláskor): amíg el nem indultak, ez a felszállás helye.
+        hits.current.set(v.id, h?.n ? h : { n: 0, first: 0, spot: here });
+        continue;
+      }
+      const next = h?.n ? { ...h, n: h.n + 1 } : { n: 1, first: position.at, spot: h?.spot ?? here };
       hits.current.set(v.id, next);
       if (next.n >= HITS && position.at - next.first >= MIN_SPAN_MS) {
         hits.current.clear();
-        setCandidate(v);
+        setCandidate({ ...v, since: next.spot });
         return;
       }
     }

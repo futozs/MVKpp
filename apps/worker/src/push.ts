@@ -41,12 +41,15 @@ const RISK_ALERT_S = 180;
 /** átszállás: ennél kisebb esélynél szólunk */
 const TRANSFER_ALERT_CHANCE = 0.4;
 /** egyszeri („erre a menetre”) indulás-figyelés ennyi idő után lejár */
-const ONE_SHOT_TTL_H = 4;
+/** egyszeri figyelés legfeljebb ennyi óráig él: este a reggeli első buszra is jó, de másnap ugyanarra a menetazonosítóra már ne szóljon */
+const ONE_SHOT_TTL_H = 20;
 
 export type WatchKind = "arrival" | "leave" | "traffic" | "transfer";
 type DeliveryKind = "arrival" | "cancelled" | "leave" | "missed" | "risk" | "traffic" | "transfer";
 
 type WatchParams = {
+  /** arrival (egyszeri menet-figyelés): a szolgáltatási nap, amelyre szól */
+  date?: string;
   /** leave: séta a megállóig (mp) */
   walkS?: number;
   /** leave (ismétlődő): melyik napokon — munkanap, hétvége, mind, vagy a hét napjai (ISO 1–7) */
@@ -101,7 +104,8 @@ function isWatchDay(days: WatchParams["days"], date: string): boolean {
 
 const minText = (s: number) => `${Math.max(1, Math.round(s / 60))} perc`;
 const busLabel = (a: ArrivalItem) => {
-  const veh = a.vehicle?.id ?? (a.predictedVehicle ? `~${a.predictedVehicle.id}` : null);
+  const p = a.predictedVehicle;
+  const veh = a.vehicle?.id ?? (p ? (p.method === "loop" ? p.id : `~${p.id}`) : null);
   return `${withHungarianSuffix(a.route)} busz${veh ? ` (${veh})` : ""}`;
 };
 /** A busz várható érkezése a megállóba (unix) és a 85%-os felső becslés. */
@@ -153,10 +157,14 @@ export class PushEngine {
   }
 
   async reload(): Promise<void> {
-    // A lejárt egyszeri „indulj most” és átszállás-figyelések takarítása.
+    // A lejárt egyszeri figyelések takarítása: „indulj most”, átszállás, és az egy napra szóló menet-figyelés
+    // (dátummal: a nap után; régi, dátum nélküli sor: az élettartam után).
     await getPool().query(
-      `DELETE FROM push_watch WHERE kind IN ('leave', 'transfer') AND sched_min IS NULL AND updated_at < now() - make_interval(hours => $1)`,
-      [ONE_SHOT_TTL_H],
+      `DELETE FROM push_watch WHERE sched_min IS NULL AND (
+         (kind IN ('leave', 'transfer') AND updated_at < now() - make_interval(hours => $1))
+         OR (kind = 'arrival' AND trip_id IS NOT NULL AND (params->>'date' < $2 OR (params->>'date' IS NULL AND updated_at < now() - make_interval(hours => $1))))
+       )`,
+      [ONE_SHOT_TTL_H, this.engine.today],
     );
     this.watches = await sql<WatchRow>(
       `SELECT w.id, w.subscription_id, w.kind, w.params, w.stop_id, w.stop_name, w.threshold_min, w.route_shorts, w.trip_id, w.sched_min, w.is_departure,
@@ -208,6 +216,8 @@ export class PushEngine {
   }
 
   private async evalArrival(w: WatchRow, arrivals: ArrivalItem[], nowMin: number, date: string) {
+    // Egy napra szóló menet-figyelés: más napon ugyanez a menetazonosító nem ez a menet.
+    if (w.trip_id && w.sched_min == null && w.params?.date && w.params.date !== date) return;
     // Törölt menet: a konkrét menetre feliratkozottak azonnal értesítést kapnak.
     if (w.trip_id && this.engine.cancelled.ids.has(w.trip_id)) {
       await this.enqueue(w, date, w.trip_id, "cancelled", {
@@ -240,14 +250,25 @@ export class PushEngine {
     const walkS = Math.max(0, Math.min(3600, Number(w.params?.walkS) || 0));
     if (w.sched_min != null && !isWatchDay(w.params?.days, date)) return;
     for (const a of this.relevant(w, arrivals, nowMin)) {
-      if (a.cancelled) continue;
       const { at, upper } = expectedAt(a, now);
       // csak a közeli indulásokra (egy óránál messzebbre nincs mit mondani)
       if (at - now > 3600) continue;
+      if (a.cancelled) {
+        // a szokásos / kért buszt kihúzták: ezt is megírjuk, a helyette jövővel
+        const next = this.insights.nextDeparture(w.stop_id, a.route, now + walkS, now);
+        await this.enqueue(w, date, a.tripId, "cancelled", {
+          title: `${busLabel(a)} kimarad`,
+          body: `Az MVK kihúzta a ${a.time}-s menetet (${w.stop_name}).${next ? ` A következő ${withHungarianSuffix(a.route)}: ${next.time}.` : ""}`,
+        });
+        continue;
+      }
       const v = catchVerdict({ nowUnix: now, expectedUnix: at, upperUnix: upper, walkS });
       if (v.state === "relax") continue;
       const eta = minText(at - now);
       if (v.state === "missed") {
+        // Az „Indulj most” után a felhasználó már úton van: a „nem éred el” akkor téves lenne
+        // (a verdikt mindig a mostani indulást feltételezi).
+        if (this.sent.has(`${w.id}|${date}|${a.tripId}|leave`)) continue;
         const next = this.insights.nextDeparture(w.stop_id, a.route, now + walkS, now);
         await this.enqueue(w, date, a.tripId, "missed", {
           title: `${busLabel(a)}: ezt már nem éred el`,
@@ -315,7 +336,13 @@ export class PushEngine {
       );
       if (!r[0]) return;
       this.stats.queued++;
-      await this.boss.send(QUEUE, { deliveryId: r[0].id });
+      try {
+        await this.boss.send(QUEUE, { deliveryId: r[0].id });
+      } catch (e) {
+        // a sorba nem került: a sort is töröljük, különben a következő kör ütközne rajta, és sosem menne ki
+        await getPool().query(`DELETE FROM push_delivery WHERE id = $1`, [r[0].id]).catch(() => {});
+        throw e;
+      }
     } catch (e) {
       this.sent.delete(key);
       throw e;

@@ -98,6 +98,8 @@ export function initialMapView(): MapView | null {
 }
 
 export function saveMapView(view: MapView) {
+  // a térkép újbóli megnyitásakor (fülváltás) innen folytatjuk, nem a betöltéskori helyről
+  cachedMap = view;
   write(MAP_KEY, view);
 }
 
@@ -121,5 +123,7 @@ export function initialTimetableView(): TimetableView | null {
 }
 
 export function saveTimetableView(view: TimetableView) {
+  // fülváltás után a Menetrend a legutóbbi választással nyílik újra
+  cachedTimetable = view.routeId ? view : null;
   write(TIMETABLE_KEY, view);
 }

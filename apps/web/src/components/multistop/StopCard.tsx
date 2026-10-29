@@ -33,8 +33,12 @@ const RETRY_MAX_MS = 30_000;
 
 const POLL_MS = 4000;
 
+/** Fordulóhurok: nem tipp — ugyanaz a busz fordul vissza, ami most odafelé jár. */
+const isLoopVehicle = (p: { method?: string }) => p.method === "loop";
+
 function predictedTitle(p: { confidence: number; method?: string }): string {
   if (p.method === "matched") return "Már úton van — a GPS-nyomvonal alapján ez a busz viszi";
+  if (isLoopVehicle(p)) return "Ez a busz most a végállomás felé jár, és ugyanonnan fordul vissza — nem tipp";
   return `Előrejelzés a korábbi fordák alapján, ${Math.round(p.confidence * 100)}% bizonyossággal`;
 }
 
@@ -355,11 +359,23 @@ export function StopCard({
                 className="mt-3 text-[11px] text-muted-foreground"
                 title={predictedTitle(next.predictedVehicle)}
               >
-                Várhatóan a{" "}
-                <span className="rounded border border-dashed border-primary/50 px-1.5 py-px font-mono font-bold tabular-nums text-primary">
-                  {next.predictedVehicle.id}
-                </span>{" "}
-                jön
+                {isLoopVehicle(next.predictedVehicle) ? (
+                  <>
+                    A{" "}
+                    <span className="rounded bg-primary/12 px-1.5 py-px font-mono font-bold tabular-nums text-primary">
+                      {next.predictedVehicle.id}
+                    </span>{" "}
+                    jön: most a végállomás felé tart, onnan fordul vissza
+                  </>
+                ) : (
+                  <>
+                    Várhatóan a{" "}
+                    <span className="rounded border border-dashed border-primary/50 px-1.5 py-px font-mono font-bold tabular-nums text-primary">
+                      {next.predictedVehicle.id}
+                    </span>{" "}
+                    jön
+                  </>
+                )}
               </p>
             ) : null}
             {f.forecast ? <ForecastLine className="mt-2.5" mode="worst" delayS={next.forecastDelaySec} upperS={next.forecastUpperSec} /> : null}
@@ -443,12 +459,21 @@ export function StopCard({
                             {bus.vehicle.id}
                           </span>
                         ) : bus.predictedVehicle && showPredicted && !bus.cancelled ? (
-                          <span
-                            className="rounded border border-dashed border-primary/40 px-1.5 py-px font-mono text-[11px] font-bold tabular-nums text-primary/80"
-                            title={predictedTitle(bus.predictedVehicle)}
-                          >
-                            ~{bus.predictedVehicle.id}
-                          </span>
+                          isLoopVehicle(bus.predictedVehicle) ? (
+                            <span
+                              className="rounded bg-primary/12 px-1.5 py-px font-mono text-[11px] font-bold tabular-nums text-primary"
+                              title={predictedTitle(bus.predictedVehicle)}
+                            >
+                              {bus.predictedVehicle.id}
+                            </span>
+                          ) : (
+                            <span
+                              className="rounded border border-dashed border-primary/40 px-1.5 py-px font-mono text-[11px] font-bold tabular-nums text-primary/80"
+                              title={predictedTitle(bus.predictedVehicle)}
+                            >
+                              ~{bus.predictedVehicle.id}
+                            </span>
+                          )
                         ) : null}
                         {bus.cancelled ? (
                           <span className="rounded bg-destructive/15 px-1.5 py-px text-[10px] font-bold uppercase text-destructive">

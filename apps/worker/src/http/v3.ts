@@ -106,7 +106,11 @@ export function registerV3(r: Router, ctx: Ctx) {
       const runs = await sql<{ d: string; n: number }>(
         `SELECT service_date::text AS d, count(*)::int AS n FROM trip_run WHERE service_date >= CURRENT_DATE - 400 GROUP BY 1 ORDER BY 1`,
       );
-      const pings = await sql<{ mn: string | null; mx: string | null }>(`SELECT min(ts)::date::text AS mn, max(ts)::date::text AS mx FROM veh_ping`);
+      // szolgáltatási napok (budapesti idő − 3 óra), nem az adatbázis UTC-dátumai: hajnalban se nyíljon egy még el nem kezdett nap
+      const pings = await sql<{ mn: string | null; mx: string | null }>(
+        `SELECT ((min(ts) AT TIME ZONE 'Europe/Budapest') - interval '3 hours')::date::text AS mn,
+                ((max(ts) AT TIME ZONE 'Europe/Budapest') - interval '3 hours')::date::text AS mx FROM veh_ping`,
+      );
       return { runs, gps: pings[0] ?? null };
     });
     sendJson(req, res, 200, data);

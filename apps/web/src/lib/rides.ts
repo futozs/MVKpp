@@ -61,6 +61,8 @@ export interface ActiveRide {
   color: string;
   text: string;
   boardedAt: number;
+  /** felismert felszállás: ahol a telefon a busz mellett állt — ebből lesz a felszállás megállója */
+  boardNear?: { lat: number; lon: number } | null;
   fromIdx: number | null;
   fromStopId: string | null;
   fromStopName: string | null;
@@ -154,7 +156,7 @@ export function startRide(r: Omit<ActiveRide, "id" | "destIdx">): ActiveRide {
 type RideEnd = Pick<Ride, "alightedAt" | "toStopId" | "toStopName" | "stops" | "distanceM" | "delayAtAlightS">;
 
 function closedRide(a: ActiveRide, end: RideEnd, chainId: string | null): StoredRide {
-  const { destIdx: _dest, fromIdx: _from, leg: _leg, turn: _turn, ...rest } = a;
+  const { destIdx: _dest, fromIdx: _from, leg: _leg, turn: _turn, boardNear: _near, ...rest } = a;
   return { ...rest, ...end, chainId, synced: false };
 }
 

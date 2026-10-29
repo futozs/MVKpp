@@ -62,7 +62,7 @@ const routes: Route[] = [
                 round(100.0 * sum(h.n_late) / nullif(sum(h.n), 0))::int AS late_pct,
                 round(approx_percentile(0.85, rollup(h.delay_pct)))::int AS p85_delay_s
            FROM stop_event_hourly h JOIN calendar_day c USING (service_date)
-          WHERE c.daytype = $1 AND h.service_date >= CURRENT_DATE - $2::int AND h.service_date < CURRENT_DATE
+          WHERE c.daytype = $1 AND h.service_date >= ((now() AT TIME ZONE 'Europe/Budapest') - interval '3 hours')::date - $2::int AND h.service_date < ((now() AT TIME ZONE 'Europe/Budapest') - interval '3 hours')::date
           GROUP BY 1 ORDER BY 1`,
         [daytype, days],
       );

@@ -5,7 +5,7 @@
  * (és hogy a push sikerült-e — ha nem, nyitott oldalnál helyben szólunk).
  */
 import { useSyncExternalStore } from "react";
-import { notificationPermission, requestNotificationPermission } from "@/lib/notifications";
+import { getNotificationSettings, isWithinDnd, notificationPermission, requestNotificationPermission } from "@/lib/notifications";
 import { registerPushWatch, unregisterPushWatch, type PushDiagnostic, type PushWatchKind } from "@/lib/push";
 
 const KEY = "mvk_alert_watches";
@@ -119,6 +119,9 @@ export function notifyLocallyOnce(stopId: string, slot: string, tripId: string, 
   const a = findAlert(stopId, slot);
   if (!a || a.pushRegistered || a.notifiedTripIds?.includes(tripId)) return false;
   if (notificationPermission() !== "granted") return false;
+  // a főkapcsoló és a „Ne zavarj” az oldalon belüli értesítésre is vonatkozik
+  const settings = getNotificationSettings();
+  if (!settings.enabled || isWithinDnd(settings.dnd)) return false;
   try {
     new Notification(title, { body, tag: `mvk-${slot}-${tripId}`.slice(0, 60), icon: "/icon-192.png" });
   } catch {

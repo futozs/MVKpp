@@ -73,7 +73,8 @@ export async function sessionUser(req: Request): Promise<User | null> {
   const tok = req.headers.get("x-account-session") ?? req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? null;
   if (!tok) return null;
   const r = await sqlOne<User>(
-    `UPDATE user_session s SET last_seen_at = now() FROM app_user u
+    // csúszó lejárat: aki használja, annak nem jár le (a fix 180 nap után a szinkron csendben leállna)
+    `UPDATE user_session s SET last_seen_at = now(), expires_at = greatest(s.expires_at, now() + interval '180 days') FROM app_user u
       WHERE s.token_hash = $1 AND s.expires_at > now() AND u.id = s.user_id
       RETURNING u.id, u.email::text AS email`,
     [hashToken(tok)],

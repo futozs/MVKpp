@@ -90,7 +90,11 @@ export function StopNotifyDialog({
     }
     const thresholdMin = Math.max(1, Math.min(60, threshold || DEFAULT_THRESHOLD_MIN));
     const finalRouteShorts = routeShorts.length ? routeShorts : undefined;
-    setWatch(stopId, { stopName, thresholdMin, routeShorts: finalRouteShorts });
+    // A Menetrendből adott menethez / naponta ugyanarra az időre kötött figyelés az is marad
+    // (különben a mentés egész napos, bármelyik buszra szóló figyeléssé tenné).
+    const prev = getWatch(stopId);
+    const pin = { tripId: prev?.tripId, schedMin: prev?.schedMin, isDeparture: prev?.isDeparture, date: prev?.date };
+    setWatch(stopId, { stopName, thresholdMin, routeShorts: finalRouteShorts, ...pin });
     setExisted(true);
     onChanged?.(true);
 
@@ -100,6 +104,10 @@ export function StopNotifyDialog({
       stopName,
       thresholdMin,
       routeShorts: finalRouteShorts,
+      tripId: pin.tripId,
+      schedMin: pin.schedMin,
+      isDeparture: pin.isDeparture,
+      params: pin.date ? { date: pin.date } : undefined,
     });
     setPushRegistered(stopId, result.ok);
     setPushStatus(

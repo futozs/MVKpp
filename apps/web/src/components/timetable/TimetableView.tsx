@@ -121,6 +121,8 @@ function DayPicker({
         max={max}
         aria-label="Menetrend napja"
         align={align}
+        // „Ma” = a szolgáltatási nap (éjfél után 03:00-ig még a mai menetek futnak)
+        today={todayIso()}
         className="h-7 min-w-0 flex-1 justify-center border-none bg-transparent px-1.5 text-xs shadow-none"
       />
 
@@ -158,6 +160,9 @@ export function TimetableView({
   const [selectedDir, setSelectedDir] = useState<string>(restored?.dir ?? "");
   const [table, setTable] = useState<TimetableResponse | null>(null);
   const [tableLoading, setTableLoading] = useState(false);
+  // a betöltés hibája nem azonos a „nincs járat” állapottal; az újrapróbálás ezt a számlálót lépteti
+  const [tableError, setTableError] = useState(false);
+  const [tableRetry, setTableRetry] = useState(0);
   const [selectedTrip, setSelectedTrip] = useState<TimetableTrip | null>(null);
   const pendingTripRef = useRef<string | null>(restored?.tripId ?? null);
   const { favorites, isFavorite, toggleFavorite } = useFavorites();
@@ -239,6 +244,7 @@ export function TimetableView({
     }
     let alive = true;
     setTableLoading(true);
+    setTableError(false);
     pendingTripRef.current ??= selectedTripIdRef.current;
     setSelectedTrip(null);
     api
@@ -252,12 +258,16 @@ export function TimetableView({
         const hit = res.trips.find((t) => t.tripId === pending);
         if (hit) chooseTrip(hit);
       })
-      .catch(() => alive && setTable(null))
+      .catch(() => {
+        if (!alive) return;
+        setTable(null);
+        setTableError(true);
+      })
       .finally(() => alive && setTableLoading(false));
     return () => {
       alive = false;
     };
-  }, [selectedRouteId, selectedDir, date]);
+  }, [selectedRouteId, selectedDir, date, tableRetry]);
 
   const vehicleByTrip = useMemo(() => {
     const map = new Map<string, LiveVehicle>();
@@ -345,8 +355,9 @@ export function TimetableView({
   const selectedTripCancelled = selectedTrip
     ? cancelled.ids.has(selectedTrip.tripId)
     : false;
+  // a menetazonosítók naponta ismétlődnek: élő busz csak a mai menethez tartozhat
   const selectedVehicle =
-    selectedTrip && !selectedTripCancelled
+    day === "today" && selectedTrip && !selectedTripCancelled
       ? (vehicleByTrip.get(selectedTrip.tripId) ?? null)
       : null;
   const dayLabel = new Date(`${date}T12:00:00`).toLocaleDateString("hu-HU", {
@@ -733,6 +744,13 @@ export function TimetableView({
                 <p className="px-4 py-10 text-center font-mono text-xs text-muted-foreground">
                   Menetrend betöltése…
                 </p>
+              ) : tableError ? (
+                <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+                  <p>A menetrend most nem tölthető be.</p>
+                  <Button variant="outline" size="sm" className="mt-3" onClick={() => setTableRetry((n) => n + 1)}>
+                    Újra
+                  </Button>
+                </div>
               ) : !table || table.trips.length === 0 ? (
                 <p className="px-4 py-10 text-center text-sm text-muted-foreground">
                   {table?.note ??
@@ -847,7 +865,7 @@ function TripDetail({
     `${journalEntry?.stopsSeen ?? 0}|${journalEntry?.status ?? ""}`,
   );
   const fmtActual = (unix: number) =>
-    new Date(unix * 1000).toLocaleTimeString("hu-HU", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    new Date(unix * 1000).toLocaleTimeString("hu-HU", { timeZone: "Europe/Budapest", hour: "2-digit", minute: "2-digit", second: "2-digit" });
   const fmtDelay = (sec: number) => {
     if (Math.abs(sec) < 45) return "pontos";
     const m = Math.floor(Math.abs(sec) / 60);
@@ -956,6 +974,7 @@ function TripDetail({
           tripId={trip.tripId}
           routeShort={routeShort}
           isDeparture={notifyTarget.isDeparture}
+          date={dateYmd ? ymdToIso(dateYmd) : todayIso()}
           departureLabel={
             trip.times[stops.findIndex((s) => s.id === notifyTarget.stop.id)] ??
             trip.departure

@@ -7,7 +7,8 @@
  */
 import GtfsRealtimeBindings from "gtfs-realtime-bindings";
 import type { ServiceDay } from "../gtfs/service.ts";
-import { resolveTrip } from "../gtfs/service.ts";
+import { resolveTripNear } from "../gtfs/service.ts";
+import { localMidnightUnix } from "../time.ts";
 import type { DecodedVehicle, LiveVeh, RealtimeSnapshot, StopPrediction } from "./types.ts";
 
 const { transit_realtime } = GtfsRealtimeBindings;
@@ -22,14 +23,18 @@ export type DecodeInput = {
   /** a szolgáltatási nap referencia-éjfele, a csak késést tartalmazó frissítésekhez */
   midnightUnix: number;
   rtError?: string | null;
+  /** a lekérés ideje (unix): ugyanaz a menetazonosító több napon is él, ehhez a legközelebbi */
+  now?: number;
 };
 
-function resolveIn(days: ServiceDay[], rtTripId: string) {
-  for (const d of days) {
-    const t = resolveTrip(d, rtTripId);
-    if (t) return { trip: t, day: d };
-  }
-  return null;
+/** A menet a `now`-hoz időben legközelebbi napon (03:00 után a még futó éjszakai menet a tegnapi napé). */
+function resolveIn(days: ServiceDay[], rtTripId: string, now: number | null) {
+  const hit = resolveTripNear(
+    days.map((day) => ({ day, midnightUnix: localMidnightUnix(day.iso) })),
+    rtTripId,
+    now,
+  );
+  return hit ? { trip: hit.trip, day: hit.dc.day } : null;
 }
 
 export function buildSnapshot(input: DecodeInput): RealtimeSnapshot {
@@ -45,7 +50,7 @@ export function buildSnapshot(input: DecodeInput): RealtimeSnapshot {
       const v = e.vehicle;
       if (!v) continue;
       const rtTrip = v.trip?.tripId || "";
-      const hit = resolveIn(input.days, rtTrip);
+      const hit = resolveIn(input.days, rtTrip, input.now ?? null);
       const tripId = hit?.trip.id ?? rtTrip;
       const feedOf = hit?.day.feed ?? primary?.feed;
       const rawRoute = (v.trip?.routeId || "").trim();
@@ -87,7 +92,7 @@ export function buildSnapshot(input: DecodeInput): RealtimeSnapshot {
       const tu = e.tripUpdate;
       if (!tu) continue;
       const rtTrip = tu.trip?.tripId || "";
-      const hit = resolveIn(input.days, rtTrip);
+      const hit = resolveIn(input.days, rtTrip, input.now ?? null);
       const tripId = hit?.trip.id ?? rtTrip;
       const sched = hit ? hit.day.feed.tripStops.get(hit.trip.id) : undefined;
       for (const stu of tu.stopTimeUpdate || []) {

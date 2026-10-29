@@ -154,7 +154,9 @@ async function breakdowns(day: ServiceDay, iso: string): Promise<IncidentIn[]> {
   }>(
     `SELECT run_key, trip_id, vehicle_id, route_short, pattern, stops_seen, stops_total, last_stop_idx,
             extract(epoch FROM last_seen_at)::int AS last_seen, sched_end_s
-       FROM trip_run WHERE service_date = $1 AND status = 'partial' AND last_stop_idx IS NOT NULL`,
+       FROM trip_run WHERE service_date = $1 AND status = 'partial' AND last_stop_idx IS NOT NULL
+        -- egy megállónyi „menet” vagy az újraindításkor lezárt futás nem bizonyítja a meghibásodást
+        AND stops_seen >= 2 AND coalesce(close_reason, '') <> 'restart'`,
     [iso],
   );
   if (!runs.length) return [];

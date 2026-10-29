@@ -96,6 +96,11 @@ export function useGeolocation(): GeoState {
       },
       (err) => {
         if (err.code === err.PERMISSION_DENIED) {
+          // a tiltott figyelés halott: engedjük el, hogy egy későbbi engedélyezés után a gomb újraindíthassa
+          if (watchIdRef.current != null) {
+            navigator.geolocation.clearWatch(watchIdRef.current);
+            watchIdRef.current = null;
+          }
           setStatus("denied");
           setPosition(null);
           setStale(false);

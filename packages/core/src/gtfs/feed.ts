@@ -8,7 +8,7 @@
 import { createHash } from "node:crypto";
 import { unzipSync, strFromU8 } from "fflate";
 import { parseCsv } from "./csv.ts";
-import { hmsToSec, isoToYmd, ymdToIso, isoDow, shiftIso } from "../time.ts";
+import { hmsToSec, isoToYmd, ymdToIso, isoDow, shiftIso, SERVICE_DAY_CUTOFF_SEC } from "../time.ts";
 import { ProjectedShape, type LatLon } from "../geo.ts";
 
 export type Stop = { id: string; code: string; name: string; lat: number; lon: number };
@@ -22,6 +22,25 @@ export type Trip = {
   shapeId: string;
 };
 export type StopTime = { stopId: string; arr: number; dep: number; seq: number };
+
+/**
+ * Az MVK GTFS az éjfél utáni meneteket 00:xx–02:xx időkkel írja az előző esti
+ * menetek közé (a menetazonosító szerint 24:xx–26:xx, és a valódi futások is a
+ * GTFS-nap utáni éjjelen vannak). A szolgáltatási nap 03:00-kor kezdődik, így ezek
+ * a nap végén futnak: +24 óra. A menet közbeni éjféli átfordulást (23:50 → 00:10)
+ * is kisimítjuk, hogy a menet ideje mindig nőjön.
+ */
+function unwrapNightTimes(list: StopTime[]): void {
+  if (!list.length) return;
+  let shift = list[0].dep < SERVICE_DAY_CUTOFF_SEC ? 86_400 : 0;
+  let prev = -Infinity;
+  for (const x of list) {
+    if (x.arr + shift < prev - 12 * 3600) shift += 86_400;
+    x.arr += shift;
+    x.dep += shift;
+    prev = x.dep;
+  }
+}
 export type StopAlong = StopTime & { alongM: number };
 
 export type FeedInfo = {
@@ -110,6 +129,7 @@ export class Feed {
     }
     for (const [tripId, list] of this.tripStops) {
       list.sort((a, b) => a.seq - b.seq);
+      unwrapNightTimes(list);
       for (const x of list) {
         let arr = this.stopSched.get(x.stopId);
         if (!arr) this.stopSched.set(x.stopId, (arr = []));

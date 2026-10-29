@@ -39,7 +39,7 @@ export async function routeHeat(day: ServiceDay, route: string, dir: string | nu
                 e.delay_s,
                 e.delay_s - lag(e.delay_s) OVER (PARTITION BY e.run_key ORDER BY e.stop_idx) AS gain
            FROM stop_event e JOIN calendar_day c USING (service_date)
-          WHERE e.route_short = $1 AND e.ts >= now() - make_interval(days => $2) AND e.service_date < CURRENT_DATE
+          WHERE e.route_short = $1 AND e.ts >= now() - make_interval(days => $2) AND e.service_date < ((now() AT TIME ZONE 'Europe/Budapest') - interval '3 hours')::date
             AND c.daytype = $3 AND e.src <> 3 AND split_part(e.trip_id, '_', 2) = ANY($4::text[]) AND e.stop_id = ANY($5::text[]))
        SELECT stop_id, h, count(*)::int AS n,
               round(percentile_cont(0.5) WITHIN GROUP (ORDER BY delay_s))::int AS p50,
@@ -73,7 +73,7 @@ export async function cityHeat(day: ServiceDay, q: HeatQuery) {
               round(approx_percentile(0.5, rollup(travel_pct)) - sum(avg_sched_s * n) / nullif(sum(n), 0))::int AS ex,
               round(sum(avg_sched_s * n) / nullif(sum(n), 0))::int AS sched
          FROM segment_daily
-        WHERE bucket >= now() - make_interval(days => $1) AND bucket < CURRENT_DATE AND daytype = $2
+        WHERE bucket >= now() - make_interval(days => $1) AND bucket < ((((now() AT TIME ZONE 'Europe/Budapest') - interval '3 hours')::date)::timestamp + interval '3 hours') AT TIME ZONE 'Europe/Budapest' AND daytype = $2
         GROUP BY 1, 2, 3 HAVING sum(n) >= $3`,
       [q.days, q.daytype, MIN_N],
     ),

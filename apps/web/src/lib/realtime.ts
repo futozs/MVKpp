@@ -36,6 +36,8 @@ class RealtimeClient {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private statusListeners = new Set<() => void>();
   private auth: { token: string; deviceId: string } | null = null;
+  /** az utolsó szerverüzenet ideje (ms) — ébredéskor ebből látjuk, él-e még a kapcsolat */
+  private lastMsgAt = 0;
   connected = false;
 
   private ensure() {
@@ -58,6 +60,7 @@ class RealtimeClient {
       if (topics.length) ws.send(JSON.stringify({ t: "sub", topics }));
     };
     ws.onmessage = (e) => {
+      this.lastMsgAt = Date.now();
       let m: Msg;
       try {
         m = JSON.parse(String(e.data));
@@ -142,9 +145,27 @@ class RealtimeClient {
       this.timer = null;
     }
     this.retry = 0;
+    // Alvás vagy hálózatváltás után a böngésző még „nyitottnak” mutathat egy rég halott kapcsolatot:
+    // megpingeljük, és ha nem jön válasz, bontjuk (az újracsatlakozás teljes állapotot hoz).
+    const ws = this.ws;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      const sentAt = Date.now();
+      try {
+        ws.send(JSON.stringify({ t: "ping" }));
+      } catch {
+        /* a bontás alább */
+      }
+      setTimeout(() => {
+        if (this.ws === ws && ws.readyState === WebSocket.OPEN && this.lastMsgAt < sentAt) ws.close();
+      }, WAKE_PROBE_MS);
+      return;
+    }
     this.ensure();
   }
 }
+
+/** ébredéskor ennyi időn belül várunk választ a pingre (ms) */
+const WAKE_PROBE_MS = 3000;
 
 function topicOf(m: Msg): string | null {
   switch (m.t) {

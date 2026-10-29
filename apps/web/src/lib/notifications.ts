@@ -1,5 +1,5 @@
 import type { ArrivalItem } from "@/types";
-import { budapestMinuteOfDay } from "@/lib/serviceDay";
+import { budapestMinuteOfDay, serviceNow } from "@/lib/serviceDay";
 import { withHungarianSuffix } from "@/lib/utils";
 import { openLink, stopLink } from "@/lib/deepLink";
 
@@ -27,6 +27,8 @@ export type NotifyWatch = {
   tripId?: string;
   isDeparture?: boolean;
   schedMin?: number;
+  /** egyszeri menet-figyelés: a szolgáltatási nap, amelyre szól (más napon ugyanez az azonosító más menet) */
+  date?: string;
   lastNotifiedTripIds?: string[];
   pushRegistered?: boolean;
 };
@@ -121,7 +123,8 @@ export function isWithinDnd(
   now: Date = new Date(),
 ): boolean {
   if (!dnd.enabled || dnd.startMin === dnd.endMin) return false;
-  const nowMin = now.getHours() * 60 + now.getMinutes();
+  // budapesti falióra, ahogy a szerver is méri a push-oknál (a készülék időzónájától függetlenül)
+  const nowMin = budapestMinuteOfDay(now.getTime());
   if (dnd.startMin < dnd.endMin) {
     return nowMin >= dnd.startMin && nowMin < dnd.endMin;
   }
@@ -169,6 +172,15 @@ export function checkAndNotify(
   const watch = getWatch(stopId);
   if (!watch) return;
   if (watch.pushRegistered) return;
+  // Egy napra szóló menet-figyelés: a nap után lejár (a csengő se maradjon égve), előtte még nem szól.
+  if (watch.tripId && watch.date) {
+    const today = serviceNow().iso;
+    if (watch.date < today) {
+      setWatch(stopId, null);
+      return;
+    }
+    if (watch.date !== today) return;
+  }
 
   const nowMin = budapestMinuteOfDay();
   const matches = arrivals.filter((a) => {
@@ -186,7 +198,11 @@ export function checkAndNotify(
     }
     return a.etaMin >= 0 && a.etaMin <= watch.thresholdMin;
   });
-  if (!matches.length) return;
+  if (!matches.length) {
+    // a menetazonosítók naponta ismétlődnek: ami elment, azt elengedjük, különben holnap nem szólnánk
+    if (watch.lastNotifiedTripIds?.length) updateNotifiedTripIds(stopId, []);
+    return;
+  }
 
   const already = new Set(watch.lastNotifiedTripIds ?? []);
   const fresh = matches.filter((a) => !already.has(a.tripId));

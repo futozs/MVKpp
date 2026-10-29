@@ -62,6 +62,8 @@ interface DateFieldProps {
   "aria-label"?: string;
   /** a felugró naptár igazítása a mezőhöz */
   align?: "left" | "right";
+  /** a „Ma” jelentése (pl. a menetrendnél a szolgáltatási nap, amely 03:00-kor vált); alapból a készülék napja */
+  today?: string;
 }
 
 export function DateField({
@@ -72,14 +74,16 @@ export function DateField({
   id,
   className,
   align = "left",
+  today,
   ...aria
 }: DateFieldProps) {
+  const todayValue = today ?? todayIso();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const reactId = useId();
   const fieldId = id ?? reactId;
 
-  const safeValue = value || todayIso();
+  const safeValue = value || todayValue;
   const { y, m } = parseIso(safeValue);
   const [viewY, setViewY] = useState(y);
   const [viewM, setViewM] = useState(m);
@@ -193,7 +197,7 @@ export function DateField({
               const iso = toIso(viewY, viewM, d);
               const disabled = Boolean((min && iso < min) || (max && iso > max));
               const selected = iso === safeValue;
-              const isToday = iso === todayIso();
+              const isToday = iso === todayValue;
               return (
                 <button
                   key={i}
@@ -220,7 +224,7 @@ export function DateField({
           <button
             type="button"
             onClick={() => {
-              onChange(todayIso());
+              onChange(todayValue);
               setOpen(false);
             }}
             className="mt-2 w-full rounded-md py-1 text-center text-[11px] font-semibold text-primary transition-colors hover:bg-accent"

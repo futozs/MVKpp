@@ -32,6 +32,8 @@ type TripNotifyDialogProps = {
   routeShort: string;
   isDeparture: boolean;
   departureLabel: string;
+  /** a menetrend napja (szolgáltatási nap): az egyszeri figyelés csak erre szól */
+  date: string;
 };
 
 type Status = { state: "idle" | "ok" | "fail"; reason?: string };
@@ -70,6 +72,7 @@ export function TripNotifyDialog({
   routeShort,
   isDeparture,
   departureLabel,
+  date,
 }: TripNotifyDialogProps) {
   const [threshold, setThreshold] = useState(DEFAULT_THRESHOLD_MIN);
   const [recurring, setRecurring] = useState(false);
@@ -103,10 +106,12 @@ export function TripNotifyDialog({
       tripId: recurring ? undefined : tripId,
       routeShorts: recurring ? [routeShort] : undefined,
       schedMin,
+      // a menetazonosító naponta ismétlődik: az egyszeri figyelés csak a kiválasztott napra szól
+      date: recurring ? undefined : date,
     };
     setWatch(stopId, config);
 
-    const result = await registerPushWatch(config);
+    const result = await registerPushWatch({ ...config, params: config.date ? { date: config.date } : undefined });
     setPushRegistered(stopId, result.ok);
     setPushStatus(
       result.ok ? { state: "ok" } : { state: "fail", reason: result.reason },

@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Stop } from "@/types";
 import { api, type JourneyMode, type JourneyPlanResponse } from "@/services/api";
 import { nowLocalTime, todayLocalIso } from "./format";
+import { zonedUnix } from "@/components/map/historyTime";
+import { serverNow } from "@/lib/realtime";
 import { PlanForm, type PlanFormValue } from "./PlanForm";
 import { PlanResults, ResultsSkeleton } from "./PlanResults";
 
@@ -27,13 +29,15 @@ function usePlaces(stops: Stop[]) {
   }, [stops]);
 }
 
+/** A beírt nap és óra:perc budapesti idő szerint (nem a készülék időzónájában). */
 function toUnix(date: string, time: string): number {
-  return Math.floor(new Date(`${date}T${time}:00`).getTime() / 1000);
+  const [h, m] = time.split(":").map(Number);
+  return zonedUnix(date, h || 0) + (m || 0) * 60;
 }
 
 function clientMode(date: string, time: string): JourneyMode {
   if (date < todayLocalIso()) return "past";
-  return toUnix(date, time) > Date.now() / 1000 + NOW_WINDOW_SEC ? "future" : "now";
+  return toUnix(date, time) > serverNow() + NOW_WINDOW_SEC ? "future" : "now";
 }
 
 function scrollIntoViewIfHidden(el: HTMLElement | null) {
@@ -83,7 +87,15 @@ export function RoutePlannerView({ stops }: { stops: Stop[] }) {
   const lastQueryRef = useRef<{ from: string; to: string; at: number; arriveBy: boolean } | null>(null);
 
   const run = async (silent = false) => {
-    const q = silent ? lastQueryRef.current : form.from && form.to ? { from: form.from, to: form.to, at: toUnix(form.date, form.time), arriveBy: form.arriveBy } : null;
+    const last = lastQueryRef.current;
+    // Élő terv csendes frissítése: a mostani időponttól (különben a rég elment buszok maradnának elöl).
+    const q = silent
+      ? last && !last.arriveBy
+        ? { ...last, at: Math.floor(serverNow()) }
+        : last
+      : form.from && form.to
+        ? { from: form.from, to: form.to, at: toUnix(form.date, form.time), arriveBy: form.arriveBy }
+        : null;
     if (!q) return;
     lastQueryRef.current = q;
     abortRef.current?.abort();

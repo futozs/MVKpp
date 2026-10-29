@@ -7,7 +7,7 @@
  */
 import type { Feed, Trip } from "./feed.ts";
 import { dayInfo, daySimilarity } from "../calendar.ts";
-import { isoToYmd, ymdToIso } from "../time.ts";
+import { isoToYmd, ymdToIso, SERVICE_DAY_CUTOFF_SEC } from "../time.ts";
 
 export type ServiceDay = {
   iso: string;
@@ -102,5 +102,36 @@ export function parseMvkTripId(id: string): { serviceId: string; shapeId: string
   const hh = Number(p[2].slice(0, 2));
   const mm = Number(p[2].slice(2, 4));
   const ss = Number(p[2].slice(4, 6));
-  return { serviceId: p[0], shapeId: p[1], startSec: hh * 3600 + mm * 60 + ss };
+  const sec = hh * 3600 + mm * 60 + ss;
+  // mint a feed betöltésénél: a 03:00 előtti indulás az előző szolgáltatási nap végén van
+  return { serviceId: p[0], shapeId: p[1], startSec: sec < SERVICE_DAY_CUTOFF_SEC ? sec + 86_400 : sec };
+}
+
+/**
+ * Ugyanaz a menetazonosító több szolgáltatási napon is él (pl. a tegnapi és a mai
+ * éjszakai menet): azt a napot választjuk, amelyiknek a menetrendje időben a
+ * legközelebb van a pinghez. `atUnix` nélkül az első feloldható nap (ma, aztán tegnap).
+ */
+export function resolveTripNear<D extends { day: ServiceDay; midnightUnix: number }>(
+  days: readonly D[],
+  rtTripId: string,
+  atUnix: number | null,
+): { trip: Trip; dc: D } | null {
+  let best: { trip: Trip; dc: D } | null = null;
+  let bestGap = Infinity;
+  for (const dc of days) {
+    const trip = resolveTrip(dc.day, rtTripId);
+    if (!trip) continue;
+    if (atUnix == null) return { trip, dc };
+    const st = dc.day.feed.tripStops.get(trip.id);
+    if (!st?.length) continue;
+    const first = dc.midnightUnix + st[0].dep;
+    const last = dc.midnightUnix + st[st.length - 1].arr;
+    const gap = atUnix < first ? first - atUnix : atUnix > last ? atUnix - last : 0;
+    if (gap < bestGap) {
+      best = { trip, dc };
+      bestGap = gap;
+    }
+  }
+  return best;
 }

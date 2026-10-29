@@ -19,11 +19,37 @@ const WITH_BUS_M = 200;
 const HM = new Intl.DateTimeFormat("hu-HU", { timeZone: "Europe/Budapest", hour: "2-digit", minute: "2-digit" });
 const hm = (unix: number) => HM.format(new Date(unix * 1000));
 
+/** A busz által már elhagyott megállók közül a felszállás helyéhez legközelebbi (ennek híján az utolsó elhagyott). */
+function nearestPassedStop(stops: TripLive["stops"], passedIdx: number, near: { lat: number; lon: number }): number {
+  let best = passedIdx;
+  let bestD = Infinity;
+  for (let i = 0; i <= Math.min(passedIdx, stops.length - 1); i++) {
+    const s = stops[i];
+    if (s.lat == null || s.lon == null) continue;
+    const d = distM(near, { lat: s.lat, lon: s.lon });
+    if (d < bestD) {
+      best = i;
+      bestD = d;
+    }
+  }
+  return best;
+}
+
 /**
  * Felszállás után: hol jár a busz, mennyit késik, mennyit késhet, és mikor
  * melyik megállóban áll meg — a menet végéig, vagy amíg le nem szállsz.
  */
-export function RidePanel({ ride, position, onFinished }: { ride: ActiveRide; position: GeoPosition | null; onFinished: (r: Ride) => void }) {
+export function RidePanel({
+  ride,
+  position,
+  onFinished,
+  onCancel,
+}: {
+  ride: ActiveRide;
+  position: GeoPosition | null;
+  onFinished: (r: Ride) => void;
+  onCancel?: () => void;
+}) {
   const trip = useTripLive(ride.tripId);
   const turn = ride.turn ?? null;
   const cont = useContinuation(ride.tripId, ride.vehicleId, Boolean(turn));
@@ -37,13 +63,15 @@ export function RidePanel({ ride, position, onFinished }: { ride: ActiveRide; po
   const listRef = useRef<HTMLOListElement>(null);
   const passed = trip?.run?.lastStopIdx ?? -1;
 
-  // A felszállás helye és a késés az első adatból.
+  // A felszállás helye és a késés az első adatból. Felismert felszállásnál a megálló,
+  // ahol a telefon a busz mellett állt (a már elhagyottak közül a legközelebbi).
   useEffect(() => {
     if (!trip || ride.fromIdx != null) return;
-    const idx = Math.max(0, trip.run?.lastStopIdx ?? 0);
+    const passedIdx = Math.max(0, trip.run?.lastStopIdx ?? 0);
+    const idx = ride.boardNear ? nearestPassedStop(trip.stops, passedIdx, ride.boardNear) : passedIdx;
     const s = trip.stops[idx];
     patchActiveRide({ fromIdx: idx, fromStopId: s?.id ?? null, fromStopName: s?.name ?? null, delayAtBoardS: trip.delayS, serviceDate: trip.run?.serviceDate ?? ride.serviceDate });
-  }, [trip, ride.fromIdx, ride.serviceDate]);
+  }, [trip, ride.fromIdx, ride.serviceDate, ride.boardNear]);
 
   // Vége: a menet befejeződött, vagy a busz elhagyta a kijelölt leszállóhelyet.
   // Ha végállomásig utazott, és nem jelölt ki leszállóhelyet, a busz fordul:
@@ -78,9 +106,18 @@ export function RidePanel({ ride, position, onFinished }: { ride: ActiveRide; po
 
   // Ha a telefon tartósan eltávolodik a busztól: leszállt az utolsó elhagyott megállónál
   // (fordulás közben a végállomáson).
+  // A felismerés csak percekkel a leszállás után jelez: addig a busz már 2–3 megállóval
+  // továbbment. Ezért azt a megállót és időt jegyezzük, amikor a telefon utoljára a busszal volt.
+  const withBusRef = useRef<{ passed: number; at: number } | null>(null);
+  useEffect(() => {
+    if (position && busPos && distM(position, busPos) <= WITH_BUS_M) withBusRef.current = { passed, at: Math.round(serverNow()) };
+  }, [position, busPos, passed]);
   useAlightingDetector(Boolean(trip), position, busPos, () => {
     if (!trip) return;
-    const r = turn ? endRide(ride, trip, turn.atIdx, turn.arrivedAt) : endRide(ride, trip, Math.max(passed, ride.fromIdx ?? 0));
+    const last = withBusRef.current;
+    const r = turn
+      ? endRide(ride, trip, turn.atIdx, turn.arrivedAt)
+      : endRide(ride, trip, Math.max(last?.passed ?? passed, ride.fromIdx ?? 0), last?.at);
     if (r) onFinished(r);
   });
 
@@ -181,7 +218,15 @@ export function RidePanel({ ride, position, onFinished }: { ride: ActiveRide; po
         >
           <LogOut /> {turn ? `Leszálltam (${turn.terminusName})` : "Leszálltam"}
         </Button>
-        <Button variant="ghost" onClick={cancelRide} title="Mégsem ezen a buszon vagyok">
+        <Button
+          variant="ghost"
+          onClick={() => {
+            cancelRide();
+            // a térkép se kövesse tovább a téves buszt
+            onCancel?.();
+          }}
+          title="Mégsem ezen a buszon vagyok"
+        >
           <X /> Mégse
         </Button>
       </footer>

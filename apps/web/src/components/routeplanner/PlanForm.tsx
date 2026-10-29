@@ -1,3 +1,4 @@
+import { todayLocalIso } from "./format";
 import { ArrowLeftRight, ArrowUpDown, History, Search } from "lucide-react";
 import type { Stop } from "@/types";
 import type { JourneyMode } from "@/services/api";
@@ -96,6 +97,7 @@ export function PlanForm({ places, value, onChange, onNow, onSubmit, mode, isLoa
             value={value.date}
             onChange={(date) => onChange({ date })}
             aria-label={value.arriveBy ? "Érkezés napja" : "Indulás napja"}
+            today={todayLocalIso()}
           />
           <TimeField
             value={value.time}

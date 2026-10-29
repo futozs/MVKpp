@@ -11,6 +11,10 @@
  * A már futó menetnél (amit az MVK élő adata más azonosítóval küld, ezért a
  * megállófigyelő nem köti járműhöz) az illesztő által azonosított buszt adjuk.
  *
+ * Fordulóhurkon nem tippelünk: ha a menet a vonal fordulóhurkos végállomásáról
+ * indul, és a beérkező menetét már viszi egy busz, rövid fordulóval ugyanaz a
+ * busz indul vissza (60 nap adata: ≤ 5 perces fordulónál 99,5%).
+ *
  * Önjutalmazás: amikor a menet ténylegesen elindul, kiértékeljük a korábban
  * kiadott jóslatokat. Amelyik jelzés eltalálta, annak nő a súlya (jutalom),
  * amelyik tévedett, annak csökken — a modell így magától javul.
@@ -19,6 +23,7 @@ import {
   dayInfo,
   fastDistM,
   localMidnightUnix,
+  loopTermini,
   nowUnix,
   planRotations,
   type Feed,
@@ -26,6 +31,7 @@ import {
   type RotationSeed,
   type RotationSlot,
   type RunOut,
+  type ServiceDay,
 } from "@mvk/core";
 import { getPool, sql } from "@mvk/db";
 import type { Engine } from "./engine.ts";
@@ -50,11 +56,23 @@ const RECENT_END_S = 40 * 60;
 const AT_TERMINUS_M = 600;
 /** GTFS route_type: villamos (az MVK-nál 900, a busz 704) */
 const TRAM_ROUTE_TYPE = "900";
+/**
+ * Fordulóhurkon eddig a menetrendi állásig viszi biztosan ugyanaz a busz a következő
+ * menetet (60 nap: ≤ 5 percnél 99,5%; 6–10 percnél egy kisebb mintán csak ~90%, 11–20
+ * percnél 85%: ott cserélnek — ott marad a „~” tipp).
+ */
+const LOOP_SURE_TURN_S = 5 * 60;
+const LOOP_CONFIDENCE = 0.99;
+/** ennyi fordulót követünk előre (minden forduló ~99,5%) */
+const LOOP_MAX_HOPS = 3;
+/** a beérkező menet után ennyi ideig várakozik a busz a fordulóhurkon */
+const LOOP_WAIT_S = 15 * 60;
 
 export type VehicleGuess = {
   id: string;
   confidence: number;
-  method: Signal | "matched";
+  /** loop: nem tipp — a fordulóhurkon ugyanaz a busz indul vissza, ami most a beérkező menetet viszi */
+  method: Signal | "matched" | "loop";
   signals: Partial<Record<Signal, string>>;
   /** a forda-tervben hányadik menet a busz mostanitól számítva */
   hops?: number;
@@ -72,6 +90,8 @@ export class VehiclePredictor {
   weights: Record<Signal, number> = { ...DEFAULT_WEIGHTS };
   accuracy = { hits: 0, total: 0, byHorizon: {} as Record<number, { hits: number; total: number }> };
   private cache = new Map<string, { at: number; guess: VehicleGuess | null }>();
+  /** napi menetrendenként: induló menet → a fordulóhurokra rövid fordulóval beérkező menete */
+  private loopPrev = new WeakMap<ServiceDay, Map<string, string>>();
   private engine: Engine;
   private resolved = new Set<string>();
 
@@ -169,6 +189,8 @@ export class VehiclePredictor {
       // Már fut (vagy lefutott): nem jóslunk, az illesztő tudja, melyik busz viszi.
       return run.status === "running" ? { id: run.vehicleId, confidence: MATCHED_CONFIDENCE, method: "matched", signals: {} } : null;
     }
+    const looped = this.loopVehicle(day, tripId, now, LOOP_MAX_HOPS);
+    if (looped) return { id: looped.vehicle, confidence: LOOP_CONFIDENCE, method: "loop", signals: {}, hops: looped.hops };
     const startS = stopsOfTrip[0].dep;
     const pattern = feed.patternHash(tripId) ?? "";
     const key = runKeyOf(pattern, startS);
@@ -238,6 +260,72 @@ export class VehiclePredictor {
     const method = (Object.entries(top).find(([, v]) => v === id)?.[0] as Signal | undefined) ?? "slot";
     const hops = rot?.vehicle === id ? rot.hops : undefined;
     return { id, confidence: Math.round(confidence * 100) / 100, method, signals: top, hops };
+  }
+
+  /**
+   * Fordulóhurok: melyik busz viszi biztosan a menetet — amelyik a beérkező menetét
+   * most viszi (vagy az imént fejezte be, és ott vár, vagy az MVK már kiosztotta rá).
+   * Ha a beérkező menet még gazdátlan, annak a beérkező menetét nézzük (legfeljebb
+   * `hops` fordulóig).
+   */
+  private loopVehicle(day: ServiceDay, tripId: string, now: number, hops: number): { vehicle: string; hops: number } | null {
+    const prev = this.loopPrevOf(day).get(tripId);
+    if (!prev || this.engine.cancelled.ids.has(prev)) return null;
+    const run = this.engine.todayRuns.get(prev);
+    if (run?.status === "running") return { vehicle: run.vehicleId, hops: 1 };
+    if (run) {
+      const ended = run.actualEnd ?? run.lastTs ?? 0;
+      const waiting = now - ended < LOOP_WAIT_S && this.engine.snapshot.vehicles.some((v) => v.id === run.vehicleId);
+      return waiting ? { vehicle: run.vehicleId, hops: 1 } : null;
+    }
+    // a beérkező menetet az MVK már kiosztotta egy buszra (percekkel az indulása előtt)
+    const assigned = this.engine.snapshot.vehicles.find((v) => v.tripId === prev);
+    if (assigned) return { vehicle: assigned.id, hops: 1 };
+    if (hops <= 1) return null;
+    const up = this.loopVehicle(day, prev, now, hops - 1);
+    return up ? { vehicle: up.vehicle, hops: up.hops + 1 } : null;
+  }
+
+  /**
+   * A nap menetei közül: a vonal fordulóhurkos végállomására beérkező menet után
+   * ugyanonnan a következő induló menet, ha a menetrendi forduló legfeljebb 10 perc.
+   */
+  private loopPrevOf(day: ServiceDay): Map<string, string> {
+    const hit = this.loopPrev.get(day);
+    if (hit) return hit;
+    const feed = day.feed;
+    const loops = loopTermini(feed);
+    const arrivals = new Map<string, { trip: string; arr: number }[]>();
+    const departures = new Map<string, { trip: string; dep: number }[]>();
+    const push = <T>(m: Map<string, T[]>, k: string, x: T) => (m.get(k) ?? m.set(k, []).get(k)!).push(x);
+    for (const t of feed.trips.values()) {
+      if (!day.services.has(t.serviceId)) continue;
+      const st = feed.tripStops.get(t.id);
+      if (!st || st.length < 2) continue;
+      const first = st[0].stopId;
+      const last = st[st.length - 1].stopId;
+      if (first === last) continue;
+      if (loops.has(last)) push(arrivals, `${t.routeId}|${last}`, { trip: t.id, arr: st[st.length - 1].arr });
+      if (loops.has(first)) push(departures, `${t.routeId}|${first}`, { trip: t.id, dep: st[0].dep });
+    }
+    const out = new Map<string, string>();
+    const gapOf = new Map<string, number>();
+    for (const [k, list] of arrivals) {
+      const deps = departures.get(k)?.sort((a, b) => a.dep - b.dep);
+      if (!deps) continue;
+      for (const a of list) {
+        // a menetrend szerint a busz akár 2 perccel a beérkezés előtti indulást is viheti
+        const next = deps.find((d) => d.dep >= a.arr - 120);
+        if (!next) continue;
+        const gap = next.dep - a.arr;
+        // két beérkező közül a később érkező fordul vissza ezzel a menettel
+        if (gap > LOOP_SURE_TURN_S || gap >= (gapOf.get(next.trip) ?? Infinity)) continue;
+        out.set(next.trip, a.trip);
+        gapOf.set(next.trip, gap);
+      }
+    }
+    this.loopPrev.set(day, out);
+    return out;
   }
 
   /** A forda-terv a forda-táblához (a mostani állapotból, 30 mp-ig gyorsítótárazva). */
@@ -327,7 +415,8 @@ export class VehiclePredictor {
       const h = HORIZONS.find((x) => lead <= x && lead > x - 1.5);
       if (h == null) continue;
       const g = this.predict(t.id);
-      if (!g || g.method === "matched") continue;
+      // a futó és a fordulóhurkon visszaforduló busz nem tipp: nem számít a pontosságba
+      if (!g || g.method === "matched" || g.method === "loop") continue;
       rows.push([iso, t.id, day.feed.routes.get(t.routeId)?.short ?? t.routeId, st[0].dep, h, g.id, g.confidence, g.method, JSON.stringify(g.signals)]);
     }
     for (const r of rows) {

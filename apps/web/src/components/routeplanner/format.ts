@@ -4,23 +4,28 @@ import type {
   JourneyTrip,
 } from "@/services/api";
 import { withHungarianSuffix } from "@/lib/utils";
+import { serverNow } from "@/lib/realtime";
 
 /** Ennél kisebb eltérést „pontos”-nak mondunk. */
 export const ON_TIME_SEC = 60;
 
-const pad2 = (n: number) => String(n).padStart(2, "0");
 
 /* ------------------------------------------------------------ idő ----- */
 
-/** A backend UTC-ben küldi az időket — a böngésző helyi idejében írjuk ki. */
+/* Minden idő Budapest szerint (a menetrenddel egyezően), a készülék időzónájától függetlenül. */
+const TZ = "Europe/Budapest";
+const HM_FMT = new Intl.DateTimeFormat("hu-HU", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+const HMS_FMT = new Intl.DateTimeFormat("hu-HU", { timeZone: TZ, hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" });
+const DATE_FMT = new Intl.DateTimeFormat("sv-SE", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" });
+
+/** A backend UTC-ben küldi az időket — budapesti idő szerint írjuk ki. */
 export function hm(input: string | number): string {
   const d = typeof input === "number" ? new Date(input * 1000) : new Date(input);
-  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  return HM_FMT.format(d);
 }
 
 export function hms(unix: number): string {
-  const d = new Date(unix * 1000);
-  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+  return HMS_FMT.format(new Date(unix * 1000));
 }
 
 export function isoToUnix(iso: string): number {
@@ -31,15 +36,15 @@ export function minutes(sec: number): string {
   return `${Math.max(1, Math.round(sec / 60))} perc`;
 }
 
-/** Helyi naptári nap (YYYY-MM-DD); unix másodpercből vagy ISO-ból, vagy ma. */
+/** Budapesti naptári nap (YYYY-MM-DD); unix másodpercből vagy ISO-ból, vagy ma (a szerver órája szerint). */
 export function localIsoDate(input?: number | string): string {
   const d =
     input == null
-      ? new Date()
+      ? new Date(serverNow() * 1000)
       : typeof input === "number"
         ? new Date(input * 1000)
         : new Date(input);
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  return DATE_FMT.format(d);
 }
 
 export function todayLocalIso(): string {
@@ -47,8 +52,7 @@ export function todayLocalIso(): string {
 }
 
 export function nowLocalTime(): string {
-  const d = new Date();
-  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  return HM_FMT.format(new Date(serverNow() * 1000));
 }
 
 /** „2026. október 20., kedd” */

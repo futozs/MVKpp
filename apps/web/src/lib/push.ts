@@ -1,4 +1,5 @@
 import { API_BASE } from "@/lib/apiBase";
+import { getNotificationSettings } from "@/lib/notifications";
 
 const log = (...args: unknown[]) => console.log("[push]", ...args);
 
@@ -129,6 +130,11 @@ export async function registerPushWatch(
       return { ok: false, reason: `A szerver elutasította a mentést (${res.status}).` };
     }
     log("figyelés mentve a szerveren:", config.stopId);
+    // A „Ne zavarj” és a főkapcsoló csak meglévő feliratkozásra menthető: ha a feliratkozás most
+    // jött létre, itt visszük fel (különben éjjel is jönne értesítés).
+    const s = getNotificationSettings();
+    void setDnd(s.dnd);
+    if (!s.enabled) void setPushEnabled(false);
     return { ok: true };
   } catch (e) {
     const message = (e as Error).message;

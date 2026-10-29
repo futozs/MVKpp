@@ -54,7 +54,7 @@ export const WATCH_FEATURES: readonly PrefItem<WatchFeature>[] = [
     id: "predictedVehicle",
     key: PREF_PREDICTED_VEHICLE,
     label: "Rendszám-előrejelzés",
-    hint: "Mielőtt a busz élőben megjelenne, a várható rendszámát ~ jellel mutatjuk — a korábbi fordák alapján.",
+    hint: "Mielőtt a busz élőben megjelenne, a várható rendszámát ~ jellel mutatjuk — a korábbi fordák alapján. Ahol a busz a végállomáson visszafordul, ott ~ nélkül: azt már tudjuk.",
   },
   {
     id: "replacement",

@@ -119,5 +119,7 @@ export function turnDecision(turn: TurnInput, cont: TurnContinuation | null, now
   }
   if (!next.departed) return now - turn.arrivedAt > TURN.DEPART_S ? "alight" : "wait";
   if (next.kind === "nearby" && !turn.stay && !withBus) return "alight";
+  // fordulóhurkon is: ha a telefon az induláskor bizonyosan nincs a buszon, a végállomáson leszállt
+  if (next.kind === "loop" && !turn.stay && withBus === false) return "alight";
   return "continue";
 }

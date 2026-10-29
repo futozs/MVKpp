@@ -31,11 +31,13 @@ import { initialView, saveView } from "@/lib/viewState";
 import { useAppHeight } from "@/hooks/useAppHeight";
 import { useLiveIncidents } from "@/hooks/useLiveIncidents";
 import { useStorageRefresh } from "@/hooks/useStorageRefresh";
-import { useFallbackPoll, useTopic } from "@/lib/realtime";
+import { realtime, useFallbackPoll, useTopic } from "@/lib/realtime";
 import { consumeInitialLink, OPEN_LINK_EVENT, parseLink, type ParsedLink } from "@/lib/deepLink";
 
 // Értesítésből (vagy könyvjelzőből) nyitott hivatkozás: egyszer, betöltéskor olvassuk ki.
 const INITIAL_LINK = typeof window === "undefined" ? null : consumeInitialLink();
+/** az első indításkor figyelt megálló (amíg a felhasználó nem állít be sajátot) */
+const DEFAULT_MONITORED = JSON.stringify(["SP1"]);
 
 const DEFAULT_FILTERS: FilterState = {
   vq: "",
@@ -110,10 +112,12 @@ export function App() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(
-        "mvk_monitored_stops",
-        JSON.stringify(monitoredStopIds),
-      );
+      const next = JSON.stringify(monitoredStopIds);
+      const cur = localStorage.getItem("mvk_monitored_stops");
+      // Az indulási alapértéket nem mentjük: különben belépéskor valódi adatként kerülne a felhőbe,
+      // és egy másik eszköz saját listáját írná felül. Változatlan értéket sem írunk újra.
+      if (cur === next || (cur == null && next === DEFAULT_MONITORED)) return;
+      localStorage.setItem("mvk_monitored_stops", next);
     } catch {}
   }, [monitoredStopIds]);
   // Értesítésből nyitott megálló: a Figyelőben elő is kerül (ha még nem figyelte, felvesszük —
@@ -259,8 +263,10 @@ export function App() {
   useFallbackPoll(fetchLivePositions, 3500);
 
   useEffect(() => {
+    // Élő kapcsolatnál a WebSocket hozza a friss állapotot; a REST-pillanatkép (mozgásbecslés nélkül)
+    // ilyenkor a buszokat a nyers jelhez rántaná vissza.
     const refreshIfVisible = () => {
-      if (document.visibilityState === "visible") fetchLivePositions();
+      if (document.visibilityState === "visible" && !realtime.connected) fetchLivePositions();
     };
     const onPageShow = (e: PageTransitionEvent) => {
       if (e.persisted) refreshIfVisible();

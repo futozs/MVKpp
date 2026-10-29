@@ -58,6 +58,12 @@ describe("körbeutazás döntés a végállomáson", () => {
     expect(turnDecision(turn, loopNext(true), T0 + 240, null)).toBe("continue");
   });
 
+  it("fordulóhurkon sem folytatjuk, ha a telefon az induláskor már nincs a buszon", () => {
+    expect(turnDecision(turn, loopNext(true), T0 + 240, false)).toBe("alight");
+    // ha azt mondta, marad, a GPS-nek nem hiszünk
+    expect(turnDecision({ ...turn, stay: true }, loopNext(true), T0 + 240, false)).toBe("continue");
+  });
+
   it("ha azt mondta, leszállt, nem folytatjuk", () => {
     expect(turnDecision({ ...turn, stay: false }, loopNext(true), T0 + 240, true)).toBe("alight");
   });

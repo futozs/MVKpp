@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/services/api";
-import { useFallbackPoll, useTopic } from "@/lib/realtime";
+import { serverNow, useFallbackPoll, useTopic } from "@/lib/realtime";
 import type { StopArrivalsResponse } from "@/types";
 
 const LIMIT = 10;
@@ -41,9 +41,10 @@ export function useStopBoard(stopId: string) {
 
 /** Az aktuális idő, másodpercenként — a nagy órához és a visszaszámlálásokhoz. */
 export function useClock(): Date {
-  const [now, setNow] = useState(() => new Date());
+  // a szerver órája: egy rossz órájú kijelző-gépen se térjen el az indulásoktól
+  const [now, setNow] = useState(() => new Date(serverNow() * 1000));
   useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 1000);
+    const t = setInterval(() => setNow(new Date(serverNow() * 1000)), 1000);
     return () => clearInterval(t);
   }, []);
   return now;

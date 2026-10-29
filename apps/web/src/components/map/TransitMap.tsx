@@ -142,7 +142,13 @@ const MOTION_TICK_MS = 250;
 
 type LiveMarker = { marker: L.Marker; iconKey: string; v: LiveVehicle; shown: Shown | undefined };
 /** a követett busz: ugyanúgy a becslés mozgatja, mint a többit */
-type FocusMarker = { marker: L.Marker; iconKey: string; motion: LiveMotion | null; shown: Shown | undefined };
+type FocusMarker = { marker: L.Marker; iconKey: string; motion: LiveMotion | null; shown: Shown | undefined; raw?: [number, number] };
+
+/** Csak akkor mozgatjuk a jelölőt, ha tényleg máshol van (a 250 ms-os ütem ne rajzoljon feleslegesen). */
+function moveIfChanged(marker: L.Marker, lat: number, lon: number) {
+  const ll = marker.getLatLng();
+  if (ll.lat !== lat || ll.lng !== lon) marker.setLatLng([lat, lon]);
+}
 /** a térkép a követett busszal halad; elhúzásra megáll, nagyításkor a busz körül nagyít */
 type FollowState = { paused: boolean; centered: boolean; zooming: boolean; holdUntil: number };
 
@@ -796,7 +802,11 @@ export function TransitMap({
       const now = serverNow();
       for (const entry of liveMarkersRef.current.values()) {
         const est = estimatePosition(entry.v.motion, now, entry.shown);
-        if (!est) continue;
+        if (!est) {
+          // nincs (még) nyomvonal a becsléshez: a valós jel helyén mutatjuk, nem a régi helyén
+          if (entry.v.lat != null && entry.v.lon != null) moveIfChanged(entry.marker, entry.v.lat, entry.v.lon);
+          continue;
+        }
         entry.shown = est.shown;
         entry.marker.setLatLng(est.latlng);
       }
@@ -806,7 +816,7 @@ export function TransitMap({
       if (est) {
         f.shown = est.shown;
         f.marker.setLatLng(est.latlng);
-      }
+      } else if (f.raw) moveIfChanged(f.marker, f.raw[0], f.raw[1]);
       follow(f.marker.getLatLng());
     };
     tick();
@@ -865,8 +875,14 @@ export function TransitMap({
     const motion = live?.motion ?? null;
 
     const entry = focusMarkerRef.current;
+    if (entry && layer.hasLayer(entry.marker) && !live) {
+      // a busz egy körre kiesett a jelentésből: ott marad, ahol volt (nem ugrik a követés kezdőpontjára)
+      entry.motion = null;
+      return;
+    }
     if (entry && layer.hasLayer(entry.marker)) {
       entry.motion = motion;
+      entry.raw = [lat, lon];
       if (entry.iconKey !== iconKey) {
         entry.marker.setIcon(createVehicleIcon(route, color, text, true, id));
         entry.iconKey = iconKey;
@@ -878,7 +894,7 @@ export function TransitMap({
       return;
     }
     const marker = L.marker([lat, lon], { icon: createVehicleIcon(route, color, text, true, id), zIndexOffset: 1200, interactive: false }).addTo(layer);
-    focusMarkerRef.current = { marker, iconKey, motion, shown: undefined };
+    focusMarkerRef.current = { marker, iconKey, motion, shown: undefined, raw: [lat, lon] };
   }, [vehicles, focusTripId, focusVehicleId, focusPath]);
 
   // Követés közben: elhúzásra a térkép megáll (körül lehet nézni), nagyításkor nem rángatjuk.

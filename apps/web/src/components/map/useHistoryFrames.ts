@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { serverNow } from "@/lib/realtime";
 import {
   fetchHistoryDays,
   fetchHistoryWindow,
@@ -92,7 +93,8 @@ export function useHistoryFrames(): HistoryFrames {
           cacheRef.current.set(start, {
             win,
             fetchedAt: Date.now(),
-            complete: win.end + COMPLETE_GRACE_SEC < Date.now() / 1000,
+            // a szerver órájához mérve: a még gyűlő ablakot ne tekintsük lezártnak
+            complete: win.end + COMPLETE_GRACE_SEC < serverNow(),
           });
           evict(wanted);
           sync(null);

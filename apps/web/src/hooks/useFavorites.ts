@@ -35,7 +35,11 @@ export function useFavorites() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(favorites));
+      const next = JSON.stringify(favorites);
+      const cur = localStorage.getItem(STORAGE_KEY);
+      // üres alapértéket és változatlan listát nem írunk (a felhős szinkron ne vigye fel valódi adatként)
+      if (cur === next || (cur == null && next === "[]")) return;
+      localStorage.setItem(STORAGE_KEY, next);
     } catch {}
   }, [favorites]);
 

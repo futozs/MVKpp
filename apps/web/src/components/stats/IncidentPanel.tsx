@@ -30,7 +30,7 @@ const KIND_META: Record<IncidentV3["kind"], { label: string; icon: typeof Ban; t
   detour: { label: "Terelés", icon: CircleAlert, tone: "text-muted-foreground" },
 };
 
-const fmtTime = (unix: number) => new Date(unix * 1000).toLocaleTimeString("hu-HU", { hour: "2-digit", minute: "2-digit" });
+const fmtTime = (unix: number) => new Date(unix * 1000).toLocaleTimeString("hu-HU", { timeZone: "Europe/Budapest", hour: "2-digit", minute: "2-digit" });
 
 /**
  * Üzemzavarok — két, élesen elválasztott forrás:

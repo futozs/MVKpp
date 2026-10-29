@@ -46,6 +46,8 @@ export interface LiveMotion {
   t: number;
   e: number;
   v: number;
+  /** várható pálya: [hely a nyomvonalon (m), idő a jel óta (mp)] — ezt követi a térkép */
+  k?: [number, number][] | null;
 }
 
 export interface LiveVehicle {

@@ -156,7 +156,8 @@ type Parent =
 
 type Endpoint = { stop: number; walk: number };
 
-function raptor(net: Net, origins: Endpoint[], dests: Endpoint[], dep: number) {
+/** `skip`: kihagyandó menetek (az MVK által ma kihúzottak — azokra nem tervezünk). */
+function raptor(net: Net, origins: Endpoint[], dests: Endpoint[], dep: number, skip: ReadonlySet<string> = new Set()) {
   const n = net.stops.length;
   const tau: Float64Array[] = Array.from({ length: MAX_ROUNDS + 1 }, () => new Float64Array(n).fill(INF));
   const parent: (Parent | null)[][] = Array.from({ length: MAX_ROUNDS + 1 }, () => new Array(n).fill(null));
@@ -206,7 +207,7 @@ function raptor(net: Net, origins: Endpoint[], dests: Endpoint[], dep: number) {
         if (prevArr < INF && (!trip || prevArr + (k > 1 ? MIN_TRANSFER_S : 0) <= trip.dep[i])) {
           const need = prevArr + (k > 1 ? MIN_TRANSFER_S : 0);
           let cand: PTrip | null = null;
-          for (const t of pat.trips) if (t.dep[i] >= need && (!cand || t.dep[i] < cand.dep[i])) cand = t;
+          for (const t of pat.trips) if (!skip.has(t.id) && t.dep[i] >= need && (!cand || t.dep[i] < cand.dep[i])) cand = t;
           if (cand && (!trip || cand.dep[i] < trip.dep[i])) {
             trip = cand;
             boardPos = i;
@@ -311,6 +312,8 @@ export async function plan(engine: Engine, q: PlanQuery, insights?: TripInsights
   if (!o || !d) return { error: "Ismeretlen kiinduló- vagy célpont." } as const;
   const midnight = localMidnightUnix(clock.iso);
   const limit = Math.max(1, Math.min(6, q.limit ?? 4));
+  // a mai kihúzott menetekkel nem tervezünk (más napra nincs ilyen lista)
+  const skip: ReadonlySet<string> = net.iso === engine.today ? engine.cancelled.ids : new Set();
 
   type J = ReturnType<typeof raptor>[number];
   const found = new Map<string, J & { dep: number }>();
@@ -319,7 +322,7 @@ export async function plan(engine: Engine, q: PlanQuery, insights?: TripInsights
   // Indulási időre: néhány egymást követő indulás elég. Érkezésire: a célidőig végigmegyünk.
   const more = (iter: number) => (q.arriveBy ? iter < 60 && t < target : iter < 16 && found.size < limit * 3);
   for (let iter = 0; more(iter); iter++) {
-    const js = raptor(net, o.eps, d.eps, t);
+    const js = raptor(net, o.eps, d.eps, t, skip);
     if (!js.length) break;
     let nextT = INF;
     for (const j of js) {

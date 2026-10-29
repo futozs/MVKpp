@@ -15,7 +15,9 @@ import { MENU_ITEM, MoreMenu } from "./MoreMenu";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 
 /** a megállókártyák rácsa asztalon: 340–400 px széles oszlopok, középre igazítva */
-const STOP_GRID = "grid justify-center gap-4 grid-cols-[repeat(auto-fill,minmax(min(100%,340px),400px))]";
+// auto-fit: az üres oszlopok összeesnek, így a meglévő kártyák valóban középre kerülnek (auto-fill mellett
+// a ki nem töltött oszlopok is helyet foglaltak, és a kártyák balra csúsztak)
+const STOP_GRID = "grid justify-center gap-4 grid-cols-[repeat(auto-fit,minmax(min(100%,340px),400px))]";
 
 type WatchView = "stops" | "rides";
 const VIEW_KEY = "mvk_watch_view";
@@ -168,7 +170,8 @@ export function MultiStopDashboard({
   };
 
   const canNearest = manualOrder.length > 1 && Boolean(geo.position);
-  const canReorder = watched.length > 1 && !nearestFirst;
+  // helyzet nélkül a „legközelebbi elöl” nem rendez: ilyenkor is lehessen kézzel sorba tenni
+  const canReorder = watched.length > 1 && !sortByDistance;
   const kioskHref = watched.length ? `/kijelzo?m=${encodeURIComponent(watched.slice(0, 3).map((s) => s.id).join(","))}` : null;
 
   return (
@@ -301,7 +304,10 @@ export function MultiStopDashboard({
       {view === "stops" && (watched.length === 0 || isWide) ? (
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
         {isWide ? <CommuteCard className="mx-auto mb-4 w-full max-w-[400px]" /> : null}
-        {watched.length === 0 ? (
+        {watched.length === 0 && stops.length === 0 && selectedStopIds.length > 0 ? (
+          // a megállólista még nem jött meg: a figyelt megállók nem vesztek el
+          <p className="mx-auto max-w-xl py-10 text-center text-sm text-muted-foreground">Megállók betöltése…</p>
+        ) : watched.length === 0 ? (
           <Card className="mx-auto max-w-xl p-6 text-center shadow-lg sm:p-8">
             <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-primary/12 text-primary">
               <Radar className="h-7 w-7" />

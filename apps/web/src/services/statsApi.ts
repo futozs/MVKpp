@@ -94,7 +94,8 @@ export type VehicleDay = {
   routes_n: number;
   dist_m: number;
   service_s: number;
-  moving_s: number;
+  /** a szerver most nem méri (null) — ilyenkor a megállókban állás (dwell_s) a „ebből állva” */
+  moving_s: number | null;
   dwell_s: number;
   max_speed_dms: number | null;
   avg_delay_s: number | null;
@@ -482,6 +483,7 @@ export function fmtSchedTime(sec: number): string {
 export function fmtClock(unix: number | null | undefined): string {
   if (!unix) return "—";
   return new Date(unix * 1000).toLocaleTimeString("hu-HU", {
+    timeZone: "Europe/Budapest",
     hour: "2-digit",
     minute: "2-digit",
   });

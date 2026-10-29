@@ -16,7 +16,7 @@ import type { ProjectedShape } from "./geo.ts";
 import { fastDistM } from "./geo.ts";
 import type { Feed, StopAlong, Trip } from "./gtfs/feed.ts";
 import type { ServiceDay } from "./gtfs/service.ts";
-import { resolveTrip } from "./gtfs/service.ts";
+import { resolveTripNear } from "./gtfs/service.ts";
 
 export const MATCH = {
   /** ennél messzebb a nyomvonaltól a pont nem számít a menethez */
@@ -229,9 +229,14 @@ export class TripMatcher {
         this.complete(cur, "final-stop");
         continue;
       }
-      if (vs.current && nowTs - (vs.current.lastPing?.ts ?? vs.current.out.openedTs) > MATCH.SILENCE_CLOSE_S) {
-        this.finalize(vs.current, "silence");
-        vs.current = null;
+      if (vs.current) {
+        // Befejezett menet után a busz gyakran még a régi azonosítóval áll a végállomáson: a csendet
+        // ilyenkor az utolsó jeltől mérjük (`lastTs` friss marad), különben egy fantom futás nyílna újra.
+        const seen = vs.current.out.status === "running" ? (vs.current.lastPing?.ts ?? vs.current.out.openedTs) : vs.current.out.lastTs;
+        if (nowTs - seen > MATCH.SILENCE_CLOSE_S) {
+          this.finalize(vs.current, "silence");
+          vs.current = null;
+        }
       }
     }
   }
@@ -325,15 +330,14 @@ export class TripMatcher {
 
   private resolve(p: Ping) {
     if (!p.rtTripId) return null;
-    for (const dc of this.days(p.ts)) {
-      const t = resolveTrip(dc.day, p.rtTripId);
-      if (!t) continue;
-      const along = dc.day.feed.tripStopsAlong(t.id);
-      const shape = t.shapeId ? dc.day.feed.shapes.get(t.shapeId) : undefined;
-      if (!along || !shape) return null;
-      return { trip: t, day: dc.day, midnight: dc.midnightUnix, along, shape };
-    }
-    return null;
+    // a ping idejéhez közelebbi nap: 03:00 után a még futó éjszakai menet a tegnapi napé
+    const hit = resolveTripNear(this.days(p.ts), p.rtTripId, p.ts);
+    if (!hit) return null;
+    const { trip: t, dc } = hit;
+    const along = dc.day.feed.tripStopsAlong(t.id);
+    const shape = t.shapeId ? dc.day.feed.shapes.get(t.shapeId) : undefined;
+    if (!along || !shape) return null;
+    return { trip: t, day: dc.day, midnight: dc.midnightUnix, along, shape };
   }
 
   private open(p: Ping, r: NonNullable<ReturnType<TripMatcher["resolve"]>>): Run {
@@ -623,6 +627,9 @@ export class TripMatcher {
 
   private finalize(run: Run, reason: CloseReason) {
     if (run.out.status !== "running") return;
+    // A végállomáson némán álló, még el sem indult busznak nincs indulása: a nyitott
+    // első-megállós zónát nem zárjuk le kitalált indulással (hamis „menet közben megállt” lenne).
+    if (reason === "silence" && run.out.actualStart == null && run.zone?.idx === 0) run.zone = null;
     this.closeZoneIfOpen(run, run.out.lastTs);
     if (this.inferFinalArrival(run)) {
       this.complete(run, "final-stop");

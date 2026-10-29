@@ -80,7 +80,12 @@ function Vehicle({ a, showPredicted }: { a: ArrivalItem; showPredicted: boolean 
       </span>
     );
   if (a.predictedVehicle && showPredicted)
-    return (
+    // fordulóhurkon nem tipp: ugyanaz a busz fordul vissza, ami most odafelé jár
+    return a.predictedVehicle.method === "loop" ? (
+      <span className="font-mono font-bold text-foreground" title="Ez a busz fordul vissza a végállomáson">
+        {a.predictedVehicle.id}
+      </span>
+    ) : (
       <span className="rounded-[0.25em] border border-dashed border-primary/50 px-[0.35em] font-mono font-bold text-primary" title="Előrejelzett rendszám">
         ~{a.predictedVehicle.id}
       </span>

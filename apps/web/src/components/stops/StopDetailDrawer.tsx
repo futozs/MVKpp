@@ -266,7 +266,7 @@ export function StopDetailDrawer({
                             {f.replacement ? <ReplacementNote compact cancelled={arr} instead={replacementFor(arrivals, arr)} /> : null}
                           </>
                         ) : (
-                          <DelayBar delaySec={arr.delaySec} showLabel={false} />
+                          <DelayBar delaySec={arr.measuredDelaySec ?? arr.delaySec ?? null} showLabel={false} />
                         )}
                         <CatchPill verdict={f.leaveTimes ? catchFor.verdict(arr) : null} />
                       </div>

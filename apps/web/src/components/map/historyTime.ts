@@ -3,6 +3,7 @@
  * függetlenül a böngésző saját időzónájától. A forgalmi nap 03:00-tól a
  * következő nap 03:00-ig tart (GTFS 03:00–27:00).
  */
+import { serviceClock } from "@mvk/core/time";
 
 export const TZ = "Europe/Budapest";
 export const SERVICE_DAY_START_HOUR = 3;
@@ -110,10 +111,9 @@ export function serviceDayRange(day: string): ServiceDayRange {
   };
 }
 
-/** Melyik forgalmi napba esik a pillanat (03:00 előtt még az előző nap). */
+/** Melyik forgalmi napba esik a pillanat (03:00 előtt még az előző nap) — a szerverrel azonos szabállyal. */
 export function serviceDayOf(unix: number): string {
-  const p = zonedParts(unix - SERVICE_DAY_START_HOUR * HOUR);
-  return `${p.y}-${String(p.mo).padStart(2, "0")}-${String(p.d).padStart(2, "0")}`;
+  return serviceClock(unix).iso;
 }
 
 /** Az összes nap a két határ között, a legújabbal kezdve. */

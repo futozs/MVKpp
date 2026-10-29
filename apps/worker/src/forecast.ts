@@ -30,6 +30,7 @@ import {
   type ProfileFn,
   type RunOut,
   type SegmentProfile,
+  type StopAlong,
   type StopEventOut,
   type VehicleMotion,
 } from "@mvk/core";
@@ -44,6 +45,9 @@ const MIN_SAMPLES = 4;
 const CACHE_S = 15;
 /** a 15 perces tod_bucket-ekből órák */
 const BUCKETS_PER_HOUR = 4;
+/** az álldogálás-profil ennyi napból (mp) és felső korlátja */
+const DWELL_DAYS = 28;
+const MAX_DWELL_S = 60;
 /** a modellt ennyi megállóig tanítottuk — azon túl a képlet */
 const MODEL_MAX_AHEAD = 30;
 /** a modell becslése legfeljebb ennyit térhet el a mostani késéstől (mp) — védőkorlát */
@@ -66,6 +70,8 @@ type DayState = { history: RunHistory; traffic: RecentTraffic; last: Map<string,
 export class DelayForecaster {
   private engine: Engine;
   private profiles = new Map<string, SegmentProfile>();
+  /** megállónként és óránként a várható álldogálás (mp; az áthaladások 0-val számítanak) — a térképi pályához */
+  private dwells = new Map<string, number>();
   private cache = new Map<string, { at: number; value: TripForecast | null }>();
   private model: DelayModelBundle | null = null;
   /** szolgáltatási naponként az élő előzmények (a mai és — éjfél körül — a tegnapi) */
@@ -107,7 +113,41 @@ export class DelayForecaster {
     this.profiles = profiles;
     this.cache.clear();
     log.info("forecast", `${profiles.size} szakaszprofil betöltve (${Date.now() - t0} ms)`);
+    await this.loadDwells(iso);
     await this.loadModel();
+  }
+
+  /** A megállókban töltött átlagos idő (a térképi mozgás pályájához); hiba esetén üres marad. */
+  private async loadDwells(iso: string): Promise<void> {
+    try {
+      const rows = await sql<{ s: string; d: number; h: number; m: number }>(
+        `SELECT from_stop AS s, daytype AS d, (tod_bucket / $3)::int AS h, avg(coalesce(dwell_s, 0))::real AS m
+           FROM segment_run WHERE service_date >= $1::date - $2::int AND service_date < $1::date
+          GROUP BY 1, 2, 3 HAVING count(*) >= $4`,
+        [iso, DWELL_DAYS, BUCKETS_PER_HOUR, MIN_SAMPLES],
+      );
+      const out = new Map<string, number>();
+      for (const r of rows) out.set(`${r.s}|${r.d}|${r.h}`, Math.min(MAX_DWELL_S, Math.max(0, r.m)));
+      this.dwells = out;
+    } catch (e) {
+      log.warn("forecast", "álldogálás-profil hiba", errMsg(e));
+    }
+  }
+
+  /** Várható álldogálás egy megállóban (mp) a menetrendi időpont órájában. */
+  expectedDwell(stopId: string, serviceDate: string, schedSec: number): number {
+    const hour = Math.floor((((schedSec % 86_400) + 86_400) % 86_400) / 3600);
+    return this.dwells.get(`${stopId}|${dayInfo(serviceDate).daytype}|${hour}`) ?? 0;
+  }
+
+  /** Szokásos menetsebesség két szomszédos megálló között (m/s): a mért medián, ennek híján a menetrend. */
+  speedBetween(a: StopAlong, b: StopAlong, serviceDate: string): number | null {
+    const len = b.alongM - a.alongM;
+    if (len <= 0) return null;
+    const hour = Math.floor((((a.dep % 86_400) + 86_400) % 86_400) / 3600);
+    const p = this.profiles.get(`${a.stopId}|${b.stopId}|${dayInfo(serviceDate).daytype}|${hour}`);
+    const secs = p?.p50 ?? b.arr - a.dep;
+    return secs > 0 ? len / secs : null;
   }
 
   /** A legfrissebb elfogadott modell betöltése (hiba esetén a képlet marad). */

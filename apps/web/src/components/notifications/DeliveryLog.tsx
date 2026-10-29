@@ -47,7 +47,7 @@ export function DeliveryLog({ open }: { open: boolean }) {
                 <p className="truncate text-xs font-medium">{d.title ?? d.stop_name}</p>
                 <p className="truncate text-[11px] text-muted-foreground">{d.body}</p>
                 <p className="text-[10px] tabular-nums text-muted-foreground">
-                  {new Date(d.created_at).toLocaleString("hu-HU", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })} · {m.label}
+                  {new Date(d.created_at).toLocaleString("hu-HU", { timeZone: "Europe/Budapest", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })} · {m.label}
                   {d.attempts > 1 ? ` · ${d.attempts}. próbálkozásra` : ""}
                   {d.status === "failed" && d.last_error ? ` · ${d.last_error}` : ""}
                 </p>

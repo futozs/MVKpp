@@ -23,10 +23,10 @@ export function parseLink(url: string): ParsedLink {
     if (u.origin !== window.location.origin) return { tab: null, stopId: null };
     const hash = u.hash.replace(/^#/, "");
     const stop = u.searchParams.get("stop");
-    return {
-      tab: (TABS as string[]).includes(hash) ? (hash as ActiveTab) : null,
-      stopId: stop && STOP_ID_RE.test(stop) ? stop : null,
-    };
+    const stopId = stop && STOP_ID_RE.test(stop) ? stop : null;
+    // fül nélküli megálló-hivatkozás (`/?stop=SP12`): a Figyelő, ahová a megálló kerül
+    const tab = (TABS as string[]).includes(hash) ? (hash as ActiveTab) : stopId ? "multistop" : null;
+    return { tab, stopId };
   } catch {
     return { tab: null, stopId: null };
   }

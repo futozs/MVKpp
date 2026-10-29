@@ -111,7 +111,8 @@ export class TripInsights {
     const b = feed?.stops.get(stops[0].stopId);
     const deadheadM = a && b ? fastDistM(a.lat, a.lon, b.lat, b.lon) : 0;
     const prevRoute = feed ? (feed.routes.get(feed.trips.get(m.tripId)?.routeId ?? "")?.short ?? null) : null;
-    return startRiskOf({ vehicleId, schedStartUnix: schedStart, prevEndUnix: prevEnd, deadheadM, prevRoute, predicted: !assigned });
+    // fordulóhurkon nem tipp: ugyanaz a busz fordul vissza
+    return startRiskOf({ vehicleId, schedStartUnix: schedStart, prevEndUnix: prevEnd, deadheadM, prevRoute, predicted: !assigned && guess?.method !== "loop" });
   }
 
   /**
@@ -176,7 +177,10 @@ export class TripInsights {
     const d = this.forecast(t.toTrip, t.boardStopId, now);
     const arrMed = arrSched + (a?.delayS ?? fallback?.arrDelayS ?? 0);
     const arrUp = a ? arrSched + a.upperS : fallback?.arrUpperS != null ? arrSched + fallback.arrUpperS : null;
-    const depMed = depSched + (d?.delayS ?? fallback?.depDelayS ?? 0);
+    // A csatlakozó menet első megállójánál nincs útközbeni becslés: ha a busza még az előző
+    // menetén jár, a késve indulás jóslata adja az indulást (különben hamis „veszélyben” lenne).
+    const risk = d ? null : this.startRisk(t.toTrip, now);
+    const depMed = depSched + (d?.delayS ?? risk?.expectedDelayS ?? fallback?.depDelayS ?? 0);
     const depUp = d ? depSched + d.upperS : null;
     const chance = transferChance(spreadOf(arrMed, arrUp), spreadOf(depMed, depUp), t.walkS);
     return { chance: Math.round(chance * 100) / 100, arriveUnix: Math.round(arrMed), departUnix: Math.round(depMed), marginS: Math.round(depMed - arrMed - t.walkS) };
@@ -187,7 +191,7 @@ export class TripInsights {
     const list = this.arrivals(boardStopId, 30, now).arrivals;
     for (const x of list) {
       if (x.route !== routeShort || x.cancelled) continue;
-      const at = (x.schedUnix ?? now + x.etaMin * 60) + (x.forecastDelaySec ?? x.delaySec ?? 0);
+      const at = (x.schedUnix ?? now + x.etaMin * 60) + (x.forecastDelaySec ?? x.startRisk?.expectedDelayS ?? x.delaySec ?? 0);
       if (at >= readyUnix + 60) return { tripId: x.tripId, time: x.time, departUnix: Math.round(at) };
     }
     return null;

@@ -10,6 +10,7 @@ export * from "./realtime/snapshot.ts";
 export * from "./realtime/arrivals.ts";
 export * from "./realtime/progress.ts";
 export * from "./timetable.ts";
+export * from "./tripVariants.ts";
 export * from "./matcher.ts";
 export * from "./rotation.ts";
 export * from "./parking.ts";
