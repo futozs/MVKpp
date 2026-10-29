@@ -48,6 +48,8 @@ const PLAN_HORIZON_S = 4 * 3600;
 /** befejezett menet után ennyi ideig számít a busz a végállomáson várakozónak */
 const RECENT_END_S = 40 * 60;
 const AT_TERMINUS_M = 600;
+/** GTFS route_type: villamos (az MVK-nál 900, a busz 704) */
+const TRAM_ROUTE_TYPE = "900";
 
 export type VehicleGuess = {
   id: string;
@@ -64,6 +66,8 @@ export class VehiclePredictor {
   private chain = new Map<string, Map<string, number>>();
   private next = new Map<string, Map<string, number>>();
   private slot = new Map<string, Map<string, number>>();
+  /** járművenként az utoljára vitt vonal (route_id) — ebből tudjuk, busz-e vagy villamos */
+  private lastRouteOf = new Map<string, string>();
   private plan: { at: number; iso: string; plan: RotationPlan } | null = null;
   weights: Record<Signal, number> = { ...DEFAULT_WEIGHTS };
   accuracy = { hits: 0, total: 0, byHorizon: {} as Record<number, { hits: number; total: number }> };
@@ -86,8 +90,8 @@ export class VehiclePredictor {
    * számítanak. A mai nap kimarad: a már lefutott menetekre úgysem jósolunk.
    */
   async learn(): Promise<void> {
-    const rows = await sql<{ d: string; age: number; v: string; p: string; s: number; e: number }>(
-      `SELECT service_date::text AS d, (CURRENT_DATE - service_date)::int AS age, vehicle_id AS v,
+    const rows = await sql<{ d: string; age: number; v: string; rid: string; p: string; s: number; e: number }>(
+      `SELECT service_date::text AS d, (CURRENT_DATE - service_date)::int AS age, vehicle_id AS v, route_id AS rid,
               pattern AS p, sched_start_s AS s, sched_end_s AS e
          FROM trip_run
         WHERE status IN ('complete', 'partial') AND pattern <> '' AND service_date < $1::date
@@ -97,6 +101,7 @@ export class VehiclePredictor {
     const chain = new Map<string, Map<string, number>>();
     const next = new Map<string, Map<string, number>>();
     const slot = new Map<string, Map<string, number>>();
+    const lastRouteOf = new Map<string, string>();
     const bump = (m: Map<string, Map<string, number>>, k: string, sub: string, w: number) => {
       let x = m.get(k);
       if (!x) m.set(k, (x = new Map()));
@@ -106,6 +111,7 @@ export class VehiclePredictor {
       const r = rows[i];
       const w = Math.pow(0.5, Math.max(0, r.age) / HISTORY_HALF_LIFE_DAYS);
       const key = runKeyOf(r.p, r.s);
+      lastRouteOf.set(r.v, r.rid);
       bump(slot, `${dayInfo(r.d).daytype}|${key}`, r.v, w);
       const prev = rows[i - 1];
       if (prev && prev.v === r.v && prev.d === r.d) {
@@ -120,6 +126,7 @@ export class VehiclePredictor {
     this.chain = chain;
     this.next = next;
     this.slot = slot;
+    this.lastRouteOf = lastRouteOf;
     this.plan = null;
     const w = await sql<{ signal: string; weight: number }>(`SELECT signal, weight FROM vehicle_model_weight`);
     for (const x of w) if ((SIGNALS as string[]).includes(x.signal)) this.weights[x.signal as Signal] = x.weight;
@@ -257,8 +264,10 @@ export class VehiclePredictor {
       const b = feed.stops.get(st[st.length - 1].stopId);
       if (!a || !b) continue;
       const key = runKeyOf(feed.patternHash(t.id) ?? "", startS);
-      const route = feed.routes.get(t.routeId)?.short ?? t.routeId;
-      out.push({ tripId: t.id, key, route, startS, endS: st[st.length - 1].arr, lat: a.lat, lon: a.lon, endLat: b.lat, endLon: b.lon });
+      const r = feed.routes.get(t.routeId);
+      const route = r?.short ?? t.routeId;
+      const tram = r?.type === TRAM_ROUTE_TYPE;
+      out.push({ tripId: t.id, key, route, tram, startS, endS: st[st.length - 1].arr, lat: a.lat, lon: a.lon, endLat: b.lat, endLon: b.lon });
     }
     return out;
   }
@@ -272,22 +281,24 @@ export class VehiclePredictor {
     }
     const nowS = now - midnight;
     const out: RotationSeed[] = [];
+    const isTram = (routeId: string | undefined) => (routeId ? feed.routes.get(routeId)?.type === TRAM_ROUTE_TYPE : false);
     for (const v of this.engine.snapshot.vehicles) {
       const last = lastRun.get(v.id);
+      const tram = isTram(last?.routeId ?? (v.routeId || this.lastRouteOf.get(v.id)));
       const st = last ? feed.tripStops.get(last.tripId) : undefined;
       const end = st?.length ? feed.stops.get(st[st.length - 1].stopId) : undefined;
       const key = last ? runKeyOf(last.pattern, last.schedStartS) : null;
       if (last?.status === "running") {
         const availS = last.schedEndS + Math.max(0, last.lastDelayS ?? 0);
-        out.push({ vehicle: v.id, availS, lat: end?.lat ?? v.lat, lon: end?.lon ?? v.lon, key, route: last.routeShort, idle: false });
+        out.push({ vehicle: v.id, availS, lat: end?.lat ?? v.lat, lon: end?.lon ?? v.lon, key, route: last.routeShort, tram, idle: false });
         continue;
       }
       const ended = last?.actualEnd ?? last?.lastTs ?? 0;
       if (last && end && now - ended < RECENT_END_S && fastDistM(v.lat, v.lon, end.lat, end.lon) < AT_TERMINUS_M) {
-        out.push({ vehicle: v.id, availS: Math.max(nowS, ended - midnight), lat: end.lat, lon: end.lon, key, route: last.routeShort, idle: false });
+        out.push({ vehicle: v.id, availS: Math.max(nowS, ended - midnight), lat: end.lat, lon: end.lon, key, route: last.routeShort, tram, idle: false });
         continue;
       }
-      out.push({ vehicle: v.id, availS: nowS, lat: v.lat, lon: v.lon, key: null, route: feed.routes.get(v.routeId)?.short ?? null, idle: true });
+      out.push({ vehicle: v.id, availS: nowS, lat: v.lat, lon: v.lon, key: null, route: feed.routes.get(v.routeId)?.short ?? null, tram, idle: true });
     }
     return out;
   }

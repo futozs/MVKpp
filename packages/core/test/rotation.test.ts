@@ -10,6 +10,7 @@ const slot = (tripId: string, route: string, from: typeof A, to: typeof A, start
   tripId,
   key: `${tripId}-key`,
   route,
+  tram: route.endsWith("V"),
   startS: start,
   endS: start + mins * 60,
   lat: from.lat,
@@ -25,6 +26,7 @@ const running = (vehicle: string, route: string, at: typeof A, availS: number, k
   lon: at.lon,
   key,
   route,
+  tram: route.endsWith("V"),
   idle: false,
 });
 
@@ -65,6 +67,13 @@ describe("forda-tervező", () => {
     const plan = planRotations(slots, [running("1641", "7", B, hm(8, 5))], new Map());
     expect(plan.byTrip.get("t1")?.vehicle).toBe("1641");
     expect(plan.byTrip.has("x1")).toBe(false);
+  });
+
+  it("buszra sosem kerül villamosmenet a közös végállomáson (és fordítva)", () => {
+    const slots = [slot("v1", "1V", B, A, hm(8, 8)), slot("b1", "7", B, A, hm(8, 20))];
+    const plan = planRotations(slots, [running("1641", "7", B, hm(8, 5)), running("611", "1V", B, hm(8, 6))], new Map());
+    expect(plan.byTrip.get("v1")?.vehicle).toBe("611");
+    expect(plan.byTrip.get("b1")?.vehicle).toBe("1641");
   });
 
   it("messze lévő vagy túl késői menetet nem rendel hozzá", () => {

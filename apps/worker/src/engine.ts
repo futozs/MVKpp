@@ -62,7 +62,8 @@ export class Engine extends EventEmitter<EngineEvents> {
   /** a mai nap menetei (tripId → legfrissebb run) — a menetrend-napló élő része */
   readonly todayRuns = new Map<string, RunOut>();
   private todayIso = serviceClock().iso;
-  private lastTs = new Map<string, number>();
+  /** járművenként az utolsó feldolgozott jel ideje (unix) */
+  readonly lastTs = new Map<string, number>();
   cancelled = { ids: new Set<string>(), raw: [] as string[], at: 0, stale: false, error: null as string | null };
   weather: { at: number; data: WeatherData } | null = null;
   poll = { ok: 0, fail: 0, lastOkAt: 0, lastError: null as string | null, lastMs: 0, pingsKept: 0, vehiclesMax: 0 };

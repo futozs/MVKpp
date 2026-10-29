@@ -119,7 +119,7 @@ function MobileNav({ activeTab, setActiveTab, counts }: MobileNavProps) {
 
   return (
     <nav aria-label="Fő nézetek" className={cn("pb-2", INSET_X)}>
-      <ul className={cn("grid grid-cols-5 gap-0.5 p-[3px]", WELL)}>
+      <ul className={cn("grid grid-cols-6 gap-0.5 p-[3px]", WELL)}>
         {NAV_TABS.map((tab) => {
           const isActive = activeTab === tab.id;
           const badge = tabBadge(tab.id, counts);

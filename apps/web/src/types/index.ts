@@ -125,6 +125,7 @@ export type ActiveTab =
   | "map"
   | "multistop"
   | "timetable"
+  | "parking"
   | "planner"
   | "stats";
 

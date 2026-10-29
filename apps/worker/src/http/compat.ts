@@ -11,13 +11,14 @@ import { config } from "../config.ts";
 import type { Engine } from "../engine.ts";
 import type { FeedManager } from "../feeds.ts";
 import { mvkFetch } from "../mvk.ts";
+import type { Parking } from "../parking.ts";
 import type { VehiclePredictor } from "../predict.ts";
 import { archiveRange, routeIndexFor, tableFor } from "../schedule.ts";
 import { currentJwt, ingestToken, lastRenewInfo, renewToken, tokenRejectedRecently, tokenStatus } from "../token.ts";
 import { HttpError, sendJson, type Req, type Router } from "./router.ts";
 import type { ServerResponse } from "node:http";
 
-export type Ctx = { engine: Engine; feeds: FeedManager; predictor: VehiclePredictor; startedAt: number; hubStats: () => unknown };
+export type Ctx = { engine: Engine; feeds: FeedManager; predictor: VehiclePredictor; parking: Parking; startedAt: number; hubStats: () => unknown };
 
 const ymdRe = /^\d{8}$/;
 const isoOfYmd = (ymd: string) => `${ymd.slice(0, 4)}-${ymd.slice(4, 6)}-${ymd.slice(6, 8)}`;

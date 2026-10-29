@@ -8,6 +8,7 @@ Next.js webapp + valós idejű worker + macOS token-agent, Postgres/TimescaleDB-
 - **Útvonaltervező** (RAPTOR): késés-előrejelzés és átszállási kockázat; **múltbeli tervezés** a ténylegesen lezajlott menetekkel.
 - **Statisztika**: hálózat (csúcsidők, lassú szakaszok), vonalak, megállók, járművek, üzemzavarok.
 - **Rendszám-előrejelzés** minden kint lévő buszra, órákra előre (forda-terv), önjavító súlyokkal.
+- **Parkoló**: ki áll most melyik végállomáson, ki van a kocsiszínben (G-járattal beállt, 1 órája néma, vagy ma még nem volt kint) — buszra és villamosra, a következő indulás tippjével, 14 napos kiállási előzménnyel; a kedvenc parkolók elöl állnak és a felhőbe mentődnek.
 - **Fiók** passkey-vel, minden beállítás kétirányú felhős szinkronnal; **push-értesítés** kézbesítési naplóval.
 - A nyers GPS-adat örökre megmarad; ha az MVK nem ad ki menetrendet, automatikus fallback az utolsó jóra.
 

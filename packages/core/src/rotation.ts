@@ -16,6 +16,8 @@ export type RotationSlot = {
   /** mintakulcs (`pattern@schedStartS`) — ezen tanulunk napokon át */
   key: string;
   route: string;
+  /** villamosmenet — buszra sosem kerülhet, és fordítva */
+  tram: boolean;
   startS: number;
   endS: number;
   lat: number;
@@ -33,6 +35,8 @@ export type RotationSeed = {
   /** a mostani/utolsó menet mintakulcsa (a tanult folytatáshoz) */
   key: string | null;
   route: string | null;
+  /** villamos-e a jármű (a közös végállomásokon ez választja szét a buszt és a villamost) */
+  tram: boolean;
   /** nincs mai menete (garázsból / várakozásból indul) */
   idle: boolean;
 };
@@ -110,6 +114,7 @@ export function planRotations(slots: RotationSlot[], seeds: RotationSeed[], next
       lon: slot.endLon,
       key: slot.key,
       route: slot.route,
+      tram: slot.tram,
       idle: false,
       conf,
       hops: cur.hops + 1,
@@ -126,10 +131,10 @@ type Ctx = {
   next: RotationLinks;
 };
 
-const freeFor = (slot: RotationSlot, vehicle: string, ctx: Ctx) => {
-  if (ctx.taken.has(slot.tripId)) return false;
+const freeFor = (slot: RotationSlot, cur: Cursor, ctx: Ctx) => {
+  if (slot.tram !== cur.tram || ctx.taken.has(slot.tripId)) return false;
   const owner = ctx.reserved.get(slot.tripId);
-  return !owner || owner === vehicle;
+  return !owner || owner === cur.vehicle;
 };
 
 /** A múltban leggyakrabban ezután jövő, még szabad menet. */
@@ -143,7 +148,7 @@ function learnedNext(cur: Cursor, ctx: Ctx): Pick | null {
     const share = n / total;
     if (share < ROTATION.minChainShare) break;
     const slot = ctx.byKey.get(key);
-    if (!slot || !freeFor(slot, cur.vehicle, ctx)) continue;
+    if (!slot || !freeFor(slot, cur, ctx)) continue;
     if (slot.startS < cur.availS - ROTATION.chainLateSlackS || slot.startS > cur.availS + ROTATION.chainMaxGapS) continue;
     return { slot, factor: 0.6 + 0.35 * share, via: "chain", share };
   }
@@ -159,7 +164,7 @@ function nearestDeparture(cur: Cursor, ctx: Ctx): Pick | null {
   for (let i = lowerBound(ctx.sorted, from); i < ctx.sorted.length; i++) {
     const s = ctx.sorted[i];
     if (s.startS > cur.availS + ROTATION.maxLayoverS) break;
-    if (!freeFor(s, cur.vehicle, ctx)) continue;
+    if (!freeFor(s, cur, ctx)) continue;
     if (fastDistM(cur.lat, cur.lon, s.lat, s.lon) > radius) continue;
     if (cur.route && s.route === cur.route) {
       same = s;

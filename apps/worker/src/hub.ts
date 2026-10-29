@@ -6,6 +6,7 @@
  *   stop:<stopId>   — a megálló érkezési táblája; csak ha tényleg változott
  *   trip:<tripId>   — egy menet élő állapota (hol tart, késés)
  *   runs:<YYYYMMDD> — a mai menetrend-napló (indult / beért), menetenként azonnal
+ *   parking         — a parkoló: ki áll melyik végállomáson, ki van a kocsiszínben
  *   sync            — a bejelentkezett felhasználó más eszközön mentett beállításai
  *
  * Üzenetformátum: JSON, permessage-deflate tömörítéssel.
@@ -18,6 +19,7 @@ import { sha256Hex } from "@mvk/db/crypto";
 import type { Engine } from "./engine.ts";
 import { journalRecord } from "./http/compat.ts";
 import { errMsg, log } from "./log.ts";
+import type { Parking } from "./parking.ts";
 import type { VehiclePredictor } from "./predict.ts";
 
 type Client = { ws: WebSocket; topics: Set<string>; userId: string | null; deviceId: string | null; alive: boolean };
@@ -32,11 +34,13 @@ export class Hub {
   private lastSent = new Map<string, string>(); // téma → utolsó küldött tartalom (változásfigyeléshez)
   private engine: Engine;
   private predictor: VehiclePredictor;
+  private parking: Parking;
   stats = { connections: 0, messages: 0 };
 
-  constructor(server: Server, engine: Engine, predictor: VehiclePredictor) {
+  constructor(server: Server, engine: Engine, predictor: VehiclePredictor, parking: Parking) {
     this.engine = engine;
     this.predictor = predictor;
+    this.parking = parking;
     this.wss = new WebSocketServer({ server, path: "/ws", perMessageDeflate: { threshold: 512 }, maxPayload: 64 * 1024 });
     this.wss.on("connection", (ws, req) => this.onConnection(ws, req));
     engine.on("tick", () => this.onTick());
@@ -80,7 +84,7 @@ export class Hub {
     if (msg.t === "sub") {
       for (const t of topics) {
         if (c.topics.size >= MAX_TOPICS) break;
-        if (!/^(vehicles|sync|stop:[\w:.-]+|trip:[\w:.-]+|runs:\d{8})$/.test(t)) continue;
+        if (!/^(vehicles|sync|parking|stop:[\w:.-]+|trip:[\w:.-]+|runs:\d{8})$/.test(t)) continue;
         c.topics.add(t);
         await this.initial(c, t);
       }
@@ -90,6 +94,7 @@ export class Hub {
   /** Feliratkozáskor azonnal a teljes állapot. */
   private async initial(c: Client, topic: string) {
     if (topic === "vehicles") return this.send(c, { t: "vehicles", full: this.engine.snapshot.decoded, at: this.engine.snapshot.fetchedAt });
+    if (topic === "parking") return this.send(c, { t: "parking", id: "", data: this.parking.snapshot() });
     if (topic.startsWith("stop:")) return this.send(c, { t: "stop", id: topic.slice(5), data: this.stopData(topic.slice(5)) });
     if (topic.startsWith("trip:")) return this.send(c, { t: "trip", id: topic.slice(5), data: this.tripData(topic.slice(5)) });
     if (topic.startsWith("runs:")) {
@@ -155,7 +160,9 @@ export class Hub {
       }
     for (const t of stopTopics) this.refreshStop(t.slice(5));
     for (const t of tripTopics) this.publishIfChanged(t, { t: "trip", id: t.slice(5), data: this.tripData(t.slice(5)) });
-    for (const key of this.lastSent.keys()) if (!stopTopics.has(key) && !tripTopics.has(key)) this.lastSent.delete(key);
+    const parkingWatched = this.subscribers("parking").length > 0;
+    if (parkingWatched) this.publishIfChanged("parking", { t: "parking", id: "", data: this.parking.snapshot() });
+    for (const key of this.lastSent.keys()) if (!stopTopics.has(key) && !tripTopics.has(key) && !(key === "parking" && parkingWatched)) this.lastSent.delete(key);
   }
 
   private refreshStop(stopId: string) {
@@ -165,8 +172,8 @@ export class Hub {
   }
 
   private publishIfChanged(topic: string, payload: { t: string; id: string; data: unknown }) {
-    // A `now` mező minden körben változik — az összehasonlításból kihagyjuk.
-    const body = JSON.stringify(payload.data, (k, v) => (k === "now" ? undefined : v));
+    // A `now` / `at` időbélyeg minden körben változik — az összehasonlításból kihagyjuk.
+    const body = JSON.stringify(payload.data, (k, v) => (k === "now" || k === "at" ? undefined : v));
     if (this.lastSent.get(topic) === body) return;
     this.lastSent.set(topic, body);
     const msg = JSON.stringify(payload);

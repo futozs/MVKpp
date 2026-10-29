@@ -62,6 +62,9 @@ export default {
         late: 'hsl(var(--late))',
         early: 'hsl(var(--early))',
         ontime: 'hsl(var(--ontime))',
+        park: 'hsl(var(--park))',
+        depot: 'hsl(var(--depot))',
+        nosignal: 'hsl(var(--nosignal))',
 
         /* Teljes zöld skála árnyalatokhoz. */
         signal: {

@@ -19,7 +19,7 @@ const isoOf = (v: string | null, fallback: string) => {
 };
 
 export function registerV3(r: Router, ctx: Ctx) {
-  const { engine, feeds, predictor } = ctx;
+  const { engine, feeds, predictor, parking } = ctx;
 
   /**
    * Egy menet megállónként: menetrend + tény (érkezés, indulás, késés).
@@ -130,6 +130,13 @@ export function registerV3(r: Router, ctx: Ctx) {
   });
 
   r.get("/engine/predict/status", (req, res) => sendJson(req, res, 200, predictor.status()));
+
+  /** Parkoló: ki áll melyik végállomáson, ki van a kocsiszínben (élőben a `parking` WebSocket-témán is). */
+  r.get("/engine/parking", (req, res) => {
+    const snap = parking.snapshot();
+    if (!snap) throw new HttpError(503, "még nincs betöltve a mai menetrend");
+    sendJson(req, res, 200, snap, { "cache-control": "no-store" });
+  });
 
   /**
    * Útvonaltervezés: ?from=stop:SP85 | lat,lon  &to=…  &at=ISO-időpont | unix  &arriveBy=1

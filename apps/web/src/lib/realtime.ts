@@ -141,6 +141,8 @@ function topicOf(m: Msg): string | null {
       return `runs:${m.date as string}`;
     case "sync":
       return "sync";
+    case "parking":
+      return "parking";
     default:
       return null;
   }

@@ -4,6 +4,7 @@ import {
   MapIcon,
   Radar,
   Route,
+  SquareParking,
   type LucideIcon,
 } from "lucide-react";
 import type { ActiveTab } from "@/types";
@@ -22,6 +23,7 @@ export const NAV_TABS: readonly NavTab[] = [
   { id: "map", label: "Forgalmi térkép", short: "Térkép", icon: MapIcon },
   { id: "multistop", label: "Megállófigyelő", short: "Figyelő", icon: Radar },
   { id: "timetable", label: "Menetrend", short: "Menetrend", icon: CalendarClock },
+  { id: "parking", label: "Parkoló", short: "Parkoló", icon: SquareParking },
   { id: "planner", label: "Útvonaltervező", short: "Útvonal", icon: Route },
   { id: "stats", label: "Statisztika", short: "Statisztika", icon: ChartColumn },
 ];

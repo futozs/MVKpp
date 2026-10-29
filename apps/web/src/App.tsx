@@ -18,6 +18,7 @@ import { StopDetailDrawer } from "@/components/stops/StopDetailDrawer";
 import { TimetableView } from "@/components/timetable/TimetableView";
 import { RoutePlannerView } from "@/components/routeplanner/RoutePlannerView";
 import { StatsView } from "@/components/stats/StatsView";
+import { ParkingView } from "@/components/parking/ParkingView";
 import { MapSettingsModal } from "@/components/map/MapSettingsModal";
 import { NotificationsModal } from "@/components/notifications/NotificationsModal";
 import { AccountModal } from "@/components/account/AccountModal";
@@ -365,6 +366,16 @@ export function App() {
                 onFocusTrip={handleFocusTripOnMap}
                 serviceRange={gtfsMeta?.serviceRange ?? null}
                 archiveRange={gtfsMeta?.archiveRange ?? null}
+              />
+            )}
+
+            {activeTab === "parking" && (
+              <ParkingView
+                routes={Object.values(routes)}
+                onFocusVehicle={(id) => {
+                  setFocusVehicleId(id);
+                  setActiveTab("map");
+                }}
               />
             )}
 

@@ -74,6 +74,12 @@
     --early: 208 83% 64.7%;   /* előresietés */
     --ontime: 153 59% 50.2%;
 
+    /* Parkoló: a P-tábla kékje = végállomáson áll; a kocsiszín semleges;
+       a borostyán figyelmeztet (menet közben elnémult jármű). */
+    --park: 213 88% 62%;
+    --depot: 160 6% 58%;
+    --nosignal: 38 92% 56%;
+
     /* ------------------------------------------------------------------
        Mélység. Valódi, rétegzett árnyékok — a felületek tényleg
        egymás fölött lebegnek, nem hajszálvonalak választják el őket.
