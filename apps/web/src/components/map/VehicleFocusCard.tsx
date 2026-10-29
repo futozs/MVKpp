@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { Gauge, Navigation, X } from "lucide-react";
+import { Gauge, Navigation, TicketCheck, X } from "lucide-react";
 import type { Stop } from "@/types";
 import { useTripPath } from "@/hooks/useTripPath";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { RouteTile } from "@/components/transit/RouteTile";
 import { LiveDot } from "@/components/transit/LiveDot";
 import { ApproachStrip } from "@/components/transit/ApproachStrip";
 import { cn } from "@/lib/utils";
+import { boardVehicle } from "@/components/ride/RideLayer";
 
 type VehicleFocusCardProps = {
   tripId: string;
@@ -101,6 +102,22 @@ export function VehicleFocusCard({
           <X />
         </Button>
       </div>
+
+      {shownId && data ? (
+        <div className="px-4 pb-3">
+          <Button
+            className="w-full"
+            onClick={() =>
+              boardVehicle(
+                { tripId: data.trip ?? tripId, vehicleId: shownId, route: data.route, color: data.color, text: data.text, headsign: data.headsign },
+                "manual",
+              )
+            }
+          >
+            <TicketCheck /> Felszálltam erre a buszra
+          </Button>
+        </div>
+      ) : null}
 
       <ApproachStrip
         tripId={data?.trip ?? tripId}

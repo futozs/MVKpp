@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { delayState } from "@/components/transit/DelayBar";
 import { PREF_PREDICTED_VEHICLE, usePreference } from "@/hooks/usePreference";
 import { useStopBoard } from "./useStopBoard";
+import { ForecastLine } from "@/components/transit/ForecastLine";
 
 const hex = (v: string | undefined, fb: string) => `#${/^[0-9a-fA-F]{6}$/.test(v ?? "") ? v : fb}`;
 
@@ -126,6 +127,7 @@ function Featured({ a, showPredicted }: { a: ArrivalItem; showPredicted: boolean
           <Vehicle a={a} showPredicted={showPredicted} />
         </p>
       ) : null}
+      <ForecastLine className="mt-[0.45em] text-[0.72em]" delayS={a.forecastDelaySec} upperS={a.forecastUpperSec} />
     </div>
   );
 }

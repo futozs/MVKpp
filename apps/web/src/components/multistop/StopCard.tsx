@@ -20,6 +20,7 @@ import { checkAndNotify, getWatch } from "@/lib/notifications";
 import { StopNotifyDialog } from "./StopNotifyDialog";
 import { useFallbackPoll, useTopic } from "@/lib/realtime";
 import { PREF_PREDICTED_VEHICLE, usePreference } from "@/hooks/usePreference";
+import { ForecastLine } from "@/components/transit/ForecastLine";
 
 const POLL_MS = 4000;
 
@@ -278,6 +279,7 @@ export function StopCard({
                 jön
               </p>
             ) : null}
+            <ForecastLine className="mt-2.5" delayS={next.forecastDelaySec} upperS={next.forecastUpperSec} />
             <VehicleTrack
               className="mt-3"
               vehicle={next.vehicle}

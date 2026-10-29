@@ -55,6 +55,7 @@ export function registerV3(r: Router, ctx: Ctx) {
       stops: (stops ?? []).map((s, i) => ({ ...s, schedTime: secToHm(s.dep), schedTs: midnight + s.dep, idx: i })),
       run: live ?? runs[0] ?? null,
       liveDelaySec: live?.status === "running" ? engine.matcher.liveDelay(tripId, nowUnix()) : null,
+      forecast: iso === engine.today ? ctx.forecaster.forTrip(tripId) : null,
       events,
       cancelled: iso === engine.today ? engine.cancelled.ids.has(tripId) : Boolean((await sql(`SELECT 1 FROM cancelled_trip WHERE service_date = $1 AND trip_id = $2`, [iso, tripId]))[0]),
       predictedVehicle: iso === engine.today && !live ? predictor.predict(tripId) : null,
@@ -130,6 +131,52 @@ export function registerV3(r: Router, ctx: Ctx) {
   });
 
   r.get("/engine/predict/status", (req, res) => sendJson(req, res, 200, predictor.status()));
+
+  /**
+   * Forda-tábla: buszonként a mai menetek (lefutott / futó) és a forda-terv
+   * szerinti következők. Idők a szolgáltatási nap kezdetétől, másodpercben.
+   */
+  r.get("/engine/blocks", (req, res) => {
+    const iso = engine.today;
+    const day = feeds.cachedDay(iso);
+    if (!day) throw new HttpError(503, "még nincs betöltve a mai menetrend");
+    const midnight = localMidnightUnix(iso);
+    const rel = (unix: number | null) => (unix == null ? null : unix - midnight);
+    const tram = (routeId: string) => day.feed.routes.get(routeId)?.type === "900";
+    type Row = { id: string; kind: "bus" | "tram"; runs: unknown[]; plan: unknown[]; first: number };
+    const rows = new Map<string, Row>();
+    const row = (id: string, routeId: string | null) => {
+      let r = rows.get(id);
+      if (!r) rows.set(id, (r = { id, kind: routeId && tram(routeId) ? "tram" : "bus", runs: [], plan: [], first: Infinity }));
+      return r;
+    };
+    for (const run of engine.todayRuns.values()) {
+      const r = row(run.vehicleId, run.routeId);
+      r.first = Math.min(r.first, run.schedStartS);
+      r.runs.push({
+        t: run.tripId,
+        r: run.routeShort,
+        h: run.headsign,
+        s: run.schedStartS,
+        e: run.schedEndS,
+        as: rel(run.actualStart),
+        ae: rel(run.actualEnd ?? (run.status === "running" ? null : run.lastTs)),
+        st: run.status,
+        d: run.status === "running" ? run.lastDelayS : (run.endDelayS ?? run.lastDelayS),
+      });
+    }
+    const plan = predictor.planSnapshot();
+    for (const [vehicleId, slots] of plan?.byVehicle ?? []) {
+      for (const sl of slots) {
+        const trip = day.feed.trips.get(sl.tripId);
+        const r = row(vehicleId, trip?.routeId ?? null);
+        r.first = Math.min(r.first, sl.startS);
+        r.plan.push({ t: sl.tripId, r: sl.route, h: trip?.headsign ?? "", s: sl.startS, e: sl.endS, c: plan?.byTrip.get(sl.tripId)?.confidence ?? null });
+      }
+    }
+    const vehicles = [...rows.values()].sort((a, b) => a.first - b.first || a.id.localeCompare(b.id, "hu", { numeric: true })).map(({ first: _f, ...r }) => r);
+    sendJson(req, res, 200, { date: iso, midnight, now: nowUnix() - midnight, vehicles }, { "cache-control": "no-store" });
+  });
 
   /** Parkoló: ki áll melyik végállomáson, ki van a kocsiszínben (élőben a `parking` WebSocket-témán is). */
   r.get("/engine/parking", (req, res) => {

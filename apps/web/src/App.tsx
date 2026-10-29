@@ -18,6 +18,8 @@ import { StopDetailDrawer } from "@/components/stops/StopDetailDrawer";
 import { TimetableView } from "@/components/timetable/TimetableView";
 import { RoutePlannerView } from "@/components/routeplanner/RoutePlannerView";
 import { StatsView } from "@/components/stats/StatsView";
+import { RideLayer } from "@/components/ride/RideLayer";
+import { useActiveRide } from "@/lib/rides";
 import { ParkingView } from "@/components/parking/ParkingView";
 import { MapSettingsModal } from "@/components/map/MapSettingsModal";
 import { NotificationsModal } from "@/components/notifications/NotificationsModal";
@@ -64,6 +66,7 @@ const DEFAULT_FILTERS: FilterState = {
 export function App() {
   useAppHeight();
   const liveIncidentCount = useLiveIncidents();
+  const activeRide = useActiveRide();
 
   const restored = initialView();
 
@@ -315,7 +318,9 @@ export function App() {
                 />
 
                 {}
-                {focusTripId ? (
+                <RideLayer vehicles={liveVehicles} onFollow={handleFocusTrip} onStopFollow={handleExitFocus} />
+
+                {focusTripId && !activeRide ? (
                   <VehicleFocusCard
                     tripId={focusTripId}
                     vehicleId={focusVehicleId}

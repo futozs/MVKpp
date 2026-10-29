@@ -11,6 +11,7 @@ import { config } from "../config.ts";
 import type { Engine } from "../engine.ts";
 import type { FeedManager } from "../feeds.ts";
 import { mvkFetch } from "../mvk.ts";
+import type { DelayForecaster } from "../forecast.ts";
 import type { Parking } from "../parking.ts";
 import type { VehiclePredictor } from "../predict.ts";
 import { archiveRange, routeIndexFor, tableFor } from "../schedule.ts";
@@ -18,7 +19,15 @@ import { currentJwt, ingestToken, lastRenewInfo, renewToken, tokenRejectedRecent
 import { HttpError, sendJson, type Req, type Router } from "./router.ts";
 import type { ServerResponse } from "node:http";
 
-export type Ctx = { engine: Engine; feeds: FeedManager; predictor: VehiclePredictor; parking: Parking; startedAt: number; hubStats: () => unknown };
+export type Ctx = {
+  engine: Engine;
+  feeds: FeedManager;
+  predictor: VehiclePredictor;
+  parking: Parking;
+  forecaster: DelayForecaster;
+  startedAt: number;
+  hubStats: () => unknown;
+};
 
 const ymdRe = /^\d{8}$/;
 const isoOfYmd = (ymd: string) => `${ymd.slice(0, 4)}-${ymd.slice(4, 6)}-${ymd.slice(6, 8)}`;
@@ -44,6 +53,7 @@ export function registerCompat(r: Router, ctx: Ctx) {
     const now = nowUnix();
     return {
       measuredDelay: (t: string) => engine.matcher.liveDelay(t, now),
+      forecast: (t: string, s: string) => ctx.forecaster.forStop(t, s, now),
       predictedVehicle: (t: string) => predictor.predict(t),
       cancelled: engine.cancelled.ids,
     };

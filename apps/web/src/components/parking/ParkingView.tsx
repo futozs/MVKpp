@@ -5,6 +5,7 @@ import type { FleetKind, KindCounts, ParkedVehicle, ParkingSnapshot } from "@/se
 import { useRealtimeConnected } from "@/lib/realtime";
 import { usePreference } from "@/hooks/usePreference";
 import { cn } from "@/lib/utils";
+import { BlockChart } from "./BlockChart";
 import { DepotLotCard } from "./DepotLot";
 import { depotKey, PREF_PARKING_FAVORITES, terminalKey, withFavorites } from "./favorites";
 import { FleetSummary } from "./FleetSummary";
@@ -28,6 +29,7 @@ export function ParkingView({ routes, onFocusVehicle }: { routes: Route[]; onFoc
   const [kind, setKind] = useState<KindFilter>("all");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
+  const [mode, setMode] = usePreference<"lots" | "blocks">("mvk_parking_mode", "lots");
   const [favorites, setFavorites] = usePreference<string[]>(PREF_PARKING_FAVORITES, []);
   const isFav = (key: string) => favorites.includes(key);
   const toggleFav = (key: string) => setFavorites(isFav(key) ? favorites.filter((k) => k !== key) : [...favorites, key]);
@@ -55,7 +57,31 @@ export function ParkingView({ routes, onFocusVehicle }: { routes: Route[]; onFoc
     <Shell>
       <Header live={live} at={data.at} kind={kind} setKind={setKind} query={query} setQuery={setQuery} />
       <FleetSummary counts={counts} facts={facts(view, data, now)} />
-      {empty ? (
+      <div role="tablist" aria-label="Nézet" className="inline-flex gap-1 rounded-lg border border-border bg-muted/60 p-1">
+        {(
+          [
+            ["lots", "Parkoló"],
+            ["blocks", "Forda-tábla"],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={mode === id}
+            onClick={() => setMode(id)}
+            className={cn(
+              "rounded-md px-3.5 py-1.5 text-xs font-semibold transition-all duration-fast focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+              mode === id ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-accent hover:text-foreground",
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {mode === "blocks" ? (
+        <BlockChart lookup={lookup} kind={kind} query={query} onSelect={setSelected} />
+      ) : empty ? (
         <div className="rounded-2xl border border-dashed border-border px-6 py-12 text-center text-sm text-muted-foreground">Nincs ilyen jármű.</div>
       ) : (
         <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(360px,440px)]">
@@ -99,7 +125,7 @@ export function ParkingView({ routes, onFocusVehicle }: { routes: Route[]; onFoc
           </aside>
         </div>
       )}
-      <ServiceList vehicles={view.service} onSelect={setSelected} lookup={lookup} />
+      {mode === "lots" ? <ServiceList vehicles={view.service} onSelect={setSelected} lookup={lookup} /> : null}
       <VehicleSheet snap={data} id={selected} now={now} lookup={lookup} onClose={() => setSelected(null)} onFocusVehicle={onFocusVehicle} />
     </Shell>
   );

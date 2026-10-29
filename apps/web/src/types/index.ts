@@ -90,6 +90,9 @@ export interface ArrivalItem {
   predictedVehicle?: { id: string; confidence: number; method?: string } | null;
   /** v3: az MVK törölte a menetet */
   cancelled?: boolean;
+  /** v3: várható késés ennél a megállónál és a 85%-os felső becslés (mp) */
+  forecastDelaySec?: number | null;
+  forecastUpperSec?: number | null;
 }
 
 export interface StopArrivalsResponse {

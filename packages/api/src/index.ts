@@ -4,6 +4,7 @@
  */
 import { handleAccount } from "./account.ts";
 import { handlePush } from "./push.ts";
+import { handleRides } from "./rides.ts";
 import { handleStats } from "./stats.ts";
 import { handleSync } from "./sync.ts";
 import { handleV3Stats } from "./v3stats.ts";
@@ -15,6 +16,7 @@ export async function handleApi(req: Request): Promise<Response> {
   if (path.startsWith("/account/")) return handleAccount(req);
   if (path.startsWith("/push/") || path.startsWith("/v3/push/")) return handlePush(req);
   if (path === "/v3/sync") return handleSync(req);
+  if (path === "/v3/rides" || path.startsWith("/v3/rides/")) return handleRides(req);
   if (path.startsWith("/v3/")) return handleV3Stats(req);
   return json({ error: "nincs ilyen végpont" }, 404);
 }

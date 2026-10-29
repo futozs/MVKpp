@@ -26,6 +26,7 @@ import { HttpError, readBody, Router, sendJson, type Req } from "./http/router.t
 import { registerV3 } from "./http/v3.ts";
 import { detectIncidentsForDay } from "./incidents.ts";
 import { errMsg, log } from "./log.ts";
+import { DelayForecaster } from "./forecast.ts";
 import { Parking } from "./parking.ts";
 import { VehiclePredictor } from "./predict.ts";
 import { PushEngine } from "./push.ts";
@@ -52,6 +53,8 @@ async function main() {
   const engine = new Engine(feeds);
   const predictor = new VehiclePredictor(engine);
   await predictor.learn().catch((e) => log.warn("predict", "tanulás sikertelen", errMsg(e)));
+  const forecaster = new DelayForecaster(engine);
+  await forecaster.load().catch((e) => log.warn("forecast", "profilok betöltése sikertelen", errMsg(e)));
   const parking = new Parking(engine, predictor);
   await parking.init().catch((e) => log.warn("parking", "indítás sikertelen", errMsg(e)));
 
@@ -61,8 +64,8 @@ async function main() {
 
   const router = new Router();
   const server = createServer();
-  const hub = new Hub(server, engine, predictor, parking);
-  const ctx = { engine, feeds, predictor, parking, startedAt: Date.now(), hubStats: () => hub.status() };
+  const hub = new Hub(server, engine, predictor, parking, forecaster);
+  const ctx = { engine, feeds, predictor, parking, forecaster, startedAt: Date.now(), hubStats: () => hub.status() };
   registerCompat(router, ctx);
   registerV3(router, ctx);
 
@@ -125,6 +128,7 @@ async function main() {
     const yesterday = shiftIso(serviceClock().iso, -1);
     await detectIncidentsForDay(feeds, yesterday);
     await predictor.learn();
+    await forecaster.load();
   });
   await boss.work("minutely", async () => {
     await predictor.recordHorizons();

@@ -18,6 +18,8 @@ export type ArrivalExtras = {
   /** tripId → előre jelzett rendszám */
   predictedVehicle?: (tripId: string) => { id: string; confidence: number } | null;
   cancelled?: Set<string>;
+  /** (tripId, stopId) → várható és legrosszabb esetben várható késés ennél a megállónál */
+  forecast?: (tripId: string, stopId: string) => { delayS: number; upperS: number } | null;
 };
 
 type DayCtx = { day: ServiceDay; midnightUnix: number };
@@ -150,6 +152,7 @@ export function arrivalsForStop(
       }
     }
 
+    const fc = veh ? (extras.forecast?.(x.tripId, stopId) ?? null) : null;
     arrivals.push({
       route: r?.short || tr?.routeId || "?",
       color: r?.color || "888888",
@@ -167,6 +170,8 @@ export function arrivalsForStop(
       measuredDelaySec: extras.measuredDelay?.(x.tripId) ?? null,
       predictedVehicle: veh ? null : (extras.predictedVehicle?.(x.tripId) ?? null),
       cancelled: extras.cancelled?.has(x.tripId) ?? false,
+      forecastDelaySec: fc?.delayS ?? null,
+      forecastUpperSec: fc?.upperS ?? null,
     });
   }
 

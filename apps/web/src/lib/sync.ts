@@ -15,7 +15,7 @@ import { realtime } from "@/lib/realtime";
 const DEVICE_KEY = "mvk_device_id";
 const META_KEY = "mvk_sync_meta";
 /** Eszközhöz kötött kulcsok — ezek nem utaznak. */
-const DEVICE_ONLY = new Set(["mvk_account", DEVICE_KEY, META_KEY, "mvk_install_dismissed", "mvk_geo_last_fix", "mvk_view_state", "mvk_map_view", "mvk_timetable_view"]);
+const DEVICE_ONLY = new Set(["mvk_account", DEVICE_KEY, META_KEY, "mvk_install_dismissed", "mvk_geo_last_fix", "mvk_view_state", "mvk_map_view", "mvk_timetable_view", "mvk_rides", "mvk_ride_active"]);
 const PUSH_DEBOUNCE_MS = 1500;
 const PULL_INTERVAL_MS = 5 * 60_000;
 

@@ -19,7 +19,7 @@ const MAX_USER_BYTES = 4 * 1024 * 1024;
 /** Eszközhöz kötött kulcsok: ezeket nem szinkronizáljuk (pl. a telepítési banner elrejtése). */
 // Ugyanaz a lista, mint a kliensen (apps/web/src/lib/sync.ts). Az mvk_account
 // a munkamenet-tokent tartalmazza: az SOHA nem kerülhet a szerverre.
-export const DEVICE_ONLY = new Set(["mvk_account", "mvk_device_id", "mvk_sync_meta", "mvk_install_dismissed", "mvk_geo_last_fix", "mvk_view_state", "mvk_map_view", "mvk_timetable_view"]);
+export const DEVICE_ONLY = new Set(["mvk_account", "mvk_device_id", "mvk_sync_meta", "mvk_install_dismissed", "mvk_geo_last_fix", "mvk_view_state", "mvk_map_view", "mvk_timetable_view", "mvk_rides", "mvk_ride_active"]);
 
 export async function applyState(userId: string, items: StateItem[], deviceId: string | null): Promise<{ applied: string[]; stale: StateItem[] }> {
   const applied: string[] = [];

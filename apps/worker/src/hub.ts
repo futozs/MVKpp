@@ -19,6 +19,7 @@ import { sha256Hex } from "@mvk/db/crypto";
 import type { Engine } from "./engine.ts";
 import { journalRecord } from "./http/compat.ts";
 import { errMsg, log } from "./log.ts";
+import type { DelayForecaster } from "./forecast.ts";
 import type { Parking } from "./parking.ts";
 import type { VehiclePredictor } from "./predict.ts";
 
@@ -35,12 +36,14 @@ export class Hub {
   private engine: Engine;
   private predictor: VehiclePredictor;
   private parking: Parking;
+  private forecaster: DelayForecaster;
   stats = { connections: 0, messages: 0 };
 
-  constructor(server: Server, engine: Engine, predictor: VehiclePredictor, parking: Parking) {
+  constructor(server: Server, engine: Engine, predictor: VehiclePredictor, parking: Parking, forecaster: DelayForecaster) {
     this.engine = engine;
     this.predictor = predictor;
     this.parking = parking;
+    this.forecaster = forecaster;
     this.wss = new WebSocketServer({ server, path: "/ws", perMessageDeflate: { threshold: 512 }, maxPayload: 64 * 1024 });
     this.wss.on("connection", (ws, req) => this.onConnection(ws, req));
     engine.on("tick", () => this.onTick());
@@ -111,6 +114,7 @@ export class Hub {
     const now = nowUnix();
     return arrivalsForStop(stopId, STOP_LIMIT, this.engine.snapshot, this.engine.feeds.arrivalDays(now), now, {
       measuredDelay: (t) => this.engine.matcher.liveDelay(t, now),
+      forecast: (t, s) => this.forecaster.forStop(t, s, now),
       predictedVehicle: (t) => this.predictor.predict(t),
       cancelled: this.engine.cancelled.ids,
     });
@@ -121,7 +125,15 @@ export class Hub {
     const v = this.engine.snapshot.vehicles.find((x) => x.tripId === tripId);
     const run = this.engine.todayRuns.get(tripId) ?? null;
     const prog = v && feed ? progressOnTrip(feed, tripId, v, serviceClock().secOfDay) : null;
-    return { tripId, live: Boolean(v), vehicle: v ?? null, progress: prog, run, measuredDelaySec: this.engine.matcher.liveDelay(tripId, nowUnix()) };
+    return {
+      tripId,
+      live: Boolean(v),
+      vehicle: v ?? null,
+      progress: prog,
+      run,
+      measuredDelaySec: this.engine.matcher.liveDelay(tripId, nowUnix()),
+      forecast: this.forecaster.forTrip(tripId),
+    };
   }
 
   private subscribers(topic: string): Client[] {

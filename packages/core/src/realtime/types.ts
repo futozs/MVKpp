@@ -67,6 +67,9 @@ export type ArrivalItem = {
   predictedVehicle?: { id: string; confidence: number } | null;
   /** v3: az MVK törölte a menetet */
   cancelled?: boolean;
+  /** v3: várható késés ennél a megállónál (szakaszprofilokból) és a 85%-os felső becslés */
+  forecastDelaySec?: number | null;
+  forecastUpperSec?: number | null;
 };
 
 export type StopArrivals = {

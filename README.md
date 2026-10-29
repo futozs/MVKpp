@@ -8,6 +8,10 @@ Next.js webapp + valós idejű worker + macOS token-agent, Postgres/TimescaleDB-
 - **Útvonaltervező** (RAPTOR): késés-előrejelzés és átszállási kockázat; **múltbeli tervezés** a ténylegesen lezajlott menetekkel.
 - **Statisztika**: hálózat (csúcsidők, lassú szakaszok), vonalak, megállók, járművek, üzemzavarok.
 - **Rendszám-előrejelzés** minden kint lévő buszra, órákra előre (forda-terv), önjavító súlyokkal.
+- **Kijelző** (`/kijelzo`): utastájékoztató tévére vagy tabletre — 1–3 megálló egymás mellett, élőben, nagy betűkkel; a Figyelőből indítható.
+- **Késés-előrejelzés megállónként**: a mostani késésből és az elmúlt 8 hét szakaszidejeiből — „ide várhatóan +3 perccel ér, legrosszabb esetben +5” (visszamérve: 3 megállóra 46 mp átlagos hiba, a felső becslés ~85%-ban tart).
+- **Felszálltam + Utazásaim**: a követett buszra „Felszálltam”, vagy a nyitott térkép magától felismeri, ha együtt mozogsz egy busszal; utazás közben élő késés, várható és legkésőbbi érkezés minden megállóra. Az utazások a telefonon gyűlnek, bejelentkezve a felhőbe is (Statisztika → Utazásaim: km, idő, begyűjtött rendszámok).
+- **Forda-tábla** (a Parkoló oldalon): a flotta napja idővonalon — lefutott menetek és a forda-terv szerinti következők.
 - **Parkoló**: ki áll most melyik végállomáson, ki van a kocsiszínben (G-járattal beállt, 1 órája néma, vagy ma még nem volt kint) — buszra és villamosra, a következő indulás tippjével, 14 napos kiállási előzménnyel; a kedvenc parkolók elöl állnak és a felhőbe mentődnek.
 - **Fiók** passkey-vel, minden beállítás kétirányú felhős szinkronnal; **push-értesítés** kézbesítési naplóval.
 - A nyers GPS-adat örökre megmarad; ha az MVK nem ad ki menetrendet, automatikus fallback az utolsó jóra.

@@ -238,6 +238,11 @@ export class VehiclePredictor {
     return { id, confidence: Math.round(confidence * 100) / 100, method, signals: top, hops };
   }
 
+  /** A forda-terv a forda-táblához (a mostani állapotból, 30 mp-ig gyorsítótárazva). */
+  planSnapshot(): RotationPlan | null {
+    return this.dayPlan(nowUnix());
+  }
+
   /** A mai forda-terv (30 mp-ig gyorsítótárazva): minden kint lévő busz következő menetei. */
   private dayPlan(now: number): RotationPlan | null {
     const iso = this.engine.today;
