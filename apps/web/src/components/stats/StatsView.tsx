@@ -7,7 +7,6 @@ import {
   Route as RouteIcon,
   Wrench,
   TrendingUp,
-  SquareParking,
   type LucideIcon,
 } from "lucide-react";
 import type { Route, Stop } from "@/types";
@@ -17,7 +16,6 @@ import { IncidentPanel } from "./IncidentPanel";
 import { RoutePanel } from "./RoutePanel";
 import { StopPanel } from "./StopPanel";
 import { NetworkPanel } from "./NetworkPanel";
-import { ParkingView } from "@/components/parking/ParkingView";
 import { HeatPanel } from "./HeatPanel";
 import { cn } from "@/lib/utils";
 
@@ -28,8 +26,7 @@ type PanelId =
   | "route"
   | "stop"
   | "network"
-  | "heat"
-  | "parking";
+  | "heat";
 
 const OVERVIEW_PANEL: { id: PanelId; label: string; short: string; icon: LucideIcon } = {
   id: "overview",
@@ -37,8 +34,6 @@ const OVERVIEW_PANEL: { id: PanelId; label: string; short: string; icon: LucideI
   short: "Áttek.",
   icon: Activity,
 };
-
-export type { PanelId as StatsPanelId };
 
 const PANELS: {
   id: PanelId;
@@ -52,8 +47,6 @@ const PANELS: {
   { id: "stop", label: "Megállók", short: "Megállók", icon: MapPinned },
   { id: "network", label: "Hálózat", short: "Hálózat", icon: TrendingUp },
   { id: "heat", label: "Hőtérkép", short: "Hőtérkép", icon: Flame },
-  // a garázsban és a végállomásokon álló kocsik (régen külön fül volt)
-  { id: "parking", label: "Parkoló", short: "Parkoló", icon: SquareParking },
 ];
 
 export function StatsView({
@@ -62,7 +55,6 @@ export function StatsView({
   onFocusVehicle,
   onOpenDisruptions,
   liveIncidents = 0,
-  requestedPanel = null,
 }: {
   stops: Stop[];
   routes: Route[];
@@ -71,14 +63,8 @@ export function StatsView({
   onOpenDisruptions?: () => void;
   /** van élő zavar (piros jelvény) → az Üzemzavarok nyíljon meg elsőként */
   liveIncidents?: number;
-  /** kívülről kért nézet (pl. a régi „Parkoló” fül hivatkozása) */
-  requestedPanel?: { id: PanelId } | null;
 }) {
-  const [panel, setPanel] = useState<PanelId>(() => requestedPanel?.id ?? (liveIncidents ? "incident" : "vehicle"));
-
-  useEffect(() => {
-    if (requestedPanel) setPanel(requestedPanel.id);
-  }, [requestedPanel]);
+  const [panel, setPanel] = useState<PanelId>(() => (liveIncidents ? "incident" : "vehicle"));
   const navRef = useRef<HTMLUListElement>(null);
 
   useEffect(() => {
@@ -159,9 +145,6 @@ export function StatsView({
           {panel === "stop" && <StopPanel stops={stops} />}
           {panel === "network" && <NetworkPanel />}
           {panel === "heat" && <HeatPanel routes={routes} />}
-          {panel === "parking" && onFocusVehicle ? (
-            <ParkingView routes={routes} onFocusVehicle={onFocusVehicle} embedded />
-          ) : null}
         </div>
       </div>
     </div>

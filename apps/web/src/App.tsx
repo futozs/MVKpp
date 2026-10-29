@@ -17,7 +17,8 @@ import { MultiStopDashboard } from "@/components/multistop/MultiStopDashboard";
 import { StopDetailDrawer } from "@/components/stops/StopDetailDrawer";
 import { TimetableView } from "@/components/timetable/TimetableView";
 import { RoutePlannerView } from "@/components/routeplanner/RoutePlannerView";
-import { StatsView, type StatsPanelId } from "@/components/stats/StatsView";
+import { StatsView } from "@/components/stats/StatsView";
+import { ParkingView } from "@/components/parking/ParkingView";
 import { RideLayer } from "@/components/ride/RideLayer";
 import { useActiveRide } from "@/lib/rides";
 import { NotificationsModal } from "@/components/notifications/NotificationsModal";
@@ -35,8 +36,6 @@ import { consumeInitialLink, OPEN_LINK_EVENT, parseLink, type ParsedLink } from 
 
 // Értesítésből (vagy könyvjelzőből) nyitott hivatkozás: egyszer, betöltéskor olvassuk ki.
 const INITIAL_LINK = typeof window === "undefined" ? null : consumeInitialLink();
-
-const fromLegacyTab = (tab: ActiveTab): ActiveTab => (tab === "parking" ? "stats" : tab);
 
 const DEFAULT_FILTERS: FilterState = {
   vq: "",
@@ -63,11 +62,7 @@ export function App() {
   const restored = initialView();
 
   const [activeTab, setActiveTab] = useState<ActiveTab>(
-    () => fromLegacyTab(INITIAL_LINK?.tab ?? restored?.tab ?? "map"),
-  );
-  // A régi „Parkoló” fül (mentett nézet, hivatkozás) a Statisztika Parkoló nézete lett.
-  const [statsPanelReq, setStatsPanelReq] = useState<{ id: StatsPanelId } | null>(() =>
-    (INITIAL_LINK?.tab ?? restored?.tab) === "parking" ? { id: "parking" } : null,
+    () => INITIAL_LINK?.tab ?? restored?.tab ?? "map",
   );
   const [stops, setStops] = useState<Stop[]>([]);
   const [routes, setRoutes] = useState<Record<string, Route>>({});
@@ -125,8 +120,7 @@ export function App() {
   // különben a hivatkozás sehová sem vinne). Nyitott appnál a service worker üzen.
   const [linkStop, setLinkStop] = useState<{ id: string } | null>(null);
   const applyLink = useCallback((link: ParsedLink) => {
-    if (link.tab) setActiveTab(fromLegacyTab(link.tab));
-    if (link.tab === "parking") setStatsPanelReq({ id: "parking" });
+    if (link.tab) setActiveTab(link.tab);
     const id = link.stopId;
     if (!id) return;
     setMonitoredStopIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
@@ -449,7 +443,6 @@ export function App() {
                 stops={stops}
                 routes={Object.values(routes)}
                 liveIncidents={liveIncidentCount}
-                requestedPanel={statsPanelReq}
                 onOpenDisruptions={() => {
                   setDisruptionsOpen(true);
                   setActiveTab("timetable");
@@ -467,6 +460,13 @@ export function App() {
                 archiveRange={gtfsMeta?.archiveRange ?? null}
                 disruptionsOpen={isDisruptionsOpen}
                 onDisruptionsOpenChange={setDisruptionsOpen}
+              />
+            )}
+
+            {activeTab === "parking" && (
+              <ParkingView
+                routes={Object.values(routes)}
+                onFocusVehicle={handleFocusVehicleOnMap}
               />
             )}
 

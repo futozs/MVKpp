@@ -30,12 +30,25 @@ async function getSubscription(): Promise<PushSubscription | null> {
 
 export type PushDiagnostic = { ok: boolean; reason?: string };
 
+/**
+ * iPhone/iPad: zárt appnál csak a Főképernyőhöz adott (telepített) webappból jöhet
+ * push (iOS 16.4+) — a Safari-lapról soha. Ilyenkor ezt mondjuk meg, nem azt, hogy „nem támogatja”.
+ */
+function iosNeedsInstall(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const standalone = window.matchMedia?.("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
+  return ios && !standalone;
+}
+
+const IOS_INSTALL_HINT = "iPhone-on zárt appnál csak akkor jön értesítés, ha a Főképernyőhöz adod: Safari → Megosztás → „Főképernyőhöz adás”, majd onnan nyisd meg és kapcsold be újra.";
+
 async function ensureSubscription(): Promise<
   { sub: PushSubscription } | { sub: null; reason: string }
 > {
   if (!pushSupported()) {
     log("ez a böngésző NEM támogatja a Push API-t (nincs serviceWorker vagy PushManager)");
-    return { sub: null, reason: "A böngésző nem támogatja a push-értesítést." };
+    return { sub: null, reason: iosNeedsInstall() ? IOS_INSTALL_HINT : "A böngésző nem támogatja a push-értesítést." };
   }
 
   const existing = await getSubscription();

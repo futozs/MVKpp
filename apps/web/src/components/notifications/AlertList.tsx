@@ -12,7 +12,14 @@ function describe(a: AlertWatch): { icon: typeof Footprints; title: string; sub:
     return { icon: Shuffle, title: `Átszállás — ${a.stopName}`, sub: `${p.fromRoute ?? "?"} → ${p.toRoute ?? "?"}, szólok, ha veszélybe kerül` };
   }
   const walk = Number(a.params?.walkS ?? 0);
-  const days = a.params?.days === "workday" ? "munkanaponként" : a.params?.days === "weekend" ? "hétvégén" : "naponta";
+  const d = a.params?.days;
+  const days = Array.isArray(d)
+    ? d.map((x) => ["", "hétfő", "kedd", "szerda", "csütörtök", "péntek", "szombat", "vasárnap"][Number(x)] ?? "").join(", ")
+    : d === "workday"
+      ? "munkanaponként"
+      : d === "weekend"
+        ? "hétvégén"
+        : "naponta";
   return {
     icon: a.schedMin != null ? Repeat : Footprints,
     title: `Indulj most — ${a.stopName}`,

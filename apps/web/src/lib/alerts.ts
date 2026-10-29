@@ -104,6 +104,11 @@ export async function addAlert(a: Omit<AlertWatch, "pushRegistered" | "createdAt
   return { ok: true, push: diag.ok, reason: diag.ok ? undefined : diag.reason };
 }
 
+/** Miért nem jön értesítés zárt appnál (a „push nélkül” megjegyzéshez). */
+export function noPushNote(r: AddAlertResult): string {
+  return r.reason ? `Csak nyitott oldalnál szólok: ${r.reason}` : "Push nélkül csak akkor szólok, ha nyitva van az oldal.";
+}
+
 export async function removeAlert(stopId: string, slot: string): Promise<void> {
   writeAll(listAlerts().filter((x) => keyOf(x.stopId, x.slot) !== keyOf(stopId, slot)));
   await unregisterPushWatch(stopId, slot);

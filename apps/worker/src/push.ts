@@ -18,7 +18,7 @@
  */
 import webpush from "web-push";
 import type { PgBoss } from "pg-boss";
-import { budapestOffsetSec, catchVerdict, dayKindOf, nowUnix, withHungarianSuffix, type ArrivalItem } from "@mvk/core";
+import { budapestOffsetSec, catchVerdict, dayKindOf, isoDow, nowUnix, withHungarianSuffix, type ArrivalItem } from "@mvk/core";
 import { getPool, sql } from "@mvk/db";
 import { config } from "./config.ts";
 import type { Engine } from "./engine.ts";
@@ -49,8 +49,8 @@ type DeliveryKind = "arrival" | "cancelled" | "leave" | "missed" | "risk" | "tra
 type WatchParams = {
   /** leave: séta a megállóig (mp) */
   walkS?: number;
-  /** leave (ismétlődő): melyik napokon — munkanap, hétvége vagy mind */
-  days?: "workday" | "weekend" | "all";
+  /** leave (ismétlődő): melyik napokon — munkanap, hétvége, mind, vagy a hét napjai (ISO 1–7) */
+  days?: "workday" | "weekend" | "all" | number[];
   /** transfer: az első menet, az átszálló megálló és a séta */
   fromTrip?: string;
   alightStopId?: string;
@@ -89,6 +89,14 @@ function delaySuffix(delaySec: number | null): string {
   if (delaySec == null || Math.abs(delaySec) < 60) return "";
   const m = Math.round(Math.abs(delaySec) / 60);
   return delaySec > 0 ? ` (${m} perc késés)` : ` (${m} perccel korábban)`;
+}
+
+/** Ismétlődő figyelés: ma esedékes-e (pl. csak szerdán és csütörtökön; ünnepnapon a munkanapi szokás nem). */
+function isWatchDay(days: WatchParams["days"], date: string): boolean {
+  if (!days || days === "all") return true;
+  if (!Array.isArray(days)) return dayKindOf(date) === days;
+  const workdayHabit = days.every((d) => d <= 5);
+  return days.includes(isoDow(date)) && !(workdayHabit && dayKindOf(date) !== "workday");
 }
 
 const minText = (s: number) => `${Math.max(1, Math.round(s / 60))} perc`;
@@ -230,8 +238,7 @@ export class PushEngine {
   /** „Indulj most”: amikor el kell indulni, hogy biztosan elérd (a sétával együtt). */
   private async evalLeave(w: WatchRow, arrivals: ArrivalItem[], now: number, nowMin: number, date: string) {
     const walkS = Math.max(0, Math.min(3600, Number(w.params?.walkS) || 0));
-    const days = w.params?.days ?? "all";
-    if (w.sched_min != null && days !== "all" && dayKindOf(date) !== days) return;
+    if (w.sched_min != null && !isWatchDay(w.params?.days, date)) return;
     for (const a of this.relevant(w, arrivals, nowMin)) {
       if (a.cancelled) continue;
       const { at, upper } = expectedAt(a, now);

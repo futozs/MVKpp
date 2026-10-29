@@ -7,7 +7,7 @@ import { RouteTile } from "@/components/transit/RouteTile";
 import { DelayBar } from "@/components/transit/DelayBar";
 import { CatchLine, StartRiskLine, TrafficLine } from "@/components/transit/TripInsights";
 import { expectedArrival, useCatchFor } from "@/hooks/useCatch";
-import { addAlert, removeAlert, useAlerts } from "@/lib/alerts";
+import { addAlert, noPushNote, removeAlert, useAlerts } from "@/lib/alerts";
 import { serverNow, useFallbackPoll, useServerClockVersion, useTopic } from "@/lib/realtime";
 import { useRides } from "@/lib/rides";
 import { useWatchFeatures } from "@/lib/watchPrefs";
@@ -17,12 +17,28 @@ import { cn } from "@/lib/utils";
 const POLL_MS = 15_000;
 const hm = (min: number) => `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
 
-/** A szokásos utazás következő indulása: ugyanaz a vonal (lehetőleg ugyanaz az irány), a szokásos időhöz legközelebb. */
+/** „hétfőnként” … „vasárnaponként” (ISO: 1 = hétfő). */
+const DOW_ADVERB = ["", "hétfőnként", "keddenként", "szerdánként", "csütörtökönként", "péntekenként", "szombatonként", "vasárnaponként"];
+
+/** Mikor szokásos: „minden munkanap” vagy „szerdánként és csütörtökönként”. */
+function commuteDaysText(c: Pick<Commute, "daily" | "dayKind" | "dows">): string {
+  if (c.daily) return c.dayKind === "workday" ? "minden munkanap" : "hétvégente";
+  const names = c.dows.map((d) => DOW_ADVERB[d]);
+  return names.length > 1 ? `${names.slice(0, -1).join(", ")} és ${names[names.length - 1]}` : (names[0] ?? "");
+}
+
+/**
+ * A szokásos utazás indulása ma: ugyanaz a vonal (lehetőleg ugyanaz az irány), a még
+ * el nem ment indulások közül a szokásos időhöz legközelebbi (egyenlőnél a korábbi).
+ */
 function pickDeparture(c: Commute, arrivals: ArrivalItem[], now: number): ArrivalItem | null {
   const same = arrivals.filter((a) => a.route === c.route && !a.cancelled);
   const dir = same.filter((a) => a.headsign === c.headsign);
-  const pool = dir.length ? dir : same;
-  return pool.find((a) => expectedArrival(a, now).at >= now - 30) ?? null;
+  const pool = (dir.length ? dir : same).filter((a) => expectedArrival(a, now).at >= now - 30);
+  const off = (a: ArrivalItem) => (a.schedUnix != null ? Math.abs(budapestMinute(a.schedUnix) - c.minute) : Infinity);
+  let best: ArrivalItem | null = null;
+  for (const a of pool) if (!best || off(a) < off(best)) best = a;
+  return best;
 }
 
 /**
@@ -30,6 +46,8 @@ function pickDeparture(c: Commute, arrivals: ArrivalItem[], now: number): Arriva
  * megálló és időpont) — a Figyelő tetején, a szokásos idő előtt másfél órával.
  * Mutatja a következő indulást, hogy eléred-e, és naponta szólni is tud.
  */
+const capitalize = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
+
 export function CommuteCard({ className }: { className?: string }) {
   const rides = useRides();
   const [now, setNow] = useState(() => serverNow());
@@ -90,10 +108,11 @@ export function CommuteCard({ className }: { className?: string }) {
         stopName: c.fromStopName,
         routeShorts: [c.route],
         schedMin,
-        params: { walkS, days: c.dayKind },
+        // csak a szokásos napokon (pl. szerdán és csütörtökön), vagy minden munkanap / hétvégén
+        params: { walkS, days: c.daily ? c.dayKind : c.dows },
       });
       if (!r.ok) setNote(r.reason ?? "Nem sikerült bekapcsolni.");
-      else setNote(`${c.dayKind === "workday" ? "Munkanaponként" : "Hétvégén"} ${hm(schedMin)}-ra szólok, amikor indulni kell${walkS ? ` (${Math.round(walkS / 60)} perc séta innen)` : ""}.${r.push ? "" : " Push nélkül csak nyitott oldalnál."}`);
+      else setNote(`${capitalize(commuteDaysText(c))} ${hm(schedMin)}-ra szólok, amikor indulni kell${walkS ? ` (${Math.round(walkS / 60)} perc séta innen)` : ""}.${r.push ? "" : ` ${noPushNote(r)}`}`);
     } finally {
       setBusy(false);
     }
@@ -106,14 +125,14 @@ export function CommuteCard({ className }: { className?: string }) {
       <div className="flex items-center gap-2">
         <Sparkles aria-hidden className="h-3.5 w-3.5 shrink-0 text-primary" />
         <p className="min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-wide text-primary">
-          Szokásos utad · {c.dayKind === "workday" ? "munkanap" : "hétvége"} ~{hm(c.minute)}
+          Szokásos utad · ~{hm(c.minute)}
         </p>
         <button
           type="button"
           onClick={() => void toggleDaily()}
           disabled={busy}
           aria-pressed={Boolean(daily)}
-          title={daily ? "Naponta szólok, amikor indulni kell — koppints a kikapcsoláshoz" : "Szólj minden ilyen napon, amikor indulnom kell"}
+          title={daily ? `${capitalize(commuteDaysText(c))} szólok, amikor indulni kell — koppints a kikapcsoláshoz` : `Szólj ${commuteDaysText(c)}, amikor indulnom kell`}
           className={cn(
             "inline-flex shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-semibold transition-colors",
             "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
@@ -121,7 +140,7 @@ export function CommuteCard({ className }: { className?: string }) {
           )}
         >
           {daily ? <BellRing aria-hidden className="h-3 w-3" /> : <Repeat aria-hidden className="h-3 w-3" />}
-          {daily ? "Naponta szólok" : "Naponta szólj"}
+          {daily ? "Szólok ilyenkor" : "Szólj ilyenkor"}
         </button>
       </div>
 
@@ -129,7 +148,7 @@ export function CommuteCard({ className }: { className?: string }) {
         <RouteTile short={c.route} color={dep?.color ?? c.color} text={dep?.text ?? c.text} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-[13px] font-semibold">
-            {c.fromStopName} <span className="text-muted-foreground">→ {c.toStopName ?? c.headsign}</span>
+            {c.fromStopName} <span className="text-muted-foreground">{c.loop ? "· körbeutazás" : `→ ${c.toStopName ?? c.headsign}`}</span>
           </p>
           <div className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
             {dep ? (
@@ -140,8 +159,11 @@ export function CommuteCard({ className }: { className?: string }) {
             ) : (
               <span>{data ? "Most nincs közeli indulás ezen a vonalon." : "Indulások lekérése…"}</span>
             )}
-            <span className="truncate">{c.rides} út, {c.days} napon</span>
           </div>
+          {/* külön sorban: a napok listája telefonon sem vágódik le */}
+          <p className="mt-0.5 text-[11px] text-muted-foreground">
+            {c.rides} út · {commuteDaysText(c)}
+          </p>
         </div>
         {etaMin != null ? (
           <span className="shrink-0 font-mono text-lg font-bold tabular-nums">

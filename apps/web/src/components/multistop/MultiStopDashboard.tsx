@@ -11,6 +11,7 @@ import { Card } from "@/components/ui/card";
 import { cn, normalizeSearchText } from "@/lib/utils";
 import { RidesPanel } from "@/components/ride/RidesPanel";
 import { CommuteCard } from "./CommuteCard";
+import { MENU_ITEM, MoreMenu } from "./MoreMenu";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 
 /** a megállókártyák rácsa asztalon: 340–400 px széles oszlopok, középre igazítva */
@@ -18,9 +19,9 @@ const STOP_GRID = "grid justify-center gap-4 grid-cols-[repeat(auto-fill,minmax(
 
 type WatchView = "stops" | "rides";
 const VIEW_KEY = "mvk_watch_view";
-const WATCH_VIEWS: { id: WatchView; label: string; short: string; icon: typeof Radar }[] = [
-  { id: "stops", label: "Megállók", short: "Megállók", icon: Radar },
-  { id: "rides", label: "Utazásaim", short: "Utaim", icon: Ticket },
+const WATCH_VIEWS: { id: WatchView; label: string; icon: typeof Radar }[] = [
+  { id: "stops", label: "Megállók", icon: Radar },
+  { id: "rides", label: "Utazásaim", icon: Ticket },
 ];
 
 const QUICK_STOPS = [
@@ -166,10 +167,15 @@ export function MultiStopDashboard({
     if (found) toggleStop(found.id);
   };
 
+  const canNearest = manualOrder.length > 1 && Boolean(geo.position);
+  const canReorder = watched.length > 1 && !nearestFirst;
+  const kioskHref = watched.length ? `/kijelzo?m=${encodeURIComponent(watched.slice(0, 3).map((s) => s.id).join(","))}` : null;
+
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
-      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-card/60 px-3 py-2.5 sm:px-4 sm:py-3">
-        <div role="tablist" aria-label="Figyelő nézet" className="inline-flex min-w-0 gap-1 rounded-lg border border-border bg-muted/60 p-1">
+      <div className="flex shrink-0 items-center gap-2 border-b border-border bg-card/60 px-3 py-2.5 sm:px-4 sm:py-3">
+        {/* A nézetváltó kitölti a szabad szélességet (egyenlő fülek): nincs üres lyuk a fejlécben. */}
+        <div role="tablist" aria-label="Figyelő nézet" className="flex min-w-0 flex-1 gap-1 rounded-lg border border-border bg-muted/60 p-1">
           {WATCH_VIEWS.map((v) => {
             const on = view === v.id;
             const Icon = v.icon;
@@ -181,69 +187,86 @@ export function MultiStopDashboard({
                 aria-selected={on}
                 onClick={() => setView(v.id)}
                 className={cn(
-                  "inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-semibold transition-colors duration-fast",
+                  "flex h-8 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md px-2 text-xs font-semibold transition-colors duration-fast",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   on ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
                 )}
               >
                 <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                <span className="hidden sm:inline">{v.label}</span>
-                <span className="sm:hidden">{v.short}</span>
+                <span className="truncate">{v.label}</span>
               </button>
             );
           })}
         </div>
 
         {view === "stops" ? (
-        <div className="flex shrink-0 items-center gap-2">
-          {manualOrder.length > 1 && geo.position ? (
-            <Button
-              variant={nearestFirst ? "default" : "outline"}
-              size="sm"
-              className="h-10"
-              onClick={toggleNearestFirst}
-              aria-pressed={nearestFirst}
-              title="Legközelebbi megálló elöl"
-            >
-              <LocateFixed />
-              <span className="hidden sm:inline">Legközelebbi elöl</span>
-            </Button>
-          ) : null}
+          <>
+            {/* Asztalon kiírva… */}
+            <div className="hidden shrink-0 items-center gap-2 sm:flex">
+              {canNearest ? (
+                <Button
+                  variant={nearestFirst ? "default" : "outline"}
+                  size="sm"
+                  className="h-10"
+                  onClick={toggleNearestFirst}
+                  aria-pressed={nearestFirst}
+                  title="Legközelebbi megálló elöl"
+                >
+                  <LocateFixed />
+                  Legközelebbi elöl
+                </Button>
+              ) : null}
+              {canReorder ? (
+                <Button variant={isReordering ? "default" : "outline"} size="sm" className="h-10" onClick={() => setReordering((v) => !v)} aria-pressed={isReordering}>
+                  {isReordering ? <Check /> : <ArrowLeftRight />}
+                  {isReordering ? "Kész" : "Sorrend"}
+                </Button>
+              ) : null}
+              {kioskHref ? (
+                <Button asChild variant="outline" size="sm" className="h-10" title="Utastájékoztató kijelző tévére vagy tabletre (legfeljebb 3 megálló)">
+                  <a href={kioskHref}>
+                    <MonitorPlay />
+                    Kijelző
+                  </a>
+                </Button>
+              ) : null}
+            </div>
 
-          {watched.length > 1 && !nearestFirst ? (
-            <Button
-              variant={isReordering ? "default" : "outline"}
-              size="sm"
-              className="h-10"
-              onClick={() => setReordering((v) => !v)}
-              aria-pressed={isReordering}
-            >
-              {isReordering ? <Check /> : <ArrowLeftRight />}
-              <span className="hidden sm:inline">
-                {isReordering ? "Kész" : "Sorrend"}
-              </span>
-            </Button>
-          ) : null}
-
-          {watched.length ? (
-            <Button asChild variant="outline" size="sm" className="h-10" title="Utastájékoztató kijelző tévére vagy tabletre (legfeljebb 3 megálló)">
-              <a href={`/kijelzo?m=${encodeURIComponent(watched.slice(0, 3).map((s) => s.id).join(","))}`}>
-                <MonitorPlay />
-                <span className="hidden sm:inline">Kijelző</span>
-              </a>
-            </Button>
-          ) : null}
-
-          <Button onClick={() => setPickerOpen(true)} className="h-10">
-            <Plus />
-            <span className="hidden sm:inline">Megálló felvétele</span>
-            {selectedStopIds.length > 0 ? (
-              <span className="rounded bg-primary-foreground/20 px-1.5 py-px font-mono text-[10px] font-bold tabular-nums">
-                {selectedStopIds.length}
-              </span>
+            {/* …telefonon egy „⋯” menüben, hogy a nézetváltó kiférjen. */}
+            {canNearest || canReorder || kioskHref ? (
+              <MoreMenu className="sm:hidden">
+                {canNearest ? (
+                  <button type="button" role="menuitemcheckbox" aria-checked={nearestFirst} className={MENU_ITEM} onClick={toggleNearestFirst}>
+                    <LocateFixed />
+                    <span className="flex-1">Legközelebbi elöl</span>
+                    {nearestFirst ? <Check className="!text-primary" /> : null}
+                  </button>
+                ) : null}
+                {canReorder ? (
+                  <button type="button" role="menuitem" className={MENU_ITEM} onClick={() => setReordering((v) => !v)}>
+                    {isReordering ? <Check /> : <ArrowLeftRight />}
+                    <span className="flex-1">{isReordering ? "Sorrend kész" : "Sorrend módosítása"}</span>
+                  </button>
+                ) : null}
+                {kioskHref ? (
+                  <a role="menuitem" href={kioskHref} className={MENU_ITEM}>
+                    <MonitorPlay />
+                    <span className="flex-1">Kijelző tévére</span>
+                  </a>
+                ) : null}
+              </MoreMenu>
             ) : null}
-          </Button>
-        </div>
+
+            <Button onClick={() => setPickerOpen(true)} className="h-10 shrink-0" aria-label="Megálló felvétele">
+              <Plus />
+              <span className="hidden sm:inline">Megálló felvétele</span>
+              {selectedStopIds.length > 0 ? (
+                <span className="rounded bg-primary-foreground/20 px-1.5 py-px font-mono text-[10px] font-bold tabular-nums">
+                  {selectedStopIds.length}
+                </span>
+              ) : null}
+            </Button>
+          </>
         ) : null}
       </div>
 

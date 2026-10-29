@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { TrafficCone } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
-import { addAlert, removeAlert, useAlerts } from "@/lib/alerts";
+import { addAlert, noPushNote, removeAlert, useAlerts } from "@/lib/alerts";
 
 const SLOT = "traffic";
 
@@ -24,7 +24,7 @@ export function TrafficAlertSwitch({ stopId, stopName, routeShorts }: { stopId: 
       else {
         const r = await addAlert({ slot: SLOT, kind: "traffic", stopId, stopName, routeShorts: routeShorts.length ? routeShorts : undefined });
         if (!r.ok) setNote(r.reason ?? "Nem sikerült bekapcsolni.");
-        else if (!r.push) setNote(r.reason ? `Push nem érhető el: ${r.reason}` : "Push nem érhető el ezen az eszközön.");
+        else if (!r.push) setNote(noPushNote(r));
       }
     } finally {
       setBusy(false);

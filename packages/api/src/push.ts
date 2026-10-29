@@ -54,7 +54,7 @@ const TRIP_ID_RE = /^[\w:.-]{1,80}$/;
 const MAX_WATCHES_PER_SUB = 60;
 const KINDS = new Set(["arrival", "leave", "traffic", "transfer"]);
 
-type WatchParams = { walkS?: number; days?: string; fromTrip?: string; alightStopId?: string; fromRoute?: string; toRoute?: string; boardStopName?: string };
+type WatchParams = { walkS?: number; days?: string | number[]; fromTrip?: string; alightStopId?: string; fromRoute?: string; toRoute?: string; boardStopName?: string };
 
 /** A fajtához tartozó paraméterek ellenőrzése (csak az ismert mezők, korlátozva). */
 function cleanParams(kind: string, p: WatchParams | undefined): WatchParams | null {
@@ -66,8 +66,13 @@ function cleanParams(kind: string, p: WatchParams | undefined): WatchParams | nu
     out.walkS = Math.round(w);
   }
   if (p?.days != null) {
-    if (!["workday", "weekend", "all"].includes(p.days)) throw new ApiError(400, "Érvénytelen napok");
-    out.days = p.days;
+    // munkanap / hétvége / mind, vagy a hét napjai (ISO: 1 = hétfő … 7 = vasárnap)
+    if (Array.isArray(p.days)) {
+      const dows = [...new Set(p.days.map(Number))].filter((d) => Number.isInteger(d) && d >= 1 && d <= 7).sort((a, b) => a - b);
+      if (!dows.length || dows.length !== p.days.length) throw new ApiError(400, "Érvénytelen napok");
+      out.days = dows;
+    } else if (typeof p.days === "string" && ["workday", "weekend", "all"].includes(p.days)) out.days = p.days;
+    else throw new ApiError(400, "Érvénytelen napok");
   }
   if (kind === "transfer") {
     if (!p?.fromTrip || !TRIP_ID_RE.test(p.fromTrip) || !p.alightStopId || !STOP_ID_RE.test(p.alightStopId)) throw new ApiError(400, "Hiányos átszállás");

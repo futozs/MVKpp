@@ -23,16 +23,7 @@ const KIND_OPTIONS: { id: KindFilter; label: string }[] = [
   { id: "tram", label: "Villamos" },
 ];
 
-export function ParkingView({
-  routes,
-  onFocusVehicle,
-  embedded = false,
-}: {
-  routes: Route[];
-  onFocusVehicle: (id: string) => void;
-  /** a Statisztikán belül: ott már van görgetés és margó */
-  embedded?: boolean;
-}) {
+export function ParkingView({ routes, onFocusVehicle }: { routes: Route[]; onFocusVehicle: (id: string) => void }) {
   const { data, error, now } = useParking();
   const live = useRealtimeConnected();
   const [kind, setKind] = useState<KindFilter>("all");
@@ -49,7 +40,7 @@ export function ParkingView({
 
   if (!data || !view) {
     return (
-      <Shell embedded={embedded}>
+      <Shell>
         <Header live={live} at={null} kind={kind} setKind={setKind} query={query} setQuery={setQuery} />
         <div className="rounded-2xl border border-dashed border-border px-6 py-16 text-center text-sm text-muted-foreground">
           {error ?? "A parkoló betöltése…"}
@@ -63,7 +54,7 @@ export function ParkingView({
   const empty = !view.terminals.length && !view.depots.some((d) => d.vehicles.length) && !view.nosignal.length && !view.service.length;
 
   return (
-    <Shell embedded={embedded}>
+    <Shell>
       <Header live={live} at={data.at} kind={kind} setKind={setKind} query={query} setQuery={setQuery} />
       <FleetSummary counts={counts} facts={facts(view, data, now)} />
       <div role="tablist" aria-label="Nézet" className="inline-flex gap-1 rounded-lg border border-border bg-muted/60 p-1">
@@ -140,8 +131,7 @@ export function ParkingView({
   );
 }
 
-function Shell({ children, embedded }: { children: ReactNode; embedded: boolean }) {
-  if (embedded) return <div className="space-y-5 pb-6">{children}</div>;
+function Shell({ children }: { children: ReactNode }) {
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="mx-auto w-full max-w-[1480px] space-y-5 px-4 pb-10 pt-4 sm:px-6 lg:pt-6">{children}</div>

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { BellPlus, BellRing, Loader2 } from "lucide-react";
 import type { JourneyTransferCheck } from "@/services/api";
-import { addAlert, removeAlert, useAlerts } from "@/lib/alerts";
+import { addAlert, noPushNote, removeAlert, useAlerts } from "@/lib/alerts";
 import { cn } from "@/lib/utils";
 
 /**
@@ -39,7 +39,7 @@ export function TransferWatchButton({ check, className }: { check: JourneyTransf
           },
         });
         if (!r.ok) setNote(r.reason ?? "Nem sikerült bekapcsolni.");
-        else if (!r.push) setNote("Ezen az eszközön nincs push — csak nyitott oldalnál látod.");
+        else if (!r.push) setNote(noPushNote(r));
       }
     } finally {
       setBusy(false);

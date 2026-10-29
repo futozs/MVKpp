@@ -23,7 +23,7 @@ import { describeApiError, type FriendlyError } from "@/lib/apiError";
 import { ForecastLine } from "@/components/transit/ForecastLine";
 import { CatchLine, CatchPill, ReplacementNote, replacementFor, StartRiskLine, TrafficLine } from "@/components/transit/TripInsights";
 import { expectedArrival, useCatchFor } from "@/hooks/useCatch";
-import { addAlert, notifyLocallyOnce, removeAlert, useAlerts } from "@/lib/alerts";
+import { addAlert, noPushNote, notifyLocallyOnce, removeAlert, useAlerts } from "@/lib/alerts";
 import { useWatchFeatures } from "@/lib/watchPrefs";
 import { RefreshCw } from "lucide-react";
 
@@ -151,7 +151,7 @@ export function StopCard({
       else {
         const r = await addAlert({ slot: leaveSlot, kind: "leave", stopId: stop.id, stopName: stop.name, tripId: next.tripId, params: { walkS: catchFor.walkS } });
         if (!r.ok) setLeaveNote(r.reason ?? "Nem sikerült bekapcsolni.");
-        else if (!r.push) setLeaveNote("Push nélkül csak akkor szólok, ha nyitva van az oldal.");
+        else if (!r.push) setLeaveNote(noPushNote(r));
       }
     } finally {
       setLeaveBusy(false);
