@@ -241,6 +241,16 @@ export class DelayForecaster {
     return { tripId, fromIdx, currentDelayS: current, stops: forecastDelays(stops, fromIdx, current, this.profileFn(run.serviceDate)), source: "formula" };
   }
 
+  /**
+   * Még el nem indult menet: a képlet a kiinduló megállótól, a várható kezdő
+   * késéssel (0, vagy ha a busza még az előző menetén késik, annyi).
+   */
+  plannedFor(tripId: string, startDelayS: number, serviceDate = this.engine.today): TripForecast | null {
+    const stops = this.engine.feeds.cachedDay(serviceDate)?.feed.tripStopsAlong(tripId);
+    if (!stops?.length) return null;
+    return { tripId, fromIdx: 0, currentDelayS: startDelayS, stops: forecastDelays(stops, 0, startDelayS, this.profileFn(serviceDate)), source: "formula" };
+  }
+
   /** Egy megálló várható késése a menetben (a következő előfordulása a busz előtt). */
   forStop(tripId: string, stopId: string, now = nowUnix()): { delayS: number; upperS: number } | null {
     const f = this.forTrip(tripId, now);

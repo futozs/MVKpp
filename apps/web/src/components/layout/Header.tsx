@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { BrandMark } from "./BrandMark";
 import { LiveStatus } from "./LiveStatus";
 import { NAV_TABS, TabBadge, tabBadge, type TabCounts } from "./navTabs";
+import { useTabBadges } from "@/lib/watchPrefs";
 import { SettingsMenu } from "./SettingsMenu";
 import { RefreshSweep } from "./RefreshSweep";
 import { WeatherReadout } from "./WeatherReadout";
@@ -106,6 +107,8 @@ interface DesktopNavProps {
 }
 
 function DesktopNav({ activeTab, setActiveTab, counts }: DesktopNavProps) {
+  // a számlálók a Beállításokban kikapcsolhatók
+  const showBadges = useTabBadges();
   const reduceMotion = useReducedMotion();
 
   return (
@@ -116,7 +119,7 @@ function DesktopNav({ activeTab, setActiveTab, counts }: DesktopNavProps) {
       <ul className={cn("flex h-9 w-max items-center gap-0.5 p-[3px]", WELL)}>
         {NAV_TABS.map((tab) => {
           const isActive = activeTab === tab.id;
-          const badge = tabBadge(tab.id, counts);
+          const badge = showBadges ? tabBadge(tab.id, counts) : null;
           const hasShortLabel = tab.short !== tab.label;
           return (
             <li key={tab.id} className="h-full">

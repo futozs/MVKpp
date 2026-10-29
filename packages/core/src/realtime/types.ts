@@ -70,6 +70,19 @@ export type ArrivalItem = {
   /** v3: várható késés ennél a megállónál (szakaszprofilokból) és a 85%-os felső becslés */
   forecastDelaySec?: number | null;
   forecastUpperSec?: number | null;
+  /** v3: menetrend szerinti érkezés/indulás ennél a megállónál (unix) */
+  schedUnix?: number | null;
+  /** v3: késve indul / valószínűleg kimarad, mert a busza még az előző menetén van */
+  startRisk?: {
+    vehicleId: string;
+    expectedDelayS: number;
+    level: "late" | "likely-missed";
+    prevRoute: string | null;
+    prevEndUnix: number;
+    predicted: boolean;
+  } | null;
+  /** v3: dugó a busz előtt a megállóig (többletidő és a legrosszabb szakasz) */
+  trafficAhead?: { excessS: number; level: number; fromName: string; toName: string } | null;
 };
 
 export type StopArrivals = {

@@ -80,17 +80,21 @@ export function TimetableGrid({
   }, [trips, vehicleByTrip, cancelledTripIds, day, nextTripId]);
 
   const tripButtonRefs = useRef(new Map<string, HTMLButtonElement>());
-  const scrolledForTripsRef = useRef<TimetableTrip[] | null>(null);
+  const scrolledForRef = useRef<{ trips: TimetableTrip[] | null; selected: string | null }>({ trips: null, selected: null });
 
+  // Görgetés csak új menetrendnél vagy új kijelölésnél (a „most” léptetése nem rángatja):
+  // ha van kijelölt menet (pl. a zavar-összesítőből ide ugrottunk), az legyen látható,
+  // különben a mostani indulás.
   useEffect(() => {
-    if (scrolledForTripsRef.current !== trips) {
-      scrolledForTripsRef.current = trips;
-      if (activeTripId) {
-        const el = tripButtonRefs.current.get(activeTripId);
-        el?.scrollIntoView({ block: "center", behavior: "smooth" });
-      }
-    }
-  }, [trips, activeTripId]);
+    const last = scrolledForRef.current;
+    const freshTrips = last.trips !== trips;
+    const newSelection = last.selected !== selectedTripId;
+    scrolledForRef.current = { trips, selected: selectedTripId };
+    if (!freshTrips && !newSelection) return;
+    const target = selectedTripId ?? (freshTrips ? activeTripId : null);
+    if (!target) return;
+    tripButtonRefs.current.get(target)?.scrollIntoView({ block: freshTrips ? "center" : "nearest", behavior: "smooth" });
+  }, [trips, activeTripId, selectedTripId]);
 
   return (
     <ul className="divide-y divide-border/60">

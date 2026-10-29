@@ -94,6 +94,17 @@ export interface JourneyTransferCheck {
   at: string;
   marginSec: number;
   risk: TransferRisk;
+  /** v3: 0..1 — eléred-e a csatlakozást (a két busz várható/rossz esetbeli idejéből) */
+  chance?: number;
+  /** v3: ha lekésed, a következő ugyanazzal a vonallal (ma) */
+  fallback?: { tripId: string; time: string; departUnix: number } | null;
+  fromTripId?: string;
+  toTripId?: string;
+  alightStopId?: string;
+  boardStopId?: string;
+  walkS?: number;
+  fromRoute?: string;
+  toRoute?: string;
 }
 
 export interface JourneyActualOutcome {

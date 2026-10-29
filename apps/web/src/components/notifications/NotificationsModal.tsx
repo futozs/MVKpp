@@ -27,6 +27,7 @@ import {
 import { registerPushWatch, setDnd, setPushEnabled, unregisterPushWatch } from "@/lib/push";
 import { cn } from "@/lib/utils";
 import { DeliveryLog } from "./DeliveryLog";
+import { AlertList } from "./AlertList";
 
 interface NotificationsModalProps {
   isOpen: boolean;
@@ -258,6 +259,8 @@ export function NotificationsModal({ isOpen, onClose }: NotificationsModalProps)
               <p className="text-[11px] text-early">{dndNote}</p>
             ) : null}
           </div>
+
+          <AlertList />
 
           {}
           <div className="space-y-2">

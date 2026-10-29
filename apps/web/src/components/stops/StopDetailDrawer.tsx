@@ -12,6 +12,9 @@ import {
 import { DelayBar } from "@/components/transit/DelayBar";
 import { LiveDot } from "@/components/transit/LiveDot";
 import { RouteTile } from "@/components/transit/RouteTile";
+import { CatchPill, ReplacementNote, replacementFor, StartRiskLine, TrafficLine } from "@/components/transit/TripInsights";
+import { useCatchFor } from "@/hooks/useCatch";
+import { useWatchFeatures } from "@/lib/watchPrefs";
 import { cn } from "@/lib/utils";
 
 const POLL_MS = 4000;
@@ -89,6 +92,9 @@ export function StopDetailDrawer({
   }, [stopId, onClose]);
 
   const stop = stops.find((s) => s.id === stopId);
+  // (a korai visszatérés előtt: a hookok sorrendje minden renderben azonos)
+  const catchFor = useCatchFor(stop);
+  const f = useWatchFeatures();
   if (!stopId || !stop) return null;
 
   const monitored = monitoredStopIds.includes(stop.id);
@@ -204,7 +210,8 @@ export function StopDetailDrawer({
         ) : (
           <ul className="divide-y divide-border/60">
             {arrivals.map((arr: ArrivalItem, i) => {
-              const focusable = arr.live && Boolean(arr.tripId);
+              // Kihúzott menetnél csak akkor visz a térképre, ha mégis jár rajta busz.
+              const focusable = arr.live && Boolean(arr.tripId) && (!arr.cancelled || arr.vehicle != null);
               return (
                 <li key={`${arr.tripId}-${i}`}>
                   <div
@@ -240,7 +247,7 @@ export function StopDetailDrawer({
                     <div className="min-w-0 flex-1">
                       <p className="flex items-center gap-1.5 truncate text-xs font-medium">
                         <span className="truncate">{arr.headsign}</span>
-                        {arr.live ? <LiveDot /> : null}
+                        {arr.live && (!arr.cancelled || arr.vehicle) ? <LiveDot /> : null}
                       </p>
 
                       <div className="mt-1 flex items-center gap-2">
@@ -254,11 +261,21 @@ export function StopDetailDrawer({
                           {arr.time}
                         </span>
                         {arr.cancelled ? (
-                          <span className="text-[10.5px] font-bold uppercase tracking-wide text-destructive">törölve</span>
+                          <>
+                            <span className="text-[10.5px] font-bold uppercase tracking-wide text-destructive">törölve</span>
+                            {f.replacement ? <ReplacementNote compact cancelled={arr} instead={replacementFor(arrivals, arr)} /> : null}
+                          </>
                         ) : (
                           <DelayBar delaySec={arr.delaySec} showLabel={false} />
                         )}
+                        <CatchPill verdict={f.leaveTimes ? catchFor.verdict(arr) : null} />
                       </div>
+                      {(f.startRisk && arr.startRisk) || (f.traffic && arr.trafficAhead) ? (
+                        <div className="mt-0.5 flex flex-wrap gap-x-2.5">
+                          {f.startRisk ? <StartRiskLine risk={arr.startRisk} compact /> : null}
+                          {f.traffic ? <TrafficLine traffic={arr.trafficAhead} compact /> : null}
+                        </div>
+                      ) : null}
 
                       {arr.progressDesc ? (
                         <p className="mt-1 truncate text-[11px] text-muted-foreground">

@@ -20,6 +20,8 @@ function wsUrl(): string {
 }
 
 let serverOffsetS = 0;
+/** nő, valahányszor a szerver órája megérkezik (kapcsolódáskor) */
+let clockVersion = 0;
 
 /** A szerver órája most (unix mp) — a kapcsolódáskor kapott „hello” alapján. */
 export function serverNow(): number {
@@ -63,7 +65,11 @@ class RealtimeClient {
         return;
       }
       // A szerver órája (pl. egy visszajátszott napon a kliensétől eltér): a „hello”-ból.
-      if (m.t === "hello" && typeof m.now === "number") serverOffsetS = m.now - Date.now() / 1000;
+      if (m.t === "hello" && typeof m.now === "number") {
+        serverOffsetS = m.now - Date.now() / 1000;
+        clockVersion++;
+        for (const l of this.statusListeners) l();
+      }
       for (const l of this.globalListeners) l(m);
       const topic = topicOf(m);
       if (!topic) return;
@@ -166,6 +172,18 @@ if (typeof window !== "undefined") {
   document.addEventListener("visibilitychange", wake);
   window.addEventListener("online", () => realtime.wake());
   window.addEventListener("pageshow", (e) => (e as PageTransitionEvent).persisted && realtime.wake());
+}
+
+/**
+ * Megérkezett-e (újra) a szerver órája: a „mai nap” ehhez igazodhat — az első
+ * rendereléskor még csak a készülék órája ismert.
+ */
+export function useServerClockVersion(): number {
+  return useSyncExternalStore(
+    (cb) => realtime.onStatus(cb),
+    () => clockVersion,
+    () => 0,
+  );
 }
 
 /** Él-e a valós idejű kapcsolat. */

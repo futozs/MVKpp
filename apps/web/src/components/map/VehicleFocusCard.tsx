@@ -15,6 +15,8 @@ type VehicleFocusCardProps = {
   vehicleId: string | null;
   stops: Stop[];
   onClose: () => void;
+  /** a felhasználó elhúzta a térképet: most nem követi a buszt */
+  followPaused?: boolean;
 };
 
 export function VehicleFocusCard({
@@ -22,6 +24,7 @@ export function VehicleFocusCard({
   vehicleId,
   stops,
   onClose,
+  followPaused = false,
 }: VehicleFocusCardProps) {
   const { data, lost } = useTripPath(tripId, vehicleId);
   const reduce = useReducedMotion();
@@ -44,6 +47,8 @@ export function VehicleFocusCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
       aria-label="Követett jármű"
+      // a térkép a követett buszt e fölött, a látható rész közepén tartja
+      data-map-cover=""
       className={cn(
         "absolute inset-x-0 bottom-0 z-drawer overflow-hidden",
         "border-t border-border bg-card shadow-xl",
@@ -87,7 +92,7 @@ export function VehicleFocusCard({
 
             <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
               <Navigation aria-hidden className="h-3 w-3 text-primary" />
-              {lost ? "A jármű kiesett a jelentésből" : "A térkép követi"}
+              {lost ? "A jármű kiesett a jelentésből" : followPaused ? "Követés szünetel" : "A térkép követi"}
             </span>
           </div>
         </div>

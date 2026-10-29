@@ -17,10 +17,9 @@ import { MultiStopDashboard } from "@/components/multistop/MultiStopDashboard";
 import { StopDetailDrawer } from "@/components/stops/StopDetailDrawer";
 import { TimetableView } from "@/components/timetable/TimetableView";
 import { RoutePlannerView } from "@/components/routeplanner/RoutePlannerView";
-import { StatsView } from "@/components/stats/StatsView";
+import { StatsView, type StatsPanelId } from "@/components/stats/StatsView";
 import { RideLayer } from "@/components/ride/RideLayer";
 import { useActiveRide } from "@/lib/rides";
-import { ParkingView } from "@/components/parking/ParkingView";
 import { NotificationsModal } from "@/components/notifications/NotificationsModal";
 import { AccountModal } from "@/components/account/AccountModal";
 import { useCloudBackup } from "@/hooks/useCloudBackup";
@@ -32,21 +31,12 @@ import { useAppHeight } from "@/hooks/useAppHeight";
 import { useLiveIncidents } from "@/hooks/useLiveIncidents";
 import { useStorageRefresh } from "@/hooks/useStorageRefresh";
 import { useFallbackPoll, useTopic } from "@/lib/realtime";
+import { consumeInitialLink, OPEN_LINK_EVENT, parseLink, type ParsedLink } from "@/lib/deepLink";
 
-const TAB_IDS: ActiveTab[] = [
-  "map",
-  "multistop",
-  "timetable",
-  "parking",
-  "planner",
-  "stats",
-];
+// Értesítésből (vagy könyvjelzőből) nyitott hivatkozás: egyszer, betöltéskor olvassuk ki.
+const INITIAL_LINK = typeof window === "undefined" ? null : consumeInitialLink();
 
-function hashTab(): ActiveTab | null {
-  if (typeof window === "undefined") return null;
-  const id = window.location.hash.replace(/^#/, "");
-  return (TAB_IDS as string[]).includes(id) ? (id as ActiveTab) : null;
-}
+const fromLegacyTab = (tab: ActiveTab): ActiveTab => (tab === "parking" ? "stats" : tab);
 
 const DEFAULT_FILTERS: FilterState = {
   vq: "",
@@ -73,7 +63,11 @@ export function App() {
   const restored = initialView();
 
   const [activeTab, setActiveTab] = useState<ActiveTab>(
-    () => hashTab() ?? restored?.tab ?? "map",
+    () => fromLegacyTab(INITIAL_LINK?.tab ?? restored?.tab ?? "map"),
+  );
+  // A régi „Parkoló” fül (mentett nézet, hivatkozás) a Statisztika Parkoló nézete lett.
+  const [statsPanelReq, setStatsPanelReq] = useState<{ id: StatsPanelId } | null>(() =>
+    (INITIAL_LINK?.tab ?? restored?.tab) === "parking" ? { id: "parking" } : null,
   );
   const [stops, setStops] = useState<Stop[]>([]);
   const [routes, setRoutes] = useState<Record<string, Route>>({});
@@ -127,6 +121,35 @@ export function App() {
       );
     } catch {}
   }, [monitoredStopIds]);
+  // Értesítésből nyitott megálló: a Figyelőben elő is kerül (ha még nem figyelte, felvesszük —
+  // különben a hivatkozás sehová sem vinne). Nyitott appnál a service worker üzen.
+  const [linkStop, setLinkStop] = useState<{ id: string } | null>(null);
+  const applyLink = useCallback((link: ParsedLink) => {
+    if (link.tab) setActiveTab(fromLegacyTab(link.tab));
+    if (link.tab === "parking") setStatsPanelReq({ id: "parking" });
+    const id = link.stopId;
+    if (!id) return;
+    setMonitoredStopIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+    setLinkStop({ id });
+  }, []);
+  useEffect(() => {
+    if (INITIAL_LINK?.stopId) applyLink(INITIAL_LINK);
+    const onOpen = (e: Event) => {
+      const url = (e as CustomEvent<unknown>).detail;
+      if (typeof url === "string") applyLink(parseLink(url));
+    };
+    const onWorker = (e: MessageEvent) => {
+      const d = e.data as { type?: unknown; url?: unknown } | null;
+      if (d?.type === "mvk-open" && typeof d.url === "string") applyLink(parseLink(d.url));
+    };
+    window.addEventListener(OPEN_LINK_EVENT, onOpen);
+    navigator.serviceWorker?.addEventListener("message", onWorker);
+    return () => {
+      window.removeEventListener(OPEN_LINK_EVENT, onOpen);
+      navigator.serviceWorker?.removeEventListener("message", onWorker);
+    };
+  }, [applyLink]);
+
   // Másik eszközről szinkronizált figyelt megállók: azonnal átvesszük.
   useStorageRefresh("mvk_monitored_stops", () => {
     try {
@@ -212,6 +235,8 @@ export function App() {
       const valid = (res.vehicles || []).filter(
         (v) => v.lat != null && v.lon != null,
       );
+      // a „hol jár most” ugrások ebből keresnek — tartalék pollnál is legyen friss
+      vehicleMap.current = new Map(valid.map((v) => [v.id, v]));
       setLiveVehicles(valid);
       setLastUpdated(new Date());
     } catch (err) {
@@ -282,11 +307,16 @@ export function App() {
     setFocusVehicleId(vehicleId ?? null);
   }, []);
 
+  // A menetrendből: ha a jármű azóta már másik menetet visz („ő vitte, hol jár most?”),
+  // a mostani menetét követjük — különben a régi menet nyomvonala és adatai látszanának.
   const handleFocusTripOnMap = useCallback((tripId: string, vehicleId?: string) => {
+    const now = vehicleId ? vehicleMap.current.get(vehicleId) : undefined;
     setActiveTab("map");
-    setFocusTripId(tripId);
+    setFocusTripId(now?.tripId || tripId);
     setFocusVehicleId(vehicleId ?? null);
   }, []);
+
+  const [followPaused, setFollowPaused] = useState(false);
 
   const handleExitFocus = useCallback(() => {
     setFocusTripId(null);
@@ -368,6 +398,7 @@ export function App() {
                   focusVehicleId={focusVehicleId}
                   onExitFocus={handleExitFocus}
                   onFocusTrip={handleFocusTrip}
+                  onFollowPausedChange={setFollowPaused}
                   tileLayerId={tileLayerId}
                   selectedStopId={selectedStopId}
                   monitoredStopIds={monitoredStopIds}
@@ -384,6 +415,7 @@ export function App() {
                     vehicleId={focusVehicleId}
                     stops={stops}
                     onClose={handleExitFocus}
+                    followPaused={followPaused}
                   />
                 ) : null}
 
@@ -406,6 +438,7 @@ export function App() {
                 selectedStopIds={monitoredStopIds}
                 setSelectedStopIds={setMonitoredStopIds}
                 onFocusMap={handleFocusStopOnMap}
+                focusStop={linkStop}
               />
             )}
 
@@ -416,6 +449,7 @@ export function App() {
                 stops={stops}
                 routes={Object.values(routes)}
                 liveIncidents={liveIncidentCount}
+                requestedPanel={statsPanelReq}
                 onOpenDisruptions={() => {
                   setDisruptionsOpen(true);
                   setActiveTab("timetable");
@@ -433,13 +467,6 @@ export function App() {
                 archiveRange={gtfsMeta?.archiveRange ?? null}
                 disruptionsOpen={isDisruptionsOpen}
                 onDisruptionsOpenChange={setDisruptionsOpen}
-              />
-            )}
-
-            {activeTab === "parking" && (
-              <ParkingView
-                routes={Object.values(routes)}
-                onFocusVehicle={handleFocusVehicleOnMap}
               />
             )}
 

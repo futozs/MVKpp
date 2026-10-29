@@ -10,6 +10,7 @@
 import type { ServiceDay } from "../gtfs/service.ts";
 import { haversineKm } from "../geo.ts";
 import { hmOfUnix } from "../time.ts";
+import type { StartRisk } from "../startRisk.ts";
 import type { ArrivalItem, LiveVeh, RealtimeSnapshot, StopArrivals } from "./types.ts";
 
 export type ArrivalExtras = {
@@ -20,6 +21,10 @@ export type ArrivalExtras = {
   cancelled?: Set<string>;
   /** (tripId, stopId) → várható és legrosszabb esetben várható késés ennél a megállónál */
   forecast?: (tripId: string, stopId: string) => { delayS: number; upperS: number } | null;
+  /** tripId → késve indul / valószínűleg kimarad, mert a busza még az előző menetén van */
+  startRisk?: (tripId: string) => StartRisk | null;
+  /** (tripId, stopId) → dugó a busz előtt a megállóig */
+  trafficAhead?: (tripId: string, stopId: string) => ArrivalItem["trafficAhead"];
 };
 
 type DayCtx = { day: ServiceDay; midnightUnix: number };
@@ -158,7 +163,10 @@ export function arrivalsForStop(
       }
     }
 
-    const fc = veh ? (extras.forecast?.(x.tripId, stopId) ?? null) : null;
+    const cancelled = x.primary ? (extras.cancelled?.has(x.tripId) ?? false) : false;
+    // Az előrejelzés élő és még el sem indult (de hamarosan induló) menetre is jár.
+    const fc = x.primary && !cancelled ? (extras.forecast?.(x.tripId, stopId) ?? null) : null;
+    const schedDep = x.dc.day.feed.stopSched.get(stopId)?.find((q) => q.trip === x.tripId)?.dep;
     arrivals.push({
       route: r?.short || tr?.routeId || "?",
       color: r?.color || "888888",
@@ -174,10 +182,15 @@ export function arrivalsForStop(
       distanceToStopKm,
       progressDesc,
       measuredDelaySec: x.primary ? (extras.measuredDelay?.(x.tripId) ?? null) : null,
-      predictedVehicle: veh || !x.primary ? null : (extras.predictedVehicle?.(x.tripId) ?? null),
-      cancelled: x.primary ? (extras.cancelled?.has(x.tripId) ?? false) : false,
+      // kihúzott menetre nem jósolunk buszt: nem jön
+      predictedVehicle: veh || !x.primary || cancelled ? null : (extras.predictedVehicle?.(x.tripId) ?? null),
+      cancelled,
       forecastDelaySec: fc?.delayS ?? null,
       forecastUpperSec: fc?.upperS ?? null,
+      schedUnix: schedDep != null ? x.dc.midnightUnix + schedDep : null,
+      // A kiosztott busz is lehet még az előző menetén: az el nem indult menetet a jóslás dönti el.
+      startRisk: x.primary && !cancelled ? (extras.startRisk?.(x.tripId) ?? null) : null,
+      trafficAhead: x.primary && veh ? (extras.trafficAhead?.(x.tripId, stopId) ?? null) : null,
     });
   }
 

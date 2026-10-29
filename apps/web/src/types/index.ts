@@ -107,6 +107,19 @@ export interface ArrivalItem {
   /** v3: várható késés ennél a megállónál és a 85%-os felső becslés (mp) */
   forecastDelaySec?: number | null;
   forecastUpperSec?: number | null;
+  /** v3: menetrend szerinti idő ennél a megállónál (unix) */
+  schedUnix?: number | null;
+  /** v3: késve indul / valószínűleg kimarad — a busza még az előző menetén jár */
+  startRisk?: {
+    vehicleId: string;
+    expectedDelayS: number;
+    level: "late" | "likely-missed";
+    prevRoute: string | null;
+    prevEndUnix: number;
+    predicted: boolean;
+  } | null;
+  /** v3: dugó a busz előtt a megállóig */
+  trafficAhead?: { excessS: number; level: number; fromName: string; toName: string } | null;
 }
 
 export interface StopArrivalsResponse {

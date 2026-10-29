@@ -13,13 +13,14 @@
  */
 import type { IncomingMessage, Server } from "node:http";
 import { WebSocketServer, type WebSocket } from "ws";
-import { arrivalsForStop, nowUnix, progressOnTrip, serviceClock, type DecodedVehicle, type RunOut } from "@mvk/core";
+import { nowUnix, progressOnTrip, serviceClock, type DecodedVehicle, type RunOut } from "@mvk/core";
 import { sql } from "@mvk/db";
 import { sha256Hex } from "@mvk/db/crypto";
 import type { Engine } from "./engine.ts";
 import { journalRecord } from "./http/compat.ts";
 import { errMsg, log } from "./log.ts";
 import type { DelayForecaster } from "./forecast.ts";
+import type { TripInsights } from "./insights.ts";
 import type { Parking } from "./parking.ts";
 import type { VehiclePredictor } from "./predict.ts";
 
@@ -27,6 +28,8 @@ type Client = { ws: WebSocket; topics: Set<string>; userId: string | null; devic
 
 const MAX_TOPICS = 40;
 const STOP_LIMIT = 10;
+/** ha a jármű legutóbbi jele ennyivel frissebb, mint amit az illesztő felhasznált, nincs becslés (mp) */
+const MOTION_STALE_S = 45;
 
 export class Hub {
   private wss: WebSocketServer;
@@ -37,10 +40,12 @@ export class Hub {
   private predictor: VehiclePredictor;
   private parking: Parking;
   private forecaster: DelayForecaster;
+  private insights: TripInsights;
   stats = { connections: 0, messages: 0 };
 
-  constructor(server: Server, engine: Engine, predictor: VehiclePredictor, parking: Parking, forecaster: DelayForecaster) {
+  constructor(server: Server, engine: Engine, predictor: VehiclePredictor, parking: Parking, forecaster: DelayForecaster, insights: TripInsights) {
     this.engine = engine;
+    this.insights = insights;
     this.predictor = predictor;
     this.parking = parking;
     this.forecaster = forecaster;
@@ -111,13 +116,7 @@ export class Hub {
   }
 
   private stopData(stopId: string) {
-    const now = nowUnix();
-    return arrivalsForStop(stopId, STOP_LIMIT, this.engine.snapshot, this.engine.feeds.arrivalDays(now), now, {
-      measuredDelay: (t) => this.engine.matcher.liveDelay(t, now),
-      forecast: (t, s) => this.forecaster.forStop(t, s, now),
-      predictedVehicle: (t) => this.predictor.predict(t),
-      cancelled: this.engine.cancelled.ids,
-    });
+    return this.insights.arrivals(stopId, STOP_LIMIT);
   }
 
   private tripData(tripId: string) {
@@ -147,9 +146,13 @@ export class Hub {
    * s = nyomvonal, a = hol tart (m), t = a jel ideje, e = a következő megálló (m),
    * v = várható sebesség (m/s). A kliens ezzel viszi tovább a buszt két jel között.
    */
-  private motionOf(id: string, gpsSpeed: number | null) {
-    const m = this.engine.matcher.motion(id);
+  private motionOf(veh: DecodedVehicle, offset: number) {
+    const m = this.engine.matcher.motion(veh.id);
     if (!m) return null;
+    // Az illesztő régóta nem tudta a jeleit a nyomvonalra tenni (terelés, rossz vetítés):
+    // a becslés a következő megállónál tartaná a buszt — inkább a valós helye látszik.
+    if (veh.timestamp && veh.timestamp - offset - m.ts > MOTION_STALE_S) return null;
+    const gpsSpeed = veh.speed;
     // Álló busznál (megálló, lámpa) nincs becslés: a jel helyén marad, amíg újra el nem indul.
     if (m.stopped) return { s: m.shapeId, a: m.alongM, t: m.ts, e: m.toAlongM, v: 0 };
     const run = this.engine.todayRuns.get(m.tripId);
@@ -157,8 +160,9 @@ export class Hub {
     return { s: m.shapeId, a: m.alongM, t: m.ts, e: m.toAlongM, v: Math.round(Math.min(22, Math.max(1.5, v)) * 10) / 10 };
   }
 
-  private withMotion(v: DecodedVehicle) {
-    return { ...v, motion: this.motionOf(v.id, v.speed) };
+  /** `offset`: a feed helyi idős időbélyegeinek eltolása (egy körön belül állandó) */
+  private withMotion(v: DecodedVehicle, offset = serviceClock().offset) {
+    return { ...v, motion: this.motionOf(v, offset) };
   }
 
   private onTick() {
@@ -167,10 +171,11 @@ export class Hub {
     const cur = new Map<string, DecodedVehicle>();
     for (const v of this.engine.snapshot.decoded) cur.set(v.id, v);
     const upd: (DecodedVehicle & { motion: unknown })[] = [];
+    const offset = serviceClock().offset;
     for (const [id, v] of cur) {
       const sig = `${v.timestamp}|${v.lat}|${v.lon}|${v.tripId}|${v.bearing}`;
       if (this.lastVehicles.get(id) !== sig) {
-        upd.push(this.withMotion(v));
+        upd.push(this.withMotion(v, offset));
         this.lastVehicles.set(id, sig);
       }
     }

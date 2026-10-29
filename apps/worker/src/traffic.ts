@@ -4,7 +4,7 @@
  * dönti el, hol áll be az út. Az átért buszok mellett a most bent ragadtakat
  * is nézzük, így a dugó azonnal látszik.
  */
-import { nowUnix, segmentCongestion, segmentPaths, TRAFFIC, type SegmentCongestion, type StopEventOut, type TrafficObs, type TrafficStuck } from "@mvk/core";
+import { nowUnix, segmentCongestion, segmentPaths, TRAFFIC, type CongestedLink, type SegmentCongestion, type StopEventOut, type TrafficObs, type TrafficStuck } from "@mvk/core";
 import type { Engine } from "./engine.ts";
 import type { DelayForecaster } from "./forecast.ts";
 
@@ -14,7 +14,7 @@ const LIVE_PING_S = 120;
 const AT_STOP_M = 60;
 const CACHE_S = 15;
 
-export type TrafficSegment = SegmentCongestion & { from: string; to: string; routes: string[]; path: [number, number][] };
+export type TrafficSegment = SegmentCongestion & { from: string; to: string; fromId: string; toId: string; routes: string[]; path: [number, number][] };
 
 export class TrafficMonitor {
   private engine: Engine;
@@ -59,6 +59,13 @@ export class TrafficMonitor {
     return value;
   }
 
+  /** A torlódó szakaszok megállópáronként (`"from|to"`) — a „dugó a busz előtt” jelzéshez. */
+  congestedLinks(now = nowUnix()): Map<string, CongestedLink> {
+    const out = new Map<string, CongestedLink>();
+    for (const s of this.snapshot(now).segments) out.set(`${s.fromId}|${s.toId}`, { excessS: s.excessS, level: s.level });
+    return out;
+  }
+
   private compute(now: number) {
     const day = this.engine.feeds.cachedDay(this.engine.today);
     if (!day) return { at: now, segments: [] };
@@ -91,7 +98,7 @@ export class TrafficMonitor {
       const p = c ? paths.get(k) : undefined;
       if (!c || !p) continue;
       const name = (id: string) => day.feed.stops.get(id)?.name ?? id;
-      segments.push({ ...c, from: name(p.from), to: name(p.to), routes: p.routes, path: p.path });
+      segments.push({ ...c, from: name(p.from), to: name(p.to), fromId: p.from, toId: p.to, routes: p.routes, path: p.path });
     }
     // Régi, már nem frissülő szakaszok kitakarítása.
     for (const [k, list] of this.obs) if (!list.length || now - list[list.length - 1].endTs > TRAFFIC.WINDOW_S) this.obs.delete(k);

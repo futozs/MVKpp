@@ -12,6 +12,7 @@ import type { Engine } from "../engine.ts";
 import type { FeedManager } from "../feeds.ts";
 import { mvkFetch } from "../mvk.ts";
 import type { DelayForecaster } from "../forecast.ts";
+import type { TripInsights } from "../insights.ts";
 import type { TrafficMonitor } from "../traffic.ts";
 import type { Parking } from "../parking.ts";
 import type { VehiclePredictor } from "../predict.ts";
@@ -27,6 +28,7 @@ export type Ctx = {
   parking: Parking;
   forecaster: DelayForecaster;
   traffic: TrafficMonitor;
+  insights: TripInsights;
   startedAt: number;
   hubStats: () => unknown;
 };
@@ -52,15 +54,7 @@ function dateParam(req: Req, fallbackYmd: string): string {
 
 export function registerCompat(r: Router, ctx: Ctx) {
   const { engine, feeds, predictor } = ctx;
-  const extras = () => {
-    const now = nowUnix();
-    return {
-      measuredDelay: (t: string) => engine.matcher.liveDelay(t, now),
-      forecast: (t: string, s: string) => ctx.forecaster.forStop(t, s, now),
-      predictedVehicle: (t: string) => predictor.predict(t),
-      cancelled: engine.cancelled.ids,
-    };
-  };
+  const extras = () => ctx.insights.extras(nowUnix());
   const today = () => engine.feeds.cachedDay(engine.today);
 
   // ── élő adatok ────────────────────────────────────────────────────────

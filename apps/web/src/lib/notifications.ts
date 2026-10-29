@@ -1,6 +1,7 @@
 import type { ArrivalItem } from "@/types";
 import { budapestMinuteOfDay } from "@/lib/serviceDay";
 import { withHungarianSuffix } from "@/lib/utils";
+import { openLink, stopLink } from "@/lib/deepLink";
 
 const STORAGE_KEY = "mvk_notify_watches";
 export const DEFAULT_THRESHOLD_MIN = 5;
@@ -207,12 +208,19 @@ export function checkAndNotify(
       : `${stopName} (${stopId}) — kb. ${minEta} percen belül${delayNote}`;
 
     try {
-      new Notification(title, {
+      const n = new Notification(title, {
         body,
         tag: `mvk-stop-${stopId}`,
         icon: "/icon-192.png",
       });
+      // Koppintásra az app előjön, és a Figyelőben ez a megálló látszik.
+      n.onclick = () => {
+        window.focus();
+        openLink(stopLink(stopId));
+        n.close();
+      };
     } catch {
+      /* a böngésző itt nem enged értesítést (pl. iOS Safari lapon) */
     }
   }
 

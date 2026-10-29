@@ -7,7 +7,8 @@ import { useGeo } from "@/context/GeoContext";
 import { API_BASE } from "@/lib/apiBase";
 import { distanceKm } from "@/lib/geo";
 import { cn } from "@/lib/utils";
-import type { Stop } from "@/types";
+import type { ArrivalItem, Stop } from "@/types";
+import { StartRiskLine } from "@/components/transit/TripInsights";
 
 export type DisruptionKind = "cancelled" | "missing" | "unseen";
 
@@ -39,7 +40,11 @@ interface Disruptions {
   nearStops: { id: string; name: string }[];
   byHour: { h: number; cancelled: number; missing: number; unseen: number }[];
   trips: DisruptionTrip[];
+  /** hamarosan induló menetek, amelyeknek a busza még az előző menetén késik */
+  atRisk?: AtRiskTrip[];
 }
+
+export type AtRiskTrip = Omit<DisruptionTrip, "kind" | "replacement" | "plannedVehicle"> & { risk: NonNullable<ArrivalItem["startRisk"]> };
 
 const POLL_MS = 60_000;
 /** ennyin belüli megállókat tekintünk „itt vagy”-nak (m) */
@@ -134,6 +139,8 @@ export function DisruptionsDialog({
     const past = trips.filter((t) => !t.upcoming && !t.near).reverse();
     return { here, ahead, past };
   }, [data, filter, route]);
+  // a „késve indulhat” lista csak a teljes nézetben (a fajtaszűrő a kieső menetekre vonatkozik)
+  const atRisk = useMemo(() => (filter === "all" ? (data?.atRisk ?? []).filter((t) => !route || t.route === route) : []), [data, filter, route]);
 
   const routes = useMemo(() => {
     const m = new Map<string, { route: string; color: string; text: string; n: number }>();
@@ -251,6 +258,14 @@ export function DisruptionsDialog({
             <p className="py-8 text-center text-sm text-muted-foreground">{total ? "A szűrésnek nincs találata." : "Ma eddig nem esett ki menet."}</p>
           ) : null}
 
+          {atRisk.length ? (
+            <TripGroup title="Késve indulhat" n={atRisk.length}>
+              {atRisk.map((t) => (
+                <RiskRow key={t.tripId} t={t} onPick={() => onPickTrip({ ...t, kind: "missing", replacement: null, plannedVehicle: null })} />
+              ))}
+            </TripGroup>
+          ) : null}
+
           {view.ahead.length ? (
             <TripGroup title="Hátralévő" n={view.ahead.length}>
               {view.ahead.map((t) => (
@@ -320,6 +335,29 @@ function TripRow({ t, at, onPick }: { t: DisruptionTrip; at?: DisruptionTrip["ne
               helyette {t.replacement.depTime} <span className="font-normal text-muted-foreground">(+{t.replacement.gapMin} perc)</span>
             </span>
           ) : null}
+        </span>
+      </button>
+    </li>
+  );
+}
+
+/** Még nem esett ki, de a busza késik az előző menetén: előre szólunk. */
+function RiskRow({ t, onPick }: { t: AtRiskTrip; onPick: () => void }) {
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onPick}
+        className="grid w-full grid-cols-[auto_3rem_minmax(0,1fr)] items-start gap-x-2.5 rounded-lg px-1.5 py-2 text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+      >
+        <RouteTile short={t.route} color={t.color} text={t.text} />
+        <span className="pt-0.5 font-mono text-sm font-bold tabular-nums">{t.near ? t.near.time : t.depTime}</span>
+        <span className="min-w-0">
+          <span className="block truncate text-[13px] font-semibold">{t.headsign || t.to}</span>
+          <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
+            {t.near ? `itt ${t.near.time} · indul ${t.from} ${t.depTime}` : `${t.from} → ${t.to}, ${t.depTime}–${t.arrTime}`}
+          </span>
+          <StartRiskLine risk={t.risk} className="mt-1" />
         </span>
       </button>
     </li>

@@ -15,6 +15,8 @@ type StopCarouselProps = {
   onMove?: (stopId: string, delta: number) => void;
   distances?: Map<string, number>;
   nearestId?: string | null;
+  /** értesítésből nyitott megálló: ennek a kártyájára lapozunk (és ott is maradunk) */
+  focusStop?: { id: string } | null;
 };
 
 export function StopCarousel({
@@ -25,9 +27,11 @@ export function StopCarousel({
   onMove,
   distances,
   nearestId,
+  focusStop,
 }: StopCarouselProps) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [index, setIndex] = useState(0);
+  const appliedFocusRef = useRef<{ id: string } | null>(null);
 
   const nearestIndex = useCallback(() => {
     const track = trackRef.current;
@@ -61,7 +65,8 @@ export function StopCarousel({
   }, [stops.length]);
 
   useEffect(() => {
-    if (!nearestId) return;
+    // A hivatkozott megálló kártyáját nem lapozza el a „legközelebbi elöl”.
+    if (!nearestId || appliedFocusRef.current) return;
     const track = trackRef.current;
     if (!track) return;
     track.scrollTo({ left: 0, behavior: "smooth" });
@@ -89,6 +94,15 @@ export function StopCarousel({
   };
 
   const step = (delta: number) => scrollToCard(nearestIndex() + delta);
+
+  useEffect(() => {
+    if (!focusStop || appliedFocusRef.current === focusStop) return;
+    const i = stops.findIndex((s) => s.id === focusStop.id);
+    if (i < 0) return; // még nincs kint (épp most vettük fel) — a következő körben
+    appliedFocusRef.current = focusStop;
+    requestAnimationFrame(() => scrollToCard(i));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusStop, stops]);
 
   const atStart = index <= 0;
   const atEnd = index >= stops.length - 1;

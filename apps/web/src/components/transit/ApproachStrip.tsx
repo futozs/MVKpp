@@ -34,6 +34,12 @@ export function ApproachStrip({
     position: geo.position,
   });
 
+  // Helymeghatározás nélkül nincs mit mondani a busz és a helyzetem viszonyáról —
+  // ilyenkor nem kérdezünk rá („Hol vagyok?”), csak a menetrendi eltérés marad.
+  const located = Boolean(geo.position);
+  const hasDelay = delayState(deviationSec) !== "unknown";
+  if (!located && !hasDelay) return null;
+
   return (
     <section
       aria-label="A busz és a helyzetem"
@@ -42,26 +48,23 @@ export function ApproachStrip({
         className,
       )}
     >
-      <HereChip stops={stops} />
+      {located ? <HereChip stops={stops} /> : null}
 
-      {approach.state === "no-gps" ? (
-        <p className="mt-1.5 text-[11px] text-muted-foreground">
-          Nincs helymeghatározás.
-        </p>
-      ) : approach.state === "no-vehicle" ? (
+      {located && approach.state === "no-vehicle" ? (
         <p className="mt-1.5 text-[11px] text-muted-foreground">
           Erre a menetre még nem jelentkezett be jármű.
         </p>
-      ) : approach.state === "off-route" ? (
+      ) : located && approach.state === "off-route" ? (
         <p className="mt-1.5 text-[11px] text-muted-foreground">
           A járat nem halad el melletted.
         </p>
       ) : null}
 
-      {delayState(deviationSec) !== "unknown" ? (
+      {hasDelay ? (
         <p
           className={cn(
-            "mt-1.5 text-[11px] font-semibold",
+            located && "mt-1.5",
+            "text-[11px] font-semibold",
             delayTone(deviationSec),
           )}
         >

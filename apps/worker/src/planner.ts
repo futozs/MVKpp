@@ -8,9 +8,10 @@
  *  - múlt: a TÉNYLEGES indulás/érkezés és a jármű a megálló-eseményekből.
  * Miskolc mérete mellett egy keresés néhány ezredmásodperc.
  */
-import { budapestOffsetSec, dayInfo, fastDistM, localMidnightUnix, serviceClock, type DaySchedule, type ServiceDay } from "@mvk/core";
+import { budapestOffsetSec, chanceLevel, dayInfo, fastDistM, localMidnightUnix, serviceClock, spreadOf, transferChance, type DaySchedule, type ServiceDay } from "@mvk/core";
 import { sql } from "@mvk/db";
 import type { Engine } from "./engine.ts";
+import type { TripInsights } from "./insights.ts";
 import { scheduleFor } from "./schedule.ts";
 
 const WALK_MPS = 1.25;
@@ -297,7 +298,7 @@ function endpoints(net: Net, spec: string, maxWalk: number, lookup: (id: string)
   return eps.length ? { eps, point: { lat, lon, name } } : null;
 }
 
-export async function plan(engine: Engine, q: PlanQuery) {
+export async function plan(engine: Engine, q: PlanQuery, insights?: TripInsights) {
   const clock = serviceClock(q.at);
   const net = await netFor(engine, clock.iso);
   if (!net) return { error: "Erre a napra nincs menetrend." } as const;
@@ -345,7 +346,7 @@ export async function plan(engine: Engine, q: PlanQuery) {
 
   const mode = clock.iso < engine.today ? "past" : q.at > Date.now() / 1000 + 600 ? "future" : "now";
   const trips = [];
-  for (const j of list) trips.push(await describe(engine, net, j, o.point, d.point, midnight, mode));
+  for (const j of list) trips.push(await describe(engine, net, j, o.point, d.point, midnight, mode, insights));
   return {
     date: clock.iso,
     at: q.at,
@@ -360,7 +361,7 @@ export async function plan(engine: Engine, q: PlanQuery) {
 
 type Mode = "past" | "now" | "future";
 
-async function describe(engine: Engine, net: Net, j: ReturnType<typeof raptor>[number], from: { lat: number; lon: number; name: string }, to: { lat: number; lon: number; name: string }, midnight: number, mode: Mode) {
+async function describe(engine: Engine, net: Net, j: ReturnType<typeof raptor>[number], from: { lat: number; lon: number; name: string }, to: { lat: number; lon: number; name: string }, midnight: number, mode: Mode, insights?: TripInsights) {
   const iso = net.iso;
   const legs: Record<string, unknown>[] = [];
   const iso8601 = (sec: number) => new Date((midnight + sec) * 1000).toISOString();
@@ -441,7 +442,29 @@ async function describe(engine: Engine, net: Net, j: ReturnType<typeof raptor>[n
     const arrive = a.schedArr + (a.prediction?.arrDelayP85S ?? a.actual?.arrDelayS ?? 0) + walk;
     const leave = b.schedDep + (b.prediction?.depDelayS ?? b.actual?.depDelayS ?? 0);
     const margin = leave - arrive;
-    transfers.push({ at: a.toName, marginSec: margin, risk: margin < 0 ? "risky" : margin < 180 ? "tight" : "safe" });
+    if (mode === "past") {
+      transfers.push({ at: a.toName, marginSec: margin, risk: margin < 0 ? "risky" : margin < 180 ? "tight" : "safe" });
+      continue;
+    }
+    // Jövő / most: valódi esély a két busz bizonytalan idejéből (ma az élő és a
+    // hamarosan induló menetekre az előrejelzés, különben a mért előzmény).
+    const ids = { fromTripId: a.tripId, toTripId: b.tripId, alightStopId: a.toStopId, boardStopId: b.fromStopId, walkS: walk, fromRoute: a.routeShortName, toRoute: b.routeShortName };
+    const hist = { arrDelayS: a.prediction?.arrDelayS ?? null, arrUpperS: a.prediction?.arrDelayP85S ?? null, depDelayS: b.prediction?.depDelayS ?? null };
+    const today = insights && net.iso === engine.today;
+    const o = today ? insights.transferOutlook({ fromTrip: a.tripId, alightStopId: a.toStopId, toTrip: b.tripId, boardStopId: b.fromStopId, walkS: walk }, undefined, hist) : null;
+    const chance =
+      o?.chance ??
+      Math.round(
+        transferChance(
+          spreadOf(a.schedArr + (hist.arrDelayS ?? 0), hist.arrUpperS != null ? a.schedArr + hist.arrUpperS : null),
+          spreadOf(b.schedDep + (hist.depDelayS ?? 0), null),
+          walk,
+        ) * 100,
+      ) / 100;
+    // Ha nem biztos: mi a következő lehetőség ugyanazzal a vonallal, ha lekésed.
+    const ready = (o?.arriveUnix ?? a.schedArr + (hist.arrUpperS ?? hist.arrDelayS ?? 0)) + walk;
+    const fallback = today && chance < 0.85 ? insights.nextDeparture(b.fromStopId, b.routeShortName, Math.max(ready, b.schedDep + 60)) : null;
+    transfers.push({ at: a.toName, marginSec: o?.marginS ?? margin, risk: chanceLevel(chance), chance, fallback, ...ids });
   }
   const tracked = rides.every((r) => r.actual?.tracked);
   return {

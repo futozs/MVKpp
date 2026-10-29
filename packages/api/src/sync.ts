@@ -39,6 +39,9 @@ export const DEVICE_ONLY = new Set([
   "mvk_ride_deleted",
   "mvk_heat_route",
   "mvk_map_panel",
+  "mvk_watch_view",
+  // az eszköz push-feliratkozásához tartozó különleges értesítések
+  "mvk_alert_watches",
 ]);
 
 export async function applyState(userId: string, items: StateItem[], deviceId: string | null): Promise<{ applied: string[]; stale: StateItem[] }> {

@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from "react";
-import { ArrowLeftRight, Check, LocateFixed, MonitorPlay, Plus, Radar } from "lucide-react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeftRight, Check, LocateFixed, MonitorPlay, Plus, Radar, Ticket } from "lucide-react";
 import type { Stop } from "@/types";
 import { useGeo } from "@/context/GeoContext";
 import { distanceKm } from "@/lib/geo";
@@ -8,8 +8,20 @@ import { StopCard } from "./StopCard";
 import { StopCarousel } from "./StopCarousel";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { normalizeSearchText } from "@/lib/utils";
+import { cn, normalizeSearchText } from "@/lib/utils";
+import { RidesPanel } from "@/components/ride/RidesPanel";
+import { CommuteCard } from "./CommuteCard";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
+
+/** a megállókártyák rácsa asztalon: 340–400 px széles oszlopok, középre igazítva */
+const STOP_GRID = "grid justify-center gap-4 grid-cols-[repeat(auto-fill,minmax(min(100%,340px),400px))]";
+
+type WatchView = "stops" | "rides";
+const VIEW_KEY = "mvk_watch_view";
+const WATCH_VIEWS: { id: WatchView; label: string; short: string; icon: typeof Radar }[] = [
+  { id: "stops", label: "Megállók", short: "Megállók", icon: Radar },
+  { id: "rides", label: "Utazásaim", short: "Utaim", icon: Ticket },
+];
 
 const QUICK_STOPS = [
   { label: "Tiszai pályaudvar", match: "Tiszai" },
@@ -25,6 +37,8 @@ interface MultiStopDashboardProps {
   selectedStopIds: string[];
   setSelectedStopIds: React.Dispatch<React.SetStateAction<string[]>>;
   onFocusMap: (stop: Stop, vehicleTripId?: string, vehicleId?: string) => void;
+  /** értesítésből nyitott megálló: a kártyája kerüljön elő */
+  focusStop?: { id: string } | null;
 }
 
 export function MultiStopDashboard({
@@ -32,11 +46,34 @@ export function MultiStopDashboard({
   selectedStopIds,
   setSelectedStopIds,
   onFocusMap,
+  focusStop,
 }: MultiStopDashboardProps) {
   const isWide = useMediaQuery("(min-width: 768px)");
   const [isPickerOpen, setPickerOpen] = useState(false);
   const [isReordering, setReordering] = useState(false);
   const geo = useGeo();
+
+  // Megállók vagy a saját utazásaim (az utazásnapló a Statisztikából került ide).
+  const [view, setViewState] = useState<WatchView>(() => {
+    try {
+      return localStorage.getItem(VIEW_KEY) === "rides" ? "rides" : "stops";
+    } catch {
+      return "stops";
+    }
+  });
+  const setView = (next: WatchView) => {
+    setViewState(next);
+    try {
+      localStorage.setItem(VIEW_KEY, next);
+    } catch {
+      /* privát mód */
+    }
+  };
+
+  // Értesítésből érkező megálló: a megállók nézete kell, nem a napló.
+  useEffect(() => {
+    if (focusStop) setViewState("stops");
+  }, [focusStop]);
 
   const [nearestFirst, setNearestFirst] = useState(() => {
     try {
@@ -86,6 +123,17 @@ export function MultiStopDashboard({
 
   const nearestId = sortByDistance ? (watched[0]?.id ?? null) : null;
 
+  // Asztalon a rácsban görgetünk a hivatkozott megálló kártyájához.
+  const scrolledFocusRef = useRef<{ id: string } | null>(null);
+  const focusShown = focusStop ? watched.some((s) => s.id === focusStop.id) : false;
+  useEffect(() => {
+    if (!isWide || !focusStop || !focusShown || scrolledFocusRef.current === focusStop) return;
+    scrolledFocusRef.current = focusStop;
+    requestAnimationFrame(() =>
+      document.querySelector(`[data-stop-card="${CSS.escape(focusStop.id)}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" }),
+    );
+  }, [isWide, focusStop, focusShown]);
+
   const removeStop = (stopId: string) =>
     setSelectedStopIds((prev) => prev.filter((id) => id !== stopId));
 
@@ -121,12 +169,32 @@ export function MultiStopDashboard({
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
       <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-card/60 px-3 py-2.5 sm:px-4 sm:py-3">
-        <div className="min-w-0">
-          <h2 className="truncate text-sm font-bold tracking-tight sm:text-base">
-            Megállófigyelő
-          </h2>
+        <div role="tablist" aria-label="Figyelő nézet" className="inline-flex min-w-0 gap-1 rounded-lg border border-border bg-muted/60 p-1">
+          {WATCH_VIEWS.map((v) => {
+            const on = view === v.id;
+            const Icon = v.icon;
+            return (
+              <button
+                key={v.id}
+                type="button"
+                role="tab"
+                aria-selected={on}
+                onClick={() => setView(v.id)}
+                className={cn(
+                  "inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-semibold transition-colors duration-fast",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  on ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                <span className="hidden sm:inline">{v.label}</span>
+                <span className="sm:hidden">{v.short}</span>
+              </button>
+            );
+          })}
         </div>
 
+        {view === "stops" ? (
         <div className="flex shrink-0 items-center gap-2">
           {manualOrder.length > 1 && geo.position ? (
             <Button
@@ -176,12 +244,23 @@ export function MultiStopDashboard({
             ) : null}
           </Button>
         </div>
+        ) : null}
       </div>
 
-      {}
+      {view === "rides" ? (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mx-auto w-full max-w-[1100px] space-y-4 px-3 py-3 sm:px-4 sm:py-4">
+            <RidesPanel />
+          </div>
+        </div>
+      ) : null}
+
       {/* Csak az egyik nézet él (a másik nem csak elrejtve): különben minden
           megálló kétszer kérné le az indulásokat és kétszer értesítene. */}
-      {watched.length > 0 && !isWide ? (
+      {/* A naplóból felismert szokásos utad (csak a szokásos idő körül látszik). */}
+      {view === "stops" && !isWide ? <CommuteCard className="mx-4 mt-3 shrink-0" /> : null}
+
+      {view === "stops" && watched.length > 0 && !isWide ? (
         <div className="min-h-0 flex-1 overflow-hidden pt-4">
           <StopCarousel
             stops={watched}
@@ -191,12 +270,14 @@ export function MultiStopDashboard({
             onMove={moveStop}
             distances={distances}
             nearestId={nearestId}
+            focusStop={focusStop}
           />
         </div>
       ) : null}
 
-      {watched.length === 0 || isWide ? (
+      {view === "stops" && (watched.length === 0 || isWide) ? (
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
+        {isWide ? <CommuteCard className="mx-auto mb-4 w-full max-w-[400px]" /> : null}
         {watched.length === 0 ? (
           <Card className="mx-auto max-w-xl p-6 text-center shadow-lg sm:p-8">
             <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-primary/12 text-primary">
@@ -233,17 +314,10 @@ export function MultiStopDashboard({
             </div>
           </Card>
         ) : (
-          <div
-            className={
-              watched.length === 1
-                ? "mx-auto grid max-w-lg gap-4"
-                : watched.length === 2
-                  ? "mx-auto grid max-w-5xl gap-4 lg:grid-cols-2"
-                  : watched.length <= 4
-                    ? "grid gap-4 md:grid-cols-2"
-                    : "grid gap-4 md:grid-cols-2 xl:grid-cols-3"
-            }
-          >
+          // Asztalon minden megálló ugyanakkora, keskeny kártya (mint a telefonon):
+          // annyi fér egymás mellé, amennyi kifér, a sor középre igazítva —
+          // nem nyúlnak szét a képernyő szélességére, akárhány megállót figyelsz.
+          <div className={STOP_GRID}>
             {watched.map((stop, i) => (
               <StopCard
                 key={stop.id}

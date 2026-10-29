@@ -23,6 +23,7 @@ import {
   setWatch,
 } from "@/lib/notifications";
 import { registerPushWatch, unregisterPushWatch } from "@/lib/push";
+import { TrafficAlertSwitch } from "./TrafficAlertSwitch";
 
 type StopNotifyDialogProps = {
   open: boolean;
@@ -175,6 +176,8 @@ export function StopNotifyDialog({
               </p>
             )}
           </div>
+
+          <TrafficAlertSwitch stopId={stopId} stopName={stopName} routeShorts={routeShorts} />
 
           {pushStatus.state !== "idle" ? (
             <div className="space-y-1 rounded-lg border border-border px-3 py-2">

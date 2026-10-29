@@ -19,9 +19,12 @@ import { cn } from "@/lib/utils";
 import { checkAndNotify, getWatch } from "@/lib/notifications";
 import { StopNotifyDialog } from "./StopNotifyDialog";
 import { useFallbackPoll, useTopic } from "@/lib/realtime";
-import { PREF_PREDICTED_VEHICLE, usePreference } from "@/hooks/usePreference";
 import { describeApiError, type FriendlyError } from "@/lib/apiError";
 import { ForecastLine } from "@/components/transit/ForecastLine";
+import { CatchLine, CatchPill, ReplacementNote, replacementFor, StartRiskLine, TrafficLine } from "@/components/transit/TripInsights";
+import { expectedArrival, useCatchFor } from "@/hooks/useCatch";
+import { addAlert, notifyLocallyOnce, removeAlert, useAlerts } from "@/lib/alerts";
+import { useWatchFeatures } from "@/lib/watchPrefs";
 import { RefreshCw } from "lucide-react";
 
 /** hiba után ennyi idő múlva próbáljuk újra (duplázva, legfeljebb 30 mp-ig) */
@@ -75,7 +78,9 @@ export function StopCard({
     };
   }, []);
 
-  const [showPredicted] = usePreference(PREF_PREDICTED_VEHICLE, true);
+  // A Beállításokban egyenként kikapcsolható funkciók (felhőben szinkronizálva).
+  const f = useWatchFeatures();
+  const showPredicted = f.predictedVehicle;
 
   const apply = (res: StopArrivalsResponse) => {
     if (!mounted.current) return;
@@ -122,8 +127,46 @@ export function StopCard({
   const next: ArrivalItem | undefined = arrivals[0];
   const rest = arrivals.slice(1, 6);
 
+  // „Elérem?”: a helyzetedből a séta, indulásonként a verdikt; „szólj, ha indulni kell”.
+  const catchFor = useCatchFor(stop);
+  const nextVerdict = next ? catchFor.verdict(next) : null;
+  const nextCatchable =
+    next && nextVerdict?.state === "missed" ? arrivals.slice(1).find((a) => a.route === next.route && catchFor.verdict(a)?.state !== "missed") ?? null : null;
+  // Ha a busza még az előző menetén késik, a visszaszámlálás a várható (késő) indulásig tart.
+  const heroEtaMin =
+    f.startRisk && next?.startRisk && next.schedUnix != null
+      ? Math.max(next.etaMin, Math.round((expectedArrival(next, catchFor.now).at - catchFor.now) / 60))
+      : (next?.etaMin ?? 0);
+  const alerts = useAlerts();
+  const leaveSlot = next ? `leave:${next.tripId}` : null;
+  const leaveOn = Boolean(leaveSlot && alerts.some((a) => a.stopId === stop.id && a.slot === leaveSlot));
+  const [leaveBusy, setLeaveBusy] = useState(false);
+  const [leaveNote, setLeaveNote] = useState<string | null>(null);
+  const toggleLeave = async () => {
+    if (!next || !leaveSlot || catchFor.walkS == null) return;
+    setLeaveBusy(true);
+    setLeaveNote(null);
+    try {
+      if (leaveOn) await removeAlert(stop.id, leaveSlot);
+      else {
+        const r = await addAlert({ slot: leaveSlot, kind: "leave", stopId: stop.id, stopName: stop.name, tripId: next.tripId, params: { walkS: catchFor.walkS } });
+        if (!r.ok) setLeaveNote(r.reason ?? "Nem sikerült bekapcsolni.");
+        else if (!r.push) setLeaveNote("Push nélkül csak akkor szólok, ha nyitva van az oldal.");
+      }
+    } finally {
+      setLeaveBusy(false);
+    }
+  };
+  // Push nélkül (pl. iOS böngészőben) helyben szólunk, amíg az oldal nyitva van.
+  useEffect(() => {
+    if (!next || !leaveSlot || !leaveOn || !nextVerdict) return;
+    if (nextVerdict.state !== "go" && nextVerdict.state !== "run") return;
+    notifyLocallyOnce(stop.id, leaveSlot, next.tripId, nextVerdict.state === "run" ? `Siess! ${next.route} ${next.etaMin} perc múlva` : `Indulj most: ${next.route} ${next.etaMin} perc múlva`, `${stop.name} — ${Math.max(1, Math.round(nextVerdict.walkS / 60))} perc séta`);
+  }, [next, leaveSlot, leaveOn, nextVerdict, stop.id, stop.name]);
+
   return (
     <Card
+      data-stop-card={stop.id}
       className={cn(
         "flex min-w-0 flex-col overflow-hidden shadow-lg",
         isNearest && "border-2 border-primary",
@@ -302,11 +345,11 @@ export function StopCard({
               {next.cancelled ? (
                 <span className="shrink-0 pt-1 text-xs font-semibold text-destructive">nem jön</span>
               ) : (
-                <Countdown etaMin={next.etaMin} />
+                <Countdown etaMin={heroEtaMin} />
               )}
             </div>
 
-            {}
+            {next.cancelled && f.replacement ? <ReplacementNote cancelled={next} instead={replacementFor(arrivals, next)} /> : null}
             {!next.vehicle && next.predictedVehicle && showPredicted && !next.cancelled ? (
               <p
                 className="mt-3 text-[11px] text-muted-foreground"
@@ -319,17 +362,30 @@ export function StopCard({
                 jön
               </p>
             ) : null}
-            <ForecastLine className="mt-2.5" mode="worst" delayS={next.forecastDelaySec} upperS={next.forecastUpperSec} />
-            <VehicleTrack
-              className="mt-3"
-              vehicle={next.vehicle}
-              progressDesc={next.progressDesc}
-              onTrack={
-                next.vehicle
-                  ? () => onFocusMap(stop, next.tripId, next.vehicle?.id)
-                  : undefined
-              }
+            {f.forecast ? <ForecastLine className="mt-2.5" mode="worst" delayS={next.forecastDelaySec} upperS={next.forecastUpperSec} /> : null}
+            {f.startRisk ? <StartRiskLine risk={next.startRisk} className="mt-2" /> : null}
+            {f.traffic ? <TrafficLine traffic={next.trafficAhead} className="mt-2" /> : null}
+            <CatchLine
+              className="mt-2.5"
+              verdict={f.catch ? nextVerdict : null}
+              next={nextCatchable}
+              alertOn={leaveOn}
+              alertBusy={leaveBusy}
+              onToggleAlert={toggleLeave}
             />
+            {leaveNote && f.catch ? <p className="mt-1 text-[10.5px] text-muted-foreground">{leaveNote}</p> : null}
+            {f.vehicleTrack ? (
+              <VehicleTrack
+                className="mt-3"
+                vehicle={next.vehicle}
+                progressDesc={next.progressDesc}
+                onTrack={
+                  next.vehicle
+                    ? () => onFocusMap(stop, next.tripId, next.vehicle?.id)
+                    : undefined
+                }
+              />
+            ) : null}
           </>
         )}
       </div>
@@ -339,7 +395,8 @@ export function StopCard({
         {rest.length > 0 ? (
           <ul className="divide-y divide-border/60">
             {rest.map((bus, i) => {
-              const focusable = bus.live && Boolean(bus.tripId);
+              // Kihúzott menetnél csak akkor visz a térképre, ha mégis jár rajta busz.
+              const focusable = bus.live && Boolean(bus.tripId) && (!bus.cancelled || bus.vehicle != null);
               return (
                 <li key={`${bus.tripId}-${i}`}>
                   <div
@@ -385,7 +442,7 @@ export function StopCard({
                           <span className="rounded bg-primary/12 px-1.5 py-px font-mono text-[11px] font-bold tabular-nums text-primary">
                             {bus.vehicle.id}
                           </span>
-                        ) : bus.predictedVehicle && showPredicted ? (
+                        ) : bus.predictedVehicle && showPredicted && !bus.cancelled ? (
                           <span
                             className="rounded border border-dashed border-primary/40 px-1.5 py-px font-mono text-[11px] font-bold tabular-nums text-primary/80"
                             title={predictedTitle(bus.predictedVehicle)}
@@ -398,11 +455,22 @@ export function StopCard({
                             törölve
                           </span>
                         ) : null}
-                        <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                        <span className={cn("font-mono text-[11px] tabular-nums text-muted-foreground", bus.cancelled && "line-through decoration-destructive/70")}>
                           {bus.time}
                         </span>
-                        <DelayBar delaySec={bus.delaySec ?? bus.measuredDelaySec ?? null} showLabel={false} />
+                        {bus.cancelled ? (
+                          f.replacement ? <ReplacementNote compact cancelled={bus} instead={replacementFor(arrivals, bus)} /> : null
+                        ) : (
+                          <DelayBar delaySec={bus.delaySec ?? bus.measuredDelaySec ?? null} showLabel={false} />
+                        )}
+                        <CatchPill verdict={f.leaveTimes ? catchFor.verdict(bus) : null} />
                       </div>
+                      {(f.startRisk && bus.startRisk) || (f.traffic && bus.trafficAhead) ? (
+                        <div className="mt-1 flex flex-wrap gap-x-2.5">
+                          {f.startRisk ? <StartRiskLine risk={bus.startRisk} compact /> : null}
+                          {f.traffic ? <TrafficLine traffic={bus.trafficAhead} compact /> : null}
+                        </div>
+                      ) : null}
                       {bus.progressDesc ? (
                         <p className="mt-1 truncate text-[11px] text-muted-foreground">
                           {bus.progressDesc}
@@ -411,7 +479,10 @@ export function StopCard({
                     </div>
 
                     <span className="shrink-0 font-mono text-base font-bold tabular-nums">
-                      {bus.etaMin <= 0 ? (
+                      {/* Az MVK kihúzta: nem jön, nincs mit visszaszámolni (mint a fő sorban). */}
+                      {bus.cancelled ? (
+                        <span className="font-sans text-xs font-semibold text-destructive">nem jön</span>
+                      ) : bus.etaMin <= 0 ? (
                         <span className="text-live">most</span>
                       ) : (
                         <>

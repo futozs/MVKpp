@@ -33,6 +33,9 @@ const DEVICE_ONLY = new Set([
   "mvk_ride_deleted",
   "mvk_heat_route",
   "mvk_map_panel",
+  "mvk_watch_view",
+  // az eszköz push-feliratkozásához tartozó különleges értesítések
+  "mvk_alert_watches",
 ]);
 const PUSH_DEBOUNCE_MS = 1500;
 const PULL_INTERVAL_MS = 5 * 60_000;

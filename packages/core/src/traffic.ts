@@ -103,3 +103,29 @@ export function segmentCongestion(obs: readonly TrafficObs[], stuck: readonly Tr
     lastTs: stuckN ? now : (recent[0]?.endTs ?? now),
   };
 }
+
+/** Egy torlódó szakasz (`"from|to"` kulccsal a térképi réteg pillanatképéből). */
+export type CongestedLink = { excessS: number; level: number };
+
+export type TrafficAhead = {
+  /** a hátralévő torlódó szakaszok összes többletideje (mp) */
+  excessS: number;
+  /** a legrosszabb szakasz */
+  worst: { from: string; to: string; excessS: number; level: number };
+};
+
+/**
+ * A busz előtti szakaszok (megállópárok a célmegállóig) torlódása: mennyi
+ * pluszidőt hoz a dugó, és melyik a legrosszabb szakasz. `null`, ha nincs.
+ */
+export function trafficAhead(pairs: readonly (readonly [string, string])[], congested: ReadonlyMap<string, CongestedLink>): TrafficAhead | null {
+  let excess = 0;
+  let worst: TrafficAhead["worst"] | null = null;
+  for (const [from, to] of pairs) {
+    const c = congested.get(`${from}|${to}`);
+    if (!c || c.excessS <= 0) continue;
+    excess += c.excessS;
+    if (!worst || c.excessS > worst.excessS) worst = { from, to, excessS: c.excessS, level: c.level };
+  }
+  return worst ? { excessS: Math.round(excess), worst } : null;
+}

@@ -20,6 +20,7 @@ import {
 } from "./format";
 import { LegInsight } from "./LegInsight";
 import { TransferBadge } from "./TransferBadge";
+import { TransferWatchButton } from "./TransferWatchButton";
 import { transferMeasured } from "./proof";
 
 type Rail = { kind: "solid"; color: string } | { kind: "dashed" } | null;
@@ -182,7 +183,14 @@ export function TripTimeline({ trip, mode }: { trip: JourneyTrip; mode: JourneyM
 
   const transferBadge = (k: number) => {
     const check = trip.transferChecks[k];
-    return check ? <TransferBadge check={check} mode={mode} measured={transferMeasured(trip, k)} /> : null;
+    if (!check) return null;
+    return (
+      <span className="flex flex-wrap items-center gap-1.5">
+        <TransferBadge check={check} mode={mode} measured={transferMeasured(trip, k)} />
+        {/* élőben (ma, a közeli utakra) a szerver figyelni is tudja */}
+        {mode === "now" ? <TransferWatchButton check={check} /> : null}
+      </span>
+    );
   };
 
   legs.forEach((leg, i) => {

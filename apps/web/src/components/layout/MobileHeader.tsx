@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { BrandMark } from "./BrandMark";
 import { LiveStatusCompact } from "./LiveStatus";
 import { NAV_TABS, TabBadge, tabBadge, type TabCounts } from "./navTabs";
+import { useTabBadges } from "@/lib/watchPrefs";
 import { RefreshSweep } from "./RefreshSweep";
 import { SettingsMenu } from "./SettingsMenu";
 import { formatTemp } from "./WeatherReadout";
@@ -103,6 +104,8 @@ interface MobileNavProps {
 }
 
 function MobileNav({ activeTab, setActiveTab, counts }: MobileNavProps) {
+  // a számlálók a Beállításokban kikapcsolhatók
+  const showBadges = useTabBadges();
   const reduceMotion = useReducedMotion();
 
   return (
@@ -110,7 +113,7 @@ function MobileNav({ activeTab, setActiveTab, counts }: MobileNavProps) {
       <ul className={cn("grid grid-cols-6 gap-0.5 p-[3px]", WELL)}>
         {NAV_TABS.map((tab) => {
           const isActive = activeTab === tab.id;
-          const badge = tabBadge(tab.id, counts);
+          const badge = showBadges ? tabBadge(tab.id, counts) : null;
           const Icon = tab.icon;
           return (
             <li key={tab.id} className="min-w-0">

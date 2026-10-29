@@ -29,6 +29,7 @@ import { errMsg, log } from "./log.ts";
 import { DelayForecaster } from "./forecast.ts";
 import { trainDelayModelInThread } from "./ml/thread.ts";
 import { TrafficMonitor } from "./traffic.ts";
+import { TripInsights } from "./insights.ts";
 import { Parking } from "./parking.ts";
 import { VehiclePredictor } from "./predict.ts";
 import { PushEngine } from "./push.ts";
@@ -60,6 +61,7 @@ async function main() {
   const parking = new Parking(engine, predictor);
   // a motor indulása előtt: a mai nap visszajátszott eseményeiből is épül
   const traffic = new TrafficMonitor(engine, forecaster);
+  const insights = new TripInsights(engine, forecaster, predictor, traffic);
   await parking.init().catch((e) => log.warn("parking", "indítás sikertelen", errMsg(e)));
 
   const boss = new PgBoss({ connectionString: databaseUrl(), schema: "pgboss" });
@@ -68,8 +70,8 @@ async function main() {
 
   const router = new Router();
   const server = createServer();
-  const hub = new Hub(server, engine, predictor, parking, forecaster);
-  const ctx = { engine, feeds, predictor, parking, forecaster, traffic, startedAt: Date.now(), hubStats: () => hub.status() };
+  const hub = new Hub(server, engine, predictor, parking, forecaster, insights);
+  const ctx = { engine, feeds, predictor, parking, forecaster, traffic, insights, startedAt: Date.now(), hubStats: () => hub.status() };
   registerCompat(router, ctx);
   registerV3(router, ctx);
 
@@ -110,7 +112,7 @@ async function main() {
   });
 
   await engine.start();
-  const push = new PushEngine(engine, predictor, boss);
+  const push = new PushEngine(engine, boss, insights);
   await push.start();
 
   // A webes oldal Postgres NOTIFY-jal szól: szinkron-változás, push-figyelés változott.

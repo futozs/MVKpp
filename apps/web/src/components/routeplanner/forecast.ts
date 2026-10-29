@@ -45,7 +45,11 @@ export function worstTransfer(
   let best: { check: JourneyTransferCheck; index: number } | null = null;
   for (let index = 0; index < trip.transferChecks.length; index++) {
     const check = trip.transferChecks[index];
-    if (!best || RISK_ORDER[check.risk] > RISK_ORDER[best.check.risk]) {
+    const worse =
+      !best ||
+      RISK_ORDER[check.risk] > RISK_ORDER[best.check.risk] ||
+      (RISK_ORDER[check.risk] === RISK_ORDER[best.check.risk] && (check.chance ?? 1) < (best.check.chance ?? 1));
+    if (worse) {
       best = { check, index };
     }
   }

@@ -8,6 +8,7 @@ import {
   ChevronRight,
   Clock,
   Crosshair,
+  Info,
   Search,
   Star,
   X,
@@ -48,6 +49,7 @@ import { getWatch } from "@/lib/notifications";
 import { initialTimetableView, saveTimetableView } from "@/lib/viewState";
 import { cn, normalizeSearchText } from "@/lib/utils";
 import { serviceNow } from "@/lib/serviceDay";
+import { useServerClockVersion } from "@/lib/realtime";
 
 interface TimetableViewProps {
   stops: Stop[];
@@ -165,10 +167,21 @@ export function TimetableView({
   const minIso = from ? ymdToIso(from) : null;
   const maxIso = to ? ymdToIso(to) : null;
   const [date, setDate] = useState(todayIso());
+  const [mountDay] = useState(todayIso);
+  const clockVersion = useServerClockVersion();
 
   useEffect(() => {
     setDate((prev) => clampIso(prev, minIso, maxIso));
   }, [minIso, maxIso]);
+
+  // Megnyitáskor még a készülék órája szerinti nap lehet; ha a szerveré más, és a
+  // felhasználó nem lapozott el, a szerver mai napjára állunk.
+  useEffect(() => {
+    const today = todayIso();
+    if (today === mountDay || date !== mountDay) return;
+    setDate(clampIso(today, minIso, maxIso));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clockVersion]);
 
   const isToday = date === todayIso();
   const day = dayRelation(date, todayIso());
@@ -207,6 +220,17 @@ export function TimetableView({
   }, [selectedRouteId, selectedDir, selectedTrip]);
 
   const selectedRoute = routes.find((r) => r.id === selectedRouteId) ?? null;
+  const [legendOpen, setLegendOpen] = useState(false);
+  const hasLegend = Boolean(table?.trips.some((t) => t.deviates || t.headsignDiffers));
+
+  // A kijelölt menet túléli az újratöltést (másik nap, a tartományhoz igazított dátum):
+  // ha az új táblában is megvan, kijelölve marad. A szándékot a kijelöléskor jegyezzük
+  // fel (nem effektben): a betöltés és a napváltás egy körben is érkezhet.
+  const selectedTripIdRef = useRef<string | null>(restored?.tripId ?? null);
+  const chooseTrip = (t: TimetableTrip | null) => {
+    selectedTripIdRef.current = t?.tripId ?? null;
+    setSelectedTrip(t);
+  };
 
   useEffect(() => {
     if (!selectedRouteId) {
@@ -215,6 +239,7 @@ export function TimetableView({
     }
     let alive = true;
     setTableLoading(true);
+    pendingTripRef.current ??= selectedTripIdRef.current;
     setSelectedTrip(null);
     api
       .getTimetable(selectedRouteId, selectedDir, isoToYmd(date))
@@ -225,7 +250,7 @@ export function TimetableView({
         if (!pending) return;
         pendingTripRef.current = null;
         const hit = res.trips.find((t) => t.tripId === pending);
-        if (hit) setSelectedTrip(hit);
+        if (hit) chooseTrip(hit);
       })
       .catch(() => alive && setTable(null))
       .finally(() => alive && setTableLoading(false));
@@ -280,7 +305,7 @@ export function TimetableView({
     const today = todayIso();
     if (date === today && selectedRouteId === t.routeId && selectedDir === t.dir && table) {
       const hit = table.trips.find((x) => x.tripId === t.tripId);
-      if (hit) setSelectedTrip(hit);
+      if (hit) chooseTrip(hit);
       return;
     }
     pendingTripRef.current = t.tripId;
@@ -651,6 +676,22 @@ export function TimetableView({
                     </button>
                   );
                 })}
+                {hasLegend ? (
+                  <button
+                    type="button"
+                    onClick={() => setLegendOpen((v) => !v)}
+                    aria-expanded={legendOpen}
+                    aria-label="Jelmagyarázat"
+                    title="Mit jelentenek a pöttyök?"
+                    className={cn(
+                      "inline-flex h-[30px] w-[30px] items-center justify-center rounded-lg border transition-colors duration-fast",
+                      "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                      legendOpen ? "border-primary/60 bg-primary/12 text-primary" : "border-border bg-secondary text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    <Info className="h-3.5 w-3.5" />
+                  </button>
+                ) : null}
               </div>
 
               <DayPicker
@@ -667,8 +708,8 @@ export function TimetableView({
             </div>
 
             {}
-            {table &&
-            table.trips.some((t) => t.deviates || t.headsignDiffers) ? (
+            {/* A jelmagyarázat csak kérésre: telefonon két sort venne el a táblától. */}
+            {hasLegend && legendOpen && table ? (
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border/60 px-3 py-1.5 text-[11px] text-muted-foreground sm:px-4">
                 {table.trips.some((t) => t.headsignDiffers) ? (
                   <span className="flex items-center gap-1.5">
@@ -705,9 +746,7 @@ export function TimetableView({
                   journal={journal}
                   selectedTripId={selectedTrip?.tripId ?? null}
                   onSelectTrip={(t) =>
-                    setSelectedTrip((prev) =>
-                      prev?.tripId === t.tripId ? null : t,
-                    )
+                    chooseTrip(selectedTrip?.tripId === t.tripId ? null : t)
                   }
                   nowSec={nowSec}
                   day={day}
@@ -730,7 +769,7 @@ export function TimetableView({
                 journalEntry={journal.get(selectedTrip.tripId) ?? null}
                 nowSec={nowSec}
                 day={day}
-                onClose={() => setSelectedTrip(null)}
+                onClose={() => chooseTrip(null)}
                 onFocusTrip={onFocusTrip}
               />
             ) : null}

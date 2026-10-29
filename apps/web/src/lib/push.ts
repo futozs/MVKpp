@@ -82,6 +82,8 @@ async function ensureSubscription(): Promise<
   }
 }
 
+export type PushWatchKind = "arrival" | "leave" | "traffic" | "transfer";
+
 export type PushWatchConfig = {
   stopId: string;
   stopName: string;
@@ -90,6 +92,10 @@ export type PushWatchConfig = {
   tripId?: string;
   isDeparture?: boolean;
   schedMin?: number;
+  /** több figyelés ugyanarra a megállóra (pl. „indulj most” egy menetre) */
+  slot?: string;
+  kind?: PushWatchKind;
+  params?: Record<string, unknown>;
 };
 
 export async function registerPushWatch(
@@ -157,14 +163,15 @@ export async function setPushEnabled(enabled: boolean): Promise<PushDiagnostic> 
   }
 }
 
-export async function unregisterPushWatch(stopId: string): Promise<void> {
+/** A megálló egy figyelése (alapból az „érkezik a busz”; a többi fajta a saját helyén marad). */
+export async function unregisterPushWatch(stopId: string, slot = "default"): Promise<void> {
   const sub = await getSubscription();
   if (!sub) return;
   try {
     await fetch(`${API_BASE}/push/watch`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ endpoint: sub.endpoint, stopId }),
+      body: JSON.stringify({ endpoint: sub.endpoint, stopId, slot }),
     });
   } catch {
   }

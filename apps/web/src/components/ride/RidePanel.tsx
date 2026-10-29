@@ -98,6 +98,8 @@ export function RidePanel({ ride, position, onFinished }: { ride: ActiveRide; po
       initial={reduce ? false : { opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       aria-label="Utazás"
+      // a térkép a buszt e fölött, a látható rész közepén tartja
+      data-map-cover=""
       className="absolute inset-x-0 bottom-0 z-drawer flex max-h-[70dvh] flex-col overflow-hidden border-t border-border bg-card shadow-xl md:inset-x-auto md:bottom-4 md:right-4 md:max-h-[calc(100%-2rem)] md:w-[400px] md:rounded-xl md:border"
     >
       <header className="flex items-start gap-3 px-4 pb-3 pt-3.5">

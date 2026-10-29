@@ -3,6 +3,7 @@ import type L from "leaflet";
 import { Pause, Play, Radio } from "lucide-react";
 import type { FilterState, Route } from "@/types";
 import { Button } from "@/components/ui/button";
+import { serverNow } from "@/lib/realtime";
 import { cn, normalizeSearchText } from "@/lib/utils";
 import { WINDOW_SEC, windowStartOf } from "./historyData";
 import { MAX_GAP_SEC } from "./historySampler";
@@ -32,7 +33,7 @@ const TEN_MINUTES = 600;
 /** A sáv alja a térkép aljától (bottom-3). */
 const BAR_BOTTOM_PX = 12;
 
-const nowSec = () => Math.floor(Date.now() / 1000);
+const nowSec = () => Math.floor(serverNow());
 
 function limitFor(range: ServiceDayRange): number {
   return Math.max(range.start, Math.min(range.end - 1, nowSec() - LIVE_MARGIN_SEC));

@@ -8,6 +8,8 @@ import { PlanResults, ResultsSkeleton } from "./PlanResults";
 /** A backend is így dönt: 10 percnél későbbi időpont már „jövő”. */
 const NOW_WINDOW_SEC = 600;
 const RESULT_LIMIT = 4;
+/** élő tervnél ilyen gyakran frissítjük csendben az eredményt (ms) */
+const LIVE_REFRESH_MS = 60_000;
 
 type Result =
   | { status: "idle" }
@@ -63,29 +65,47 @@ export function RoutePlannerView({ stops }: { stops: Stop[] }) {
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
+  // Élő tervnél percenként csendben frissítünk: a késések és az átszállási esélyek változnak.
+  const liveResult = result.status === "done" && result.plan.mode === "now";
+  useEffect(() => {
+    if (!liveResult) return;
+    const t = setInterval(() => {
+      if (document.visibilityState === "visible") void run(true);
+    }, LIVE_REFRESH_MS);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveResult]);
+
   const mode = clientMode(form.date, form.time);
   const update = (patch: Partial<PlanFormValue>) => setForm((f) => ({ ...f, ...patch }));
   const setNow = () => update({ date: todayLocalIso(), time: nowLocalTime() });
 
-  const run = async () => {
-    if (!form.from || !form.to) return;
+  const lastQueryRef = useRef<{ from: string; to: string; at: number; arriveBy: boolean } | null>(null);
+
+  const run = async (silent = false) => {
+    const q = silent ? lastQueryRef.current : form.from && form.to ? { from: form.from, to: form.to, at: toUnix(form.date, form.time), arriveBy: form.arriveBy } : null;
+    if (!q) return;
+    lastQueryRef.current = q;
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
-    setResult({ status: "loading" });
-    requestAnimationFrame(() => scrollIntoViewIfHidden(resultsRef.current));
+    if (!silent) {
+      setResult({ status: "loading" });
+      requestAnimationFrame(() => scrollIntoViewIfHidden(resultsRef.current));
+    }
     try {
       const plan = await api.planJourney({
-        from: `stop:${form.from}`,
-        to: `stop:${form.to}`,
-        at: toUnix(form.date, form.time),
-        arriveBy: form.arriveBy,
+        from: `stop:${q.from}`,
+        to: `stop:${q.to}`,
+        at: q.at,
+        arriveBy: q.arriveBy,
         limit: RESULT_LIMIT,
         signal: controller.signal,
       });
       if (!controller.signal.aborted) setResult({ status: "done", plan });
     } catch (e) {
-      if (controller.signal.aborted) return;
+      // a csendes frissítés hibája nem tünteti el a meglévő eredményt
+      if (controller.signal.aborted || silent) return;
       const message =
         e instanceof TypeError
           ? "Nem sikerült elérni a szervert. Ellenőrizd a kapcsolatot, és próbáld újra."
@@ -112,7 +132,7 @@ export function RoutePlannerView({ stops }: { stops: Stop[] }) {
           value={form}
           onChange={update}
           onNow={setNow}
-          onSubmit={run}
+          onSubmit={() => void run()}
           mode={mode}
           isLoading={result.status === "loading"}
         />

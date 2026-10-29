@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import { Pause, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { serverNow } from "@/lib/realtime";
 import { cn } from "@/lib/utils";
 import { fmtSec, heatColor, hourLabel } from "./heatScale";
 import { Legend } from "./RouteHeat";
@@ -38,7 +39,7 @@ const weightOf = (n: number, days: number) => {
 };
 
 function initialHour(from: number, to: number) {
-  const h = new Date().toLocaleString("en-GB", { timeZone: "Europe/Budapest", hour: "2-digit", hour12: false });
+  const h = new Date(serverNow() * 1000).toLocaleString("en-GB", { timeZone: "Europe/Budapest", hour: "2-digit", hour12: false });
   const now = Number(h);
   return Math.min(to, Math.max(from, Number.isFinite(now) ? now : 8));
 }

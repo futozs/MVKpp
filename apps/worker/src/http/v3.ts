@@ -135,7 +135,7 @@ export function registerV3(r: Router, ctx: Ctx) {
       .map((x) => x.trim())
       .filter((x) => /^[\w:.-]{1,32}$/.test(x))
       .slice(0, 8);
-    sendJson(req, res, 200, disruptions(engine, predictor, day, near), { "cache-control": "no-store" });
+    sendJson(req, res, 200, disruptions(engine, predictor, day, near, ctx.insights), { "cache-control": "no-store" });
   });
 
   /**
@@ -312,7 +312,7 @@ export function registerV3(r: Router, ctx: Ctx) {
     const arriveBy = req.query.get("arriveBy") === "1";
     const rawLimit = Number(req.query.get("limit") ?? 4);
     const limit = Number.isInteger(rawLimit) ? rawLimit : 4;
-    const run = () => plan(engine, { from, to, at, arriveBy, limit });
+    const run = () => plan(engine, { from, to, at, arriveBy, limit }, ctx.insights);
     // A múltbeli tervezés (tényadatokból) már nem változik — a pár órán belüli
     // még kaphat késve beérő adatot, ezért az csak röviden él; az élő mindig friss.
     const age = nowUnix() - at;

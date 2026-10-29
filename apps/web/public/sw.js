@@ -138,12 +138,15 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || "/#multistop";
   event.waitUntil(
-    self.clients.matchAll({ type: "window" }).then((clientList) => {
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
+      // Nyitott appnál nem töltünk újra: megkérjük, hogy a hivatkozott megállót mutassa.
       for (const client of clientList) {
-        if ("focus" in client) return client.focus();
+        if (!("focus" in client)) continue;
+        client.postMessage({ type: "mvk-open", url });
+        return client.focus();
       }
-      const url = (event.notification.data && event.notification.data.url) || "/#multistop";
       if (self.clients.openWindow) return self.clients.openWindow(url);
     }),
   );

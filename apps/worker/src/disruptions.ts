@@ -8,8 +8,9 @@
  * Menetenként a pótló indulás (ugyanaz a vonal és irány, ugyanonnan) és — ha
  * a kliens megadja a közelében lévő megállókat — hogy ott mikor állt volna meg.
  */
-import { findMissingTrips, isOnDemandTrip, localMidnightUnix, MISSING, nowUnix, secToHm, type MissingCandidate, type MissingRun, type ServiceDay } from "@mvk/core";
+import { findMissingTrips, isOnDemandTrip, localMidnightUnix, MISSING, nowUnix, secToHm, type MissingCandidate, type MissingRun, type ServiceDay, type StartRisk } from "@mvk/core";
 import type { Engine } from "./engine.ts";
+import type { TripInsights } from "./insights.ts";
 import type { VehiclePredictor } from "./predict.ts";
 
 /** ugyanaz a nyomvonal ennyin belüli indulással — az MVK más azonosítóval vitte */
@@ -71,7 +72,48 @@ function missingRuns(engine: Engine, day: ServiceDay): MissingRun[] {
   return runs;
 }
 
-export function disruptions(engine: Engine, predictor: VehiclePredictor, day: ServiceDay, nearStopIds: string[]) {
+/** Hamarosan induló menet, amelynek a busza még az előző menetén késik (előre, mielőtt kihúznák). */
+export type AtRiskTrip = Omit<DisruptionTrip, "kind" | "replacement" | "plannedVehicle"> & { risk: StartRisk };
+
+/** ennyi percen belül induló meneteket nézünk */
+const AT_RISK_AHEAD_S = 45 * 60;
+
+function atRiskTrips(engine: Engine, insights: TripInsights, day: ServiceDay, nowS: number, now: number, skip: Set<string>, near: Set<string>): AtRiskTrip[] {
+  const feed = day.feed;
+  const out: AtRiskTrip[] = [];
+  for (const t of feed.trips.values()) {
+    if (!day.services.has(t.serviceId) || skip.has(t.id)) continue;
+    const st = feed.tripStops.get(t.id);
+    if (!st?.length) continue;
+    const dep = st[0].dep;
+    if (dep < nowS - 120 || dep > nowS + AT_RISK_AHEAD_S) continue;
+    const risk = insights.startRisk(t.id, now);
+    if (!risk) continue;
+    const r = feed.routes.get(t.routeId);
+    const hit = near.size ? st.find((s) => near.has(s.stopId)) : undefined;
+    out.push({
+      tripId: t.id,
+      routeId: t.routeId,
+      route: r?.short ?? t.routeId,
+      color: r?.color ?? "888888",
+      text: r?.text ?? "FFFFFF",
+      dir: t.dir,
+      headsign: t.headsign,
+      depS: dep,
+      depTime: secToHm(dep),
+      arrTime: secToHm(st[st.length - 1].arr),
+      from: feed.stops.get(st[0].stopId)?.name ?? st[0].stopId,
+      to: feed.stops.get(st[st.length - 1].stopId)?.name ?? st[st.length - 1].stopId,
+      near: hit ? { stopId: hit.stopId, name: feed.stops.get(hit.stopId)?.name ?? hit.stopId, time: secToHm(hit.dep), timeS: hit.dep } : null,
+      upcoming: true,
+      risk,
+    });
+  }
+  // a közeli megállóidat érintők elöl, aztán indulás szerint
+  return out.sort((a, b) => Number(Boolean(b.near)) - Number(Boolean(a.near)) || a.depS - b.depS);
+}
+
+export function disruptions(engine: Engine, predictor: VehiclePredictor, day: ServiceDay, nearStopIds: string[], insights?: TripInsights) {
   const feed = day.feed;
   const now = nowUnix();
   const midnight = localMidnightUnix(engine.today);
@@ -176,5 +218,6 @@ export function disruptions(engine: Engine, predictor: VehiclePredictor, day: Se
     nearStops: [...near].map((id) => ({ id, name: feed.stops.get(id)?.name ?? id })),
     byHour: [...byHour.values()].sort((a, b) => a.h - b.h),
     trips,
+    atRisk: insights && engine.poll.lastOkAt ? atRiskTrips(engine, insights, day, nowS, now, new Set(kinds.keys()), near) : [],
   };
 }

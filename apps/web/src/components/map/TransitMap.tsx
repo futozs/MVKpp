@@ -8,6 +8,7 @@ import React, {
 import L from "leaflet";
 import {
   ArrowLeft,
+  Crosshair,
   History,
   LocateFixed,
   Minus,
@@ -15,7 +16,7 @@ import {
   SlidersHorizontal,
   X,
 } from "lucide-react";
-import type { FilterState, LiveVehicle, Route, Stop } from "@/types";
+import type { FilterState, LiveMotion, LiveVehicle, Route, Stop, TripPathResponse } from "@/types";
 import { api } from "@/services/api";
 import { useGeo } from "@/context/GeoContext";
 import { distanceKm, nearest } from "@/lib/geo";
@@ -128,6 +129,8 @@ interface TransitMapProps {
   focusVehicleId: string | null;
   onExitFocus: () => void;
   onFocusTrip: (tripId: string, vehicleId?: string) => void;
+  /** követés közben a felhasználó elhúzta a térképet (a kártya felirata ezt mutatja) */
+  onFollowPausedChange?: (paused: boolean) => void;
   tileLayerId: string;
   selectedStopId: string | null;
   monitoredStopIds: string[];
@@ -138,6 +141,47 @@ interface TransitMapProps {
 const MOTION_TICK_MS = 250;
 
 type LiveMarker = { marker: L.Marker; iconKey: string; v: LiveVehicle; shown: Shown | undefined };
+/** a követett busz: ugyanúgy a becslés mozgatja, mint a többit */
+type FocusMarker = { marker: L.Marker; iconKey: string; motion: LiveMotion | null; shown: Shown | undefined };
+/** a térkép a követett busszal halad; elhúzásra megáll, nagyításkor a busz körül nagyít */
+type FollowState = { paused: boolean; centered: boolean; zooming: boolean; holdUntil: number };
+
+/** követéskor legalább ekkora nagyítás */
+const FOCUS_ZOOM = 15;
+/** a „Busz középre” csúszása alatt a követés nem rángatja a térképet (ms) */
+const FOCUS_RECENTER_MS = 450;
+/** ennél nagyobb eltérésnél a térkép odacsúszik a buszhoz, nem ugrik (px) */
+const FOCUS_GLIDE_PX = 40;
+
+/**
+ * A térkép alját teljes szélességben takaró panel (követett jármű, utazás —
+ * `data-map-cover`) magassága: telefonon ezek alatt nem látszana a busz útja.
+ */
+function coveredBottom(container: HTMLElement): number {
+  const box = container.getBoundingClientRect();
+  let covered = 0;
+  for (const el of document.querySelectorAll<HTMLElement>("[data-map-cover]")) {
+    const r = el.getBoundingClientRect();
+    if (r.width < box.width * 0.6 || r.top >= box.bottom || r.bottom < box.bottom - 4) continue;
+    covered = Math.max(covered, box.bottom - r.top);
+  }
+  return Math.min(covered, box.height * 0.6);
+}
+
+/** Mennyit kell a térképnek elmozdulnia, hogy a busz a látható rész közepén legyen (px). */
+function offsetToFollow(map: L.Map, pos: L.LatLng): L.Point {
+  const size = map.getSize();
+  const target = L.point(size.x / 2, (size.y - coveredBottom(map.getContainer())) / 2);
+  return map.latLngToContainerPoint(pos).subtract(target);
+}
+
+/** Követéskor a nagyítás (csípés, görgő, dupla koppintás) a képközépen marad — ott a busz. */
+function zoomAroundCenter(map: L.Map, on: boolean) {
+  const mode = on ? "center" : true;
+  map.options.touchZoom = mode;
+  map.options.scrollWheelZoom = mode;
+  map.options.doubleClickZoom = mode;
+}
 
 /** A jármű buborékja (megnyitáskor készül, így mindig a friss adatot mutatja). */
 function vehiclePopupHtml(raw: LiveVehicle): string {
@@ -191,6 +235,7 @@ export function TransitMap({
   focusVehicleId,
   onExitFocus,
   onFocusTrip,
+  onFollowPausedChange,
   tileLayerId,
   selectedStopId,
   monitoredStopIds,
@@ -207,6 +252,10 @@ export function TransitMap({
   const routeLayerRef = useRef<L.LayerGroup | null>(null);
   const trafficLayerRef = useRef<L.LayerGroup | null>(null);
   const focusLayerRef = useRef<L.LayerGroup | null>(null);
+  const focusMarkerRef = useRef<FocusMarker | null>(null);
+  const followRef = useRef<FollowState>({ paused: false, centered: false, zooming: false, holdUntil: 0 });
+  const [focusPath, setFocusPath] = useState<TripPathResponse | null>(null);
+  const [followPaused, setFollowPaused] = useState(false);
   const geoCacheRef = useRef<Record<string, [number, number][][]>>({});
   const lastFocusKeyRef = useRef<string>("");
 
@@ -721,9 +770,28 @@ export function TransitMap({
   }, [vehicles, filters, focusTripId, historyOn, routes, onFocusTrip]);
 
   // Élő becslés: negyed másodpercenként a nyomvonalon továbbvisszük a buszokat
-  // (a szakasz szokásos sebességével, legfeljebb a következő megállóig).
+  // (a szakasz szokásos sebességével, legfeljebb a következő megállóig) —
+  // követéskor a követett buszt is, és a térkép vele együtt halad.
   useEffect(() => {
-    if (focusTripId || historyOn) return;
+    if (historyOn) return;
+    const follow = (pos: L.LatLng) => {
+      const map = mapRef.current;
+      const st = followRef.current;
+      if (!map || st.paused || st.zooming || performance.now() < st.holdUntil) return;
+      // Rákövetéskor azonnal, animáció nélkül a buszra állunk.
+      const first = !st.centered;
+      if (first) {
+        st.centered = true;
+        map.setView(pos, Math.max(map.getZoom(), FOCUS_ZOOM), { animate: false });
+      }
+      const off = offsetToFollow(map, pos);
+      if (Math.abs(off.x) < 1 && Math.abs(off.y) < 1) return;
+      // Nagyobb eltérésnél (nagyítás után, ugrásszerű új jelnél) odacsúszik, különben lépésről lépésre követ.
+      if (!first && Math.hypot(off.x, off.y) > FOCUS_GLIDE_PX) {
+        st.holdUntil = performance.now() + FOCUS_RECENTER_MS;
+        map.panBy(off, { animate: true, duration: FOCUS_RECENTER_MS / 1000 - 0.05 });
+      } else map.panBy(off, { animate: false });
+    };
     const tick = () => {
       const now = serverNow();
       for (const entry of liveMarkersRef.current.values()) {
@@ -732,88 +800,127 @@ export function TransitMap({
         entry.shown = est.shown;
         entry.marker.setLatLng(est.latlng);
       }
+      const f = focusMarkerRef.current;
+      if (!f) return;
+      const est = estimatePosition(f.motion, now, f.shown);
+      if (est) {
+        f.shown = est.shown;
+        f.marker.setLatLng(est.latlng);
+      }
+      follow(f.marker.getLatLng());
     };
     tick();
     const t = setInterval(tick, MOTION_TICK_MS);
     return () => clearInterval(t);
-  }, [focusTripId, historyOn]);
+  }, [historyOn]);
 
+  // Menetkövetés: a nyomvonal egyszer rajzolódik ki; a buszt az élő adatfolyam
+  // frissíti (lent), és a fenti becslés mozgatja folyamatosan.
   useEffect(() => {
-    if (!mapRef.current || !focusLayerRef.current) return;
     const layer = focusLayerRef.current;
+    if (!mapRef.current || !layer) return;
     layer.clearLayers();
+    focusMarkerRef.current = null;
+    followRef.current = { paused: false, centered: false, zooming: false, holdUntil: 0 };
+    setFollowPaused(false);
+    setFocusPath(null);
     if (!focusTripId) return;
 
     let alive = true;
-
-    const draw = async (fit: boolean) => {
-      try {
-        const res = await api.getTripPath(
-          focusTripId,
-          focusVehicleId || undefined,
-        );
+    api
+      .getTripPath(focusTripId, focusVehicleId || undefined)
+      .then((res) => {
         if (!alive) return;
-
-        layer.clearLayers();
-        const color = `#${res.color || "1FB574"}`;
-        const halo = token("--background");
-        const bounds: [number, number][] = [];
-
-        if (res.shape?.length) {
-          L.polyline(res.shape, {
-            color: halo,
-            weight: 8,
-            opacity: 0.6,
-            interactive: false,
-          }).addTo(layer);
-          L.polyline(res.shape, {
-            color,
-            weight: 4,
-            opacity: 0.95,
-            interactive: false,
-          }).addTo(layer);
-          res.shape.forEach((pt) => bounds.push(pt));
+        setFocusPath(res);
+        if (!res.shape?.length) return;
+        L.polyline(res.shape, { color: token("--background"), weight: 8, opacity: 0.6, interactive: false }).addTo(layer);
+        L.polyline(res.shape, { color: `#${res.color || "1FB574"}`, weight: 4, opacity: 0.95, interactive: false }).addTo(layer);
+        // Busz még nincs (nem indult el, nincs jele): a teljes nyomvonal látszik.
+        if (!focusMarkerRef.current && !res.vehicle && mapRef.current) {
+          mapRef.current.fitBounds(res.shape, { padding: [60, 60], maxZoom: 16 });
         }
-
-        if (res.vehicle?.lat != null && res.vehicle?.lon != null) {
-          L.marker([res.vehicle.lat, res.vehicle.lon], {
-            icon: createVehicleIcon(
-              res.route,
-              res.color,
-              res.text,
-              true,
-              res.vehicle.id,
-            ),
-            zIndexOffset: 1200,
-          }).addTo(layer);
-
-          bounds.push([res.vehicle.lat, res.vehicle.lon]);
-
-          if (fit && mapRef.current) {
-            // Rákövetéskor azonnal, animáció nélkül a járműre zoomolunk —
-            // nem a teljes útvonalra, hogy ne kelljen várni a következő
-            // frissítési ciklusra.
-            mapRef.current.setView([res.vehicle.lat, res.vehicle.lon], 15, {
-              animate: false,
-            });
-          } else if (mapRef.current) {
-            mapRef.current.flyTo([res.vehicle.lat, res.vehicle.lon], 15, {
-              duration: 0.5,
-            });
-          }
-        } else if (fit && bounds.length && mapRef.current) {
-          mapRef.current.fitBounds(bounds, { padding: [60, 60], maxZoom: 16 });
-        }
-      } catch {}
-    };
-
-    draw(true);
-    const timer = setInterval(() => draw(false), 5000);
+      })
+      // A nyomvonal nélkül is követhető: a busz az élő adatfolyamból jön.
+      .catch(() => undefined);
     return () => {
       alive = false;
-      clearInterval(timer);
     };
   }, [focusTripId, focusVehicleId]);
+
+  // A követett busz jelölője az élő adatfolyamból (ha onnan hiányzik: a menet utolsó ismert helye).
+  useEffect(() => {
+    const layer = focusLayerRef.current;
+    if (!layer || !focusTripId) return;
+    const live = vehicles.find((v) => (focusVehicleId ? v.id === focusVehicleId : v.tripId === focusTripId) && v.lat != null && v.lon != null);
+    const last = focusPath?.vehicle ?? null;
+    const lat = live?.lat ?? last?.lat;
+    const lon = live?.lon ?? last?.lon;
+    if (lat == null || lon == null) return;
+
+    const route = live?.routeShort || focusPath?.route || "?";
+    const color = live?.routeColor || focusPath?.color || "1FB574";
+    const text = live?.routeText || focusPath?.text || "FFFFFF";
+    const id = live?.id ?? last?.id ?? focusVehicleId;
+    const iconKey = `${route}|${color}|${text}|${id}`;
+    const motion = live?.motion ?? null;
+
+    const entry = focusMarkerRef.current;
+    if (entry && layer.hasLayer(entry.marker)) {
+      entry.motion = motion;
+      if (entry.iconKey !== iconKey) {
+        entry.marker.setIcon(createVehicleIcon(route, color, text, true, id));
+        entry.iconKey = iconKey;
+      }
+      if (!motion) {
+        entry.shown = undefined;
+        entry.marker.setLatLng([lat, lon]);
+      }
+      return;
+    }
+    const marker = L.marker([lat, lon], { icon: createVehicleIcon(route, color, text, true, id), zIndexOffset: 1200, interactive: false }).addTo(layer);
+    focusMarkerRef.current = { marker, iconKey, motion, shown: undefined };
+  }, [vehicles, focusTripId, focusVehicleId, focusPath]);
+
+  // Követés közben: elhúzásra a térkép megáll (körül lehet nézni), nagyításkor nem rángatjuk.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !focusTripId) return;
+    const onDrag = () => {
+      followRef.current.paused = true;
+      setFollowPaused(true);
+    };
+    const onZoomStart = () => {
+      followRef.current.zooming = true;
+    };
+    const onZoomEnd = () => {
+      followRef.current.zooming = false;
+    };
+    map.on("dragstart", onDrag);
+    map.on("zoomstart", onZoomStart);
+    map.on("zoomend", onZoomEnd);
+    return () => {
+      map.off("dragstart", onDrag);
+      map.off("zoomstart", onZoomStart);
+      map.off("zoomend", onZoomEnd);
+      followRef.current.zooming = false;
+    };
+  }, [focusTripId]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (map) zoomAroundCenter(map, Boolean(focusTripId) && !followPaused);
+    onFollowPausedChange?.(Boolean(focusTripId) && followPaused);
+  }, [focusTripId, followPaused, onFollowPausedChange]);
+
+  const resumeFollow = () => {
+    const st = followRef.current;
+    st.paused = false;
+    setFollowPaused(false);
+    const f = focusMarkerRef.current;
+    if (!f || !mapRef.current) return;
+    st.holdUntil = performance.now() + FOCUS_RECENTER_MS;
+    mapRef.current.panBy(offsetToFollow(mapRef.current, f.marker.getLatLng()), { animate: true, duration: FOCUS_RECENTER_MS / 1000 - 0.05 });
+  };
 
   const vehicleResults = useMemo(() => {
     const list = getVisibleVehicles();
@@ -868,7 +975,10 @@ export function TransitMap({
         {/* Bal fent: szűrés (vagy menetkövetéskor a kilépés). A nyitott panel alatt nem látszik. */}
         <MapCorner corner="top-left" row className={cn("max-w-[calc(100%-5.5rem)]", isPanelOpen && "hidden")}>
           {focusTripId ? (
-            <MapControl icon={ArrowLeft} label="Követés vége" showLabel="always" active onClick={onExitFocus} />
+            <>
+              <MapControl icon={ArrowLeft} label="Követés vége" showLabel="always" active onClick={onExitFocus} />
+              {followPaused ? <MapControl icon={Crosshair} label="Busz középre" showLabel="always" onClick={resumeFollow} /> : null}
+            </>
           ) : (
             <>
               <MapControl

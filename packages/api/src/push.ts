@@ -50,7 +50,34 @@ function validPushEndpoint(endpoint: string): boolean {
   }
 }
 const STOP_ID_RE = /^[\w:.-]{1,32}$/;
+const TRIP_ID_RE = /^[\w:.-]{1,80}$/;
 const MAX_WATCHES_PER_SUB = 60;
+const KINDS = new Set(["arrival", "leave", "traffic", "transfer"]);
+
+type WatchParams = { walkS?: number; days?: string; fromTrip?: string; alightStopId?: string; fromRoute?: string; toRoute?: string; boardStopName?: string };
+
+/** A fajtához tartozó paraméterek ellenőrzése (csak az ismert mezők, korlátozva). */
+function cleanParams(kind: string, p: WatchParams | undefined): WatchParams | null {
+  if (kind === "arrival") return null;
+  const out: WatchParams = {};
+  if (p?.walkS != null) {
+    const w = Number(p.walkS);
+    if (!Number.isFinite(w) || w < 0 || w > 3600) throw new ApiError(400, "Érvénytelen sétaidő");
+    out.walkS = Math.round(w);
+  }
+  if (p?.days != null) {
+    if (!["workday", "weekend", "all"].includes(p.days)) throw new ApiError(400, "Érvénytelen napok");
+    out.days = p.days;
+  }
+  if (kind === "transfer") {
+    if (!p?.fromTrip || !TRIP_ID_RE.test(p.fromTrip) || !p.alightStopId || !STOP_ID_RE.test(p.alightStopId)) throw new ApiError(400, "Hiányos átszállás");
+    out.fromTrip = p.fromTrip;
+    out.alightStopId = p.alightStopId;
+  }
+  for (const k of ["fromRoute", "toRoute"] as const) if (typeof p?.[k] === "string") out[k] = p[k]!.slice(0, 8);
+  if (typeof p?.boardStopName === "string") out.boardStopName = p.boardStopName.slice(0, 128);
+  return out;
+}
 
 const routes: Route[] = [
   route("GET", "/push/vapid-public-key", () => json({ publicKey: configured() ? publicKey() : null })),
@@ -67,9 +94,15 @@ const routes: Route[] = [
       isDeparture?: boolean;
       schedMin?: number;
       slot?: string;
+      kind?: string;
+      params?: WatchParams;
     }>(req);
     if (!b?.stopId || !b.stopName) throw new ApiError(400, "Hiányzó mező");
-    if (!STOP_ID_RE.test(b.stopId) || (b.tripId != null && (typeof b.tripId !== "string" || b.tripId.length > 80))) throw new ApiError(400, "Érvénytelen megálló vagy menet");
+    if (!STOP_ID_RE.test(b.stopId) || (b.tripId != null && (typeof b.tripId !== "string" || !TRIP_ID_RE.test(b.tripId)))) throw new ApiError(400, "Érvénytelen megálló vagy menet");
+    const kind = b.kind ?? "arrival";
+    if (!KINDS.has(kind)) throw new ApiError(400, "Ismeretlen értesítés-fajta");
+    if (kind === "transfer" && !b.tripId) throw new ApiError(400, "Az átszálláshoz menet kell");
+    const params = cleanParams(kind, b.params);
     const subId = await upsertSub(req, b.subscription);
     const count = await sqlOne<{ n: number; same: boolean }>(
       `SELECT count(*)::int AS n, bool_or(stop_id = $2 AND slot = $3) AS same FROM push_watch WHERE subscription_id = $1`,
@@ -83,11 +116,12 @@ const routes: Route[] = [
     const tripId = schedMin == null ? (b.tripId ?? null) : null;
     const slot = (b.slot ?? "default").slice(0, 64);
     await getPool().query(
-      `INSERT INTO push_watch (subscription_id, slot, stop_id, stop_name, threshold_min, route_shorts, trip_id, sched_min, is_departure)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `INSERT INTO push_watch (subscription_id, slot, stop_id, stop_name, threshold_min, route_shorts, trip_id, sched_min, is_departure, kind, params)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        ON CONFLICT (subscription_id, stop_id, slot) DO UPDATE SET stop_name = EXCLUDED.stop_name, threshold_min = EXCLUDED.threshold_min,
-         route_shorts = EXCLUDED.route_shorts, trip_id = EXCLUDED.trip_id, sched_min = EXCLUDED.sched_min, is_departure = EXCLUDED.is_departure, updated_at = now()`,
-      [subId, slot, b.stopId, b.stopName.slice(0, 128), threshold, routes, tripId, schedMin, Boolean(b.isDeparture)],
+         route_shorts = EXCLUDED.route_shorts, trip_id = EXCLUDED.trip_id, sched_min = EXCLUDED.sched_min, is_departure = EXCLUDED.is_departure,
+         kind = EXCLUDED.kind, params = EXCLUDED.params, updated_at = now()`,
+      [subId, slot, b.stopId, b.stopName.slice(0, 128), threshold, routes, tripId, schedMin, Boolean(b.isDeparture), kind, params ? JSON.stringify(params) : null],
     );
     await notifyWatches();
     return json({ ok: true });
@@ -133,7 +167,7 @@ const routes: Route[] = [
     );
     if (!sub) return json({ known: false, configured: configured(), watches: [], deliveries: [] });
     const watches = await sql(
-      `SELECT id, slot, stop_id, stop_name, threshold_min, route_shorts, trip_id, sched_min, is_departure, updated_at FROM push_watch WHERE subscription_id = $1 ORDER BY stop_name`,
+      `SELECT id, slot, kind, params, stop_id, stop_name, threshold_min, route_shorts, trip_id, sched_min, is_departure, updated_at FROM push_watch WHERE subscription_id = $1 ORDER BY stop_name`,
       [sub.id],
     );
     const deliveries = await sql(
