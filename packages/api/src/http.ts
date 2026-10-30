@@ -1,6 +1,14 @@
 /** Web-szabványos (Request → Response) segédek; Next.js route handlerből és tesztből is hívható. */
 import { cached as sharedCached } from "@mvk/cache";
 import { isPlausibleIso, serviceClock } from "@mvk/core";
+import { RouteMetrics } from "@mvk/core/ops/metrics";
+
+/**
+ * A web API válaszidői útvonal-mintánként (a rendszer-hub /v3/admin/metrics-en
+ * olvassa). A globalThis-en él, hogy a Next minden route-bundle-je ugyanazt lássa.
+ */
+const g = globalThis as { __mvkApiMetrics?: RouteMetrics };
+export const apiMetrics: RouteMetrics = (g.__mvkApiMetrics ??= new RouteMetrics());
 
 export class ApiError extends Error {
   status: number;
@@ -14,7 +22,7 @@ export function json(data: unknown, status = 200, headers: Record<string, string
   return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", ...headers } });
 }
 
-export type Route = { method: string; re: RegExp; keys: string[]; fn: (req: Request, p: Record<string, string>, url: URL) => Promise<Response> | Response };
+export type Route = { method: string; path: string; re: RegExp; keys: string[]; fn: (req: Request, p: Record<string, string>, url: URL) => Promise<Response> | Response };
 
 export function route(method: string, path: string, fn: Route["fn"]): Route {
   const keys: string[] = [];
@@ -22,7 +30,7 @@ export function route(method: string, path: string, fn: Route["fn"]): Route {
     keys.push(k);
     return "/([^/]+)";
   });
-  return { method, re: new RegExp(`^${src}$`), keys, fn };
+  return { method, path, re: new RegExp(`^${src}$`), keys, fn };
 }
 
 /** A route-ok közül az első egyezőt futtatja; hibát egységes JSON-ná alakít. */
@@ -38,13 +46,19 @@ export async function dispatch(routes: Route[], req: Request): Promise<Response>
     } catch {
       return json({ error: "érvénytelen útvonal-kódolás" }, 400);
     }
+    const t0 = performance.now();
+    let res: Response;
     try {
-      return await r.fn(req, p, url);
+      res = await r.fn(req, p, url);
     } catch (e) {
-      if (e instanceof ApiError) return json({ error: e.message }, e.status);
-      console.error(`[api] ${req.method} ${url.pathname}:`, e);
-      return json({ error: "Belső hiba" }, 500);
+      if (e instanceof ApiError) res = json({ error: e.message }, e.status);
+      else {
+        console.error(`[api] ${req.method} ${url.pathname}:`, e);
+        res = json({ error: "Belső hiba" }, 500);
+      }
     }
+    apiMetrics.record(`${req.method} ${r.path}`, performance.now() - t0, res.status);
+    return res;
   }
   return json({ error: "nincs ilyen végpont" }, 404);
 }

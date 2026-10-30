@@ -28,6 +28,7 @@ import { VehicleFocusCard } from "@/components/map/VehicleFocusCard";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { GeoProvider } from "@/context/GeoContext";
 import { initialView, saveView } from "@/lib/viewState";
+import { startUsage, trackView } from "@/lib/usage";
 import { useAppHeight } from "@/hooks/useAppHeight";
 import { useLiveIncidents } from "@/hooks/useLiveIncidents";
 import { useStorageRefresh } from "@/hooks/useStorageRefresh";
@@ -100,6 +101,10 @@ export function App() {
   useEffect(() => {
     saveView({ tab: activeTab, selectedStopId, focusTripId, focusVehicleId });
   }, [activeTab, selectedStopId, focusTripId, focusVehicleId]);
+
+  // Névtelen használati jel a rendszer-hubnak (nézetek, kedvencek).
+  useEffect(() => startUsage(), []);
+  useEffect(() => trackView(activeTab), [activeTab]);
 
   const [monitoredStopIds, setMonitoredStopIds] = useState<string[]>(() => {
     try {

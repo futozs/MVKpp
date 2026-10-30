@@ -5,7 +5,7 @@ import { gzipSync } from "node:zlib";
 export type Req = IncomingMessage & { path: string; query: URLSearchParams; params: Record<string, string>; body?: Buffer; ip: string };
 export type Handler = (req: Req, res: ServerResponse) => Promise<unknown> | unknown;
 
-type Route = { method: string; pattern: RegExp; keys: string[]; handler: Handler };
+type Route = { method: string; path: string; pattern: RegExp; keys: string[]; handler: Handler };
 
 export class Router {
   private routes: Route[] = [];
@@ -19,7 +19,7 @@ export class Router {
         return "/([^/]+)";
       })
       .replace(/\\\*$|\*$/, "(.*)");
-    this.routes.push({ method, pattern: new RegExp(`^${src}$`), keys, handler });
+    this.routes.push({ method, path, pattern: new RegExp(`^${src}$`), keys, handler });
     return this;
   }
   get(p: string, h: Handler) {

@@ -1,5 +1,10 @@
 // MVK token-agent — macOS.
 //
+// 2-es protokoll: a rendszer-hubból parancsot is fogad (az /agent/status
+// válaszában): az MVK app újraindítása, a token azonnali küldése, vagy az agent
+// újraindítása. A szerver kérésére fél percenként jelentkezik, így a parancs
+// gyorsan célba ér; az eredményt /agent/ack-kal jelenti.
+//
 // A Mac-en futó (App Store-os) MVK MobilON+ app saját tokenjét olvassa ki a
 // plistjéből, és HMAC-aláírt kéréssel felküldi a VPS-re. Ha a szerveren lévő
 // token hamarosan lejár, vagy az MVK elutasította, újraindítja az appot
@@ -164,20 +169,69 @@ func restartApp(_ cfg: Config) {
 
 // MARK: - egy kör
 
+/// Az agent protokoll-verziója: 2-től fogad parancsot a rendszer-hubból (/agent/status → command).
+let agentVersion = 2
 var lastRestart = Date.distantPast
+/// A szerver kérése, hogy mikor jelentkezzünk újra (a hubból kért parancs így fél percen belül célba ér).
+var serverPollSeconds: Double? = nil
+
+func iso(_ d: Date) -> String {
+    d == Date.distantPast ? "" : ISO8601DateFormatter().string(from: d)
+}
+
+/// A hubból érkező parancs végrehajtása; az eredményt /agent/ack-kal jelentjük.
+/// Visszaadja, hogy a tokent mindenképp el kell-e küldeni ebben a körben.
+func runCommand(_ cfg: Config, _ cmd: [String: Any], local: inout Token?) -> Bool {
+    guard let id = (cmd["id"] as? NSNumber)?.intValue, let kind = cmd["kind"] as? String else { return false }
+    log("parancs a hubból: #\(id) \(kind)")
+    switch kind {
+    case "restart-app":
+        lastRestart = Date()
+        restartApp(cfg)
+        local = readToken(cfg)
+        let left = local.map { Int(($0.exp - Date().timeIntervalSince1970) / 60) }
+        _ = post(cfg, "/agent/ack", ["id": id, "ok": local != nil, "note": local != nil ? "az app újraindult, a token \(left ?? 0) percig érvényes" : "az app újraindult, de nincs olvasható token"])
+        return true
+    case "send-token":
+        local = readToken(cfg)
+        _ = post(cfg, "/agent/ack", ["id": id, "ok": local != nil, "note": local != nil ? "token elküldve" : "nincs olvasható token a plistben"])
+        return true
+    case "restart-agent":
+        _ = post(cfg, "/agent/ack", ["id": id, "ok": true, "note": "az agent újraindul (launchd)"])
+        log("újraindulás a hub kérésére")
+        exit(0)
+    default:
+        _ = post(cfg, "/agent/ack", ["id": id, "ok": false, "note": "ismeretlen parancs: \(kind)"])
+        return false
+    }
+}
 
 func cycle(_ cfg: Config) {
     let now = Date().timeIntervalSince1970
-    let info: [String: Any] = ["host": Host.current().localizedName ?? "mac", "appRunning": appRunning(cfg), "plistReadable": plistReadable(cfg)]
+    var local = readToken(cfg)
+    var info: [String: Any] = [
+        "host": Host.current().localizedName ?? "mac",
+        "appRunning": appRunning(cfg),
+        "plistReadable": plistReadable(cfg),
+        "version": agentVersion,
+        "macos": ProcessInfo.processInfo.operatingSystemVersionString,
+        "lastRestartAt": iso(lastRestart),
+    ]
+    if let t = local { info["localTokenLeftSec"] = Int(t.exp - now) }
     let (code, status) = post(cfg, "/agent/status", ["agentId": cfg.agentId, "info": info])
     if code != 200 {
         log("a szerver nem elérhető vagy elutasított (/agent/status → HTTP \(code)) — ellenőrizd a serverUrl-t és az agentSecret-et")
     }
+    serverPollSeconds = (status["nextCheckSec"] as? NSNumber)?.doubleValue
     let serverLeft = (status["expiresInSec"] as? NSNumber)?.doubleValue ?? -1
     let rejected = (status["rejected"] as? Bool) ?? false
     let threshold = cfg.refreshBelowHours * 3600
 
-    var local = readToken(cfg)
+    var forceSend = false
+    if let cmd = status["command"] as? [String: Any] {
+        forceSend = runCommand(cfg, cmd, local: &local)
+    }
+
     if local == nil && !plistReadable(cfg) {
         log("a plist nem olvasható — adj Teljes lemezhozzáférést ennek a binárisnak: \(CommandLine.arguments[0])")
     }
@@ -185,7 +239,7 @@ func cycle(_ cfg: Config) {
 
     // Kell-e új token az apptól: a helyi is lejár hamarosan, vagy az MVK elutasította.
     let needAppRefresh = local == nil || localLeft < threshold || (rejected && local != nil && serverLeft > 0 && abs(localLeft - serverLeft) < 120)
-    if needAppRefresh && Date().timeIntervalSince(lastRestart) > cfg.restartCooldownMinutes * 60 {
+    if !forceSend && needAppRefresh && Date().timeIntervalSince(lastRestart) > cfg.restartCooldownMinutes * 60 {
         lastRestart = Date()
         restartApp(cfg)
         local = readToken(cfg)
@@ -201,9 +255,9 @@ func cycle(_ cfg: Config) {
         log("nincs token a plistben — nyisd meg egyszer kézzel az MVK appot")
         return
     }
-    let left = tok.exp - now
-    // Csak akkor küldjük, ha a szerveren nincs token, vagy a miénk később jár le.
-    if code == 200 && serverLeft > 0 && left <= serverLeft + 60 && !rejected {
+    let left = tok.exp - Date().timeIntervalSince1970
+    // Csak akkor küldjük, ha a szerveren nincs token, vagy a miénk később jár le (kivéve: a hub kérte).
+    if !forceSend && code == 200 && serverLeft > 0 && left <= serverLeft + 60 && !rejected {
         return
     }
     var payload: [String: Any] = ["jwt": tok.jwt, "agentId": cfg.agentId, "info": info]
@@ -214,6 +268,13 @@ func cycle(_ cfg: Config) {
     } else {
         log("a token küldése sikertelen: HTTP \(c2) \(r2["error"] ?? "")")
     }
+}
+
+/// A következő kör ideje: a beállítás a felső határ, a szerver kérhet sűrűbbet (legalább 10 mp).
+func nextSleepSeconds(_ cfg: Config) -> Double {
+    let configured = cfg.checkEveryMinutes * 60
+    guard let hint = serverPollSeconds, hint > 0 else { return configured }
+    return max(10, min(configured, hint))
 }
 
 // MARK: - belépési pont
@@ -233,6 +294,6 @@ default:
     log("MVK token-agent fut — szerver: \(cfg.serverUrl), ellenőrzés \(Int(cfg.checkEveryMinutes)) percenként")
     while true {
         cycle(cfg)
-        Thread.sleep(forTimeInterval: cfg.checkEveryMinutes * 60)
+        Thread.sleep(forTimeInterval: nextSleepSeconds(cfg))
     }
 }

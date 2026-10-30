@@ -41,10 +41,11 @@ describe("útvonal-változatok a menetrendben", () => {
       ],
       nameOf,
     );
-    const byCode = Object.fromEntries(r.variants.map((v) => [v.code, v.label]));
-    expect(Object.values(byCode)).toContain("Tanulmányi épületek nélkül (+0)".replace(" (+0)", "").replace("Tanulmányi épületek", "Tanulmányi épületek"));
-    expect(r.variants.find((v) => v.trips === 1 && v.label.startsWith("csak"))?.label).toBe("csak Egyetemvárosig");
-    expect(r.variants.find((v) => v.label.startsWith("tovább"))?.label).toBe("tovább Búza térig");
+    const byTrip = (id: string) => r.variants.find((v) => v.code === r.codeOf.get(id));
+    // a célfelirat „(Egyetem)” része emeli ki a kulcshelyet
+    expect(byTrip("x1")?.label).toBe("Egyetemváros nélkül (−2 megálló)");
+    expect(byTrip("x2")?.label).toBe("csak Egyetemvárosig");
+    expect(byTrip("x3")).toEqual({ code: "B", label: "tovább Búza térig", trips: 1 });
     // minden betűjel egyedi
     expect(new Set(r.variants.map((v) => v.code)).size).toBe(r.variants.length);
   });

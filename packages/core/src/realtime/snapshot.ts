@@ -13,6 +13,13 @@ import type { DecodedVehicle, LiveVeh, RealtimeSnapshot, StopPrediction } from "
 
 const { transit_realtime } = GtfsRealtimeBindings;
 
+/** A nyers protobuf olvasható objektumként (a rendszer-hub API-vizsgálójához). */
+export function decodeRtFeedJson(buf: Uint8Array): { header: unknown; entity: unknown[] } {
+  const msg = transit_realtime.FeedMessage.decode(buf);
+  const obj = transit_realtime.FeedMessage.toObject(msg, { longs: Number, enums: String, defaults: false }) as { header?: unknown; entity?: unknown[] };
+  return { header: obj.header ?? null, entity: obj.entity ?? [] };
+}
+
 export type DecodeInput = {
   positions: Uint8Array | null;
   updates: Uint8Array | null;

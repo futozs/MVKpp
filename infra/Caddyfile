@@ -4,6 +4,14 @@
 {$DOMAIN} {
 	encode zstd gzip
 
+	# A rendszer-hub belső végpontjai kívülről nem látszanak (admin-kulcs nélkül
+	# amúgy is elutasítanák, de így a létezésük sem derül ki). A handle blokkok
+	# a leírt sorrendben értékelődnek, ezért ez áll elöl.
+	@hubonly path /v3/admin/* /system/metrics /system/live /system/logs /system/logs/* /system/mvk-call /system/jobs/*
+	handle @hubonly {
+		respond 404
+	}
+
 	@worker path /ws /live/* /gtfs/* /weather /engine/* /_health /_jwt /_export /_ingest /_renew /system/* /agent/* /api/* /MVK_mobilapp/*
 	handle @worker {
 		reverse_proxy worker:8090 {

@@ -1,0 +1,60 @@
+/* Ugyanazok a tokenek, mint a főappban (a web alól) — a hub vizuálisan az MVK++ része. */
+@import "../../web/src/styles/tokens.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Kategóriás chart-színek (sötét felületre lépcsőzve, a dataviz-validátorral ellenőrizve). */
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-sans);
+    font-feature-settings: "ss01" 1;
+  }
+
+  .tnum,
+  .font-mono {
+    font-variant-numeric: tabular-nums;
+  }
+
+  ::selection {
+    @apply bg-primary/30 text-foreground;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--accent));
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 999px;
+}
+
+/* A háttér finom szemcséje: a vezérlőterem-hangulat, ami mögött a kártyák lebegnek. */
+.hub-backdrop {
+  background-image:
+    radial-gradient(1200px 520px at 12% -8%, hsl(var(--sg-900) / 0.35), transparent 60%),
+    radial-gradient(900px 480px at 100% 0%, hsl(var(--sg-950) / 0.5), transparent 55%);
+}

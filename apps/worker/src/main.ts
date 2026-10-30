@@ -21,11 +21,13 @@ import { config } from "./config.ts";
 import { Engine } from "./engine.ts";
 import { FeedManager } from "./feeds.ts";
 import { Hub } from "./hub.ts";
+import { registerAdmin } from "./http/admin.ts";
 import { registerCompat } from "./http/compat.ts";
 import { HttpError, readBody, Router, sendJson, type Req } from "./http/router.ts";
 import { registerV3 } from "./http/v3.ts";
 import { detectIncidentsForDay } from "./incidents.ts";
-import { errMsg, log } from "./log.ts";
+import { captureConsole, errMsg, log } from "./log.ts";
+import { httpMetrics } from "./metrics.ts";
 import { DelayForecaster } from "./forecast.ts";
 import { trainDelayModelInThread } from "./ml/thread.ts";
 import { TrafficMonitor } from "./traffic.ts";
@@ -36,6 +38,7 @@ import { PushEngine } from "./push.ts";
 import { loadToken, startRenewLoop, tokenStatus } from "./token.ts";
 
 async function main() {
+  captureConsole();
   for (let i = 0; !(await dbReady()); i++) {
     if (i > 30) throw new Error("az adatbázis nem érhető el");
     log.warn("db", "várakozás az adatbázisra…");
@@ -74,6 +77,7 @@ async function main() {
   const ctx = { engine, feeds, predictor, parking, forecaster, traffic, insights, startedAt: Date.now(), hubStats: () => hub.status() };
   registerCompat(router, ctx);
   registerV3(router, ctx);
+  registerAdmin(router, { ...ctx, liveBreakdown: () => hub.liveBreakdown() });
 
   server.on("request", async (raw, res) => {
     let url: URL;
@@ -100,6 +104,16 @@ async function main() {
     const m = router.match(raw.method ?? "GET", req.path);
     if (!m) return sendJson(req, res, 404, { error: "nincs ilyen végpont" });
     req.params = m.params;
+    // Válaszidő útvonal-mintánként (a hosszú életű SSE-folyam kimarad).
+    if (!m.route.path.endsWith("/stream")) {
+      const t0 = performance.now();
+      const key = `${raw.method === "HEAD" ? "GET" : raw.method} ${m.route.path}`;
+      res.once("finish", () => httpMetrics.record(key, performance.now() - t0, res.statusCode));
+      res.once("close", () => {
+        // a kliens a válasz előtt bontott (nginx-szokás szerint 499)
+        if (!res.writableFinished) httpMetrics.record(key, performance.now() - t0, 499);
+      });
+    }
     try {
       if (raw.method === "POST" || raw.method === "PUT") req.body = await readBody(raw);
       await m.route.handler(req, res);

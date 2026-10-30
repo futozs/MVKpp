@@ -33,6 +33,7 @@ Az architektúra és a v2-hibák részletei: [docs/v3.md](docs/v3.md).
 9. [Mappaszerkezet](#9-mappaszerkezet)
 10. [Környezeti változók](#10-környezeti-változók)
 11. [Üzemeltetés](#11-üzemeltetés)
+12. [Rendszer-hub (belső hálós vezérlőpult)](#12-rendszer-hub-belső-hálós-vezérlőpult)
 
 ---
 
@@ -367,7 +368,7 @@ bun run build       # Prisma-kliens + Next production build
 |---|---|---|---|
 | `DATABASE_URL` | worker, web, import | igen | Postgres kapcsolat |
 | `APP_SECRET` | worker, web | igen | az MVK-token titkosítási kulcsa |
-| `ADMIN_KEY` | worker | igen (éles) | `X-Admin-Key` a védett végpontokhoz (`/_jwt`, `/_export`, `/_ingest`, `/system/*`) |
+| `ADMIN_KEY` | worker, web, hub | igen (éles) | `X-Admin-Key` a védett végpontokhoz (`/_jwt`, `/_export`, `/_ingest`, `/system/*`, `/v3/admin/*`); a hub ezzel éri el a workert és a webet |
 | `AGENT_SECRET` | worker | igen (éles) | a token-agent HMAC-titka |
 | `REDIS_URL` | worker, web | nem | `redis://` vagy `rediss://` — Upstash vagy helyi Redis |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | worker, web | push-hoz | Web Push kulcspár |
@@ -381,6 +382,11 @@ bun run build       # Prisma-kliens + Next production build
 | `BOOTSTRAP_GTFS` | worker | nem | helyi GTFS-zip az első induláshoz |
 | `DEV_CLOCK_AT` | worker | csak fejlesztés | fejlesztői óra (élesben soha) |
 | `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASS`, `MYSQL_DB`, `STEPS` | import | importhoz | a v2 MySQL elérése, futtatandó lépések |
+| `HUB_BIND`, `HUB_PORT` | compose (hub) | a hubhoz | a hub LAN-címe és portja (pl. `192.168.1.11`, `8099`); üresen csak `127.0.0.1` |
+| `HUB_PASSWORD` | hub | a hubhoz | belépési jelszó, min. 12 karakter |
+| `HUB_BACKUP_HOUR`, `HUB_BACKUP_KEEP` | hub | nem | napi automatikus mentés órája (`-1` = ki) és megtartott darabszám (4, 7) |
+| `HUB_GIT_TOKEN` | hub | privát repónál | GitHub fine-grained token (Contents: read) a frissítéshez |
+| `HUB_ALLOWED_CIDRS` | hub | nem | engedett kliens-tartományok; üresen magánhálózatok + loopback + VPN (100.64/10) |
 
 ---
 
@@ -388,6 +394,60 @@ bun run build       # Prisma-kliens + Next production build
 
 - **Állapot:** `/_health` (token, poll), `/system/info` (GTFS, illesztés, predikció, WebSocket-kliensek, gyorsítótár), `/engine/predict/status` (előrejelzés pontossága horizontonként, súlyok, tervezett menetek).
 - **GTFS kézi frissítés:** `curl -X POST -H "X-Admin-Key: …" https://<domain>/system/reload-gtfs`.
-- **Mentés:** `docker compose -f infra/docker-compose.yml --env-file infra/.env exec db pg_dump -U mvk -Fc -d mvk -f /tmp/mvk.dump`, majd `… cp db:/tmp/mvk.dump ./mvk-$(date +%F).dump`. Visszaállítás: [7/A, 4. lépés](#7-a-régi-v2-adatok-átvitele).
+- **Mentés:** a [rendszer-hubból](#12-rendszer-hub-belső-hálós-vezérlőpult) egy gombbal (és naponta magától). Kézzel: `docker compose -f infra/docker-compose.yml --env-file infra/.env exec db pg_dump -U mvk -Fc -d mvk -f /tmp/mvk.dump`, majd `… cp db:/tmp/mvk.dump ./mvk-$(date +%F).dump`. Visszaállítás: [7/A, 4. lépés](#7-a-régi-v2-adatok-átvitele).
 - **Naplók:** `docker compose … logs -f worker` / `web` / `caddy`; Macen `~/Library/Logs/mvk-token-agent.log`.
 - **Tárhely:** GPS ~2–3 MB/nap tömörítve, megálló-események ~1 MB/nap → évente ~1,5 GB.
+
+---
+
+## 12. Rendszer-hub (belső hálós vezérlőpult)
+
+Külön Next.js app (`apps/hub`), plusz egy konténer ugyanabban a Compose-projektben. **Csak a belső hálón** érhető el (pl. `http://192.168.1.11:8099`), és innen az egész rendszer látszik és irányítható:
+
+| Oldal | Mit látsz / mit tudsz csinálni |
+|---|---|
+| **Áttekintés** | egy mondatban az állapot, riasztások (token, agent, MVK-feed, konténer, lemez, mentés, event loop, elérhetőség), minden alrendszer fő száma |
+| **Szolgáltatások** | minden konténer CPU / memória / hálózat / lemez, újraindítás, leállítás, indítás; worker és web folyamat; Docker-gazdagép, kötetek mérete |
+| **Válaszidők** | kívülről 30 mp-enként mért elérhetőség és válaszidő (worker, web, a nyilvános domain a Caddyn át), belülről útvonalanként p50/p95/p99 és hibaarány (worker, web API, MVK API) |
+| **Naplók** | élő naplók: worker, hub és (Dockerben) minden konténer — szűrés szintre/szövegre, megállítás, letöltés |
+| **Token és agent** | visszaszámláló, előzmények, agentek állapota; **MVK app újraindítása**, token azonnali küldése, agent újraindítása, szerveroldali megújítás, kézi betöltés, a token megtekintése |
+| **MVK API** | lekérések, hibák, végpontonkénti válaszidők, napi feed-egészség, GTFS-verziók + újratöltés, **API-vizsgáló** (bármely MVK-végpont a szerver tokenjével; a GTFS-RT protobuf JSON-ként) |
+| **Feladatok** | pg-boss ütemezés és futások, ML-modell és rendszám-előrejelző állapota; minden feladat indítható most |
+| **Használat** | aktív eszközök (napi/heti/havi), új és visszatérő, platform, böngésző, telepített app arány, nézetek, ki van fent most — és **a kedvencek ranglistája** (vonal, megálló, jármű, parkoló, kijelző) |
+| **Felhasználók** | fiókok listája; részletek (kedvencek, passkey-k, munkamenetek, eszközök, utazások, push, beállítások), kiléptetés, passkey/fiók törlése, adatexport (JSON) |
+| **Push** | feliratkozások, figyelések fajtánként, kézbesítések, hibák |
+| **Adatbázis** | méret táblánként (hypertable-darabok, tömörítés), napi növekedés, kapcsolatok, futó lekérdezések megszakítása |
+| **Mentések** | mentés most, napi automatikus mentés, letöltés, feltöltés, **visszaállítás** (előtte biztonsági mentés; a régi adatbázis csak félreáll, hiba esetén automatikusan visszakerül) |
+| **Telepítés** | git-állapot, érkező commitok, **frissítés + újratelepítés egy gombbal**, korábbi telepítések naplója, műveleti napló (minden beavatkozás: ki, honnan, mikor) |
+
+### Bekapcsolás
+
+1. `infra/.env`-be (lásd `infra/.env.example`):
+
+   ```
+   HUB_BIND=192.168.1.11        # a szerver LAN-címe — SOHA ne 0.0.0.0 egy nyilvános VPS-en
+   HUB_PORT=8099
+   HUB_PASSWORD=<openssl rand -base64 24>
+   HUB_GIT_TOKEN=<csak privát repóhoz>
+   ```
+
+2. Indítás/frissítés ugyanúgy, mint eddig (a hub egy plusz konténer):
+
+   ```bash
+   mkdir -p data/backups
+   docker compose -f infra/docker-compose.yml --env-file infra/.env up -d --build
+   ```
+
+3. Böngészőben: `http://192.168.1.11:8099` → jelszó. Kívülről a WireGuard-VPN-en át is elérhető (a `10.x`, `100.64.x` tartomány engedett).
+
+4. **Token-agent frissítése a Macen** (a hubból kért parancsokhoz kell, a régi agent csak nem fogad parancsot): `cd apps/token-agent && ./install.sh <szerver-url> <AGENT_SECRET>`. Az új agent fél percenként jelentkezik, így a „MVK app újraindítása” gomb ~1,5 percen belül friss tokent hoz.
+
+### Hogyan működik
+
+- **Biztonság:** a port csak a `HUB_BIND` címen figyel; a hub minden kérésnél ellenőrzi, hogy a kliens magánhálózati címről jön-e; jelszó + aláírt, `HttpOnly`, `SameSite=Strict` süti (a jelszó cseréje minden munkamenetet érvénytelenít); módosító kérés csak a hub saját oldaláról (Origin-ellenőrzés); 8 hibás próbálkozás után 15 perc zár; minden beavatkozás a `hub_audit` táblába kerül. A hub a Docker-socketet kapja meg, ami **root-egyenértékű** — ezért nem kerülhet nyilvános hálóra. A Caddy a hub belső végpontjait (`/system/metrics|live|logs|mvk-call|jobs`, `/v3/admin/*`) kívülről 404-gyel zárja.
+- **Adatok:** az adatbázist közvetlenül olvassa; a worker és a web belső állapotát admin-kulcsos végpontokon (`/system/metrics`, `/system/live`, `/system/logs[/stream]`, `/system/mvk-call`, `/system/jobs/*`, `/v3/admin/metrics`) — a kulcs a hub szerverén marad, a böngésző nem kapja meg. A konténereket a Docker Engine API-n éri el.
+- **Használat és kedvencek:** a webapp névtelen jelet küld (`POST /v3/usage`): véletlen eszközazonosító, platform, telepített-e, megnyitott nézetek, a kedvencek pillanatképe. IP-címet nem tárol; bejelentkezve az eszköz a fiókhoz kötődik. (Ezt érdemes egy mondatban az adatkezelési tájékoztatóban is jelezni.)
+- **Telepítés:** egy leválasztott segédkonténer futtatja (`git pull --ff-only` → `compose build` → worker és web csere → egészség-ellenőrzés → a hub cseréje), a repóval a gépen érvényes útvonalán felcsatolva — így a hub önmagát is lecserélheti, és a git-műveletek a repó tulajdonosának nevében futnak.
+- **Mentés:** `pg_dump -Fc` az adatbázis saját konténerében (a verzió mindig egyezik), a gépen `data/backups/`. A visszaállítás `timescaledb_pre_restore()` / `post_restore()` között fut; a régi adatbázis átnevezve vár, hiba esetén visszakapja a nevét.
+
+**Fejlesztés:** `apps/hub/.env.local` (lásd a `.claude/launch.json` „hub” bejegyzését), `bun run --cwd apps/hub dev` → `http://localhost:3010`. Docker nélkül a konténer-, mentés- és telepítés-funkciók jelzik, hogy nem érhetők el; minden más működik.

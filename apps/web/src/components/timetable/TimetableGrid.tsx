@@ -40,6 +40,8 @@ interface TimetableGridProps {
   nowSec: number;
   day: DayRelation;
   directionHeadsign: string;
+  /** betűjel → magyarázat (a menetrend alján is ott van) */
+  variantLabels?: Map<string, string>;
 }
 
 export function TimetableGrid({
@@ -52,6 +54,7 @@ export function TimetableGrid({
   nowSec,
   day,
   directionHeadsign,
+  variantLabels,
 }: TimetableGridProps) {
   const rows = useMemo(() => groupByHour(trips), [trips]);
 
@@ -159,6 +162,7 @@ export function TimetableGrid({
                       nowSec,
                       day,
                       directionHeadsign,
+                      variantLabel: trip.variant ? variantLabels?.get(trip.variant) ?? null : null,
                     })}
                     className={cn(
                       "relative flex h-9 min-w-[46px] items-center justify-center rounded-lg border px-2.5",
@@ -187,8 +191,18 @@ export function TimetableGrid({
                       <span className="sr-only"> — törölve</span>
                     ) : null}
 
-                    {}
-                    {trip.deviates && !isLive && !isCancelled ? (
+                    {/* útvonal-változat: betűjel (magyarázat a menetrend alján és a tooltipben) */}
+                    {trip.variant && !isCancelled ? (
+                      <span
+                        className={cn(
+                          "absolute -right-1.5 -top-1.5 min-w-[16px] rounded-[5px] px-1 text-center font-sans text-[10px] font-bold leading-4",
+                          isLive && !isWaiting ? "bg-primary-foreground text-primary" : "bg-early text-background",
+                        )}
+                      >
+                        {trip.variant}
+                      </span>
+                    ) : null}
+                    {trip.deviates && !trip.variant && !isLive && !isCancelled ? (
                       <span
                         aria-hidden
                         className="absolute bottom-1 right-1 h-1 w-1 rounded-full bg-muted-foreground"
@@ -196,7 +210,7 @@ export function TimetableGrid({
                     ) : null}
 
                     {}
-                    {trip.headsignDiffers && !isCancelled ? (
+                    {trip.headsignDiffers && !trip.variant && !isCancelled ? (
                       <span
                         aria-hidden
                         className={cn(
@@ -224,6 +238,7 @@ function buildTitle({
   nowSec,
   day,
   directionHeadsign,
+  variantLabel,
 }: {
   trip: TimetableTrip;
   isCancelled: boolean;
@@ -232,6 +247,7 @@ function buildTitle({
   nowSec: number;
   day: DayRelation;
   directionHeadsign: string;
+  variantLabel?: string | null;
 }): string {
   if (isCancelled) {
     return `${trip.destinationName} — TÖRÖLVE, ez a menet nem indul el`;
@@ -252,7 +268,8 @@ function buildTitle({
       : null);
   return [
     `${trip.destinationName} — érkezés ${trip.arrival}`,
-    trip.headsignDiffers
+    variantLabel && trip.variant ? `${trip.variant}: ${variantLabel}` : "",
+    !variantLabel && trip.headsignDiffers
       ? `eltér a szokásos iránytól (${directionHeadsign} helyett ${trip.headsign} felé)`
       : "",
     tripRunLabel(state, vehicleId),

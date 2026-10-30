@@ -21,11 +21,11 @@ export function untilName(name: string): string {
 
 const firstWord = (s: string) => s.trim().split(/[\s/.-]+/)[0]?.toLowerCase() ?? "";
 
-/** A célfelirat azon részei („Centrum - Avas vk. - Avas kilátó”), amelyek a másikban nincsenek. */
+/** A célfelirat azon részei („Centrum - Avas vk. - Avas kilátó”, „… (Egyetem)”), amelyek a másikban nincsenek. */
 function extraSegments(headsign: string, other: string): string[] {
-  const seg = (h: string) => h.split(/\s+-\s+/).map((x) => x.trim()).filter(Boolean);
-  const theirs = new Set(seg(other).map(firstWord));
-  return seg(headsign).filter((x) => !theirs.has(firstWord(x)));
+  const seg = (h: string) => h.split(/\s+-\s+|\s*[()]\s*/).map((x) => x.trim()).filter(Boolean);
+  const theirs = new Set(seg(other).map((x) => x.toLowerCase()));
+  return seg(headsign).filter((x) => !theirs.has(x.toLowerCase()));
 }
 
 /** A megállók közül az, amelyiket a célfelirat is kiemel (pl. „Avas vk.” → Avas városközpont); ennek híján az első. */
@@ -33,7 +33,11 @@ function keyName(names: string[], hints: string[]): string | null {
   if (!names.length) return null;
   for (const h of hints) {
     const w = firstWord(h);
-    const hit = names.find((n) => firstWord(n) === w);
+    if (w.length < 3) continue;
+    const hit = names.find((n) => {
+      const f = firstWord(n);
+      return f === w || (Math.min(f.length, w.length) >= 4 && (f.startsWith(w) || w.startsWith(f)));
+    });
     if (hit) return hit;
   }
   return names[0];
@@ -64,21 +68,21 @@ export function tripVariants(trips: readonly VariantTrip[], nameOf: StopName): V
     const fc = common[0] ?? -1;
     const lc = common[common.length - 1] ?? -1;
     const parts: string[] = [];
-    let key: string | null = null;
+    const keys: string[] = [];
 
     // eltérő kezdet: más megállóból indul (pl. a kocsiszín felől)
     const startsElsewhere = fc !== 0 && g.stops[0] !== main.stops[0];
     const startsLater = fc === 0 && main.stops.indexOf(g.stops[0]) > 0;
     if (startsElsewhere || startsLater) {
       parts.push(`${nameOf(g.stops[0])} felől indul`);
-      key ??= nameOf(g.stops[0]);
+      keys.push(nameOf(g.stops[0]));
     }
     // kitérő: a közös szakaszon belül érintett plusz megállók
     const detour = fc >= 0 ? uniq(g.stops.slice(fc, lc + 1).filter((s) => !mainSet.has(s)).map(nameOf)) : [];
     if (detour.length) {
       const k = keyName(detour, extraSegments(head, mainHead));
       parts.unshift(`${k} érintésével${detour.length > 1 ? ` (+${detour.length} megálló)` : ""}`);
-      key = k;
+      if (k) keys.unshift(k);
     }
     // kihagyott megállók a közös szakaszon
     const i0 = fc >= 0 ? main.stops.indexOf(g.stops[fc]) : -1;
@@ -86,8 +90,8 @@ export function tripVariants(trips: readonly VariantTrip[], nameOf: StopName): V
     const skipped = i0 >= 0 && i1 >= i0 ? uniq(main.stops.slice(i0, i1 + 1).filter((s) => !set.has(s)).map(nameOf)) : [];
     if (skipped.length) {
       const k = keyName(skipped, extraSegments(mainHead, head));
-      parts.push(`${k} nélkül`);
-      key ??= k;
+      parts.push(`${k} nélkül${skipped.length > 1 ? ` (−${skipped.length} megálló)` : ""}`);
+      if (k) keys.push(k);
     }
     // eltérő vég: hamarabb véget ér, továbbmegy, vagy máshová megy
     const last = g.stops[g.stops.length - 1];
@@ -95,10 +99,10 @@ export function tripVariants(trips: readonly VariantTrip[], nameOf: StopName): V
     if (last !== mainLast) {
       const to = untilName(nameOf(last));
       parts.push(mainSet.has(last) ? `csak ${to}` : set.has(mainLast) ? `tovább ${to}` : `${to} megy`);
-      key ??= nameOf(last);
+      keys.push(nameOf(last));
     }
     if (!parts.length) continue;
-    const code = pickCode(key ?? "", used);
+    const code = pickCode(keys, used);
     used.add(code);
     variants.push({ code, label: parts.join(" · "), trips: g.trips.length });
     for (const t of g.trips) codeOf.set(t.tripId, code);
@@ -112,12 +116,17 @@ function mostCommon(xs: string[]): string {
   return [...n.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "";
 }
 
-/** Emlékeztető betű: a kulcshely kezdőbetűje (ha foglalt, a következő szóé, végül az ábécé szerint). */
-function pickCode(key: string, used: Set<string>): string {
-  const words = key.split(/[\s/.-]+/).filter(Boolean);
-  for (const w of words) {
-    const c = w[0]?.toUpperCase();
+/** Emlékeztető betű: a kulcshelyek kezdőbetűje sorban (ha foglalt, a következő helyé / szóé, végül az ábécé szerint). */
+function pickCode(keys: string[], used: Set<string>): string {
+  for (const key of keys) {
+    const c = key.trim()[0]?.toUpperCase();
     if (c && /\p{L}/u.test(c) && !used.has(c)) return c;
+  }
+  for (const key of keys) {
+    for (const w of key.split(/[\s/.-]+/).filter(Boolean)) {
+      const c = w[0]?.toUpperCase();
+      if (c && /\p{L}/u.test(c) && !used.has(c)) return c;
+    }
   }
   for (const c of "ABCDEFGHIJKLMNOPRSTUVZ") if (!used.has(c)) return c;
   return String(used.size + 1);

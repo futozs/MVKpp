@@ -13,6 +13,8 @@ import pg from "pg";
 import { fileURLToPath } from "node:url";
 
 const SQL_DIR = join(import.meta.dirname, "..", "sql");
+/** pg_advisory_lock kulcs („mvk-migrate”) */
+const MIGRATION_LOCK = 0x6d766b6d;
 
 export function splitSql(sql: string): string[] {
   const out: string[] = [];
@@ -51,6 +53,8 @@ export async function migrate(url = process.env.DATABASE_URL): Promise<string[]>
   await client.connect();
   const applied: string[] = [];
   try {
+    // A worker és a rendszer-hub is futtatja induláskor: egyszerre csak egyikük.
+    await client.query(`SELECT pg_advisory_lock($1)`, [MIGRATION_LOCK]);
     await client.query(`CREATE TABLE IF NOT EXISTS _migration (name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`);
     const done = new Set((await client.query<{ name: string }>(`SELECT name FROM _migration`)).rows.map((r) => r.name));
     const files = readdirSync(SQL_DIR).filter((f) => /^\d+_.+\.sql$/.test(f)).sort();
@@ -68,6 +72,7 @@ export async function migrate(url = process.env.DATABASE_URL): Promise<string[]>
       applied.push(f);
     }
   } finally {
+    // a kapcsolat bontása a zárat is elengedi
     await client.end();
   }
   return applied;

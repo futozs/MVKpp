@@ -324,4 +324,23 @@ export class Hub {
   status() {
     return { clients: this.clients.size, ...this.stats };
   }
+
+  /** Kik vannak most fent: témánként, és hány bejelentkezett felhasználó / eszköz (a rendszer-hubnak). */
+  liveBreakdown() {
+    const topics: Record<string, number> = {};
+    const stops = new Map<string, number>();
+    const users = new Set<string>();
+    const devices = new Set<string>();
+    for (const c of this.clients) {
+      if (c.userId) users.add(c.userId);
+      if (c.deviceId) devices.add(c.deviceId);
+      for (const t of c.topics) {
+        const kind = t.split(":")[0];
+        topics[kind] = (topics[kind] ?? 0) + 1;
+        if (kind === "stop") stops.set(t.slice(5), (stops.get(t.slice(5)) ?? 0) + 1);
+      }
+    }
+    const topStops = [...stops].sort((a, b) => b[1] - a[1]).slice(0, 15).map(([stopId, n]) => ({ stopId, name: this.engine.feeds.latest()?.stops.get(stopId)?.name ?? stopId, watchers: n }));
+    return { clients: this.clients.size, signedIn: users.size, devices: devices.size, topics, topStops };
+  }
 }

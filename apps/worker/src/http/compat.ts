@@ -6,7 +6,7 @@
 import { cacheStatus, cached } from "@mvk/cache";
 import { arrivalsForStop, isPlausibleIso, nowUnix, progressOnTrip, secToHm, serviceClock, tripStopRows, type ServiceDay } from "@mvk/core";
 import { sql } from "@mvk/db";
-import { verifyAgentRequest } from "@mvk/db/crypto";
+import { safeEqual, verifyAgentRequest } from "@mvk/db/crypto";
 import { config } from "../config.ts";
 import type { Engine } from "../engine.ts";
 import type { FeedManager } from "../feeds.ts";
@@ -18,6 +18,7 @@ import type { Parking } from "../parking.ts";
 import type { VehiclePredictor } from "../predict.ts";
 import { archiveRange, routeIndexFor, tableFor } from "../schedule.ts";
 import { currentJwt, ingestToken, lastRenewInfo, renewToken, tokenRejectedRecently, tokenStatus } from "../token.ts";
+import { errMsg, log } from "../log.ts";
 import { HttpError, sendJson, type Req, type Router } from "./router.ts";
 import type { ServerResponse } from "node:http";
 
@@ -39,9 +40,9 @@ const isoOfYmd = (ymd: string) => `${ymd.slice(0, 4)}-${ymd.slice(4, 6)}-${ymd.s
 export function isAdmin(req: Req): boolean {
   if (!config.adminKey) return false;
   const h = String(req.headers["x-admin-key"] ?? "") || String(req.headers.authorization ?? "").replace(/^Bearer\s+/i, "");
-  return h.length > 0 && h === config.adminKey;
+  return h.length > 0 && safeEqual(h, config.adminKey);
 }
-function requireAdmin(req: Req) {
+export function requireAdmin(req: Req) {
   if (!isAdmin(req)) throw new HttpError(401, "admin kulcs szükséges (X-Admin-Key)");
 }
 
@@ -424,10 +425,29 @@ export function registerCompat(r: Router, ctx: Ctx) {
     const body = req.body?.toString("utf8") ?? "";
     if (!verifyAgentRequest(config.agentSecret, header(req, "x-agent-ts"), header(req, "x-agent-signature"), body)) throw new HttpError(401, "érvénytelen aláírás");
     const j = body ? (JSON.parse(body) as { agentId?: string; info?: unknown }) : {};
-    await heartbeat(String(j.agentId ?? "agent"), j.info);
+    const agentId = String(j.agentId ?? "agent");
+    await heartbeat(agentId, j.info);
     const st = tokenStatus();
+    // A rendszer-hubból kért parancs (app-újraindítás, token küldése) — az új agent végrehajtja, a régi figyelmen kívül hagyja.
+    const command = await pickAgentCommand(agentId);
     // Az agent ebből dönti el, kell-e újraindítania az MVK appot.
-    sendJson(req, res, 200, { present: st.present, expiresInSec: st.expiresInSec ?? null, rejected: tokenRejectedRecently(), wantFresh: !st.present || (st.expiresInSec ?? 0) < 3.5 * 3600 || tokenRejectedRecently() });
+    sendJson(req, res, 200, {
+      present: st.present,
+      expiresInSec: st.expiresInSec ?? null,
+      rejected: tokenRejectedRecently(),
+      wantFresh: !st.present || (st.expiresInSec ?? 0) < 3.5 * 3600 || tokenRejectedRecently(),
+      command,
+      nextCheckSec: AGENT_POLL_SEC,
+    });
+  });
+  r.post("/agent/ack", async (req, res) => {
+    const body = req.body?.toString("utf8") ?? "";
+    if (!verifyAgentRequest(config.agentSecret, header(req, "x-agent-ts"), header(req, "x-agent-signature"), body)) throw new HttpError(401, "érvénytelen aláírás");
+    const j = JSON.parse(body) as { id?: number; ok?: boolean; note?: string };
+    if (!Number.isInteger(j.id)) throw new HttpError(400, "hiányzó parancs-azonosító");
+    await sql(`UPDATE agent_command SET done_at = now(), ok = $2, note = $3 WHERE id = $1 AND done_at IS NULL`, [j.id, Boolean(j.ok), String(j.note ?? "").slice(0, 500)]);
+    log.info("agent", `parancs #${j.id} ${j.ok ? "kész" : "sikertelen"}${j.note ? `: ${String(j.note).slice(0, 120)}` : ""}`);
+    sendJson(req, res, 200, { ok: true });
   });
 
   // ── MVK proxy (szűkítve) ──────────────────────────────────────────────
@@ -443,6 +463,27 @@ export function registerCompat(r: Router, ctx: Ctx) {
 function header(req: Req, name: string): string | undefined {
   const v = req.headers[name];
   return Array.isArray(v) ? v[0] : v;
+}
+
+/** az agent ennyi másodperc múlva jelentkezzen újra (a hubból kért parancs így fél percen belül célba ér) */
+const AGENT_POLL_SEC = 30;
+/** ennél régebbi, fel nem vett parancsot már nem adunk ki (a hub „lejárt”-nak mutatja) */
+const AGENT_COMMAND_TTL = "30 minutes";
+
+async function pickAgentCommand(agentId: string): Promise<{ id: number; kind: string } | null> {
+  const rows = await sql<{ id: number; kind: string }>(
+    `UPDATE agent_command SET picked_at = now(), picked_by = $1
+      WHERE id = (SELECT id FROM agent_command
+                   WHERE picked_at IS NULL AND (agent_id IS NULL OR agent_id = $1) AND created_at > now() - interval '${AGENT_COMMAND_TTL}'
+                   ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED)
+      RETURNING id, kind`,
+    [agentId.slice(0, 64)],
+  ).catch((e) => {
+    log.warn("agent", "a parancssor nem olvasható", errMsg(e));
+    return [];
+  });
+  if (rows[0]) log.info("agent", `parancs #${rows[0].id} (${rows[0].kind}) → ${agentId}`);
+  return rows[0] ?? null;
 }
 
 async function heartbeat(agentId: string, info: unknown) {

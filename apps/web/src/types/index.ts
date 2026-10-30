@@ -304,7 +304,16 @@ export interface TimetableTrip {
   stopCount: number;
   deviates: boolean;
   headsignDiffers: boolean;
+  /** útvonal-változat betűjele (az alaptól eltérő menetnél) — magyarázata a `variants`-ban */
+  variant?: string;
   times: (string | null)[];
+}
+
+/** „A = Avas városközpont érintésével” — miben más a betűjeles menet */
+export interface TimetableVariant {
+  code: string;
+  label: string;
+  trips: number;
 }
 
 export interface TimetableResponse {
@@ -315,6 +324,7 @@ export interface TimetableResponse {
   stops: TimetableStop[];
   trips: TimetableTrip[];
   note?: string;
+  variants?: TimetableVariant[];
 }
 
 export interface CancelledTrip {

@@ -19,6 +19,7 @@ import type {
   TimetableResponse,
   TimetableRoute,
   TimetableTrip,
+  TimetableVariant,
   TripJournalEntry,
 } from "@/types";
 import { api } from "@/services/api";
@@ -227,6 +228,7 @@ export function TimetableView({
   const selectedRoute = routes.find((r) => r.id === selectedRouteId) ?? null;
   const [legendOpen, setLegendOpen] = useState(false);
   const hasLegend = Boolean(table?.trips.some((t) => t.deviates || t.headsignDiffers));
+  const variantLabels = useMemo(() => new Map((table?.variants ?? []).map((v) => [v.code, v.label])), [table]);
 
   // A kijelölt menet túléli az újratöltést (másik nap, a tartományhoz igazított dátum):
   // ha az új táblában is megvan, kijelölve marad. A szándékot a kijelöléskor jegyezzük
@@ -722,14 +724,17 @@ export function TimetableView({
             {/* A jelmagyarázat csak kérésre: telefonon két sort venne el a táblától. */}
             {hasLegend && legendOpen && table ? (
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border/60 px-3 py-1.5 text-[11px] text-muted-foreground sm:px-4">
-                {table.trips.some((t) => t.headsignDiffers) ? (
+                {table.variants?.length ? (
+                  <VariantLegend variants={table.variants} />
+                ) : null}
+                {!table.variants?.length && table.trips.some((t) => t.headsignDiffers) ? (
                   <span className="flex items-center gap-1.5">
                     <span className="h-1.5 w-1.5 rounded-full bg-early" />
                     más célállomás, mint a viszonylat szokásos iránya (
                     {table.headsign})
                   </span>
                 ) : null}
-                {table.trips.some((t) => t.deviates) ? (
+                {!table.variants?.length && table.trips.some((t) => t.deviates) ? (
                   <span className="flex items-center gap-1.5">
                     <span className="h-1 w-1 rounded-full bg-muted-foreground" />
                     a szokásos útvonalon kívüli megállót is érint (betérő)
@@ -769,8 +774,14 @@ export function TimetableView({
                   nowSec={nowSec}
                   day={day}
                   directionHeadsign={table.headsign}
+                  variantLabels={variantLabels}
                 />
               )}
+              {!tableLoading && !tableError && table?.variants?.length ? (
+                <div className="border-t border-border/60 px-3 py-2.5 sm:px-4">
+                  <VariantLegend variants={table.variants} />
+                </div>
+              ) : null}
             </div>
 
             {}
@@ -779,6 +790,7 @@ export function TimetableView({
                 // Másik menet = friss állapot (értesítő-cél, előrehaladás, tény-idők).
                 key={selectedTrip.tripId}
                 trip={selectedTrip}
+                variantLabel={selectedTrip.variant ? (variantLabels.get(selectedTrip.variant) ?? null) : null}
                 stops={table.stops}
                 routeShort={selectedRoute.short}
                 vehicle={selectedVehicle}
@@ -800,6 +812,7 @@ export function TimetableView({
 
 function TripDetail({
   trip,
+  variantLabel,
   stops,
   routeShort,
   vehicle,
@@ -812,6 +825,8 @@ function TripDetail({
   dateYmd,
 }: {
   trip: TimetableTrip;
+  /** miben más ez a menet (útvonal-változat), ha más */
+  variantLabel?: string | null;
   stops: TimetableResponse["stops"];
   routeShort: string;
   vehicle: LiveVehicle | null;
@@ -892,9 +907,15 @@ function TripDetail({
             </span>
             <span className="block font-mono text-[11px] tabular-nums text-muted-foreground">
               érkezés {trip.arrival} · {trip.stopCount} megálló
-              {trip.deviates ? " · betérő" : ""}
-              {trip.headsignDiffers ? " · eltérő célállomás" : ""}
+              {!variantLabel && trip.deviates ? " · betérő" : ""}
+              {!variantLabel && trip.headsignDiffers ? " · eltérő célállomás" : ""}
             </span>
+            {variantLabel && trip.variant ? (
+              <span className="mt-0.5 flex items-center gap-1.5 text-[11.5px] font-semibold text-early">
+                <span className="rounded-[5px] bg-early px-1 text-[10px] font-bold leading-4 text-background">{trip.variant}</span>
+                {variantLabel}
+              </span>
+            ) : null}
             {}
             {!cancelled && statusLabel && (vehicle || pastVehicleId) ? (
               <span
@@ -1053,5 +1074,24 @@ function TripDetail({
         </>
       )}
     </div>
+  );
+}
+
+/** A betűjeles útvonal-változatok magyarázata: „A = Avas városközpont érintésével (+2 megálló) · 18 menet”. */
+function VariantLegend({ variants }: { variants: TimetableVariant[] }) {
+  return (
+    <ul className="space-y-1 text-[12px] leading-snug text-muted-foreground" aria-label="Betűjelek magyarázata">
+      {variants.map((v) => (
+        <li key={v.code} className="flex items-start gap-2">
+          <span className="mt-px min-w-[18px] shrink-0 rounded-[5px] bg-early px-1 text-center text-[11px] font-bold leading-[18px] text-background">
+            {v.code}
+          </span>
+          <span className="min-w-0">
+            <span className="font-semibold text-foreground">{v.label}</span>
+            <span className="ml-1.5 whitespace-nowrap font-mono text-[10.5px] tabular-nums">· {v.trips} menet</span>
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }
