@@ -21,6 +21,7 @@ import { journalRecord } from "./http/compat.ts";
 import { errMsg, log } from "./log.ts";
 import type { DelayForecaster } from "./forecast.ts";
 import type { TripInsights } from "./insights.ts";
+import type { MotionPredictor } from "./motion/live.ts";
 import type { Parking } from "./parking.ts";
 import type { VehiclePredictor } from "./predict.ts";
 
@@ -30,7 +31,7 @@ const MAX_TOPICS = 40;
 const STOP_LIMIT = 10;
 /** ha a jármű legutóbbi jele ennyivel frissebb, mint amit az illesztő felhasznált, nincs becslés (mp) */
 const MOTION_STALE_S = 45;
-/** a térképi pálya: ennyi megállón át, legfeljebb ennyi másodpercre előre */
+/** a régi (modell nélküli) térképi pálya: ennyi megállón át, legfeljebb ennyi másodpercre előre */
 const TRAJ_STOPS = 5;
 const TRAJ_HORIZON_S = 240;
 /** álló busznál (megálló, lámpa) a pálya ennyi várakozással indul — a következő jel úgyis jön */
@@ -45,13 +46,15 @@ export class Hub {
   private predictor: VehiclePredictor;
   private parking: Parking;
   private forecaster: DelayForecaster;
-  /** járművenként az utolsó jel helye/ideje és a simított tempó (a pályához) */
+  private motion: MotionPredictor;
+  /** járművenként az utolsó jel helye/ideje és a simított tempó (a régi pályához) */
   private pace = new Map<string, { trip: string; a: number; t: number; pace: number }>();
   private insights: TripInsights;
   stats = { connections: 0, messages: 0 };
 
-  constructor(server: Server, engine: Engine, predictor: VehiclePredictor, parking: Parking, forecaster: DelayForecaster, insights: TripInsights) {
+  constructor(server: Server, engine: Engine, predictor: VehiclePredictor, parking: Parking, forecaster: DelayForecaster, insights: TripInsights, motion: MotionPredictor) {
     this.engine = engine;
+    this.motion = motion;
     this.insights = insights;
     this.predictor = predictor;
     this.parking = parking;
@@ -151,7 +154,8 @@ export class Hub {
   /**
    * A jármű mozgásállapota a térképi becsléshez (rövid kulcsokkal):
    * s = nyomvonal, a = hol tart (m), t = a jel ideje, e = a következő megálló (m),
-   * v = várható sebesség (m/s). A kliens ezzel viszi tovább a buszt két jel között.
+   * v = várható sebesség (m/s), k = a várható pálya (ezt követi a térkép).
+   * A pálya a tanított mozgás-modelltől jön; amíg nincs modell, a régi becslés.
    */
   private motionOf(veh: DecodedVehicle, offset: number) {
     const m = this.engine.matcher.motion(veh.id);
@@ -163,7 +167,7 @@ export class Hub {
     const run = this.engine.todayRuns.get(m.tripId);
     const serviceDate = run?.serviceDate ?? this.engine.today;
     const segV = this.forecaster.segmentSpeed(m, serviceDate);
-    const k = this.trajectoryOf(veh.id, m, serviceDate, segV);
+    const k = this.motion.trajectory(veh.id, m, serviceDate, nowUnix()) ?? this.trajectoryOf(veh.id, m, serviceDate, segV);
     // Álló busznál (megálló, lámpa) a régi kliens a jel helyén tartja; a pálya (k) ilyenkor egy rövid várakozással indul.
     if (m.stopped) return { s: m.shapeId, a: m.alongM, t: m.ts, e: m.toAlongM, v: 0, k };
     const v = segV ?? gpsSpeed ?? 6;
@@ -171,10 +175,9 @@ export class Hub {
   }
 
   /**
-   * A busz várható pályája a következő megállókon át: [hely a nyomvonalon (m), idő a jel óta (mp)].
-   * Szakaszonként a mért szokásos menetsebesség a busz saját mostani tempójával, és megállónként az
-   * átlagos álldogálás (ahol gyakran nem áll meg, ott kevés). A térkép ezt követi sima gyorsulással —
-   * a visszamérés szerint így nem marad le rendszeresen (a régi „minden megállóban megáll” 22 m-t késett).
+   * Régi pálya (csak amíg nincs tanított mozgás-modell, pl. az első telepítés utáni ~15 percben):
+   * szakaszonként a szokásos menetsebesség a busz tempójával, megállónként az átlagos álldogálás.
+   * Visszamérve 60–70 m átlagos hibával megy (az álló buszt 12 mp után elindítja) — a modell ~25 m.
    */
   private trajectoryOf(vehicleId: string, m: VehicleMotion, serviceDate: string, segV: number | null): [number, number][] | null {
     const stops = this.engine.feeds.cachedDay(serviceDate)?.feed.tripStopsAlong(m.tripId);

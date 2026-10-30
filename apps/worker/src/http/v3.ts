@@ -8,6 +8,7 @@ import { plan, segmentEstimate } from "../planner.ts";
 import { disruptions, liveMissing } from "../disruptions.ts";
 import { cityHeat, clampHeatQuery, routeHeat } from "../heat.ts";
 import { latestReport } from "../ml/store.ts";
+import { latestMotionReport } from "../motion/store.ts";
 
 /** ennél régebbi időpont adatai már nem változnak → hosszan gyorsítótárazható */
 const SETTLED_S = 600;
@@ -247,6 +248,15 @@ export function registerV3(r: Router, ctx: Ctx) {
   r.get("/engine/ml/status", async (req, res) => {
     const last = await latestReport();
     sendJson(req, res, 200, { inUse: ctx.forecaster.modelInfo(), lastTraining: last }, { "cache-control": "no-store" });
+  });
+
+  /**
+   * A térképi mozgás-modell: a teszten mért és az élő pontszám (minden új fix leosztályozza az
+   * előzőből mutatott pályát — modell és tartalék is), melyik becsül most, és az utolsó tanítás.
+   */
+  r.get("/engine/motion/status", async (req, res) => {
+    const last = await latestMotionReport();
+    sendJson(req, res, 200, { inUse: ctx.motion.status(), lastTraining: last }, { "cache-control": "no-store" });
   });
 
   /**

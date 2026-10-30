@@ -14,7 +14,7 @@ import { createServer } from "node:http";
 import { PgBoss } from "pg-boss";
 import pg from "pg";
 import { cacheStatus, closeCache } from "@mvk/cache";
-import { serviceClock, shiftIso } from "@mvk/core";
+import { nowUnix, serviceClock, shiftIso } from "@mvk/core";
 import { closeDb, databaseUrl, dbReady } from "@mvk/db";
 import { migrate } from "@mvk/db/migrate";
 import { config } from "./config.ts";
@@ -30,6 +30,8 @@ import { captureConsole, errMsg, log } from "./log.ts";
 import { httpMetrics } from "./metrics.ts";
 import { DelayForecaster } from "./forecast.ts";
 import { trainDelayModelInThread } from "./ml/thread.ts";
+import { MotionPredictor } from "./motion/live.ts";
+import { trainMotionModelInThread } from "./motion/thread.ts";
 import { TrafficMonitor } from "./traffic.ts";
 import { TripInsights } from "./insights.ts";
 import { Parking } from "./parking.ts";
@@ -58,6 +60,9 @@ async function main() {
   await feeds.warmToday();
 
   const engine = new Engine(feeds);
+  // a motor indulása előtt: a mai nap visszajátszott fixeiből is épül (menet-előzmény, forgalom)
+  const motion = new MotionPredictor(engine);
+  await motion.load();
   const predictor = new VehiclePredictor(engine);
   await predictor.learn().catch((e) => log.warn("predict", "tanulás sikertelen", errMsg(e)));
   const forecaster = new DelayForecaster(engine);
@@ -74,8 +79,8 @@ async function main() {
 
   const router = new Router();
   const server = createServer();
-  const hub = new Hub(server, engine, predictor, parking, forecaster, insights);
-  const ctx = { engine, feeds, predictor, parking, forecaster, traffic, insights, startedAt: Date.now(), hubStats: () => hub.status() };
+  const hub = new Hub(server, engine, predictor, parking, forecaster, insights, motion);
+  const ctx = { engine, feeds, predictor, parking, forecaster, traffic, insights, motion, startedAt: Date.now(), hubStats: () => hub.status() };
   registerCompat(router, ctx);
   registerV3(router, ctx);
   registerAdmin(router, { ...ctx, liveBreakdown: () => hub.liveBreakdown() });
@@ -190,6 +195,11 @@ async function main() {
     await forecaster.load();
     // A késés-modell újratanítása a friss nappal (külön szálon); csak a bizonyítottan jobb modell él.
     if (await trainDelayModelInThread()) await forecaster.loadModel();
+    // A térképi mozgás-modell is (a tegnapi nappal), csak ha a teszten jobb a mostaninál. Nem várjuk meg:
+    // ~10 perc, és a pg-boss a 15 percnél tovább futó feladatot lejártnak venné (újraindítaná).
+    void trainMotionModelInThread().then(async (ok) => {
+      if (ok) await motion.load();
+    });
   });
   // Első indításkor (még nincs modell) nem várunk az éjszakáig.
   if (!forecaster.hasModel()) {
@@ -199,8 +209,16 @@ async function main() {
       });
     }, 3 * 60_000).unref();
   }
+  if (!motion.hasModel()) {
+    setTimeout(() => {
+      void trainMotionModelInThread().then(async (ok) => {
+        if (ok) await motion.load();
+      });
+    }, 8 * 60_000).unref();
+  }
   await boss.work("minutely", async () => {
     await predictor.recordHorizons();
+    motion.prune(nowUnix());
   });
   await boss.work("gtfs-refresh", async () => {
     log.info("gtfs", await feeds.refresh());

@@ -30,6 +30,8 @@ export type EngineEvents = {
   stopEvent: [StopEventOut, RunOut];
   atStop: [RunOut, number, number];
   cancelled: [Set<string>];
+  /** egy jármű jele az illesztő után (élesben és az indításkori visszajátszáskor is): jármű, idő (unix), GPS-sebesség */
+  fix: [string, number, number | null];
 };
 
 /** ennél hosszabb szünet a sikeres pozíció-lekérések között kiesésnek számít (ms) */
@@ -176,6 +178,7 @@ export class Engine extends EventEmitter<EngineEvents> {
       }
       this.lastTs.set(r.v, Math.max(this.lastTs.get(r.v) ?? 0, r.ts));
       this.matcher.push({ vehicleId: r.v, ts: r.ts, lat: r.lat, lon: r.lon, speed: r.speed, bearing: r.bearing, rtTripId: r.rt ?? "" });
+      this.emit("fix", r.v, r.ts, r.speed);
     }
     this.replaying = false;
     if (rows.rows.length) log.info("engine", `mai nap visszajátszva: ${rows.rows.length} pont → ${this.todayRuns.size} menet (${Date.now() - t0} ms)`);
@@ -248,6 +251,7 @@ export class Engine extends EventEmitter<EngineEvents> {
           this.lastTs.set(v.id, ts);
           kept++;
           this.matcher.push({ vehicleId: v.id, ts, lat: v.lat, lon: v.lon, speed: v.speed, bearing: v.bearing, rtTripId: v.rtTripId ?? v.tripId });
+          this.emit("fix", v.id, ts, v.speed);
         }
         this.poll.pingsKept += kept;
         this.poll.vehiclesMax = Math.max(this.poll.vehiclesMax, snap.vehicles.length);
