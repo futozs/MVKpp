@@ -23,7 +23,7 @@ import { closeDb, databaseUrl } from "@mvk/db";
 import { containerAction, dockerAvailable, listContainers } from "./docker.ts";
 import { env } from "./env.ts";
 import { HubError } from "./http.ts";
-import { run, type Task } from "./tasks.ts";
+import { childEnv, run, type Task } from "./tasks.ts";
 
 export type BackupKind = "auto" | "manual" | "pre-restore" | "upload";
 export type BackupMeta = { name: string; bytes: number; createdAt: string; kind: BackupKind; note?: string; durationMs?: number; dbBytes?: number | null; serverVersion?: string | null };
@@ -104,7 +104,7 @@ async function dbContainer(): Promise<string> {
 function execArgs(container: string, cmd: string[], interactive = false): string[] {
   return ["exec", ...(interactive ? ["-i"] : []), "-e", "PGPASSWORD", container, ...cmd];
 }
-const pgEnv = (db: Db) => ({ ...process.env, PGPASSWORD: db.password });
+const pgEnv = (db: Db) => childEnv({ PGPASSWORD: db.password });
 
 const psqlCmd = (db: Db, database: string, sqlText: string) => ["psql", "-h", "127.0.0.1", "-U", db.user, "-d", database, "-v", "ON_ERROR_STOP=1", "-At", "-c", sqlText];
 const ident = (s: string) => `"${s.replace(/"/g, '""')}"`;
@@ -153,6 +153,17 @@ export function pruneAutoBackups(keep: number): string[] {
 }
 
 // ── feltöltés ──────────────────────────────────────────────────────────
+
+/** A feltöltés ennél több szabad helyet hagyjon a lemezen (az adatbázis is itt nő). */
+const UPLOAD_HEADROOM_BYTES = 2 * 1024 ** 3;
+
+/** Elfér-e egy `bytes` méretű feltöltés úgy, hogy marad tartalék? */
+export function assertUploadFits(bytes: number): void {
+  if (!Number.isFinite(bytes) || bytes <= 0) throw new HubError(411, "a feltöltéshez Content-Length kell");
+  const s = statfsSync(dir());
+  const free = s.bavail * s.bsize;
+  if (bytes > free - UPLOAD_HEADROOM_BYTES) throw new HubError(507, `nincs elég hely: ${(bytes / 1073741824).toFixed(1)} GB kellene, ${(free / 1073741824).toFixed(1)} GB szabad (2 GB tartalékkal)`);
+}
 
 export async function saveUpload(body: ReadableStream<Uint8Array>, rawName: string): Promise<BackupMeta> {
   const base = rawName.replace(/\.dump$/i, "").replace(/[^\w.-]/g, "_").slice(0, 60) || "feltoltott";

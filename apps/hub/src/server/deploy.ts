@@ -9,14 +9,14 @@
  * kézzel futtatva, és a hub a végén önmagát is lecserélheti: a segéd túléli.
  */
 import { execFile } from "node:child_process";
-import { statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { hostname } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { dockerAvailable, inspectContainer, streamContainerLogs, type ContainerDetail } from "./docker.ts";
 import { env } from "./env.ts";
 import { HubError } from "./http.ts";
-import { run, type Task } from "./tasks.ts";
+import { childEnv, run, type Task } from "./tasks.ts";
 
 const pExecFile = promisify(execFile);
 const DEPLOY_LABEL = "mvk.hub.deploy";
@@ -53,13 +53,14 @@ function asOwner(): { uid?: number; gid?: number } {
   return { uid: o.uid, gid: o.gid };
 }
 
-function authArgs(): string[] {
-  if (!env.gitToken) return [];
+/** A GitHub-token a git környezetében (GIT_CONFIG_*), nem a parancssorban — így a folyamatlistában sem látszik. */
+function authEnv(): Record<string, string> {
+  if (!env.gitToken) return {};
   const basic = Buffer.from(`x-access-token:${env.gitToken}`).toString("base64");
-  return ["-c", `http.extraHeader=Authorization: Basic ${basic}`];
+  return { GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "http.extraHeader", GIT_CONFIG_VALUE_0: `Authorization: Basic ${basic}` };
 }
 
-async function git(args: string[], timeoutMs = 20_000): Promise<string> {
+async function git(args: string[], timeoutMs = 20_000, withAuth = false): Promise<string> {
   const owner = asOwner();
   try {
     const { stdout } = await pExecFile("git", ["-c", "safe.directory=*", ...args], {
@@ -67,7 +68,7 @@ async function git(args: string[], timeoutMs = 20_000): Promise<string> {
       timeout: timeoutMs,
       maxBuffer: 4 * 1024 * 1024,
       // Más felhasználó nevében a root HOME-ja nem olvasható; saját néven (fejlesztés) a saját git-beállítás él.
-      env: { ...process.env, GIT_TERMINAL_PROMPT: "0", ...(owner.uid != null ? { HOME: "/tmp" } : {}) },
+      env: childEnv({ GIT_TERMINAL_PROMPT: "0", ...(owner.uid != null ? { HOME: "/tmp" } : {}), ...(withAuth ? authEnv() : {}) }),
       ...owner,
     });
     return stdout.trim();
@@ -134,7 +135,7 @@ export async function gitStatus(): Promise<GitStatus> {
 }
 
 export async function gitFetch(): Promise<string> {
-  return git([...authArgs(), "fetch", "--prune", "origin"], 60_000);
+  return git(["fetch", "--prune", "origin"], 60_000, true);
 }
 
 export async function recentCommits(n = 15): Promise<Commit[]> {
@@ -218,7 +219,7 @@ export async function redeploy(task: Task, opts: { pull: boolean; services: Depl
     "-e",
     "HOME=/tmp",
     "-e",
-    `GIT_TOKEN=${env.gitToken}`,
+    "GIT_TOKEN",
     "-v",
     `${env.dockerSock}:/var/run/docker.sock`,
     "-v",
@@ -230,8 +231,12 @@ export async function redeploy(task: Task, opts: { pull: boolean; services: Depl
     me.image,
     "-c",
     script,
-  ], { quiet: true });
-  await followHelper(task, name);
+  ], { quiet: true, env: childEnv({ GIT_TOKEN: env.gitToken }) });
+  try {
+    await followHelper(task, name);
+  } finally {
+    await archiveHelper(name).catch((e) => task.log(`a segédkonténer naplója nem menthető: ${e instanceof Error ? e.message : e}`, "error"));
+  }
 }
 
 async function followHelper(task: Task, name: string): Promise<void> {
@@ -241,22 +246,66 @@ async function followHelper(task: Task, name: string): Promise<void> {
   if (end.exitCode !== 0) throw new Error(`a telepítés hibával állt le (kilépési kód: ${end.exitCode})`);
 }
 
-/** Az előző telepítések (a segédkonténerek megmaradnak; a legutóbbi 5 kivételével törlődnek). */
-export async function previousDeploys(task?: Task): Promise<{ name: string; exitCode: number | null; state: string; createdAt: number }[]> {
-  if (!dockerAvailable()) return [];
-  const out = await pExecFile("docker", ["ps", "-a", "--filter", `label=${DEPLOY_LABEL}=1`, "--format", "{{.Names}}"], { timeout: 15_000 }).catch(() => ({ stdout: "" }));
-  const names = out.stdout.split("\n").filter(Boolean).sort().reverse();
-  for (const old of names.slice(5)) {
-    await pExecFile("docker", ["rm", "-f", old], { timeout: 15_000 }).catch(() => {});
-    task?.log(`régi segédkonténer törölve: ${old}`);
+// A lefutott segédkonténer naplója fájlba kerül, maga a konténer törlődik (a környezetében ott a git-token).
+const historyDir = () => join(env.backupDir, "deploy-logs");
+const HISTORY_KEEP = 20;
+type DeployRecord = { name: string; exitCode: number | null; state: string; createdAt: number };
+
+async function archiveHelper(name: string): Promise<void> {
+  const d = await inspectContainer(name);
+  if (d.state === "running") return;
+  const lines: string[] = [];
+  await streamContainerLogs(name, { tail: 5000, follow: false, signal: new AbortController().signal }, (_s, l) => lines.push(l.replace(/^\S+Z /, "")));
+  if (!existsSync(historyDir())) mkdirSync(historyDir(), { recursive: true });
+  const rec: DeployRecord = { name, exitCode: d.exitCode, state: d.state, createdAt: d.createdAt };
+  writeFileSync(join(historyDir(), `${name}.json`), JSON.stringify({ ...rec, lines }));
+  await pExecFile("docker", ["rm", "-f", name], { timeout: 15_000, env: childEnv() });
+}
+
+/**
+ * Ütemezett takarítás (nem GET-ből): a befejezett segédkonténerek naplója fájlba,
+ * a konténer törlődik; a régi naplófájlok közül az utolsó 20 marad.
+ */
+export async function sweepDeployHelpers(): Promise<void> {
+  if (!dockerAvailable()) return;
+  const out = await pExecFile("docker", ["ps", "-a", "--filter", `label=${DEPLOY_LABEL}=1`, "--format", "{{.Names}}"], { timeout: 15_000, env: childEnv() });
+  for (const n of out.stdout.split("\n").filter(Boolean)) await archiveHelper(n).catch(() => {});
+  if (!existsSync(historyDir())) return;
+  const files = readdirSync(historyDir()).filter((f) => /^mvk-hub-deploy-\d+\.json$/.test(f)).sort().reverse();
+  for (const f of files.slice(HISTORY_KEEP)) rmSync(join(historyDir(), f), { force: true });
+}
+
+/** Az előző telepítések: a még futó segédkonténer(ek) és a mentett naplók. Mellékhatás nélkül. */
+export async function previousDeploys(): Promise<DeployRecord[]> {
+  const running: DeployRecord[] = [];
+  if (dockerAvailable()) {
+    const out = await pExecFile("docker", ["ps", "--filter", `label=${DEPLOY_LABEL}=1`, "--format", "{{.Names}}"], { timeout: 15_000, env: childEnv() }).catch(() => ({ stdout: "" }));
+    for (const n of out.stdout.split("\n").filter(Boolean)) running.push({ name: n, exitCode: null, state: "running", createdAt: Number(n.split("-").pop()) || Date.now() });
   }
-  const keep = names.slice(0, 5);
-  const details = await Promise.all(keep.map((n) => inspectContainer(n).catch(() => null)));
-  return details.filter((d): d is ContainerDetail => d != null).map((d) => ({ name: d.name, exitCode: d.state === "running" ? null : d.exitCode, state: d.state, createdAt: d.createdAt }));
+  const saved: DeployRecord[] = [];
+  if (existsSync(historyDir())) {
+    for (const f of readdirSync(historyDir()).filter((x) => /^mvk-hub-deploy-\d+\.json$/.test(x))) {
+      try {
+        const r = JSON.parse(readFileSync(join(historyDir(), f), "utf8")) as DeployRecord;
+        saved.push({ name: r.name, exitCode: r.exitCode, state: r.state, createdAt: r.createdAt });
+      } catch {
+        /* sérült naplófájl — kihagyjuk */
+      }
+    }
+  }
+  return [...running, ...saved].sort((a, b) => b.createdAt - a.createdAt).slice(0, HISTORY_KEEP);
 }
 
 export async function deployLogs(name: string): Promise<string[]> {
   if (!/^mvk-hub-deploy-\d+$/.test(name)) throw new HubError(400, "ismeretlen telepítés");
+  const file = join(historyDir(), `${name}.json`);
+  if (existsSync(file)) {
+    try {
+      return (JSON.parse(readFileSync(file, "utf8")) as { lines: string[] }).lines;
+    } catch {
+      return [];
+    }
+  }
   const lines: string[] = [];
   await streamContainerLogs(name, { tail: 3000, follow: false, signal: new AbortController().signal }, (_s, l) => lines.push(l.replace(/^\S+Z /, "")));
   return lines;

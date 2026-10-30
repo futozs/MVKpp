@@ -14,7 +14,9 @@ function base(target: Target): string {
 
 export async function callService(target: Target, path: string, init: RequestInit & { timeoutMs?: number } = {}): Promise<Response> {
   const headers = new Headers(init.headers);
-  if (env.adminKey) headers.set("x-admin-key", env.adminKey);
+  // A worker a mesterkulcsot kapja, a (nyilvános) web csak a csak-olvasó metrika-kulcsot.
+  if (target === "worker" && env.adminKey) headers.set("x-admin-key", env.adminKey);
+  if (target === "web" && env.metricsKey) headers.set("x-metrics-key", env.metricsKey);
   try {
     return await fetch(base(target) + path, { ...init, headers, cache: "no-store", signal: init.signal ?? AbortSignal.timeout(init.timeoutMs ?? DEFAULT_TIMEOUT_MS) });
   } catch (e) {
@@ -34,7 +36,8 @@ export async function serviceJson<T>(target: Target, path: string, init: Request
   }
   if (!res.ok) {
     const msg = (data as { error?: string } | null)?.error ?? `HTTP ${res.status}`;
-    throw new HubError(res.status === 401 ? 502 : res.status, `${target}: ${msg}${res.status === 401 ? " (ADMIN_KEY eltér?)" : ""}`);
+    const hint = res.status === 401 ? (target === "worker" ? " (ADMIN_KEY eltér?)" : " (METRICS_KEY eltér vagy hiányzik?)") : "";
+    throw new HubError(res.status === 401 ? 502 : res.status, `${target}: ${msg}${hint}`);
   }
   return data as T;
 }

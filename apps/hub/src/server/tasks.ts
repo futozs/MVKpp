@@ -13,6 +13,20 @@ export type TaskLine = { at: number; text: string; level: "info" | "error" | "st
 export type TaskInfo = { id: string; kind: TaskKind; title: string; startedAt: number; finishedAt: number | null; ok: boolean | null; error: string | null; lines: number };
 
 const MAX_LINES = 8000;
+
+/**
+ * A gyerekfolyamatok (git, docker CLI) csak a működésükhöz szükséges környezetet
+ * kapják — a hub titkai (HUB_PASSWORD, ADMIN_KEY, DATABASE_URL…) nem öröklődnek.
+ */
+export function childEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
+  const keep = ["PATH", "HOME", "LANG", "LC_ALL", "TZ", "DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_CONFIG", "DOCKER_CERT_PATH", "DOCKER_TLS_VERIFY", "TMPDIR"];
+  const out: Record<string, string> = {};
+  for (const k of keep) {
+    const v = process.env[k];
+    if (v != null) out[k] = v;
+  }
+  return { ...out, ...extra } as NodeJS.ProcessEnv;
+}
 const KEEP_TASKS = 30;
 
 export class Task {

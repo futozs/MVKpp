@@ -8,15 +8,21 @@
  */
 import { sql } from "@mvk/db";
 import { sessionUser } from "./account.ts";
-import { body, dispatch, json, route, type Route } from "./http.ts";
+import { dispatch, json, route, type Route } from "./http.ts";
 
 const DEVICE_RE = /^[\w-]{8,64}$/;
 const VIEW_RE = /^[a-z][a-z0-9_-]{0,23}$/;
 const ID_RE = /^[\w:.|-]{1,64}$/;
 const MAX_VIEWS = 16;
-const MAX_FAV_ITEMS = 60;
+const MAX_FAV_ITEMS = 40;
 const MIN_INTERVAL_MS = 8_000;
 const MAX_TRACKED = 50_000;
+/** egy jel legfeljebb ekkora lehet (a Caddy is levágja a nagyobbat) */
+const MAX_BODY_BYTES = 8_192;
+/** egy címről óránként legfeljebb ennyi KÜLÖNBÖZŐ eszköz (egy családi Wi-Fi bőven belefér) */
+const NEW_DEVICES_PER_IP_HOUR = 20;
+/** az egész rendszerre percenként legfeljebb ennyi még nem látott eszköz (tömeges hamisítás ellen) */
+const NEW_DEVICES_PER_MIN = 300;
 
 export type FavoriteSnapshot = {
   lines: { routeId: string; dir: string }[];
@@ -86,40 +92,86 @@ export function cleanViews(v: unknown): Record<string, number> {
   return out;
 }
 
+/** Korlátos Map: a legrégebben beírt kulcsot dobja el (nem üríti ki egyszerre — az kinyitná a korlátot). */
+function remember<V>(m: Map<string, V>, key: string, value: V): void {
+  m.delete(key);
+  m.set(key, value);
+  if (m.size > MAX_TRACKED) m.delete(m.keys().next().value as string);
+}
+
+/** A cím, amire korlátozunk: IPv4-nél maga a cím, IPv6-nál a /64 előtag (egy előfizető egész tartománya). */
+export function clientKey(req: Request): string {
+  const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "?";
+  if (!ip.includes(":")) return ip;
+  return ip.split(":").slice(0, 4).join(":");
+}
+
 const perIp = new Map<string, { n: number; reset: number }>();
 const IP_PER_MIN = 60;
 
 /** Címenként percenként legfeljebb 60 jel (a cím csak memóriában, ehhez a kerethez él). */
-function ipLimited(req: Request, now: number): boolean {
-  const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "?";
-  if (perIp.size > MAX_TRACKED) perIp.clear();
+function ipLimited(ip: string, now: number): boolean {
   const b = perIp.get(ip);
   if (!b || now > b.reset) {
-    perIp.set(ip, { n: 1, reset: now + 60_000 });
+    remember(perIp, ip, { n: 1, reset: now + 60_000 });
     return false;
   }
   b.n++;
   return b.n > IP_PER_MIN;
 }
 
+const devicesByIp = new Map<string, { ids: Set<string>; reset: number }>();
+const seenDevices = new Map<string, number>();
+let globalNew = { n: 0, reset: 0 };
+
+/** Új (ebben a folyamatban még nem látott) eszköz: címenként és összesen is korlátozva. */
+function newDeviceBlocked(ip: string, deviceId: string, now: number): boolean {
+  if (seenDevices.has(deviceId)) return false;
+  const b = devicesByIp.get(ip);
+  const entry = !b || now > b.reset ? { ids: new Set<string>(), reset: now + 3_600_000 } : b;
+  if (!entry.ids.has(deviceId) && entry.ids.size >= NEW_DEVICES_PER_IP_HOUR) return true;
+  if (now > globalNew.reset) globalNew = { n: 0, reset: now + 60_000 };
+  if (globalNew.n >= NEW_DEVICES_PER_MIN) return true;
+  globalNew.n++;
+  entry.ids.add(deviceId);
+  remember(devicesByIp, ip, entry);
+  remember(seenDevices, deviceId, now);
+  return false;
+}
+
 /** Eszközönként legfeljebb ~8 mp-enként egy jel; a többit csendben eldobjuk. */
 function throttled(deviceId: string, now: number): boolean {
   const last = lastSeen.get(deviceId) ?? 0;
   if (now - last < MIN_INTERVAL_MS) return true;
-  if (lastSeen.size > MAX_TRACKED) lastSeen.clear();
-  lastSeen.set(deviceId, now);
+  remember(lastSeen, deviceId, now);
   return false;
+}
+
+async function readCapped(req: Request): Promise<UsageIn | null> {
+  if (Number(req.headers.get("content-length") ?? 0) > MAX_BODY_BYTES) return null;
+  const text = await req.text();
+  if (text.length > MAX_BODY_BYTES) return null;
+  try {
+    const v = JSON.parse(text);
+    return v && typeof v === "object" ? (v as UsageIn) : null;
+  } catch {
+    return null;
+  }
 }
 
 const routes: Route[] = [
   route("POST", "/v3/usage", async (req) => {
-    const b = await body<UsageIn>(req);
+    const b = await readCapped(req);
     const deviceId = typeof b?.deviceId === "string" && DEVICE_RE.test(b.deviceId) ? b.deviceId : null;
     if (!b || !deviceId) return json({ ok: false }, 400);
-    if (ipLimited(req, Date.now())) return json({ ok: false }, 429);
+    const now = Date.now();
+    const ip = clientKey(req);
+    if (ipLimited(ip, now)) return json({ ok: false }, 429);
+    // Tömeges, kitalált eszközazonosítók: csendben eldobjuk (a statisztika nem szennyeződik, a lemez nem telik).
+    if (newDeviceBlocked(ip, deviceId, now)) return new Response(null, { status: 204 });
     const opened = b.open === true;
     // A megnyitás és a kedvencek változása mindig átmegy, a puszta nézet-jel ritkítva.
-    if (!opened && !b.favorites && throttled(deviceId, Date.now())) return new Response(null, { status: 204 });
+    if (!opened && !b.favorites && throttled(deviceId, now)) return new Response(null, { status: 204 });
 
     const ua = req.headers.get("user-agent") ?? "";
     // A munkamenetet csak megnyitáskor nézzük meg (nem minden jelnél).

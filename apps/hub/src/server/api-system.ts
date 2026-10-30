@@ -12,7 +12,7 @@ import { feedOverview, jobsOverview } from "./ops.ts";
 import { overview, type WebMetrics, type WorkerMetrics } from "./overview.ts";
 import { latestProbes, probeSeries, probeUptime, probeTargets } from "./probes.ts";
 import { postJson, webJson, workerJson } from "./services.ts";
-import { clearLoginFailures, issueSession, loginBlocked, noteLoginFailure, passwordMatches, SESSION_COOKIE } from "./session.ts";
+import { clearLoginFailures, issueSession, loginBlocked, noteLoginFailure, passwordMatches, revokeAllSessions, revokeSession, SESSION_COOKIE } from "./session.ts";
 import { getTask, listTasks, runningExclusive, startTask } from "./tasks.ts";
 import { AGENT_COMMANDS, cancelAgentCommand, ingestToken, queueAgentCommand, renewToken, revealToken, tokenOverview } from "./token.ts";
 
@@ -27,12 +27,20 @@ function cookie(value: string, expires: Date | null, secure: boolean): string {
   return parts.join("; ");
 }
 
+function cookieValue(req: Request): string | undefined {
+  for (const part of (req.headers.get("cookie") ?? "").split(";")) {
+    const [k, ...v] = part.trim().split("=");
+    if (k === SESSION_COOKIE) return v.join("=");
+  }
+  return undefined;
+}
+
 const authRoutes = [
   route("POST", "/api/auth/login", async ({ req, ip, url }) => {
     const wait = loginBlocked(ip);
     if (wait) throw new HubError(429, `túl sok hibás próbálkozás — próbáld újra ${Math.ceil(wait / 60_000)} perc múlva`);
     const problems = configProblems();
-    if (env.password.length < 12 || env.appSecret.length < 16) throw new HubError(503, problems.join(" "));
+    if (env.password.length < 12) throw new HubError(503, problems.join(" "));
     const b = await readJson<{ password: string }>(req);
     if (!passwordMatches(String(b.password ?? ""), env.password)) {
       noteLoginFailure(ip);
@@ -40,13 +48,21 @@ const authRoutes = [
       throw new HubError(401, "hibás jelszó");
     }
     clearLoginFailures(ip);
-    const s = issueSession(env.password, env.appSecret, env.sessionHours * 3_600_000);
+    const s = issueSession(env.sessionHours * 3_600_000);
     await audit("login", null, true, null, ip);
     return json({ ok: true }, 200, { "set-cookie": cookie(s.value, s.expires, url.protocol === "https:") });
   }),
-  route("POST", "/api/auth/logout", ({ url }) => json({ ok: true }, 200, { "set-cookie": cookie("", null, url.protocol === "https:") })),
-  // Belépés előtt is hívható (a proxy átengedi): csak a beállítási hibákat adja vissza.
-  route("GET", "/api/auth/me", () => json({ problems: configProblems() })),
+  route("POST", "/api/auth/logout", ({ req, url }) => {
+    revokeSession(cookieValue(req));
+    return json({ ok: true }, 200, { "set-cookie": cookie("", null, url.protocol === "https:") });
+  }),
+  route("POST", "/api/auth/logout-all", async ({ ip, url }) => {
+    revokeAllSessions();
+    await audit("logout-all", null, true, null, ip);
+    return json({ ok: true }, 200, { "set-cookie": cookie("", null, url.protocol === "https:") });
+  }),
+  // Belépés előtt is hívható (a proxy átengedi): csak azt mondja meg, le van-e tiltva a belépés.
+  route("GET", "/api/auth/me", () => json({ problems: env.password.length < 12 ? ["A belépés le van tiltva: a HUB_PASSWORD hiányzik vagy 12 karakternél rövidebb."] : [] })),
 ];
 
 const statusRoutes = [
@@ -150,9 +166,15 @@ const mvkRoutes = [
   }),
   route("POST", "/api/mvk/call", async ({ req, ip }) => {
     const b = await readJson<{ method: string; path: string; body: string }>(req);
-    const r = await workerJson("/system/mvk-call", { ...postJson({ method: b.method, path: b.path, body: b.body }), timeoutMs: 25_000 });
-    await audit("mvk:call", `${b.method ?? "GET"} ${b.path ?? ""}`, true, null, ip);
-    return json(r);
+    const target = `${b.method ?? "GET"} ${String(b.path ?? "").slice(0, 300)}`;
+    try {
+      const r = await workerJson("/system/mvk-call", { ...postJson({ method: b.method, path: b.path, body: b.body }), timeoutMs: 25_000 });
+      await audit("mvk:call", target, true, null, ip);
+      return json(r);
+    } catch (e) {
+      await audit("mvk:call", target, false, { error: e instanceof Error ? e.message : String(e) }, ip);
+      throw e;
+    }
   }),
   route("POST", "/api/mvk/reload-gtfs", async ({ ip }) => {
     const r = await workerJson("/system/reload-gtfs", { method: "POST", timeoutMs: 120_000 });
@@ -164,6 +186,7 @@ const mvkRoutes = [
 const opsRoutes = [
   route("GET", "/api/deploy", async () => {
     const [git, commits, previous] = await Promise.all([gitStatus(), settle(recentCommits(12)), settle(previousDeploys())]);
+    // (a befejezett segédkonténerek takarítása az ütemezőben fut, nem ebben a GET-ben)
     return json({ git, commits, previous, tasks: listTasks(), running: runningExclusive(), dockerAvailable: dockerAvailable(), deployable: DEPLOYABLE });
   }),
   route("POST", "/api/deploy/fetch", async ({ ip }) => {

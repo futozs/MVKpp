@@ -39,14 +39,20 @@ export async function readJson<T extends Record<string, unknown>>(req: Request):
 
 export const clientIp = (req: Request) => (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim();
 
+/** Minden kérésre (GET-re is): más oldalról indított kérést a böngésző Sec-Fetch-Site-tal jelöl. */
+function assertNotCrossSite(req: Request): void {
+  const site = req.headers.get("sec-fetch-site");
+  if (site && site !== "same-origin" && site !== "none") throw new HubError(403, "idegen oldalról érkező kérés");
+}
+
 /**
  * Módosító kérés csak a hub saját oldaláról jöhet: az Origin (vagy a
  * Sec-Fetch-Site) a saját hosztunk legyen. A süti SameSite=Strict, ez a
  * második védvonal.
  */
 function assertSameOrigin(req: Request, url: URL): void {
+  assertNotCrossSite(req);
   const site = req.headers.get("sec-fetch-site");
-  if (site && site !== "same-origin" && site !== "none") throw new HubError(403, "idegen oldalról érkező kérés");
   const origin = req.headers.get("origin");
   if (!origin) {
     if (!site) throw new HubError(403, "hiányzó Origin fejléc");
@@ -70,6 +76,7 @@ export async function dispatch(routes: Route[], req: Request): Promise<Response>
     if (!m) continue;
     try {
       if (req.method !== "GET" && req.method !== "HEAD") assertSameOrigin(req, url);
+      else assertNotCrossSite(req);
       const params: Record<string, string> = {};
       r.keys.forEach((k, i) => (params[k] = decodeURIComponent(m[i + 1])));
       return await r.fn({ req, url, params, ip: clientIp(req) });

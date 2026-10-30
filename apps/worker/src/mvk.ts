@@ -5,7 +5,7 @@ import { currentJwt, markRejected } from "./token.ts";
 
 export type MvkResponse = { status: number; buf: Buffer; contentType: string | null };
 
-export async function mvkFetch(path: string, init: { method?: string; body?: Buffer; contentType?: string; accept?: string; timeoutMs?: number } = {}): Promise<MvkResponse> {
+export async function mvkFetch(path: string, init: { method?: string; body?: Buffer; contentType?: string; accept?: string; timeoutMs?: number; redirect?: "follow" | "manual" } = {}): Promise<MvkResponse> {
   const headers: Record<string, string> = { accept: init.accept ?? "application/json" };
   const tok = currentJwt();
   if (tok) headers.authorization = `Bearer ${tok}`;
@@ -19,6 +19,7 @@ export async function mvkFetch(path: string, init: { method?: string; body?: Buf
       headers,
       body: init.body ? new Uint8Array(init.body) : undefined,
       signal: AbortSignal.timeout(init.timeoutMs ?? 10_000),
+      redirect: init.redirect ?? "follow",
     });
     if (res.status === 401 || res.status === 403) await markRejected();
     const buf = Buffer.from(await res.arrayBuffer());

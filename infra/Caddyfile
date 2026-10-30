@@ -7,9 +7,16 @@
 	# A rendszer-hub belső végpontjai kívülről nem látszanak (admin-kulcs nélkül
 	# amúgy is elutasítanák, de így a létezésük sem derül ki). A handle blokkok
 	# a leírt sorrendben értékelődnek, ezért ez áll elöl.
-	@hubonly path /v3/admin/* /system/metrics /system/live /system/logs /system/logs/* /system/mvk-call /system/jobs/*
+	# A token kiolvasása / megújítása és a worker leállítása is csak a hubból (belső hálón) mehet.
+	@hubonly path /v3/admin/* /system/metrics /system/live /system/logs /system/logs/* /system/mvk-call /system/jobs/* /system/restart /_jwt /_export /_renew
 	handle @hubonly {
 		respond 404
+	}
+
+	# A névtelen használati jel kicsi; a nagyobbat el sem fogadjuk.
+	@usage path /v3/usage
+	request_body @usage {
+		max_size 8KB
 	}
 
 	@worker path /ws /live/* /gtfs/* /weather /engine/* /_health /_jwt /_export /_ingest /_renew /system/* /agent/* /api/* /MVK_mobilapp/*

@@ -22,7 +22,7 @@ describe("usage beacon cleaning", () => {
     });
     expect(f?.lines).toEqual([{ routeId: "R1", dir: "0" }]);
     expect(f?.stops).toEqual(["SP1", "SP2"]);
-    expect(f?.vehicles.length).toBe(60);
+    expect(f?.vehicles.length).toBe(40);
     expect(f?.parking).toEqual(["d:bus"]);
     expect(f && "evil" in f).toBe(false);
     expect(cleanFavorites(null)).toBeNull();
@@ -30,5 +30,16 @@ describe("usage beacon cleaning", () => {
 
   it("accepts only known-shaped view counters", () => {
     expect(cleanViews({ map: 3, "Bad Key": 1, timetable: -1, stats: 9999, planner: "2" })).toEqual({ map: 3, stats: 500 });
+  });
+});
+
+import { clientKey } from "../src/usage.ts";
+
+describe("clientKey", () => {
+  const req = (xff: string) => new Request("http://x/v3/usage", { headers: { "x-forwarded-for": xff } });
+  it("limits IPv4 per address but IPv6 per /64, so one subscriber cannot rotate around the limit", () => {
+    expect(clientKey(req("84.1.2.3"))).toBe("84.1.2.3");
+    expect(clientKey(req("2a01:36d:1:2:aaaa::1"))).toBe(clientKey(req("2a01:36d:1:2:bbbb::9")));
+    expect(clientKey(req("2a01:36d:1:2::1"))).not.toBe(clientKey(req("2a01:36d:1:3::1")));
   });
 });

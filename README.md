@@ -386,7 +386,9 @@ bun run build       # Prisma-kliens + Next production build
 | `HUB_PASSWORD` | hub | a hubhoz | belépési jelszó, min. 12 karakter |
 | `HUB_BACKUP_HOUR`, `HUB_BACKUP_KEEP` | hub | nem | napi automatikus mentés órája (`-1` = ki) és megtartott darabszám (4, 7) |
 | `HUB_GIT_TOKEN` | hub | privát repónál | GitHub fine-grained token (Contents: read) a frissítéshez |
-| `HUB_ALLOWED_CIDRS` | hub | nem | engedett kliens-tartományok; üresen magánhálózatok + loopback + VPN (100.64/10) |
+| `HUB_ALLOWED_CIDRS` | hub | nem | engedett kliens-tartományok; üresen magánhálózatok + loopback + VPN (100.64/10) — ajánlott szűkíteni, pl. `192.168.1.0/24,10.5.5.0/24` |
+| `HUB_ALLOWED_HOSTS` | hub | nem | ha nem IP-címmel éred el a hubot (pl. `hub.lan`): az engedett nevek (DNS-rebinding ellen minden más Host tiltva) |
+| `METRICS_KEY` | web, hub | a hubhoz | csak-olvasó kulcs a web válaszidőihez (`X-Metrics-Key`); a nyilvános web így nem kapja meg az `ADMIN_KEY`-t |
 
 ---
 
@@ -428,7 +430,9 @@ Külön Next.js app (`apps/hub`), plusz egy konténer ugyanabban a Compose-proje
    HUB_BIND=192.168.1.11        # a szerver LAN-címe — SOHA ne 0.0.0.0 egy nyilvános VPS-en
    HUB_PORT=8099
    HUB_PASSWORD=<openssl rand -base64 24>
-   HUB_GIT_TOKEN=<csak privát repóhoz>
+   METRICS_KEY=<openssl rand -hex 32>
+   HUB_ALLOWED_CIDRS=192.168.1.0/24,10.5.5.0/24   # a LAN és a WireGuard-alháló (ajánlott)
+   HUB_GIT_TOKEN=<csak privát repóhoz — a repó most privát, kell>
    ```
 
 2. Indítás/frissítés ugyanúgy, mint eddig (a hub egy plusz konténer):
@@ -444,7 +448,8 @@ Külön Next.js app (`apps/hub`), plusz egy konténer ugyanabban a Compose-proje
 
 ### Hogyan működik
 
-- **Biztonság:** a port csak a `HUB_BIND` címen figyel; a hub minden kérésnél ellenőrzi, hogy a kliens magánhálózati címről jön-e; jelszó + aláírt, `HttpOnly`, `SameSite=Strict` süti (a jelszó cseréje minden munkamenetet érvénytelenít); módosító kérés csak a hub saját oldaláról (Origin-ellenőrzés); 8 hibás próbálkozás után 15 perc zár; minden beavatkozás a `hub_audit` táblába kerül. A hub a Docker-socketet kapja meg, ami **root-egyenértékű** — ezért nem kerülhet nyilvános hálóra. A Caddy a hub belső végpontjait (`/system/metrics|live|logs|mvk-call|jobs`, `/v3/admin/*`) kívülről 404-gyel zárja.
+- **HTTP, nem HTTPS:** a hub a belső hálón titkosítatlanul megy. Megosztott vagy idegen Wi-Fin (ahol valaki lehallgathat) csak a WireGuard-VPN-en át használd — az titkosít. A belépés után a Telepítés → Műveleti naplóban nézd meg, milyen címmel látszol: ha `172.x`, a Docker elfedi a valódi címet, és a `HUB_ALLOWED_CIDRS` szűkítése nem működik (ilyenkor a jelszó és a port kötése véd).
+- **Biztonság:** a port csak a `HUB_BIND` címen figyel; a hub minden kérésnél ellenőrzi, hogy a kliens magánhálózati címről jön-e; jelszó + aláírt, `HttpOnly`, `SameSite=Strict` süti, szerveroldali munkamenet-listával (a kilépés azonnal érvénytelenít, a hub újraindulása mindenkit kiléptet); csak IP-címmel vagy engedett névvel nyitható meg (DNS-rebinding ellen); más oldalról indított kérést elutasít (Origin + Sec-Fetch-Site); 8 hibás próbálkozás után 15 perc zár; minden beavatkozás a `hub_audit` táblába kerül. A hub a Docker-socketet kapja meg, ami **root-egyenértékű** — ezért nem kerülhet nyilvános hálóra. A Caddy a hub belső végpontjait (`/system/metrics|live|logs|mvk-call|jobs`, `/v3/admin/*`) és a veszélyes régi admin-végpontokat (`/_jwt`, `/_export`, `/_renew`, `/system/restart`) kívülről 404-gyel zárja — ezeket mostantól a hubból éred el. A nyilvános `POST /v3/usage` 8 KB-os, címenként és összesen is korlátozott; a használati sorok 400 nap után törlődnek.
 - **Adatok:** az adatbázist közvetlenül olvassa; a worker és a web belső állapotát admin-kulcsos végpontokon (`/system/metrics`, `/system/live`, `/system/logs[/stream]`, `/system/mvk-call`, `/system/jobs/*`, `/v3/admin/metrics`) — a kulcs a hub szerverén marad, a böngésző nem kapja meg. A konténereket a Docker Engine API-n éri el.
 - **Használat és kedvencek:** a webapp névtelen jelet küld (`POST /v3/usage`): véletlen eszközazonosító, platform, telepített-e, megnyitott nézetek, a kedvencek pillanatképe. IP-címet nem tárol; bejelentkezve az eszköz a fiókhoz kötődik. (Ezt érdemes egy mondatban az adatkezelési tájékoztatóban is jelezni.)
 - **Telepítés:** egy leválasztott segédkonténer futtatja (`git pull --ff-only` → `compose build` → worker és web csere → egészség-ellenőrzés → a hub cseréje), a repóval a gépen érvényes útvonalán felcsatolva — így a hub önmagát is lecserélheti, és a git-műveletek a repó tulajdonosának nevében futnak.

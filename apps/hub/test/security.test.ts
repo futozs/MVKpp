@@ -1,31 +1,36 @@
 import { describe, expect, it } from "vitest";
-import { ipAllowed, ipInCidr, normalizeIp } from "../src/server/netguard.ts";
-import { clearLoginFailures, issueSession, loginBlocked, noteLoginFailure, passwordMatches, verifySession } from "../src/server/session.ts";
+import { hostAllowed, ipAllowed, ipInCidr, normalizeIp } from "../src/server/netguard.ts";
+import { clearLoginFailures, issueSession, loginBlocked, noteLoginFailure, passwordMatches, revokeAllSessions, revokeSession, verifySession } from "../src/server/session.ts";
 
 const PW = "correct horse battery";
-const SECRET = "0123456789abcdef0123456789abcdef";
 
 describe("session cookie", () => {
-  it("verifies its own session and rejects tampering, expiry and a changed password", () => {
-    const s = issueSession(PW, SECRET, 60_000, 1_000);
-    expect(verifySession(s.value, PW, SECRET, 2_000)).toBe(true);
-    expect(verifySession(s.value, PW, SECRET, 70_000)).toBe(false);
-    expect(verifySession(s.value, "other password!", SECRET, 2_000)).toBe(false);
+  it("verifies its own live session and rejects tampering and expiry", () => {
+    const s = issueSession(60_000, 1_000);
+    expect(verifySession(s.value, 2_000)).toBe(true);
+    expect(verifySession(s.value, 70_000)).toBe(false);
     const parts = s.value.split(".");
-    expect(verifySession([parts[0], String(Number(parts[1]) + 999_999), parts[2], parts[3]].join("."), PW, SECRET, 2_000)).toBe(false);
-    expect(verifySession(undefined, PW, SECRET)).toBe(false);
-    expect(verifySession("v1.x.y", PW, SECRET)).toBe(false);
+    expect(verifySession([parts[0], String(Number(parts[1]) + 999_999), parts[2], parts[3]].join("."), 2_000)).toBe(false);
+    expect(verifySession(`${parts.slice(0, 3).join(".")}.AAAA`, 2_000)).toBe(false);
+    expect(verifySession(undefined)).toBe(false);
+    expect(verifySession("v1.x.y")).toBe(false);
   });
 
-  it("refuses everything when the hub has no password configured", () => {
-    const s = issueSession(PW, SECRET, 60_000);
-    expect(verifySession(s.value, "", SECRET)).toBe(false);
-    expect(passwordMatches("", "")).toBe(false);
+  it("logout really kills the cookie, and logout-all kills every session", () => {
+    const now = Date.now();
+    const a = issueSession(60_000, now);
+    const b = issueSession(60_000, now);
+    revokeSession(a.value);
+    expect(verifySession(a.value, now + 1)).toBe(false);
+    expect(verifySession(b.value, now + 1)).toBe(true);
+    revokeAllSessions();
+    expect(verifySession(b.value, now + 1)).toBe(false);
   });
 
-  it("compares passwords exactly", () => {
+  it("compares passwords exactly and refuses an unset password", () => {
     expect(passwordMatches(PW, PW)).toBe(true);
     expect(passwordMatches(`${PW} `, PW)).toBe(false);
+    expect(passwordMatches("", "")).toBe(false);
   });
 
   it("locks an address out after repeated failures, and lets it back after success", () => {
@@ -35,6 +40,20 @@ describe("session cookie", () => {
     expect(loginBlocked(ip, 1_000 + 16 * 60_000)).toBe(0);
     clearLoginFailures(ip);
     expect(loginBlocked(ip, 2_000)).toBe(0);
+  });
+});
+
+describe("host header guard (DNS rebinding)", () => {
+  it("accepts IP literals, localhost and configured names only", () => {
+    expect(hostAllowed("192.168.1.11:8099", [])).toBe(true);
+    expect(hostAllowed("[fd00::1]:8099", [])).toBe(true);
+    expect(hostAllowed("localhost:3010", [])).toBe(true);
+    expect(hostAllowed("hub.lan:8099", ["hub.lan"])).toBe(true);
+    expect(hostAllowed("evil.example.com:8099", ["hub.lan"])).toBe(false);
+    expect(hostAllowed("evil.com", [])).toBe(false);
+    expect(hostAllowed("a:b", [])).toBe(false);
+    expect(hostAllowed("[not-ip]", [])).toBe(false);
+    expect(hostAllowed(null, [])).toBe(false);
   });
 });
 

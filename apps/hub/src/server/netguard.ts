@@ -62,3 +62,22 @@ export function ipAllowed(ip: string, cidrs: string[]): boolean {
   const list = cidrs.length ? cidrs : DEFAULT_CIDRS;
   return list.some((c) => ipInCidr(ip, c));
 }
+
+/**
+ * DNS-rebinding ellen: a Host fejléc csak IP-cím, localhost vagy egy kifejezetten
+ * engedett név lehet. (Egy rosszindulatú oldal a saját domainjét a hub címére
+ * irányíthatja — a böngésző ilyenkor a saját nevét küldi Hostként.)
+ */
+export function hostAllowed(hostHeader: string | null, allowedHosts: string[]): boolean {
+  if (!hostHeader) return false;
+  const h = hostHeader.trim().toLowerCase();
+  // [IPv6]:port
+  const v6 = /^\[([0-9a-f:.]+)\](:\d+)?$/.exec(h);
+  if (v6) return ipv6ToBigInt(normalizeIp(v6[1])) != null || ipv4ToInt(normalizeIp(v6[1])) != null;
+  const m = /^([a-z0-9.-]+)(:\d+)?$/.exec(h);
+  if (!m) return false;
+  const name = m[1];
+  if (ipv4ToInt(name) != null) return true;
+  if (name === "localhost" || name.endsWith(".localhost")) return true;
+  return allowedHosts.includes(name);
+}

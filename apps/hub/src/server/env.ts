@@ -14,11 +14,14 @@ export const env = {
   /** a nyilvános cím a Caddyn át (opcionális — ezt is méri a hub) */
   publicUrl: process.env.DOMAIN ? `https://${process.env.DOMAIN}` : trimUrl(process.env.PUBLIC_URL, ""),
   adminKey: process.env.ADMIN_KEY ?? "",
-  appSecret: process.env.APP_SECRET ?? "",
+  /** a web csak-olvasó metrika-kulcsa (X-Metrics-Key) */
+  metricsKey: process.env.METRICS_KEY ?? "",
   password: process.env.HUB_PASSWORD ?? "",
   sessionHours: num(process.env.HUB_SESSION_HOURS, 12),
   /** vesszővel elválasztott CIDR-lista; alapból csak magánhálózat + loopback + VPN-tartományok */
   allowedCidrs: (process.env.HUB_ALLOWED_CIDRS ?? "").split(",").map((s) => s.trim()).filter(Boolean),
+  /** a hub nevei (Host fejléc), ha nem IP-címmel éred el; IP és localhost mindig mehet (DNS-rebinding ellen) */
+  allowedHosts: (process.env.HUB_ALLOWED_HOSTS ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean),
   dockerSock: process.env.DOCKER_SOCK ?? "/var/run/docker.sock",
   composeProject: process.env.COMPOSE_PROJECT ?? "mvk",
   /** a repó a konténerben (a telepítéshez és a git-állapothoz) */
@@ -40,7 +43,7 @@ export const MIN_PASSWORD = 12;
 export function configProblems(): string[] {
   const out: string[] = [];
   if (env.password.length < MIN_PASSWORD) out.push(`HUB_PASSWORD hiányzik vagy rövidebb ${MIN_PASSWORD} karakternél — a belépés le van tiltva.`);
-  if (env.appSecret.length < 16) out.push("APP_SECRET hiányzik — a munkamenet-aláíráshoz kell.");
   if (!env.adminKey) out.push("ADMIN_KEY hiányzik — a worker vezérlése nem működik.");
+  if (!env.metricsKey) out.push("METRICS_KEY hiányzik — a web válaszidői nem látszanak.");
   return out;
 }

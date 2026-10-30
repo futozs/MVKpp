@@ -4,9 +4,12 @@
  *   - óránként a régi mérések törlése
  *   - 30 percenként git fetch (a „frissítés elérhető” jelzéshez)
  *   - naponta automatikus adatbázis-mentés (HUB_BACKUP_HOUR, Budapest), a régiek ritkítása
+ *   - 5 percenként a befejezett telepítő-segédkonténerek naplója fájlba, a konténer törlése
+ *   - naponta a 400 napnál régebbi használati és műveleti sorok törlése
  */
+import { sql } from "@mvk/db";
 import { createBackup, listBackups, pruneAutoBackups } from "./backup.ts";
-import { gitFetch, gitStatus } from "./deploy.ts";
+import { gitFetch, gitStatus, sweepDeployHelpers } from "./deploy.ts";
 import { dockerAvailable } from "./docker.ts";
 import { env } from "./env.ts";
 import { cleanupProbes, runProbes } from "./probes.ts";
@@ -43,6 +46,13 @@ async function autoBackup(): Promise<void> {
   });
 }
 
+/** Megőrzés: a használati statisztika és a műveleti napló nem nőhet a végtelenségig. */
+async function purgeOldRows(): Promise<void> {
+  await sql(`DELETE FROM usage_day WHERE day < (now() AT TIME ZONE 'Europe/Budapest')::date - 400`);
+  await sql(`DELETE FROM usage_device WHERE last_seen < now() - interval '400 days'`);
+  await sql(`DELETE FROM hub_audit WHERE at < now() - interval '400 days'`);
+}
+
 export function startScheduler(): void {
   if (g.__hubScheduler) return;
   g.__hubScheduler = true;
@@ -52,5 +62,7 @@ export function startScheduler(): void {
     if ((await gitStatus()).available) await gitFetch();
   }, 90_000);
   every(5 * 60_000, autoBackup, 2 * 60_000);
+  every(5 * 60_000, sweepDeployHelpers, 20_000);
+  every(24 * HOUR_MS, purgeOldRows, 10 * 60_000);
   console.log(`[scheduler] fut — mérés ${Math.round(env.probeEveryMs / 1000)} mp-enként, napi mentés ${env.backupHour >= 0 ? `${env.backupHour} órakor` : "kikapcsolva"}`);
 }

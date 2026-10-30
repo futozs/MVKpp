@@ -47,6 +47,7 @@ async function main() {
   const applied = await migrate();
   if (applied.length) log.info("db", `migráció: ${applied.join(", ")}`);
 
+  if (config.adminKey && config.adminKey.length < 32) log.warn("worker", "az ADMIN_KEY rövidebb 32 karakternél — generálj erősebbet: openssl rand -hex 32");
   await loadToken();
   const st = tokenStatus();
   log.info("token", st.present ? `betöltve, ${Math.round((st.expiresInSec ?? 0) / 60)} percig érvényes` : "NINCS token — várom a macOS agentet (/agent/token)");

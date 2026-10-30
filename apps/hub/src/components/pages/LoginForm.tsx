@@ -6,6 +6,17 @@ import { api, post } from "@/lib/api";
 import { BrandGlyph } from "../shell/BrandMark";
 import { Button, ErrorNote, Input } from "../ui/primitives";
 
+/** Csak a hub saját oldalára irányítunk vissza (a `?next=` ne vihessen idegen oldalra). */
+function safeNext(next: string | null): string {
+  if (!next) return "/";
+  try {
+    const u = new URL(next, window.location.origin);
+    return u.origin === window.location.origin ? `${u.pathname}${u.search}` : "/";
+  } catch {
+    return "/";
+  }
+}
+
 export function LoginForm() {
   const params = useSearchParams();
   const [password, setPassword] = useState("");
@@ -23,8 +34,7 @@ export function LoginForm() {
     setError(null);
     try {
       await post("/api/auth/login", { password });
-      const next = params.get("next");
-      window.location.href = next && next.startsWith("/") && !next.startsWith("//") ? next : "/";
+      window.location.href = safeNext(params.get("next"));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setBusy(false);

@@ -158,6 +158,8 @@ async function inspectMvk(raw: Buffer | undefined) {
   const path = String(j.path ?? "");
   if (method !== "GET" && method !== "POST") throw new HttpError(400, "csak GET és POST");
   if (!/^\/api\/[\w./?=&%:,-]{1,400}$/.test(path)) throw new HttpError(400, "az útvonal /api/…-val kezdődjön (pl. /api/v1/gtfs/get-positions)");
+  // ne lehessen kilépni az /api/ alól (a hívás a szerver tokenjét viszi)
+  if (/\.\.|%2e|%2f|%5c|\/\//i.test(path.split("?")[0])) throw new HttpError(400, "érvénytelen útvonal");
   const isProto = /gtfs\/get-(positions|updates)/.test(path);
   const t0 = performance.now();
   const r = await mvkFetch(path, {
@@ -166,6 +168,7 @@ async function inspectMvk(raw: Buffer | undefined) {
     contentType: method === "POST" ? "application/json" : undefined,
     accept: j.accept ?? (isProto ? "application/x-protobuf, */*" : "application/json"),
     timeoutMs: 20_000,
+    redirect: "manual",
   });
   const ms = Math.round(performance.now() - t0);
   const out = { status: r.status, ms, contentType: r.contentType, bytes: r.buf.length, body: null as unknown, text: null as string | null, truncated: false };

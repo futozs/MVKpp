@@ -63,8 +63,8 @@ services:
       RP_ORIGINS: https://${DOMAIN:?DOMAIN kell}
       REDIS_URL: ${REDIS_URL:-}
       DB_POOL: "8"
-      # a rendszer-hub ezzel olvassa a web válaszidőit (/v3/admin/metrics)
-      ADMIN_KEY: ${ADMIN_KEY}
+      # a rendszer-hub ezzel olvassa a web válaszidőit (/v3/admin/metrics) — NEM a mesterkulcs
+      METRICS_KEY: ${METRICS_KEY:-}
 
   # Rendszer-hub: üzemeltetői pult, CSAK a belső hálón (HUB_BIND = a szerver LAN-címe,
   # pl. 192.168.1.11). Soha ne kösd 0.0.0.0-ra egy nyilvános VPS-en!
@@ -79,10 +79,11 @@ services:
       WORKER_URL: http://worker:8090
       WEB_URL: http://web:3000
       DOMAIN: ${DOMAIN}
-      APP_SECRET: ${APP_SECRET}
       ADMIN_KEY: ${ADMIN_KEY}
+      METRICS_KEY: ${METRICS_KEY:-}
       HUB_PASSWORD: ${HUB_PASSWORD:-}
       HUB_ALLOWED_CIDRS: ${HUB_ALLOWED_CIDRS:-}
+      HUB_ALLOWED_HOSTS: ${HUB_ALLOWED_HOSTS:-}
       HUB_GIT_TOKEN: ${HUB_GIT_TOKEN:-}
       HUB_BACKUP_HOUR: ${HUB_BACKUP_HOUR:-4}
       HUB_BACKUP_KEEP: ${HUB_BACKUP_KEEP:-7}

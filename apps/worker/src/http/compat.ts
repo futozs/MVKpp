@@ -42,8 +42,20 @@ export function isAdmin(req: Req): boolean {
   const h = String(req.headers["x-admin-key"] ?? "") || String(req.headers.authorization ?? "").replace(/^Bearer\s+/i, "");
   return h.length > 0 && safeEqual(h, config.adminKey);
 }
+
+/** Rossz admin-kulccsal próbálkozók: címenként 10 percben legfeljebb 20 hiba, utána 429. */
+const adminFails = new Map<string, { n: number; reset: number }>();
+const ADMIN_FAIL_LIMIT = 20;
+
 export function requireAdmin(req: Req) {
-  if (!isAdmin(req)) throw new HttpError(401, "admin kulcs szükséges (X-Admin-Key)");
+  const now = Date.now();
+  const f = adminFails.get(req.ip);
+  if (f && now < f.reset && f.n >= ADMIN_FAIL_LIMIT) throw new HttpError(429, "túl sok hibás admin-kulcs — próbáld később");
+  if (isAdmin(req)) return;
+  if (!f || now > f.reset) adminFails.set(req.ip, { n: 1, reset: now + 10 * 60_000 });
+  else f.n++;
+  if (adminFails.size > 10_000) adminFails.delete(adminFails.keys().next().value as string);
+  throw new HttpError(401, "admin kulcs szükséges (X-Admin-Key)");
 }
 
 function dateParam(req: Req, fallbackYmd: string): string {
