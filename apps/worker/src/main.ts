@@ -63,6 +63,8 @@ async function main() {
   // a motor indulása előtt: a mai nap visszajátszott fixeiből is épül (menet-előzmény, forgalom)
   const motion = new MotionPredictor(engine);
   await motion.load();
+  // a régóta hallgató menetek elengedése — saját időzítővel, hogy más feladat hibája ne akassza meg
+  setInterval(() => motion.prune(nowUnix()), 60_000).unref();
   const predictor = new VehiclePredictor(engine);
   await predictor.learn().catch((e) => log.warn("predict", "tanulás sikertelen", errMsg(e)));
   const forecaster = new DelayForecaster(engine);
@@ -218,7 +220,6 @@ async function main() {
   }
   await boss.work("minutely", async () => {
     await predictor.recordHorizons();
-    motion.prune(nowUnix());
   });
   await boss.work("gtfs-refresh", async () => {
     log.info("gtfs", await feeds.refresh());

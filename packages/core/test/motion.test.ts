@@ -116,6 +116,24 @@ describe("élő forgalom a szakaszon", () => {
     expect(Number.isNaN(tr.query("S1", 200, passEnd + 60, prof, "slow").ratio)).toBe(true); // saját magát nem
   });
 
+  it("az egész napot ismerő index sem lát többet, mint ami az adott pillanatig kiderült (a tanítás nem lát előre)", () => {
+    const runs = [0, 120, 300, 480, 700].map((k, i) => ({ key: `r${i}`, fixes: run(T0 + k, i % 2 ? 60 : 20).fixes }));
+    const full = new StretchTraffic();
+    for (const r of runs) full.addRun("S1", r.key, r.fixes, prof.pace.length);
+    let seen = 0;
+    for (let t = T0; t <= T0 + 1000; t += 37) {
+      const partial = new StretchTraffic();
+      for (const r of runs) partial.addRun("S1", r.key, r.fixes.filter((f) => f[0] <= t), prof.pace.length);
+      for (const x of [0, 150, 380, 600]) {
+        const a = full.query("S1", x, t, prof, "me");
+        const b = partial.query("S1", x, t, prof, "me");
+        expect([a.ratio, a.age]).toEqual([b.ratio, b.age]);
+        if (Number.isFinite(a.ratio)) seen++;
+      }
+    }
+    expect(seen).toBeGreaterThan(10); // tényleg volt mit összevetni
+  });
+
   it("a 20 percnél régebbi áthaladás kiesik", () => {
     const tr = new StretchTraffic();
     tr.addRun("S1", "a", run(T0 + 1000).fixes, prof.pace.length);

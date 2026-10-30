@@ -11,8 +11,11 @@ export async function saveMotionBundle(b: MotionModelBundle): Promise<{ id: numb
     `INSERT INTO ml_model (name, accepted, report, model) VALUES ($1, $2, $3, $4) RETURNING id`,
     [b.name, report.accepted, JSON.stringify(report), JSON.stringify(model)],
   );
+  // A legfrissebb ELFOGADOTT modell sosem törlődik (több elutasított tanítás után is ez él tovább).
   await getPool().query(
-    `DELETE FROM ml_model WHERE name = $1 AND id NOT IN (SELECT id FROM ml_model WHERE name = $1 ORDER BY trained_at DESC LIMIT $2)`,
+    `DELETE FROM ml_model WHERE name = $1
+        AND id NOT IN (SELECT id FROM ml_model WHERE name = $1 ORDER BY trained_at DESC LIMIT $2)
+        AND id NOT IN (SELECT id FROM ml_model WHERE name = $1 AND accepted ORDER BY trained_at DESC LIMIT 1)`,
     [b.name, KEEP],
   );
   return { id: r.rows[0].id, accepted: report.accepted };

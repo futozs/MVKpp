@@ -40,6 +40,8 @@ type Computed = { t: number; L: number; model: Path; fallback: Path; standing: b
 
 /** menetenként ennyi fixet tartunk meg (a tempó ~2 percet néz vissza) */
 const KEEP_FIXES = 16;
+/** menetenként ennyi még pontozatlan pálya (nagy késleltetésnél egy fix több pálya ablakába is eshet) */
+const KEEP_SCORABLE = 4;
 /** ennyi csend után a menetet elengedjük (mp) */
 const RUN_IDLE_S = 30 * 60;
 /** a pálya ennyi mp-ig tart (lásd MOTION_GRID); a térkép utána a végén marad */
@@ -105,15 +107,19 @@ export class MotionPredictor {
   private traffic = new StretchTraffic();
   /** menetenként a legutóbbi fixből számolt pálya */
   private computed = new Map<string, Computed>();
-  /** … amíg a következő fix le nem pontozza (a térkép ezt mutatta) */
-  private scorable = new Map<string, Computed>();
+  /** menetenként a pályák a mutatás sorrendjében: mindegyik t + L-től a következő t + L-éig látszott */
+  private scorable = new Map<string, Computed[]>();
   private trips = new Map<string, MotionTrip>();
   private buf = new Float32Array(MOTION_FEATURES.length);
   private mode: "model" | "fallback" = "model";
   private sinceGate = 0;
-  private score = { model: new Ring(), fallback: new Ring(), standing: new Ring(), moving: new Ring() };
+  private score = MotionPredictor.freshScore();
   private switches: { at: string; to: "model" | "fallback"; maeModel: number; maeFallback: number }[] = [];
   stats = { trajectories: 0, scored: 0, errors: 0 };
+
+  private static freshScore() {
+    return { model: new Ring(), fallback: new Ring(), standing: new Ring(), moving: new Ring() };
+  }
 
   constructor(engine: Engine) {
     this.engine = engine;
@@ -136,10 +142,16 @@ export class MotionPredictor {
         log.info("motion", "még nincs elfogadott mozgás-modell — a térkép a régi becsléssel megy");
         return;
       }
+      const profile = unpackProfile(b.profile);
       this.model = b.model;
-      this.profile = unpackProfile(b.profile);
+      this.profile = profile;
       this.info = { trainedAt: b.trainedAt, report: b.report };
       this.computed.clear();
+      // Új modell, tiszta lap: a régi modell élő pontszáma (és egy esetleges tartalék-állás) nem öröklődik.
+      this.scorable.clear();
+      this.score = MotionPredictor.freshScore();
+      this.mode = "model";
+      this.sinceGate = 0;
       log.info("motion", `mozgás-modell betöltve (${b.trainedAt}; teszten ${b.report.overall.maeModel} m átlagos hiba, a tartalék ${b.report.overall.maeFallback} m)`);
     } catch (e) {
       log.warn("motion", "a mozgás-modell nem töltődött be", errMsg(e));
@@ -166,14 +178,25 @@ export class MotionPredictor {
     if (p) this.traffic.addFix(m.shapeId, key, fix, p.pace.length);
   }
 
-  /** Az előző fixből mutatott pálya pontozása az új fixszel. */
+  /**
+   * Az új fix pontozza azt a pályát, amelyik a fix pillanatában a térképen látszott
+   * (ugyanígy, mint a tanítóminták: ha a jel késése nagyobb a fixek közti időnél,
+   * ez nem feltétlenül az előző fixé).
+   */
   private scoreAgainst(key: string, fix: MotionFix) {
-    const s = this.scorable.get(key);
-    if (!s || fix[0] <= s.t) return;
-    this.scorable.delete(key);
+    const list = this.scorable.get(key);
+    if (!list?.length) return;
+    let k = -1;
+    for (let i = 0; i < list.length; i++) if (list[i].t + list[i].L <= fix[0]) k = i;
+    if (k < 0) return;
+    // a korábbi pályák ablaka lezárult (a fixek ideje csak nő)
+    list.splice(0, k);
+    const s = list[0];
     const h = fix[0] - s.t;
-    // a térkép a fix megérkezése (t + L) után mutatta; a pálya vége után nem pontozunk
-    if (h < s.L || h > MAX_PATH_S) return;
+    if (h > MAX_PATH_S) {
+      list.shift();
+      return;
+    }
     const em = pathAt(s.model, h) - fix[1];
     const ef = pathAt(s.fallback, h) - fix[1];
     this.score.model.push(em);
@@ -253,7 +276,10 @@ export class MotionPredictor {
     if (dm.some((x) => !Number.isFinite(x))) return null;
     const c: Computed = { t: m.ts, L, model: motionTrajectory(m.alongM, dm, end), fallback: motionTrajectory(m.alongM, df, end), standing: isStanding(a.v) };
     this.computed.set(key, c);
-    this.scorable.set(key, c);
+    let list = this.scorable.get(key);
+    if (!list) this.scorable.set(key, (list = []));
+    list.push(c);
+    if (list.length > KEEP_SCORABLE) list.shift();
     this.stats.trajectories++;
     return this.mode === "model" ? c.model : c.fallback;
   }
