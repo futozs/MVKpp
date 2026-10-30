@@ -16,7 +16,7 @@ type TokenData = {
   current: { masked: string | null; claims: Record<string, unknown> | null; status: { source?: string; receivedAt?: string } | null };
   history: { id: number; source: string; agentId: string | null; installationId: string | null; iat: string | null; exp: string; receivedAt: string; rejectedAt: string | null }[];
   agents: Agent[];
-  commands: { id: number; agentId: string | null; kind: string; createdAt: string; requestedBy: string | null; pickedAt: string | null; pickedBy: string | null; doneAt: string | null; ok: boolean | null; note: string | null; expired: boolean }[];
+  commands: { id: number; agentId: string | null; kind: string; createdAt: string; requestedBy: string | null; pickedAt: string | null; pickedBy: string | null; doneAt: string | null; ok: boolean | null; note: string | null; expired: boolean; stuck: boolean }[];
 };
 
 const COMMAND_LABEL: Record<string, string> = {
@@ -27,7 +27,7 @@ const COMMAND_LABEL: Record<string, string> = {
 
 function commandState(c: TokenData["commands"][number]): { text: string; tone: Tone } {
   if (c.doneAt) return c.ok ? { text: "kész", tone: "ok" } : { text: "sikertelen", tone: "crit" };
-  if (c.pickedAt) return { text: "fut az agenten", tone: "info" };
+  if (c.pickedAt) return c.stuck ? { text: "nincs visszajelzés", tone: "warn" } : { text: "fut az agenten", tone: "info" };
   if (c.expired) return { text: "lejárt (nem vette fel)", tone: "idle" };
   return { text: "vár az agentre", tone: "warn" };
 }

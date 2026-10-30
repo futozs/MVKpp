@@ -34,7 +34,9 @@ export async function tokenOverview() {
     sql<{ agentId: string; lastSeenAt: string; info: Record<string, unknown> }>(`SELECT agent_id AS "agentId", last_seen_at AS "lastSeenAt", info FROM agent_heartbeat ORDER BY last_seen_at DESC`),
     sql(
       `SELECT id, agent_id AS "agentId", kind, created_at AS "createdAt", requested_by AS "requestedBy", picked_at AS "pickedAt", picked_by AS "pickedBy", done_at AS "doneAt", ok, note,
-              (picked_at IS NULL AND created_at < now() - interval '30 minutes') AS expired
+              (picked_at IS NULL AND created_at < now() - interval '30 minutes') AS expired,
+              -- felvette, de 10 perce nem nyugtázta (az agent leállt; az új agent indulás után pótolja)
+              (picked_at IS NOT NULL AND done_at IS NULL AND picked_at < now() - interval '10 minutes') AS stuck
          FROM agent_command ORDER BY id DESC LIMIT 30`,
     ).catch(() => []),
   ]);

@@ -130,7 +130,8 @@ A nagy értékek gzip-pel tömörítve mennek a Redisbe (4 MB fölött csak mem�
 
 Az MVK API-hoz egy kb. 9 órás JWT kell, amit csak az MVK MobilON+ app kap meg. A `mvk-token-agent` (Swift, `apps/token-agent/`) egy Macen fut, és:
 
-- 10 percenként megkérdezi a szervert (`/agent/status`), meddig él még a szerver tokenje;
+- fél percenként (a szerver kérésére; legfeljebb `checkEveryMinutes`-enként) megkérdezi a szervert (`/agent/status`), meddig él még a szerver tokenje, és van-e parancs a rendszer-hubból; ha a szerver nem érhető el (pl. gépindításkor még nem fut a Docker stack), 15 mp-től 2 percig növekvő szünettel újrapróbálja;
+- a hub parancsait a lemezre is felírja (`pending-commands.json` a konfiguráció mellett), így ha közben leáll, újraindulás után lezárja a félbemaradtat (restart-app után elindítja az appot, ha bezárva maradt), és pótolja az el nem jutott nyugtát;
 - ha 3,5 órán belül lejár, vagy az MVK elutasította: **a háttérben újraindítja az MVK appot** (`open -g`, nem veszi el a fókuszt), megvárja, hogy friss tokent kapjon, **kiolvassa a plistjéből**, és HMAC-aláírva **felküldi** (`/agent/token`) — így a token kb. 6 óránként cserélődik;
 - közben az appot futva tartja, hogy az magától is frissíthessen.
 

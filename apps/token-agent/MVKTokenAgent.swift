@@ -151,6 +151,23 @@ func appRunning(_ cfg: Config) -> Bool {
     !NSRunningApplication.runningApplications(withBundleIdentifier: cfg.bundleId).isEmpty
 }
 
+/// Az MVK app indítása a háttérben; visszaadja, hogy az `open` sikerült-e.
+@discardableResult
+func openApp(_ cfg: Config) -> Bool {
+    let p = Process()
+    p.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+    p.arguments = ["-g", "-b", cfg.bundleId] // -g: a háttérben, nem lopja el a fókuszt
+    do {
+        try p.run()
+        p.waitUntilExit()
+    } catch {
+        log("az app nem indítható: \(error.localizedDescription)")
+        return false
+    }
+    if p.terminationStatus != 0 { log("az app nem indítható: open → \(p.terminationStatus)") }
+    return p.terminationStatus == 0
+}
+
 func restartApp(_ cfg: Config) {
     log("az MVK app újraindítása (friss token kérése)…")
     for app in NSRunningApplication.runningApplications(withBundleIdentifier: cfg.bundleId) {
@@ -160,11 +177,99 @@ func restartApp(_ cfg: Config) {
     for app in NSRunningApplication.runningApplications(withBundleIdentifier: cfg.bundleId) {
         _ = app.forceTerminate()
     }
-    let p = Process()
-    p.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-    p.arguments = ["-g", "-b", cfg.bundleId] // -g: a háttérben, nem lopja el a fókuszt
-    do { try p.run(); p.waitUntilExit() } catch { log("az app nem indítható: \(error.localizedDescription)") }
+    openApp(cfg)
     Thread.sleep(forTimeInterval: cfg.appWarmupSeconds)
+}
+
+// MARK: - parancsnapló
+
+/// A hubból kapott parancs a lemezen: végrehajtás előtt beírjuk, az eredményt
+/// mellé tesszük, és csak a sikeres /agent/ack után töröljük. Így ha az agent a
+/// parancs közben leáll, vagy a nyugta nem jut át, a következő futás pótolja.
+struct PendingCommand: Codable {
+    let id: Int
+    let kind: String
+    let startedAt: Date
+    /// nil: még fut (vagy az előző agent közben leállt)
+    let ok: Bool?
+    let note: String?
+
+    func closed(ok: Bool, note: String) -> PendingCommand {
+        PendingCommand(id: id, kind: kind, startedAt: startedAt, ok: ok, note: note)
+    }
+}
+
+let pendingPath = configDir.appendingPathComponent("pending-commands.json")
+
+func loadPending() -> [PendingCommand] {
+    guard let data = try? Data(contentsOf: pendingPath) else { return [] }
+    do {
+        return try JSONDecoder().decode([PendingCommand].self, from: data)
+    } catch {
+        log("a parancsnapló hibás, eldobom: \(error.localizedDescription)")
+        return []
+    }
+}
+
+func savePending(_ list: [PendingCommand]) {
+    do {
+        if list.isEmpty {
+            if FileManager.default.fileExists(atPath: pendingPath.path) { try FileManager.default.removeItem(at: pendingPath) }
+        } else {
+            try JSONEncoder().encode(list).write(to: pendingPath, options: .atomic)
+        }
+    } catch {
+        log("a parancsnapló nem írható: \(error.localizedDescription)")
+    }
+}
+
+func beginCommand(_ id: Int, _ kind: String) {
+    savePending(loadPending().filter { $0.id != id } + [PendingCommand(id: id, kind: kind, startedAt: Date(), ok: nil, note: nil)])
+}
+
+func finishCommand(_ cfg: Config, _ id: Int, ok: Bool, note: String) {
+    savePending(loadPending().map { $0.id == id ? $0.closed(ok: ok, note: note) : $0 })
+    flushAcks(cfg)
+}
+
+/// A lezárt, de még nem nyugtázott parancsok elküldése; ami átment, kikerül a naplóból.
+func flushAcks(_ cfg: Config) {
+    let list = loadPending()
+    let unacked = list.filter { p in
+        guard let ok = p.ok else { return true }
+        let (code, _) = post(cfg, "/agent/ack", ["id": p.id, "ok": ok, "note": p.note ?? ""])
+        if code != 200 { log("a #\(p.id) parancs nyugtája nem ment át (HTTP \(code)), a következő körben újra") }
+        return code != 200
+    }
+    if unacked.count != list.count { savePending(unacked) }
+}
+
+/// Indításkor: az eredmény nélkül maradt parancs végrehajtása közben állt le az
+/// előző agent. Lezárjuk, restart-app után pedig gondoskodunk róla, hogy az app fusson.
+func recoverInterruptedCommands(_ cfg: Config) {
+    let list = loadPending()
+    guard list.contains(where: { $0.ok == nil }) else { return }
+    savePending(list.map { p in
+        guard p.ok == nil else { return p }
+        log("a #\(p.id) \(p.kind) parancs közben leállt az agent — lezárom")
+        guard p.kind == "restart-app" else {
+            return p.closed(ok: false, note: "megszakadt: az agent leállt a végrehajtás közben")
+        }
+        // a cooldown az újraindulás után is számítson
+        lastRestart = max(lastRestart, p.startedAt)
+        let apps = NSRunningApplication.runningApplications(withBundleIdentifier: cfg.bundleId)
+        if apps.isEmpty {
+            return openApp(cfg)
+                ? p.closed(ok: true, note: "az agent leállt a parancs közben, az app bezárva maradt — újraindulás után elindítva")
+                : p.closed(ok: false, note: "az agent leállt a parancs közben, az app bezárva maradt, és nem indítható")
+        }
+        guard let launched = apps.compactMap(\.launchDate).max() else {
+            return p.closed(ok: true, note: "az agent leállt a parancs közben; az app fut, de az újraindulása nem ellenőrizhető")
+        }
+        return launched >= p.startedAt
+            ? p.closed(ok: true, note: "az agent leállt a parancs közben, de az app újraindult")
+            : p.closed(ok: false, note: "megszakadt, mielőtt az app újraindult volna (a régi példány fut) — kérd újra")
+    })
 }
 
 // MARK: - egy kör
@@ -174,6 +279,11 @@ let agentVersion = 2
 var lastRestart = Date.distantPast
 /// A szerver kérése, hogy mikor jelentkezzünk újra (a hubból kért parancs így fél percen belül célba ér).
 var serverPollSeconds: Double? = nil
+/// Egymás utáni sikertelen /agent/status-ok (gépindításkor a Docker stack még nem fut).
+var failedPolls = 0
+/// Sikertelen kör után ennyi mp múlva próbáljuk újra, minden hibánál duplázva, legfeljebb `retryMaxSeconds`-ig.
+let retryBaseSeconds = 15.0
+let retryMaxSeconds = 120.0
 
 func iso(_ d: Date) -> String {
     d == Date.distantPast ? "" : ISO8601DateFormatter().string(from: d)
@@ -184,24 +294,25 @@ func iso(_ d: Date) -> String {
 func runCommand(_ cfg: Config, _ cmd: [String: Any], local: inout Token?) -> Bool {
     guard let id = (cmd["id"] as? NSNumber)?.intValue, let kind = cmd["kind"] as? String else { return false }
     log("parancs a hubból: #\(id) \(kind)")
+    beginCommand(id, kind)
     switch kind {
     case "restart-app":
         lastRestart = Date()
         restartApp(cfg)
         local = readToken(cfg)
         let left = local.map { Int(($0.exp - Date().timeIntervalSince1970) / 60) }
-        _ = post(cfg, "/agent/ack", ["id": id, "ok": local != nil, "note": local != nil ? "az app újraindult, a token \(left ?? 0) percig érvényes" : "az app újraindult, de nincs olvasható token"])
+        finishCommand(cfg, id, ok: local != nil, note: local != nil ? "az app újraindult, a token \(left ?? 0) percig érvényes" : "az app újraindult, de nincs olvasható token")
         return true
     case "send-token":
         local = readToken(cfg)
-        _ = post(cfg, "/agent/ack", ["id": id, "ok": local != nil, "note": local != nil ? "token elküldve" : "nincs olvasható token a plistben"])
+        finishCommand(cfg, id, ok: local != nil, note: local != nil ? "token elküldve" : "nincs olvasható token a plistben")
         return true
     case "restart-agent":
-        _ = post(cfg, "/agent/ack", ["id": id, "ok": true, "note": "az agent újraindul (launchd)"])
+        finishCommand(cfg, id, ok: true, note: "az agent újraindul (launchd)")
         log("újraindulás a hub kérésére")
         exit(0)
     default:
-        _ = post(cfg, "/agent/ack", ["id": id, "ok": false, "note": "ismeretlen parancs: \(kind)"])
+        finishCommand(cfg, id, ok: false, note: "ismeretlen parancs: \(kind)")
         return false
     }
 }
@@ -219,10 +330,20 @@ func cycle(_ cfg: Config) {
     ]
     if let t = local { info["localTokenLeftSec"] = Int(t.exp - now) }
     let (code, status) = post(cfg, "/agent/status", ["agentId": cfg.agentId, "info": info])
-    if code != 200 {
-        log("a szerver nem elérhető vagy elutasított (/agent/status → HTTP \(code)) — ellenőrizd a serverUrl-t és az agentSecret-et")
+    if code == 200 {
+        failedPolls = 0
+        serverPollSeconds = (status["nextCheckSec"] as? NSNumber)?.doubleValue
+        flushAcks(cfg)
+    } else {
+        // Ne a teljes checkEveryMinutes-t várjuk ki: gépindításkor az agent a szerver előtt indul.
+        failedPolls += 1
+        let retry = min(retryMaxSeconds, retryBaseSeconds * pow(2, Double(failedPolls - 1)))
+        serverPollSeconds = retry
+        let why = code == 0
+            ? "a szerver nem érhető el (még nem indult el, vagy rossz a serverUrl)"
+            : "a szerver elutasította (HTTP \(code)) — ellenőrizd a serverUrl-t és az agentSecret-et"
+        log("/agent/status: \(why); újrapróbálás \(Int(retry)) mp múlva")
     }
-    serverPollSeconds = (status["nextCheckSec"] as? NSNumber)?.doubleValue
     let serverLeft = (status["expiresInSec"] as? NSNumber)?.doubleValue ?? -1
     let rejected = (status["rejected"] as? Bool) ?? false
     let threshold = cfg.refreshBelowHours * 3600
@@ -245,10 +366,7 @@ func cycle(_ cfg: Config) {
         local = readToken(cfg)
     } else if !appRunning(cfg) {
         // Az app fusson a háttérben, hogy magától is frissíthesse a tokenjét.
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-        p.arguments = ["-g", "-b", cfg.bundleId]
-        try? p.run()
+        openApp(cfg)
     }
 
     guard let tok = local else {
@@ -289,9 +407,11 @@ case "status":
         log("nincs olvasható token (plist olvasható: \(plistReadable(cfg)))")
     }
 case "once":
+    recoverInterruptedCommands(cfg)
     cycle(cfg)
 default:
     log("MVK token-agent fut — szerver: \(cfg.serverUrl), ellenőrzés \(Int(cfg.checkEveryMinutes)) percenként")
+    recoverInterruptedCommands(cfg)
     while true {
         cycle(cfg)
         Thread.sleep(forTimeInterval: nextSleepSeconds(cfg))
