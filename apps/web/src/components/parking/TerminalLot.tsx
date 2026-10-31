@@ -78,6 +78,8 @@ export function TerminalLotCard({
 }
 
 export function ParkedTile({ v, ctx }: { v: ParkedVehicle; ctx: LotContext }) {
+  // a vonat neve hosszabb a rendszámnál („FLIRT 415 112”): kisebb betűvel egy sorban marad
+  const label = displayVehicleId(v.id);
   const parked = v.since ? Math.max(0, ctx.now - v.since) : null;
   // Néma járműnél az 1 órás határig hátralévő idő: utána a kocsiszínbe soroljuk.
   const silent = !v.online && v.lastSeen ? Math.max(0, ctx.now - v.lastSeen) : null;
@@ -93,7 +95,12 @@ export function ParkedTile({ v, ctx }: { v: ParkedVehicle; ctx: LotContext }) {
       )}
     >
       <span className="flex items-center justify-between gap-2">
-        <span className="font-mono text-[15px] font-bold leading-none tabular-nums" title={vehicleIdTitle(v.id)}>{displayVehicleId(v.id)}</span>
+        <span
+          className={cn("whitespace-nowrap font-mono font-bold leading-none tabular-nums", label.length > 9 ? "text-[12.5px]" : "text-[15px]")}
+          title={vehicleIdTitle(v.id)}
+        >
+          {label}
+        </span>
         <SignalDot online={v.online} />
       </span>
       <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">

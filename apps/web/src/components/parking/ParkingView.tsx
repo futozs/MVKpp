@@ -43,7 +43,8 @@ export function ParkingView({ routes, onFocusVehicle }: { routes: Route[]; onFoc
   const toggleFav = (key: string) => setFavorites(isFav(key) ? favorites.filter((k) => k !== key) : [...favorites, key]);
 
   const byShort = useMemo(() => new Map(routes.map((r) => [r.short, r])), [routes]);
-  const lookup = (short: string | null) => (short ? byShort.get(short) : undefined);
+  // a vonat címkéje „IC 191”: a színt a kategória („IC”) adja
+  const lookup = (short: string | null) => (short ? (byShort.get(short) ?? byShort.get(short.split(" ")[0])) : undefined);
   const view = useMemo(() => (data ? withFavorites(filterSnapshot(data, kind, query), favorites, query) : null), [data, kind, query, favorites]);
   // Volán és vasút: csak a megyén belüli végállomások, a bekapcsolt módok szerint, a keresővel szűrve
   const regionalLots = useMemo(() => {

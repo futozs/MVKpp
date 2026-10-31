@@ -1,6 +1,7 @@
 import { Star } from "lucide-react";
 import type { Route } from "@/types";
 import type { TripTip } from "@/services/parkingApi";
+import { isRegionalId } from "@/lib/modes";
 import { cn } from "@/lib/utils";
 import { durationText, hmOfDaySec, pct, untilStart, untilText } from "./format";
 
@@ -24,7 +25,7 @@ export function RouteChip({
   return (
     <span
       className={cn(
-        "inline-flex h-[18px] min-w-[26px] items-center justify-center rounded-[5px] px-1 font-mono text-[11px] font-bold leading-none tabular-nums",
+        "inline-flex h-[18px] min-w-[26px] shrink-0 items-center justify-center whitespace-nowrap rounded-[5px] px-1 font-mono text-[11px] font-bold leading-none tabular-nums",
         className,
       )}
       style={{ background: hex(r?.color, FALLBACK.color), color: hex(r?.text, FALLBACK.text) }}
@@ -68,7 +69,7 @@ export function TipChip({
   const extra =
     variant === "stall" ? null : !tip.certain ? pct(tip.confidence) : variant === "full" ? untilText(until) : until < 60 ? "most" : durationText(until);
   const title = tip.certain
-    ? `Az MVK már kiadta neki: ${tip.route} ${hmOfDaySec(tip.startS)}`
+    ? `${isRegionalId(tip.tripId) ? "A MÁV" : "Az MVK"} már kiadta neki: ${tip.route} ${hmOfDaySec(tip.startS)}`
     : `Előrejelzés a korábbi fordák alapján, ${pct(tip.confidence)} bizonyossággal`;
   return (
     <span
