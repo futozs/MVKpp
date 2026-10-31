@@ -62,6 +62,58 @@ export function useEnabledModes(): TransitMode[] {
   }, [tram, bus, coach, rail]);
 }
 
+/**
+ * Közös megállók (ugyanott álló MVK-oszlop és Volán-megálló, pl. „Cementgyár” és
+ * „Miskolc (Hejőcsaba), cementgyár”): egy megállóként, minden ott megálló járattal
+ * („all”), csak az MVK vagy csak a Volán járataival, vagy külön, ahogy a forrás adja.
+ * Minden megállótáblára érvényes (térkép, figyelő, kioszk, értesítések).
+ */
+export type StopMerge = "all" | "mvk" | "coach" | "off";
+export const STOP_MERGE_KEY = "mvk_pref_stop_merge";
+export const STOP_MERGE_ITEMS: readonly { id: StopMerge; label: string; hint: string }[] = [
+  { id: "all", label: "Összevonva", hint: "Egy megálló, és minden járat, ami ott megáll — MVK és Volán együtt." },
+  { id: "mvk", label: "Csak MVK", hint: "A közös megállókban csak az MVK járatai látszanak." },
+  { id: "coach", label: "Csak Volán", hint: "A közös megállókban csak a Volán-buszok látszanak." },
+  { id: "off", label: "Külön", hint: "Az MVK- és a Volán-megálló külön, ahogy a menetrendben szerepel." },
+];
+const MERGES = new Set<string>(STOP_MERGE_ITEMS.map((m) => m.id));
+
+/** Az összevonás most (a nem React kódnak). */
+export function stopMergeNow(): StopMerge {
+  try {
+    const v = JSON.parse(localStorage.getItem(STOP_MERGE_KEY) ?? "null");
+    return MERGES.has(v) ? (v as StopMerge) : "all";
+  } catch {
+    return "all";
+  }
+}
+
+export function useStopMerge(): StopMerge {
+  const v = usePreference<StopMerge>(STOP_MERGE_KEY, "all")[0];
+  return MERGES.has(v) ? v : "all";
+}
+
+/** Összevont nézetben a Volán-ikermegálló nem külön tétel (az MVK-oszlop mutatja). */
+export const isMergedTwin = (s: { twinOf?: string }, merge: StopMerge) => Boolean(s.twinOf) && merge !== "off";
+
+/**
+ * A megállótáblák kulcsa: a módok és az összevonás (`tram,bus,coach,rail~all`) — ez megy a
+ * `?modes=&merge=` paraméterekbe és a `stop:<id>@<kulcs>` WebSocket-témába.
+ */
+export const boardKey = (modes: readonly TransitMode[], merge: StopMerge) => `${modesParam(modes)}~${merge}`;
+export const boardKeyNow = () => boardKey(enabledModesNow(), stopMergeNow());
+export function useBoardKey(): string {
+  const modes = useEnabledModes();
+  const merge = useStopMerge();
+  return boardKey(modes, merge);
+}
+
+/** A tábla-kulcs URL-paraméterei (a régi, csak módos kulcs is jó). */
+export function boardQuery(key: string): string {
+  const [modes, merge] = key.split("~");
+  return `modes=${modes}${merge ? `&merge=${merge}` : ""}`;
+}
+
 /** Be van-e kapcsolva bármelyik regionális mód (Volán, vasút). */
 export const hasRegional = (modes: readonly TransitMode[]) => modes.includes("coach") || modes.includes("rail");
 

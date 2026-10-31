@@ -128,4 +128,6 @@ export type StopArrivals = {
   now: number;
   rtError: string | null;
   arrivals: ArrivalItem[];
+  /** közös megálló: a táblán ezeknek a megállóknak az indulásai (az MVK-oszlop és a Volán-párja) */
+  merged?: string[];
 };

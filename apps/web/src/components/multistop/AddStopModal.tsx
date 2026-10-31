@@ -14,7 +14,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { api } from "@/services/api";
 import { stopKindLabel } from "@/components/transit/RegionalBits";
 import { MAX_RELATIONS, MAX_TRAINS, type RelationWatch } from "@/lib/transitWatches";
-import { pickableStops, regionRank } from "@/lib/modes";
+import { isMergedTwin, pickableStops, regionRank, useStopMerge } from "@/lib/modes";
 import { cn, normalizeSearchText, withHungarianSuffix } from "@/lib/utils";
 
 type Tab = "stops" | "relation" | "train";
@@ -53,7 +53,9 @@ export function AddStopModal({
   const [trainHits, setTrainHits] = useState<TransitSearchResponse["trains"] | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  const pickable = useMemo(() => pickableStops(stops), [stops]);
+  // összevont nézetben a Volán-iker nem külön tétel: az MVK-oszlop mutatja a járatait
+  const merge = useStopMerge();
+  const pickable = useMemo(() => pickableStops(stops).filter((s) => !isMergedTwin(s, merge)), [stops, merge]);
   const results = useMemo(() => {
     const q = normalizeSearchText(query.trim());
     // az állomások elöl (Tiszai pu., Búza téri autóbusz-állomás), utána a megállók

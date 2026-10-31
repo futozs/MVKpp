@@ -6,6 +6,8 @@ import {
   Feed,
   feedFromFiles,
   feedOfId,
+  findTrains,
+  findTrip,
   inRegion,
   isMvkId,
   localMidnightUnix,
@@ -208,6 +210,24 @@ describe("megállótábla több forrásból", () => {
     expect(train.route).toBe("Sz");
     expect(train.platform).toBe("6");
     expect(train.notices).toEqual(["Pálya állapota miatti késés"]);
+  });
+});
+
+describe("vonat vonatszám és menetazonosító szerint", () => {
+  const day = resolveServiceDay([composite], ISO)!;
+  const midnight = localMidnightUnix(ISO);
+  const days = [{ day, midnightUnix: midnight }];
+
+  it("a követett vonat menete azonosító szerint: a napja, az indulása és az érkezése", () => {
+    const want = [{ tripId: "1:35051212", dayIndex: 0, firstDepUnix: midnight + 26400, lastArrUnix: midnight + 29280 }];
+    expect(findTrip(days, "1:35051212")).toEqual(want);
+    // ugyanaz, mint a vonatszám szerinti keresés
+    expect(findTrains(days, "5139")).toEqual(want);
+  });
+
+  it("Volán-menet és ismeretlen azonosító: nincs találat", () => {
+    expect(findTrip(days, "hkir:hkir_3738_366-5")).toEqual([]);
+    expect(findTrip(days, "1:nincs-ilyen")).toEqual([]);
   });
 });
 

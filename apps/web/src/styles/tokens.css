@@ -112,6 +112,8 @@
     --z-overlay: 400;
     --z-bar: 600;
     --z-drawer: 1000;
+    /* a fejléc a lenyíló menüivel (Beállítások, értesítések) a nyitott fiókok fölött */
+    --z-header: 1100;
     --z-dialog: 1200;
   }
 

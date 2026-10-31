@@ -25,8 +25,8 @@ import { CatchLine, CatchPill, ReplacementNote, replacementFor, StartRiskLine, T
 import { expectedArrival, useCatchFor } from "@/hooks/useCatch";
 import { addAlert, noPushNote, notifyLocallyOnce, removeAlert, useAlerts } from "@/lib/alerts";
 import { useWatchFeatures } from "@/lib/watchPrefs";
-import { displayVehicleId, modesParam, useEnabledModes } from "@/lib/modes";
-import { arrivalTileText, arrivalTitle, arrivalVehicleLabel, NoticeList, PlatformBadge, stopKindLabel } from "@/components/transit/RegionalBits";
+import { displayVehicleId, useBoardKey } from "@/lib/modes";
+import { arrivalTileText, arrivalTitle, arrivalVehicleLabel, NoticeList, PlatformBadge, SharedStopTag, stopKindLabel } from "@/components/transit/RegionalBits";
 import { RefreshCw } from "lucide-react";
 
 /** hiba után ennyi idő múlva próbáljuk újra (duplázva, legfeljebb 30 mp-ig) */
@@ -87,7 +87,7 @@ export function StopCard({
   // A Beállításokban egyenként kikapcsolható funkciók (felhőben szinkronizálva).
   const f = useWatchFeatures();
   // A bekapcsolt módok indulásai (a Tiszai pu. MVK-megállóján a Volán is megáll); az állomás táblája hosszabb.
-  const modesKey = modesParam(useEnabledModes());
+  const modesKey = useBoardKey();
   const isStation = Boolean(stop.station || stop.feed === "rail");
   const listLimit = isStation ? 12 : 8;
   const showPredicted = f.predictedVehicle;
@@ -199,6 +199,12 @@ export function StopCard({
               </span>
             ) : null}
             {stopKindLabel(stop)}
+            {data?.merged ? (
+              <>
+                <span aria-hidden>·</span>
+                <SharedStopTag merged={data.merged} />
+              </>
+            ) : null}
           </p>
         </div>
 

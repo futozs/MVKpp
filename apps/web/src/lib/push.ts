@@ -1,6 +1,6 @@
 import { API_BASE } from "@/lib/apiBase";
 import { getNotificationSettings } from "@/lib/notifications";
-import { modesParam } from "@/lib/modes";
+import { modesParam, stopMergeNow } from "@/lib/modes";
 
 const log = (...args: unknown[]) => console.log("[push]", ...args);
 
@@ -124,7 +124,7 @@ export async function registerPushWatch(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       // a figyelés a bekapcsolt módokat nézi (Volán, vonat is) — ahogy a megállótábla
-      body: JSON.stringify({ subscription: result.sub.toJSON(), ...config, params: { modes: modesParam(), ...config.params } }),
+      body: JSON.stringify({ subscription: result.sub.toJSON(), ...config, params: { modes: modesParam(), merge: stopMergeNow(), ...config.params } }),
     });
     if (!res.ok) {
       const text = await res.text().catch(() => "");

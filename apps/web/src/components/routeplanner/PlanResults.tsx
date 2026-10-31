@@ -33,7 +33,8 @@ function ModeTag({ mode }: { mode: JourneyMode }) {
   );
 }
 
-export function PlanResults({ plan }: { plan: JourneyPlanResponse }) {
+/** `emptyHint`: ha nincs út, mit érdemes kipróbálni (pl. a Volán vagy a vonat bepipálását) */
+export function PlanResults({ plan, emptyHint }: { plan: JourneyPlanResponse; emptyHint?: string | null }) {
   const when = plan.arriveBy ? `${hm(plan.at)}-ig érkezéssel` : `${hm(plan.at)} utáni indulással`;
   return (
     <section aria-labelledby="rp-results-title" className="space-y-3">
@@ -73,7 +74,7 @@ export function PlanResults({ plan }: { plan: JourneyPlanResponse }) {
         <div className="rounded-2xl border border-dashed border-border px-4 py-8 text-center">
           <p className="text-sm font-semibold">Ebben az időpontban nincs kapcsolat a két hely között.</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Éjszaka és hétvégén kevesebb járat közlekedik — próbálj másik időpontot.
+            {emptyHint ?? "Éjszaka és hétvégén kevesebb járat közlekedik — próbálj másik időpontot."}
           </p>
         </div>
       )}

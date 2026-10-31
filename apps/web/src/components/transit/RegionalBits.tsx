@@ -3,7 +3,7 @@
  * (élőben változhat), a MÁV hivatalos megjegyzései (késés oka, kocsiösszeállítás,
  * pótlóbusz), és a csempe szövege (vonatnál a kategória és a vonatszám).
  */
-import { Info, TrainTrack } from "lucide-react";
+import { Info, Merge, TrainTrack } from "lucide-react";
 import type { ArrivalItem, Stop } from "@/types";
 import { displayVehicleId, feedOfId } from "@/lib/modes";
 import { cn } from "@/lib/utils";
@@ -66,5 +66,19 @@ export function NoticeList({ notices, compact, className }: { notices?: string[]
         </li>
       ))}
     </ul>
+  );
+}
+
+/** Közös megálló a fejlécben: az MVK-oszlop és a mellette álló Volán-megálló egy táblán. */
+export function SharedStopTag({ merged }: { merged?: string[] | null }) {
+  if (!merged || merged.length < 2) return null;
+  return (
+    <span
+      title="Az MVK- és a Volán-megálló egy helyen áll: a táblán mindkettő járatai (a Beállításokban állítható)."
+      className="inline-flex items-center gap-1 font-sans font-semibold text-foreground/80"
+    >
+      <Merge aria-hidden className="h-3 w-3 text-primary" />
+      közös megálló
+    </span>
   );
 }

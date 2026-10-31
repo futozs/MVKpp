@@ -22,7 +22,7 @@ import type {
   TransitSearchResponse,
 } from "../types";
 import { API_BASE } from "@/lib/apiBase";
-import { modesParam } from "@/lib/modes";
+import { boardKeyNow, boardQuery, modesParam } from "@/lib/modes";
 
 /* ---------------------------------------------------------------------------
    Saját útvonaltervező (/engine/plan) — a menetrend, a mért késések és az élő
@@ -162,6 +162,8 @@ export interface JourneyPlanQuery {
   at: number;
   arriveBy?: boolean;
   limit?: number;
+  /** a tervezésben használható módok (`?modes=`); alapból a Beállítások szerinti */
+  modes?: string;
   signal?: AbortSignal;
 }
 
@@ -179,9 +181,9 @@ export const api = {
   /** A bekapcsolt módok megállói (v3: + forrás, szülő-állomás, állomás-e). */
   async getStops(modes = modesParam()): Promise<Stop[]> {
     const raw = await handleResponse<
-      [string, string, string, number, number, string?, string?, number?][]
+      [string, string, string, number, number, string?, string?, number?, string?][]
     >(await fetch(`${API_BASE}/gtfs/stops.json?modes=${modes}`), "/gtfs/stops.json");
-    return raw.map(([id, code, name, lat, lon, feed, parent, station]) => ({
+    return raw.map(([id, code, name, lat, lon, feed, parent, station, twinOf]) => ({
       id,
       code,
       name,
@@ -190,6 +192,7 @@ export const api = {
       ...(feed ? { feed: feed as Stop["feed"] } : {}),
       ...(parent ? { parent } : {}),
       ...(station ? { station: true } : {}),
+      ...(twinOf ? { twinOf } : {}),
     }));
   },
 
@@ -306,10 +309,11 @@ export const api = {
     );
   },
 
-  async getArrivals(stopId: string, limit = 12, modes = modesParam()): Promise<StopArrivalsResponse> {
+  /** `board`: a tábla kulcsa (módok és a közös megállók összevonása, lásd `boardKey`). */
+  async getArrivals(stopId: string, limit = 12, board = boardKeyNow()): Promise<StopArrivalsResponse> {
     return handleResponse<StopArrivalsResponse>(
       await fetch(
-        `${API_BASE}/live/arrivals?stop=${encodeURIComponent(stopId)}&limit=${limit}&modes=${modes}`,
+        `${API_BASE}/live/arrivals?stop=${encodeURIComponent(stopId)}&limit=${limit}&${boardQuery(board)}`,
       ),
       "/live/arrivals",
     );
@@ -322,7 +326,7 @@ export const api = {
     if (!stopIds.length) return { results: [] };
     return handleResponse<MultiArrivalsResponse>(
       await fetch(
-        `${API_BASE}/live/multi-arrivals?stops=${encodeURIComponent(stopIds.join(","))}&limit=${limit}&modes=${modesParam()}`,
+        `${API_BASE}/live/multi-arrivals?stops=${encodeURIComponent(stopIds.join(","))}&limit=${limit}&${boardQuery(boardKeyNow())}`,
       ),
       "/live/multi-arrivals",
     );
@@ -337,6 +341,11 @@ export const api = {
   /** Egy vonat vonatszám szerint (a ma vagy holnap közlekedő példány, megállónként). */
   async getTrain(no: string): Promise<TrainDetailResponse> {
     return handleResponse<TrainDetailResponse>(await fetch(`${API_BASE}/engine/transit/train?no=${encodeURIComponent(no)}`), "/engine/transit/train");
+  },
+
+  /** Egy vasúti menet megállónként (a térképen követett vonat menetrendje). */
+  async getTrainTrip(tripId: string): Promise<TrainDetailResponse> {
+    return handleResponse<TrainDetailResponse>(await fetch(`${API_BASE}/engine/transit/train?trip=${encodeURIComponent(tripId)}`), "/engine/transit/train");
   },
 
   /** Megálló-, állomás- és vonatszám-keresés minden bekapcsolt módban. */
@@ -439,7 +448,7 @@ export const api = {
       to: q.to,
       at: String(Math.floor(q.at)),
       limit: String(q.limit ?? 4),
-      modes: modesParam(),
+      modes: q.modes ?? modesParam(),
     });
     if (q.arriveBy) params.set("arriveBy", "1");
     const res = await fetch(`${API_BASE}/engine/plan?${params.toString()}`, {

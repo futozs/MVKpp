@@ -6,6 +6,7 @@
 import {
   ALL_MODES,
   findTrains,
+  findTrip,
   isMvkId,
   modeOfRoute,
   nowUnix,
@@ -138,11 +139,21 @@ export function registerTransit(r: Router, ctx: Ctx) {
     sendJson(req, res, 200, board, { "cache-control": "no-store" });
   });
 
-  /** Egy vonat vonatszám szerint: a ma (vagy ha már elment, holnap) közlekedő példány megállónként. */
+  /**
+   * Egy vonat megállónként: vonatszám szerint (`?no=`) a ma (vagy ha már elment, holnap)
+   * közlekedő példány, menetazonosító szerint (`?trip=`) pontosan az a menet — a térképen
+   * követett vonat menetrendje.
+   */
   r.get("/engine/transit/train", (req, res) => {
+    const trip = (req.query.get("trip") ?? "").trim();
+    if (trip) {
+      if (!/^1:[\w.-]{1,40}$/.test(trip)) throw new HttpError(400, "érvénytelen ?trip= (vasúti menet)");
+      sendJson(req, res, 200, trainDetail(ctx, { trip }), { "cache-control": "no-store" });
+      return;
+    }
     const no = (req.query.get("no") ?? "").trim();
     if (!/^\d{1,6}$/.test(no)) throw new HttpError(400, "érvénytelen ?no= (vonatszám)");
-    sendJson(req, res, 200, trainDetail(ctx, no), { "cache-control": "no-store" });
+    sendJson(req, res, 200, trainDetail(ctx, { no }), { "cache-control": "no-store" });
   });
 
   /** A Volán és a vasút hivatalos zavarai (késésok, kocsiösszeállítás, pótlóbusz, Telebusz). */
@@ -190,6 +201,8 @@ type TrainStop = {
   id: string;
   name: string;
   platform: string | null;
+  /** az élő vágány eltér a menetrenditől */
+  platformChanged: boolean;
   schedArr: string;
   schedDep: string;
   arrUnix: number;
@@ -221,14 +234,14 @@ function trainSummaries(ctx: Ctx, no: string) {
     });
 }
 
-function trainDetail(ctx: Ctx, no: string) {
+function trainDetail(ctx: Ctx, by: { no: string } | { trip: string }) {
   const { engine, feeds } = ctx;
   const now = nowUnix();
   const days = feeds.arrivalDays(now);
-  const matches = findTrains(days, no);
+  const matches = "trip" in by ? findTrip(days, by.trip) : findTrains(days, by.no);
   // a most futó, különben a következő, különben a mai utolsó
   const pick = matches.find((m) => m.firstDepUnix <= now && m.lastArrUnix + 600 >= now) ?? matches.find((m) => m.firstDepUnix > now) ?? matches[matches.length - 1] ?? null;
-  if (!pick) return { no, found: false, trips: [] as unknown[] };
+  if (!pick) return { no: "no" in by ? by.no : "", found: false, trips: [] as unknown[] };
   const dc = days[pick.dayIndex];
   const f = dc.day.feed;
   const t = f.trips.get(pick.tripId)!;
@@ -242,10 +255,13 @@ function trainDetail(ctx: Ctx, no: string) {
     const s = f.stops.get(x.stopId);
     const delay = p?.delay ?? (run?.lastStopIdx != null && i > run.lastStopIdx ? run.lastDelayS : null);
     const depUnix = p?.unix ?? dc.midnightUnix + x.dep + (delay ?? 0);
+    const livePlatform = isToday ? ctx.regionalRt.platform(t.id, x.stopId) : null;
+    const schedPlatform = s?.platform ?? null;
     return {
       id: x.stopId,
       name: s?.name ?? x.stopId,
-      platform: (isToday ? ctx.regionalRt.platform(t.id, x.stopId) : null) ?? s?.platform ?? null,
+      platform: livePlatform ?? schedPlatform,
+      platformChanged: Boolean(livePlatform && schedPlatform && livePlatform !== schedPlatform),
       schedArr: secToHm(x.arr),
       schedDep: secToHm(x.dep),
       arrUnix: dc.midnightUnix + x.arr + (delay ?? 0),
@@ -255,6 +271,7 @@ function trainDetail(ctx: Ctx, no: string) {
     };
   });
   const tp = trainParts(t.shortName);
+  const no = "no" in by ? by.no : (tp.no ?? "");
   return {
     no,
     found: true,

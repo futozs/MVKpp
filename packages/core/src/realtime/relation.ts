@@ -192,6 +192,22 @@ export function findTrains(days: DayCtx[], trainNo: string): TrainMatch[] {
   return out.sort((a, b) => a.firstDepUnix - b.firstDepUnix);
 }
 
+/**
+ * Egy vasúti menet azonosító szerint (a térképen követett vonat): a napok, amelyeken
+ * közlekedik, az indulás szerint. Ugyanaz az azonosító ma és holnap is lehet.
+ */
+export function findTrip(days: DayCtx[], tripId: string): TrainMatch[] {
+  const out: TrainMatch[] = [];
+  days.forEach((dc, di) => {
+    const t = dc.day.feed.trips.get(tripId);
+    if (!t || !isRailTrip(t) || !dc.day.services.has(t.serviceId)) return;
+    const st = dc.day.feed.tripStops.get(tripId);
+    if (!st?.length) return;
+    out.push({ tripId, dayIndex: di, firstDepUnix: dc.midnightUnix + st[0].dep, lastArrUnix: dc.midnightUnix + st[st.length - 1].arr });
+  });
+  return out.sort((a, b) => a.firstDepUnix - b.firstDepUnix);
+}
+
 /** Kereséshez: kisbetű, ékezet nélkül, a „Miskolc, ” előtag nélkül is egyezik. */
 export function searchKey(s: string): string {
   return s

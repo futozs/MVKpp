@@ -8,7 +8,8 @@ import {
 } from "@/components/ui/tooltip";
 import { getSession } from "@/lib/account";
 import { HEADER_PREFS, useToggle, WATCH_FEATURES, type PrefItem } from "@/lib/watchPrefs";
-import { MODE_ITEMS, useEnabledModes, type ModeItem } from "@/lib/modes";
+import { MODE_ITEMS, STOP_MERGE_ITEMS, STOP_MERGE_KEY, useEnabledModes, useStopMerge, type ModeItem, type StopMerge } from "@/lib/modes";
+import { usePreference } from "@/hooks/usePreference";
 import { cn } from "@/lib/utils";
 import { useGeo } from "@/context/GeoContext";
 import { HeaderPopover } from "./HeaderPopover";
@@ -112,7 +113,47 @@ function ModesGroup() {
       {MODE_ITEMS.map((item) => (
         <ModeRow key={item.key} item={item} isLast={enabled.length === 1 && enabled[0] === item.id} />
       ))}
+      {enabled.includes("coach") && (enabled.includes("tram") || enabled.includes("bus")) ? <StopMergeRow /> : null}
     </section>
+  );
+}
+
+/**
+ * Közös megállók (ugyanott álló MVK- és Volán-megálló): egy megállóként mindkettő
+ * járataival, csak az egyikével, vagy külön — minden megállótáblára érvényes.
+ */
+function StopMergeRow() {
+  const merge = useStopMerge();
+  const setMerge = usePreference<StopMerge>(STOP_MERGE_KEY, "all")[1];
+  const labelId = useId();
+  const hintId = useId();
+  const current = STOP_MERGE_ITEMS.find((m) => m.id === merge) ?? STOP_MERGE_ITEMS[0];
+  return (
+    <div className="rounded-md px-2.5 py-2">
+      <p id={labelId} className="text-[13px] font-semibold text-foreground">
+        Közös megállók
+      </p>
+      <div role="radiogroup" aria-labelledby={labelId} aria-describedby={hintId} className="mt-1.5 grid grid-cols-4 gap-1 rounded-lg border border-border bg-muted/60 p-1">
+        {STOP_MERGE_ITEMS.map((m) => (
+          <button
+            key={m.id}
+            type="button"
+            role="radio"
+            aria-checked={merge === m.id}
+            onClick={() => setMerge(m.id)}
+            className={cn(
+              "h-7 rounded-md px-1 text-[11px] font-semibold leading-tight transition-colors duration-fast focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+              merge === m.id ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-accent hover:text-foreground",
+            )}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
+      <p id={hintId} className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
+        {current.hint}
+      </p>
+    </div>
   );
 }
 

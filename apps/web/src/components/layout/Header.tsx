@@ -53,7 +53,7 @@ export function Header({
   const weather = useWeather();
 
   return (
-    <header className="relative z-bar hidden shrink-0 border-b border-border bg-card pt-[env(safe-area-inset-top)] md:block">
+    <header className="relative z-header hidden shrink-0 border-b border-border bg-card pt-[env(safe-area-inset-top)] md:block">
       <div className="flex h-14 items-center gap-2 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))]">
         <BrandMark onSelect={() => setActiveTab("map")} labelClassName="hidden xl:flex" />
         <span aria-hidden className="ml-1 mr-1 hidden h-6 w-px shrink-0 bg-border lg:block" />

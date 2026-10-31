@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Stop } from "@/types";
+import type { Stop, TransitMode } from "@/types";
 import { api, type JourneyMode, type JourneyPlanResponse } from "@/services/api";
 import { nowLocalTime, todayLocalIso } from "./format";
 import { zonedUnix } from "@/components/map/historyTime";
 import { serverNow } from "@/lib/realtime";
+import { feedOfId, isMergedTwin, modesParam, pickableStops, regionRank, useEnabledModes, useStopMerge } from "@/lib/modes";
+import { usePreference } from "@/hooks/usePreference";
 import { PlanForm, type PlanFormValue } from "./PlanForm";
 import { PlanResults, ResultsSkeleton } from "./PlanResults";
+import { travelEmptyHint, type PlanTravel } from "./TravelModes";
 
 /** A backend is így dönt: 10 percnél későbbi időpont már „jövő”. */
 const NOW_WINDOW_SEC = 600;
@@ -19,14 +22,53 @@ type Result =
   | { status: "error"; message: string }
   | { status: "done"; plan: JourneyPlanResponse };
 
-function usePlaces(stops: Stop[]) {
+/**
+ * A választható helyek a pipák szerint: az MVK megállói mindig, a Volánéi és a vasútállomások
+ * csak bepipálva. Az állomás vágányai nem külön tételek; a megyén belüliek elöl.
+ */
+function usePlaces(stops: Stop[], travel: PlanTravel) {
+  const merge = useStopMerge();
   return useMemo(() => {
+    const allowed = (s: Stop) => {
+      const f = s.feed && s.feed !== "mvk" ? s.feed : feedOfId(s.id);
+      return f === "mvk" || (f === "coach" ? travel.coach : travel.rail);
+    };
     const byName = new Map<string, Stop>();
-    for (const s of stops) if (!byName.has(s.name)) byName.set(s.name, s);
-    return [...byName.values()].sort((a, b) =>
-      a.name.localeCompare(b.name, "hu"),
-    );
-  }, [stops]);
+    for (const s of pickableStops(stops)) if (allowed(s) && !isMergedTwin(s, merge) && !byName.has(s.name)) byName.set(s.name, s);
+    return [...byName.values()].sort((a, b) => regionRank(a) - regionRank(b) || a.name.localeCompare(b.name, "hu"));
+  }, [stops, travel.coach, travel.rail, merge]);
+}
+
+/**
+ * Mivel tervezzünk: a tervező saját pipái (Volán, vonat), amíg a felhasználó nem állítja
+ * őket, a Beállítások szerint. Ha a tervezőben olyan mód van bepipálva, ami a Beállításokban
+ * ki van kapcsolva, annak a megállóit itt külön kérjük le.
+ */
+function useTravel(stops: Stop[]) {
+  const enabled = useEnabledModes();
+  const [coachPref, setCoach] = usePreference<boolean | null>("mvk_pref_plan_coach", null);
+  const [railPref, setRail] = usePreference<boolean | null>("mvk_pref_plan_rail", null);
+  const travel: PlanTravel = { coach: coachPref ?? enabled.includes("coach"), rail: railPref ?? enabled.includes("rail") };
+  const modes: TransitMode[] = ["tram", "bus", ...(travel.coach ? (["coach"] as const) : []), ...(travel.rail ? (["rail"] as const) : [])];
+  const key = modesParam(modes);
+  const missing = (travel.coach && !enabled.includes("coach")) || (travel.rail && !enabled.includes("rail"));
+  const [own, setOwn] = useState<{ key: string; stops: Stop[] } | null>(null);
+  useEffect(() => {
+    if (!missing) return;
+    let alive = true;
+    api
+      .getStops(key)
+      .then((list) => alive && setOwn({ key, stops: list }))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [missing, key]);
+  const change = (patch: Partial<PlanTravel>) => {
+    if (patch.coach !== undefined) setCoach(patch.coach);
+    if (patch.rail !== undefined) setRail(patch.rail);
+  };
+  return { travel, modes: key, change, stops: missing && own?.key === key ? own.stops : stops };
 }
 
 /** A beírt nap és óra:perc budapesti idő szerint (nem a készülék időzónájában). */
@@ -55,7 +97,8 @@ function scrollIntoViewIfHidden(el: HTMLElement | null) {
  * (élő adat vagy korábbi mérések) és az átszállások kockázata.
  */
 export function RoutePlannerView({ stops }: { stops: Stop[] }) {
-  const places = usePlaces(stops);
+  const travel = useTravel(stops);
+  const places = usePlaces(travel.stops, travel.travel);
   const [form, setForm] = useState<PlanFormValue>(() => ({
     from: "",
     to: "",
@@ -84,7 +127,7 @@ export function RoutePlannerView({ stops }: { stops: Stop[] }) {
   const update = (patch: Partial<PlanFormValue>) => setForm((f) => ({ ...f, ...patch }));
   const setNow = () => update({ date: todayLocalIso(), time: nowLocalTime() });
 
-  const lastQueryRef = useRef<{ from: string; to: string; at: number; arriveBy: boolean } | null>(null);
+  const lastQueryRef = useRef<{ from: string; to: string; at: number; arriveBy: boolean; modes: string } | null>(null);
 
   const run = async (silent = false) => {
     const last = lastQueryRef.current;
@@ -94,7 +137,7 @@ export function RoutePlannerView({ stops }: { stops: Stop[] }) {
         ? { ...last, at: Math.floor(serverNow()) }
         : last
       : form.from && form.to
-        ? { from: form.from, to: form.to, at: toUnix(form.date, form.time), arriveBy: form.arriveBy }
+        ? { from: form.from, to: form.to, at: toUnix(form.date, form.time), arriveBy: form.arriveBy, modes: travel.modes }
         : null;
     if (!q) return;
     lastQueryRef.current = q;
@@ -112,6 +155,7 @@ export function RoutePlannerView({ stops }: { stops: Stop[] }) {
         at: q.at,
         arriveBy: q.arriveBy,
         limit: RESULT_LIMIT,
+        modes: q.modes,
         signal: controller.signal,
       });
       if (!controller.signal.aborted) setResult({ status: "done", plan });
@@ -127,6 +171,28 @@ export function RoutePlannerView({ stops }: { stops: Stop[] }) {
       setResult({ status: "error", message });
     }
   };
+
+  // Át-pipáláskor: a már nem választható hely (pl. vonat nélkül Budapest-Keleti) kiürül,
+  // különben a meglévő terv azonnal újraszámolódik az új módokkal.
+  const travelSeen = useRef(travel.modes);
+  useEffect(() => {
+    if (travelSeen.current === travel.modes) return;
+    travelSeen.current = travel.modes;
+    const ids = new Set(places.map((p) => p.id));
+    const gone: Partial<PlanFormValue> = {
+      ...(form.from && !ids.has(form.from) ? { from: "" } : {}),
+      ...(form.to && !ids.has(form.to) ? { to: "" } : {}),
+    };
+    if (Object.keys(gone).length) {
+      update(gone);
+      abortRef.current?.abort();
+      lastQueryRef.current = null;
+      setResult({ status: "idle" });
+      return;
+    }
+    if (lastQueryRef.current) void run();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [travel.modes, places]);
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
@@ -147,6 +213,8 @@ export function RoutePlannerView({ stops }: { stops: Stop[] }) {
           onSubmit={() => void run()}
           mode={mode}
           isLoading={result.status === "loading"}
+          travel={travel.travel}
+          onTravelChange={travel.change}
         />
 
         <div ref={resultsRef} className="scroll-mt-3" aria-busy={result.status === "loading"}>
@@ -163,7 +231,7 @@ export function RoutePlannerView({ stops }: { stops: Stop[] }) {
               {result.message}
             </p>
           ) : null}
-          {result.status === "done" ? <PlanResults plan={result.plan} /> : null}
+          {result.status === "done" ? <PlanResults plan={result.plan} emptyHint={travelEmptyHint(travel.travel)} /> : null}
         </div>
       </div>
     </div>

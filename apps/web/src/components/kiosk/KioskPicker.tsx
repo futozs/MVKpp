@@ -3,7 +3,7 @@ import { Plus, Search, X } from "lucide-react";
 import type { Stop } from "@/types";
 import { Button } from "@/components/ui/button";
 import { normalizeSearchText } from "@/lib/utils";
-import { isRegionalId, pickableStops, regionRank } from "@/lib/modes";
+import { isMergedTwin, isRegionalId, pickableStops, regionRank, useStopMerge } from "@/lib/modes";
 import { stopKindLabel } from "@/components/transit/RegionalBits";
 
 export const KIOSK_MAX = 3;
@@ -25,7 +25,9 @@ export function KioskPicker({
 }) {
   const [query, setQuery] = useState("");
   const byId = useMemo(() => new Map(stops.map((s) => [s.id, s])), [stops]);
-  const pickable = useMemo(() => pickableStops(stops), [stops]);
+  // összevont nézetben a Volán-iker nem külön tétel: az MVK-oszlop mutatja a járatait
+  const merge = useStopMerge();
+  const pickable = useMemo(() => pickableStops(stops).filter((s) => !isMergedTwin(s, merge)), [stops, merge]);
   const results = useMemo(() => {
     const q = normalizeSearchText(query.trim());
     if (!q) return [];

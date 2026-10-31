@@ -16,8 +16,8 @@ import { CatchPill, ReplacementNote, replacementFor, StartRiskLine, TrafficLine 
 import { useCatchFor } from "@/hooks/useCatch";
 import { useWatchFeatures } from "@/lib/watchPrefs";
 import { cn } from "@/lib/utils";
-import { arrivalTileText, arrivalTitle, arrivalVehicleLabel, NoticeList, PlatformBadge, stopKindLabel } from "@/components/transit/RegionalBits";
-import { modesParam, useEnabledModes } from "@/lib/modes";
+import { arrivalTileText, arrivalTitle, arrivalVehicleLabel, NoticeList, PlatformBadge, SharedStopTag, stopKindLabel } from "@/components/transit/RegionalBits";
+import { useBoardKey } from "@/lib/modes";
 
 const POLL_MS = 4000;
 
@@ -39,7 +39,7 @@ export function StopDetailDrawer({
   onToggleMonitorStop,
 }: StopDetailDrawerProps) {
   // a bekapcsolt módok indulásai (a közös MVK-megállón a Volán is)
-  const modesKey = modesParam(useEnabledModes());
+  const modesKey = useBoardKey();
   const [data, setData] = useState<StopArrivalsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -149,6 +149,12 @@ export function StopDetailDrawer({
           <p className="mt-0.5 flex items-center gap-1.5 font-mono text-[11px] tabular-nums text-muted-foreground">
             <span>{stopKindLabel(stop)}</span>
             <span aria-hidden>·</span>
+            {data?.merged ? (
+              <>
+                <SharedStopTag merged={data.merged} />
+                <span aria-hidden>·</span>
+              </>
+            ) : null}
             {data?.rtError ? (
               <span>menetrendi</span>
             ) : (

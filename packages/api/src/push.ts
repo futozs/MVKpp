@@ -65,7 +65,12 @@ type WatchParams = {
   boardStopName?: string;
   /** a figyelés módjai („tram,bus,coach,rail” részhalmaza); hiányában MVK-megállónál csak MVK */
   modes?: string;
+  /** közös megállók: „all” (összevonva), „mvk”, „coach”; hiányában nincs összevonás */
+  merge?: string;
 };
+
+const MERGES = new Set(["all", "mvk", "coach"]);
+const cleanMerge = (raw: unknown) => (typeof raw === "string" && MERGES.has(raw) ? raw : undefined);
 
 /** „rail,tram” → rendezett, ismert módok vesszővel; ismeretlen / üres → nincs megadva */
 function cleanModes(raw: unknown): string | undefined {
@@ -81,13 +86,15 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 function cleanParams(kind: string, p: WatchParams | undefined): WatchParams | null {
   // egyszeri menet-figyelés: csak erre a szolgáltatási napra (a menetazonosítók naponta ismétlődnek)
   const modes = cleanModes(p?.modes);
+  const merge = cleanMerge(p?.merge);
   if (kind === "arrival") {
     const out: WatchParams = {};
     if (typeof p?.date === "string" && DATE_RE.test(p.date)) out.date = p.date;
     if (modes) out.modes = modes;
+    if (merge) out.merge = merge;
     return Object.keys(out).length ? out : null;
   }
-  const out: WatchParams = modes ? { modes } : {};
+  const out: WatchParams = { ...(modes ? { modes } : {}), ...(merge ? { merge } : {}) };
   if (p?.walkS != null) {
     const w = Number(p.walkS);
     if (!Number.isFinite(w) || w < 0 || w > 3600) throw new ApiError(400, "Érvénytelen sétaidő");

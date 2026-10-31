@@ -15,10 +15,12 @@ import {
   onlyMvk,
   operatorLabel,
   parseModes,
+  parseStopMerge,
   progressOnTrip,
   secToHm,
   serviceClock,
   stopAllowed,
+  stopTwinsOf,
   type TransitMode,
   tripStopRows,
   type ServiceDay,
@@ -121,6 +123,17 @@ export function registerCompat(r: Router, ctx: Ctx) {
   const today = () => engine.feeds.cachedDay(engine.today);
   /** a mai összefésült feed (MVK + regionális), ha még nincs, az MVK legfrissebbje */
   const catalogFeed = () => today()?.feed ?? feeds.latest();
+  /**
+   * A mai napba bekerült-e már a Volán és a vasút (a kompozit feed verziója „MVK+R…”).
+   * Induláskor a regionális menetrend percekig épül: addig a katalógus csak MVK-s.
+   */
+  const regionalState = (): "off" | "pending" | "ready" => {
+    if (!ctx.regionalFeeds.enabled) return "off";
+    return today()?.feed.version.includes("+") ? "ready" : "pending";
+  };
+  /** A katalógus (megállók, vonalak) gyorsítótárazható-e: a félkész (még csak MVK-s) nem. */
+  const catalogCache = (modes: Set<TransitMode>) =>
+    (modes.has("coach") || modes.has("rail")) && regionalState() === "pending" ? "no-store" : "public, max-age=300";
   const vehiclesFor = (req: Req) => {
     const { modes, rich } = modesOf(req);
     const feed = catalogFeed();
@@ -160,7 +173,9 @@ export function registerCompat(r: Router, ctx: Ctx) {
     const { modes, rich } = modesOf(req);
     // egy állomás (pl. Tiszai pu.) táblája hosszabb lehet
     const limit = Math.min(rich ? 30 : 20, Math.max(1, Number(req.query.get("limit") ?? 10) || 10));
-    sendJson(req, res, 200, ctx.insights.arrivals(stop, limit, nowUnix(), modes, rich), { "cache-control": "no-store" });
+    // v3: közös megállók (MVK-oszlop + a mellette álló Volán-megálló) egy táblán; a v2 alapból „off”
+    const merge = rich ? parseStopMerge(req.query.get("merge")) : "off";
+    sendJson(req, res, 200, ctx.insights.arrivals(stop, limit, nowUnix(), modes, rich, merge), { "cache-control": "no-store" });
   });
 
   r.get("/live/multi-arrivals", (req, res) => {
@@ -170,6 +185,11 @@ export function registerCompat(r: Router, ctx: Ctx) {
     const now = nowUnix();
     const days = feeds.arrivalDays(now);
     const { modes, rich } = modesOf(req);
+    const merge = rich ? parseStopMerge(req.query.get("merge")) : "off";
+    if (merge !== "off") {
+      sendJson(req, res, 200, { results: list.map((id) => ctx.insights.arrivals(id, limit, now, modes, rich, merge)) });
+      return;
+    }
     const ex = ctx.insights.extras(now, modes, rich);
     for (const id of list) if (!isMvkId(id) || !onlyMvk(modes)) ctx.regionalRt.touch(id);
     sendJson(req, res, 200, { results: list.map((id) => arrivalsForStop(id, limit, engine.snapshot, days, now, ex)) });
@@ -214,9 +234,20 @@ export function registerCompat(r: Router, ctx: Ctx) {
     const rt = tr ? feed!.routes.get(tr.routeId) : undefined;
     const shape = tr?.shapeId ? (feed!.shapes.get(tr.shapeId)?.points ?? []) : [];
     const prog = veh && feed ? progressOnTrip(feed, tripId, veh, serviceClock().secOfDay) : null;
-    // a regionális járműhöz a mód, a rendszám és a vonatszám is (az MVK-é változatlan, a v2-alak)
+    // a regionális járműhöz a mód, a rendszám, a vonatszám és a MÁV által közölt késés is
+    // (az MVK-é változatlan, a v2-alak)
     const full = veh && !isMvkId(veh.id) ? engine.snapshot.decoded.find((d) => d.id === veh!.id) : undefined;
-    const vehicle = veh && full ? { ...veh, mode: full.mode, ...(full.plate ? { plate: full.plate } : {}), ...(full.trainNo ? { trainNo: full.trainNo } : {}), ...(full.trainName ? { trainName: full.trainName } : {}) } : veh;
+    const vehicle =
+      veh && full
+        ? {
+            ...veh,
+            mode: full.mode,
+            ...(full.plate ? { plate: full.plate } : {}),
+            ...(full.trainNo ? { trainNo: full.trainNo } : {}),
+            ...(full.trainName ? { trainName: full.trainName } : {}),
+            ...(full.delaySec != null ? { delaySec: full.delaySec } : {}),
+          }
+        : veh;
     sendJson(req, res, 200, {
       trip: tripId,
       route: rt?.short || tr?.routeId || "",
@@ -285,14 +316,16 @@ export function registerCompat(r: Router, ctx: Ctx) {
       sendJson(req, res, 200, [...feed.stops.values()].map((s) => [s.id, s.code, s.name, s.lat, s.lon]), { "cache-control": "public, max-age=300" });
       return;
     }
-    // v3: [id, kód, név, lat, lon, mód, szülő-állomás, állomás-e (1/0)] — a Volán és a vasút is
+    // v3: [id, kód, név, lat, lon, mód, szülő-állomás, állomás-e (1/0), közös megálló] — a Volán és a vasút is.
+    // A közös megálló: a Volán-megálló melyik MVK-oszloppal áll egy helyen (összevont nézetben az mutatja).
     const feed = catalogFeed();
     if (!feed) throw new HttpError(503, "nincs menetrend");
     const modeOfStop = (id: string): TransitMode | "mvk" => (isMvkId(id) ? "mvk" : id.startsWith("1:") ? "rail" : "coach");
+    const twins = stopTwinsOf(feed);
     const out = [...feed.stops.values()]
       .filter((s) => stopAllowed(s.id, modes) && (s.station || (feed.stopSched.get(s.id)?.length ?? 0) > 0))
-      .map((s) => [s.id, s.code, s.name, s.lat, s.lon, modeOfStop(s.id), s.parent ?? "", s.station ? 1 : 0]);
-    sendJson(req, res, 200, out, { "cache-control": "public, max-age=300" });
+      .map((s) => [s.id, s.code, s.name, s.lat, s.lon, modeOfStop(s.id), s.parent ?? "", s.station ? 1 : 0, twins.toMvk.get(s.id) ?? ""]);
+    sendJson(req, res, 200, out, { "cache-control": catalogCache(modes) });
   });
 
   r.get("/gtfs/routes.json", (req, res) => {
@@ -306,7 +339,7 @@ export function registerCompat(r: Router, ctx: Ctx) {
       res,
       200,
       routes.map((x) => (rich ? [x.id, x.short, x.long, x.type, x.color, x.text, modeOfRoute(x.id, x.type), x.key, operatorLabel(x.agencyName) ?? ""] : [x.id, x.short, x.long, x.type, x.color, x.text])),
-      { "cache-control": "public, max-age=300" },
+      { "cache-control": rich ? catalogCache(modes) : "public, max-age=300" },
     );
   });
 
@@ -354,6 +387,8 @@ export function registerCompat(r: Router, ctx: Ctx) {
       serviceRange: range,
       archiveRange: await archiveRange(),
       today: t ? { feedVersion: t.feed.version, fallback: t.fallback } : null,
+      // a Volán és a vasút a mai katalógusban: „pending” amíg épül (a web addig újrakéri)
+      regional: regionalState(),
     });
   });
 

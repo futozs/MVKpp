@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/services/api";
 import { serverNow, useFallbackPoll, useTopic } from "@/lib/realtime";
 import type { StopArrivalsResponse } from "@/types";
-import { modesParam, useEnabledModes } from "@/lib/modes";
+import { useBoardKey } from "@/lib/modes";
 
 const LIMIT = 10;
 const POLL_MS = 10_000;
@@ -12,7 +12,7 @@ const POLL_MS = 10_000;
  * A bekapcsolt módok szerint (Volán, vonat is, ha be vannak kapcsolva).
  */
 export function useStopBoard(stopId: string) {
-  const modesKey = modesParam(useEnabledModes());
+  const modesKey = useBoardKey();
   const [data, setData] = useState<StopArrivalsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const alive = useRef(true);

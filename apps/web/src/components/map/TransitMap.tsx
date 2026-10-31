@@ -147,7 +147,15 @@ interface TransitMapProps {
   monitoredStopIds: string[];
   onToggleMonitorStop: (stopId: string) => void;
   onSelectTileLayer: (layerId: string) => void;
+  /**
+   * A követés panelje (FocusDock) asztalon jobb oldalt: „card” lent a kártya, „column”
+   * vonatnál a menetrenddel a teljes magasságban — a jobb oldali gombok mellé húzódnak.
+   */
+  dock?: "card" | "column" | null;
 }
+
+/** a FocusDock asztalon: jobb margó + szélesség + köz (px) */
+const DOCK_INSET = "md:right-[408px]";
 
 const MOTION_TICK_MS = 250;
 
@@ -184,13 +192,30 @@ function coveredBottom(container: HTMLElement): number {
     if (r.width < box.width * 0.6 || r.top >= box.bottom || r.bottom < box.bottom - 4) continue;
     covered = Math.max(covered, box.bottom - r.top);
   }
-  return Math.min(covered, box.height * 0.6);
+  // (a lenyitott vonat-menetrend telefonon a térkép nagyobb részét is takarhatja)
+  return Math.min(covered, box.height * 0.8);
+}
+
+/**
+ * Asztalon a jobb szélen a térkép magasságának nagy részét takaró oszlop (a követett
+ * vonat menetrendje a kártyával) szélessége: a vonat a mellette maradó rész közepén legyen.
+ */
+function coveredRight(container: HTMLElement): number {
+  const box = container.getBoundingClientRect();
+  let covered = 0;
+  for (const el of document.querySelectorAll<HTMLElement>("[data-map-cover]")) {
+    const r = el.getBoundingClientRect();
+    if (r.width >= box.width * 0.6 || r.height < box.height * 0.6 || r.right < box.right - 24) continue;
+    covered = Math.max(covered, box.right - r.left);
+  }
+  return Math.min(covered, box.width * 0.5);
 }
 
 /** Mennyit kell a térképnek elmozdulnia, hogy a busz a látható rész közepén legyen (px). */
 function offsetToFollow(map: L.Map, pos: L.LatLng): L.Point {
   const size = map.getSize();
-  const target = L.point(size.x / 2, (size.y - coveredBottom(map.getContainer())) / 2);
+  const container = map.getContainer();
+  const target = L.point((size.x - coveredRight(container)) / 2, (size.y - coveredBottom(container)) / 2);
   return map.latLngToContainerPoint(pos).subtract(target);
 }
 
@@ -269,6 +294,7 @@ export function TransitMap({
   monitoredStopIds,
   onToggleMonitorStop,
   onSelectTileLayer,
+  dock = null,
 }: TransitMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -1094,7 +1120,7 @@ export function TransitMap({
         </MapCorner>
 
         {/* Jobb fent: alaptérkép és rétegek, alatta az MVK hírei. */}
-        <MapCorner corner="top-right">
+        <MapCorner corner="top-right" className={cn(dock === "column" && DOCK_INSET)}>
           <MapLayersControl
             tileLayerId={tileLayerId}
             onSelectTileLayer={onSelectTileLayer}
@@ -1130,7 +1156,7 @@ export function TransitMap({
         )}
 
         {/* Jobb lent: idővonal, nagyítás (asztalon), helyzetem; az idővonal-sáv fölé emelkedik. */}
-        <MapCorner corner="bottom-right" style={historyOn && timelineInset > 0 ? { bottom: timelineInset + 8 } : undefined}>
+        <MapCorner corner="bottom-right" className={cn(dock && DOCK_INSET)} style={historyOn && timelineInset > 0 ? { bottom: timelineInset + 8 } : undefined}>
           {geo.error && (geoAsked || geo.status !== "denied") ? (
             <p role="status" className="pointer-events-auto max-w-[220px] rounded-xl border border-border/80 bg-card/90 px-3 py-2 text-[11.5px] text-muted-foreground shadow-md backdrop-blur-md">
               {geo.error}

@@ -84,19 +84,23 @@ A **v2-végpontok** opcionális `?modes=` paramétert kaptak (`tram,bus,coach,ra
 | `/live/positions`, `/live/vehicle` | Volán (rendszám) és vonat (vonatszám, név, hivatalos késés) is; a vonat- és rendszámkeresés is |
 | `/live/arrivals`, `/live/multi-arrivals` | állomásnál a peronok összevonva; vágány és változása, MÁV-megjegyzések, mód, üzemeltető, vonatszám |
 | `/live/cancelled` | a regionális törlések is |
-| `/gtfs/stops.json`, `/gtfs/routes.json` | plusz oszlopok: mód, szülő-állomás, állomás-e; vonal: mód, kulcs, üzemeltető |
+| `/gtfs/stops.json`, `/gtfs/routes.json` | plusz oszlopok: mód, szülő-állomás, állomás-e, közös megálló (a Volán-megálló MVK-párja); vonal: mód, kulcs, üzemeltető. Amíg a regionális menetrend indulás után épül, `no-store` (nem ragad be a csak MVK-s lista) |
 | `/gtfs/route-geo`, `/live/trip-path`, menetrend, menetnapló | regionális azonosítókkal is működnek (a trip-path regionális járműnél módot, rendszámot, vonatszámot is ad) |
 
-Új: `/engine/transit/search` (állomás, megálló, vonatszám), `/engine/transit/stop`, `/engine/transit/relation?from=&to=` (A → B közvetlenül), `/engine/transit/train?no=` (vonatszám ma / holnap), `/engine/transit/alerts`; `/engine/plan?modes=`; `/v3/stats/regional?days=&modes=`; a `/stats/*` és `/v3/stats/*` `?modes=`-szal regionálisan is szűr. Üzemeltetés (admin-kulccsal): `GET /system/sources`, `POST /system/regional-build`, a `/system/metrics` `source` mezője.
+Új: `/engine/transit/search` (állomás, megálló, vonatszám), `/engine/transit/stop`, `/engine/transit/relation?from=&to=` (A → B közvetlenül), `/engine/transit/train?no=` (vonatszám ma / holnap) és `?trip=` (pontosan az a menet — a térképen követett vonat menetrendje), `/engine/transit/alerts`; `/engine/plan?modes=`; `/v3/stats/regional?days=&modes=`; a `/stats/*` és `/v3/stats/*` `?modes=`-szal regionálisan is szűr. Üzemeltetés (admin-kulccsal): `GET /system/sources`, `POST /system/regional-build`, a `/system/metrics` `source` mezője.
 
 WebSocket: `vehicles@<módok>` és `stop:<id>@<módok>` téma (a `vehicles` és `stop:<id>` marad MVK); az üzenet a `topic` mezőben visszaküldi, melyik témára jött.
 
+`/gtfs/meta.json` `regional` mezője: `off` / `pending` / `ready` — a web `pending` alatt 45 mp-enként újrakéri a katalógust (élesítés után ~3–4 percig épül a mai nap).
+
+**Közös megállók** (`packages/core/src/transit/stopTwins.ts`): a Volán-megálló, amely 220 m-en belül egy azonos nevű MVK-oszlop mellett áll („Miskolc (Hejőcsaba), cementgyár” ↔ „Cementgyár”; a „Miskolc,” előtag, a zárójeles városrész és az „utca / út / tér” nem számít), a legközelebbi ilyen oszlophoz tartozik (élőben 89 pár). Más nevű közeli megállót (Auchan ↔ Keleti kapu, autóbusz-állomás ↔ Búza tér) nem vonunk össze. A `/live/arrivals`, `/live/multi-arrivals` `&merge=all|mvk|coach|off` paramétere (WebSocket: `stop:<id>@<módok>~<merge>`, push: `params.merge`): `all` — az MVK-oszlop és a párja indulásai egy táblán (a válasz `merged` mezője sorolja), `mvk` / `coach` — közös helyen csak az egyik, `off` vagy hiányzó — a régi tábla. A v2 (`?modes=` nélkül) nem változik.
+
 ### M.6 Felület
 
-- **Beállítások:** módonként kapcsoló (villamos, városi busz, Volán, vonat), alapból mind be; az első indításkor egy kártya kérdez (marad / csak MVK). A fejléc változatlan; az alcím („Miskolc és Borsod közlekedése”) csak a lap címében és a manifestben van.
-- **Térkép:** vonat-pirula kategóriával és vonatszámmal, Volán-csempe, becsült helyzet szaggatott kerettel; szűrő módra, üzemeltetőre, vonatkategóriára, késésre; kereső rendszámra (Volán) és vonatszámra.
+- **Beállítások:** módonként kapcsoló (villamos, városi busz, Volán, vonat), alapból mind be; az első indításkor egy kártya kérdez (marad / csak MVK). **Közös megállók:** Összevonva (alap) / Csak MVK / Csak Volán / Külön — minden megállótáblára (térkép, figyelő, kioszk, értesítés); összevont nézetben a Volán-iker nem külön pötty és nem külön tétel, a figyelő régi iker-bejegyzése az MVK-oszlopra kerül. A fejléc változatlan; az alcím („Miskolc és Borsod közlekedése”) csak a lap címében és a manifestben van.
+- **Térkép:** vonat-pirula kategóriával és vonatszámmal, Volán-csempe, becsült helyzet szaggatott kerettel; szűrő módra, üzemeltetőre, vonatkategóriára, késésre; kereső rendszámra (Volán) és vonatszámra. **Vonat követésekor** a menetrend is ott van (`FocusDock` + `TrainTimetable`): asztalon jobb oldalt a kártya fölött teljes hosszában (a térkép gombjai és a vonat a mellette maradó részre húzódnak), telefonon a kártya fölött összecsukva (utolsó elhagyott + a következő kettő, „Mind”-dal lenyitható); vágány, várható idő a MÁV-késéssel, késés oka. A követés-kártya vonatnál a MÁV hivatalos késését mutatja.
 - **Figyelő:** állomás (vágányokkal), viszonylat (A → B), vonatszám; kioszk és „szokásos utad” is a bekapcsolt módokkal.
-- **Menetrend:** Mind / MVK / Volán / Vonat nézet; **útvonaltervező** Volánnal és vonattal (csempe: „IC 582”, vágány).
+- **Menetrend:** Mind / MVK / Volán / Vonat nézet; **útvonaltervező** Volánnal és vonattal (csempe: „IC 582”, vágány). A tervezőnek saját pipái vannak („Mivel utaznál?” — MVK mindig, Volán, Vonat; `mvk_pref_plan_*`, alapból a Beállítások szerint): mindennel akár Budapest-Keletiig, csak MVK-val a városon belül; átpipáláskor újratervez, a már nem választható hely kiürül.
 - **Utazásnapló:** Volánra és vonatra is lehet felszállni; a közelségi küszöbök módonként (vonatnál tágabbak).
 - **Statisztika:** „Vasút és Volán” panel (pontosság, napi késés, legtöbbet késő vonatok, MÁV-késésokok, vágányváltozás); a Járművek, Vonalak és Megállók panel a regionálisakat is mutatja; az üzemzavar és a hőtérkép MVK-s marad.
 - **Push:** a figyelés a bekapcsolt módokat nézi (`params.modes`); a szöveg módhoz illő („IC 582 vonat, 3. vágány”).

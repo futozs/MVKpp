@@ -11,8 +11,11 @@ import {
   arrivalsForStop,
   fastDistM,
   isMvkId,
+  mergedBoard,
   MVK_MODES,
   onlyMvk,
+  stopTwinsOf,
+  type StopMerge,
   type TransitMode,
   localMidnightUnix,
   nowUnix,
@@ -222,9 +225,16 @@ export class TripInsights {
     };
   }
 
-  /** Egy megálló táblája a közös kiegészítőkkel. */
-  arrivals(stopId: string, limit: number, now = nowUnix(), modes: ReadonlySet<TransitMode> = new Set(MVK_MODES), rich = false) {
-    if (!isMvkId(stopId) || !onlyMvk(modes)) this.engine.regional?.touch(stopId);
-    return arrivalsForStop(stopId, limit, this.engine.snapshot, this.engine.feeds.arrivalDays(now), now, this.extras(now, modes, rich));
+  /**
+   * Egy megálló táblája a közös kiegészítőkkel. `merge`: közös megállónál (MVK-oszlop és a
+   * mellette álló Volán-megálló) egy táblán mindkettő indulásai, vagy csak az egyiké.
+   */
+  arrivals(stopId: string, limit: number, now = nowUnix(), modes: ReadonlySet<TransitMode> = new Set(MVK_MODES), rich = false, merge: StopMerge = "off") {
+    const feed = merge === "off" ? null : this.engine.feeds.cachedDay(this.engine.today)?.feed;
+    const board = feed ? mergedBoard(stopTwinsOf(feed), stopId, merge, modes) : null;
+    const use = board?.modes ?? modes;
+    for (const id of board?.stopIds ?? [stopId]) if (!isMvkId(id) || !onlyMvk(use)) this.engine.regional?.touch(id);
+    const extras = this.extras(now, use, rich);
+    return arrivalsForStop(stopId, limit, this.engine.snapshot, this.engine.feeds.arrivalDays(now), now, board ? { ...extras, boardStops: board.stopIds } : extras);
   }
 }

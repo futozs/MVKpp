@@ -7,6 +7,7 @@ import { DateField } from "@/components/ui/date-field";
 import { TimeField } from "@/components/ui/time-field";
 import { cn } from "@/lib/utils";
 import { PlaceSelect } from "./PlaceSelect";
+import { TravelModes, type PlanTravel } from "./TravelModes";
 
 export type PlanFormValue = {
   from: string;
@@ -26,6 +27,8 @@ type Props = {
   onSubmit: () => void;
   mode: JourneyMode;
   isLoading: boolean;
+  travel: PlanTravel;
+  onTravelChange: (patch: Partial<PlanTravel>) => void;
 };
 
 const HINT: Record<JourneyMode, string> = {
@@ -61,7 +64,7 @@ function Segmented({ value, onChange }: { value: boolean; onChange: (arriveBy: b
   );
 }
 
-export function PlanForm({ places, value, onChange, onNow, onSubmit, mode, isLoading }: Props) {
+export function PlanForm({ places, value, onChange, onNow, onSubmit, mode, isLoading, travel, onTravelChange }: Props) {
   const canSubmit = Boolean(value.from && value.to && value.from !== value.to);
   const swap = () => onChange({ from: value.to, to: value.from });
 
@@ -88,6 +91,10 @@ export function PlanForm({ places, value, onChange, onNow, onSubmit, mode, isLoa
         <div className="col-start-1 row-start-2 min-w-0 sm:col-start-3 sm:row-start-1">
           <PlaceSelect label="Hova" places={places} value={value.to} onChange={(to) => onChange({ to })} />
         </div>
+      </div>
+
+      <div className="mt-4">
+        <TravelModes value={travel} onChange={onTravelChange} />
       </div>
 
       <div className="mt-4 flex flex-wrap items-end gap-2 sm:gap-3">

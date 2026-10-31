@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { displayVehicleId, feedOfId, modesParam, pickableStops, regionRank, rideModeOf, routeModeOf, vehicleModeOf } from "../src/lib/modes.ts";
+import { boardKey, boardQuery, displayVehicleId, feedOfId, isMergedTwin, modesParam, pickableStops, regionRank, rideModeOf, routeModeOf, vehicleModeOf } from "../src/lib/modes.ts";
+import { travelEmptyHint, travelSentence } from "../src/components/routeplanner/TravelModes.tsx";
 import { arrivalTileText, arrivalTitle, arrivalVehicleLabel, stopKindLabel } from "../src/components/transit/RegionalBits.tsx";
 import { legTileText, vehiclePhrase } from "../src/components/routeplanner/format.ts";
 import { tripRunLabel } from "../src/lib/tripStatus.ts";
@@ -79,5 +80,30 @@ describe("megjelenítés", () => {
   it("menetállapot: a regionális jármű olvashatóan", () => {
     expect(tripRunLabel("live", "1641")).toBe("Úton · 1641");
     expect(tripRunLabel("live", "hkir:hkir_TDE321")).toBe("Úton · TDE321");
+  });
+});
+
+describe("közös megállók és a tábla kulcsa", () => {
+  it("a kulcs a módokból és az összevonásból; a régi (csak módos) kulcs is jó", () => {
+    expect(boardKey(["rail", "tram", "bus", "coach"], "all")).toBe("tram,bus,coach,rail~all");
+    expect(boardQuery("tram,bus,coach~mvk")).toBe("modes=tram,bus,coach&merge=mvk");
+    expect(boardQuery("tram,bus")).toBe("modes=tram,bus");
+  });
+
+  it("összevont nézetben a Volán-iker nem külön tétel, „Külön” módban igen", () => {
+    expect(isMergedTwin({ twinOf: "SP84" }, "all")).toBe(true);
+    expect(isMergedTwin({ twinOf: "SP84" }, "coach")).toBe(true);
+    expect(isMergedTwin({ twinOf: "SP84" }, "off")).toBe(false);
+    expect(isMergedTwin({}, "all")).toBe(false);
+  });
+});
+
+describe("a tervező pipái", () => {
+  it("a mondat és az üres eredmény tanácsa a pipák szerint", () => {
+    expect(travelSentence({ coach: false, rail: false })).toMatch(/Csak az MVK/);
+    expect(travelSentence({ coach: true, rail: true })).toMatch(/Teljes hálózat/);
+    expect(travelEmptyHint({ coach: true, rail: true })).toBeNull();
+    expect(travelEmptyHint({ coach: true, rail: false })).toMatch(/pipáld be a vonatot/);
+    expect(travelEmptyHint({ coach: false, rail: false })).toMatch(/a Volánt vagy a vonatot/);
   });
 });

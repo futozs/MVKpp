@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import type {
   Stop,
   Route,
@@ -24,7 +24,7 @@ import { getActiveRide, useActiveRide } from "@/lib/rides";
 import { NotificationsModal } from "@/components/notifications/NotificationsModal";
 import { AccountModal } from "@/components/account/AccountModal";
 import { useCloudBackup } from "@/hooks/useCloudBackup";
-import { VehicleFocusCard } from "@/components/map/VehicleFocusCard";
+import { FocusDock, isRailFocus } from "@/components/map/FocusDock";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { GeoProvider } from "@/context/GeoContext";
 import { initialView, saveView } from "@/lib/viewState";
@@ -33,7 +33,7 @@ import { useAppHeight } from "@/hooks/useAppHeight";
 import { useLiveIncidents } from "@/hooks/useLiveIncidents";
 import { useStorageRefresh } from "@/hooks/useStorageRefresh";
 import { realtime, useFallbackPoll, useTopic } from "@/lib/realtime";
-import { feedOfId, modesParam, useEnabledModes } from "@/lib/modes";
+import { feedOfId, isMergedTwin, modesParam, useEnabledModes, useStopMerge } from "@/lib/modes";
 import { RegionalIntroBanner } from "@/components/layout/RegionalIntroBanner";
 import { consumeInitialLink, OPEN_LINK_EVENT, parseLink, type ParsedLink } from "@/lib/deepLink";
 
@@ -41,6 +41,8 @@ import { consumeInitialLink, OPEN_LINK_EVENT, parseLink, type ParsedLink } from 
 const INITIAL_LINK = typeof window === "undefined" ? null : consumeInitialLink();
 /** az első indításkor figyelt megálló (amíg a felhasználó nem állít be sajátot) */
 const DEFAULT_MONITORED = JSON.stringify(["SP1"]);
+/** amíg a worker a Volán és a vasút menetrendjét építi, ennyi időnként kérjük újra a katalógust */
+const REGIONAL_RETRY_MS = 45_000;
 
 const DEFAULT_FILTERS: FilterState = {
   vq: "",
@@ -175,6 +177,18 @@ export function App() {
     };
   }, [applyLink]);
 
+  // Közös megállók összevonva: a térképen és a keresőben a Volán-iker nem külön pötty
+  // (az MVK-oszlop tábláján ott vannak a járatai), a figyelőben pedig a régi iker-
+  // bejegyzés az MVK-oszlopra kerül — különben ugyanaz a tábla kétszer látszana.
+  const stopMerge = useStopMerge();
+  const mapStops = useMemo(() => (stopMerge === "off" ? stops : stops.filter((s) => !isMergedTwin(s, stopMerge))), [stops, stopMerge]);
+  useEffect(() => {
+    if (stopMerge === "off") return;
+    const twinOf = new Map(stops.flatMap((s) => (s.twinOf ? [[s.id, s.twinOf] as const] : [])));
+    if (!twinOf.size) return;
+    setMonitoredStopIds((prev) => (prev.some((id) => twinOf.has(id)) ? [...new Set(prev.map((id) => twinOf.get(id) ?? id))] : prev));
+  }, [stops, stopMerge]);
+
   // Másik eszközről szinkronizált figyelt megállók: azonnal átvesszük.
   useStorageRefresh("mvk_monitored_stops", () => {
     try {
@@ -230,6 +244,12 @@ export function App() {
         loadedRoutes.forEach((r) => (rMap[r.id] = r));
         setRoutes(rMap);
         setGtfsMeta(meta);
+        // A worker indulás után percekig építi a Volán és a vasút menetrendjét: addig a lista
+        // csak MVK-s — újrakérjük, különben az állomások (Tiszai, Gömöri) újratöltésig hiányoznának.
+        if (meta.regional === "pending" && /coach|rail/.test(modesKey)) {
+          loaded = false;
+          timer = setTimeout(initGtfs, REGIONAL_RETRY_MS);
+        }
       } catch (err) {
         console.warn("A menetrend alapadatai nem töltődtek be, újrapróbálom:", err);
         if (!alive) return;
@@ -415,7 +435,7 @@ export function App() {
             {activeTab === "map" && (
               <div className="flex-1 flex h-full w-full overflow-hidden relative">
                 <TransitMap
-                  stops={stops}
+                  stops={mapStops}
                   routes={routes}
                   vehicles={liveVehicles}
                   filters={filters}
@@ -432,13 +452,14 @@ export function App() {
                   monitoredStopIds={monitoredStopIds}
                   onToggleMonitorStop={handleToggleMonitorStop}
                   onSelectTileLayer={handleSelectTileLayer}
+                  dock={focusTripId && !activeRide ? (isRailFocus(focusTripId) ? "column" : "card") : null}
                 />
 
                 {}
                 <RideLayer vehicles={liveVehicles} followingTripId={focusTripId} onFollow={handleFocusTrip} onStopFollow={handleExitFocus} />
 
                 {focusTripId && !activeRide ? (
-                  <VehicleFocusCard
+                  <FocusDock
                     tripId={focusTripId}
                     vehicleId={focusVehicleId}
                     stops={stops}

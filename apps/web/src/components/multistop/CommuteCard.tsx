@@ -11,7 +11,7 @@ import { addAlert, noPushNote, removeAlert, useAlerts } from "@/lib/alerts";
 import { serverNow, useFallbackPoll, useServerClockVersion, useTopic } from "@/lib/realtime";
 import { useRides } from "@/lib/rides";
 import { useWatchFeatures } from "@/lib/watchPrefs";
-import { modesParam, useEnabledModes } from "@/lib/modes";
+import { useBoardKey } from "@/lib/modes";
 import { serviceNow } from "@/lib/serviceDay";
 import { cn } from "@/lib/utils";
 
@@ -62,7 +62,7 @@ export function CommuteCard({ className }: { className?: string }) {
   const commutes = useMemo(() => detectCommutes(rides, now), [rides, now]);
   const c = useMemo(() => upcomingCommute(commutes, now, serviceNow(now * 1000).iso), [commutes, now]);
 
-  const modesKey = modesParam(useEnabledModes());
+  const modesKey = useBoardKey();
   const [data, setData] = useState<StopArrivalsResponse | null>(null);
   const load = async () => {
     if (!c) return;

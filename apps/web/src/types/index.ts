@@ -13,6 +13,11 @@ export interface Stop {
   parent?: string;
   /** v3: maga az állomás */
   station?: boolean;
+  /**
+   * v3: közös megálló — ez a Volán-megálló ugyanott áll, mint ez az MVK-oszlop
+   * (összevont nézetben nem külön tétel, az MVK-oszlop táblája mutatja a járatait)
+   */
+  twinOf?: string;
 }
 
 export interface Route {
@@ -47,6 +52,8 @@ export interface GtfsMeta {
   shapes?: number;
   serviceRange?: { from: string; to: string } | null;
   archiveRange?: { from: string; to: string; days: number } | null;
+  /** v3: a Volán és a vasút a mai menetrendben — „pending”, amíg a worker indulás után építi */
+  regional?: "off" | "pending" | "ready";
 }
 
 /**
@@ -118,6 +125,8 @@ export interface ArrivalVehicle {
   plate?: string;
   trainNo?: string;
   trainName?: string;
+  /** a MÁV által közölt késés (mp) — vonatnál ez a hivatalos, a menetrend is ebből számol */
+  delaySec?: number;
 }
 
 export interface ArrivalItem {
@@ -180,6 +189,8 @@ export interface StopArrivalsResponse {
     lat?: number;
     lon?: number;
   };
+  /** v3: közös megálló — a táblán ezeknek a megállóknak az indulásai (MVK-oszlop + Volán-pár) */
+  merged?: string[];
   now: number;
   rtError: string | null;
   arrivals: ArrivalItem[];
@@ -522,6 +533,8 @@ export interface TrainStop {
   id: string;
   name: string;
   platform: string | null;
+  /** az élő vágány eltér a menetrenditől */
+  platformChanged?: boolean;
   schedArr: string;
   schedDep: string;
   arrUnix: number;

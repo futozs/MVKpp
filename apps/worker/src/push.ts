@@ -29,6 +29,7 @@ import {
   nowUnix,
   onlyMvk,
   parseModes,
+  parseStopMerge,
   withHungarianSuffix,
   type ArrivalItem,
 } from "@mvk/core";
@@ -75,6 +76,8 @@ type WatchParams = {
   boardStopName?: string;
   /** a figyelés közlekedési módjai (pl. „rail” vagy „tram,bus,coach”); hiányában MVK-megállónál csak MVK */
   modes?: string;
+  /** közös megállók összevonása („all”, „mvk”, „coach”); hiányában nincs */
+  merge?: string;
 };
 
 type WatchRow = {
@@ -215,11 +218,13 @@ export class PushEngine {
       // A figyelés módjai: ha nincs megadva, MVK-megállón csak az MVK (a régi figyelések így maradnak), másutt minden.
       const boards = new Map<string, ArrivalItem[]>();
       const arrivalsFor = (w: WatchRow) => {
-        const key = w.params?.modes ?? (isMvkId(stopId) ? "mvk" : "all");
+        const modesKey = w.params?.modes ?? (isMvkId(stopId) ? "mvk" : "all");
+        const merge = parseStopMerge(w.params?.merge);
+        const key = `${modesKey}|${merge}`;
         let b = boards.get(key);
         if (!b) {
-          const modes = key === "mvk" ? new Set(MVK_MODES) : parseModes(key, ALL_MODES);
-          b = this.insights.arrivals(stopId, SCAN_LIMIT, now, modes, !onlyMvk(modes)).arrivals;
+          const modes = modesKey === "mvk" ? new Set(MVK_MODES) : parseModes(modesKey, ALL_MODES);
+          b = this.insights.arrivals(stopId, SCAN_LIMIT, now, modes, !onlyMvk(modes), merge).arrivals;
           boards.set(key, b);
         }
         return b;

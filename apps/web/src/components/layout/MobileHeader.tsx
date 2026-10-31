@@ -52,7 +52,7 @@ export function MobileHeader({
   const weather = useWeather();
 
   return (
-    <header className="pwa-inset-top relative z-bar shrink-0 border-b border-border bg-card md:hidden">
+    <header className="pwa-inset-top relative z-header shrink-0 border-b border-border bg-card md:hidden">
       <div className="relative flex h-12 items-center gap-1 pl-[max(0.25rem,env(safe-area-inset-left))] pr-[max(0.25rem,env(safe-area-inset-right))]">
         <BrandMark onSelect={() => setActiveTab("map")} isTouch />
 

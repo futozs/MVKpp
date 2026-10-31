@@ -116,6 +116,7 @@ export default {
         overlay: 'var(--z-overlay)',
         bar: 'var(--z-bar)',
         drawer: 'var(--z-drawer)',
+        header: 'var(--z-header)',
         dialog: 'var(--z-dialog)',
       },
 

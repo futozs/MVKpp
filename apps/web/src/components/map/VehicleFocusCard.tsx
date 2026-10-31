@@ -18,6 +18,7 @@ type VehicleFocusCardProps = {
   onClose: () => void;
   /** a felhasználó elhúzta a térképet: most nem követi a buszt */
   followPaused?: boolean;
+  className?: string;
 };
 
 export function VehicleFocusCard({
@@ -26,6 +27,7 @@ export function VehicleFocusCard({
   stops,
   onClose,
   followPaused = false,
+  className,
 }: VehicleFocusCardProps) {
   const { data, lost } = useTripPath(tripId, vehicleId);
   const reduce = useReducedMotion();
@@ -53,13 +55,8 @@ export function VehicleFocusCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
       aria-label="Követett jármű"
-      // a térkép a követett buszt e fölött, a látható rész közepén tartja
-      data-map-cover=""
-      className={cn(
-        "absolute inset-x-0 bottom-0 z-drawer overflow-hidden",
-        "border-t border-border bg-card shadow-xl",
-        "md:inset-x-auto md:bottom-4 md:right-4 md:w-[380px] md:rounded-xl md:border",
-      )}
+      // a helyét a FocusDock adja (telefonon alul, asztalon jobb oldalt)
+      className={cn("shrink-0 overflow-hidden border-t border-border bg-card shadow-xl md:rounded-xl md:border", className)}
     >
       <div className="flex items-start gap-3 px-4 py-3">
         <RouteTile
@@ -135,7 +132,7 @@ export function VehicleFocusCard({
         shape={data?.shape}
         vehicle={vehicle}
         stops={stops}
-        deviationSec={data?.scheduleDeviationSec}
+        deviationSec={vehicle?.delaySec ?? data?.scheduleDeviationSec}
       />
     </motion.aside>
   );

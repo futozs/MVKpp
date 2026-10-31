@@ -35,6 +35,11 @@ export type ArrivalExtras = {
   notices?: (tripId: string) => string[] | null;
   /** az MVK-sorokhoz is kellenek a v3-mezők (mód, vonal-kulcs) — a v2 alapválasza bájtra a régi marad */
   rich?: boolean;
+  /**
+   * Közös megálló (lásd `mergedBoard`): ezeknek a megállóknak az indulásai egy táblán
+   * (az MVK-oszlop és a mellette álló Volán-megálló). Hiányában csak a kért megállóé.
+   */
+  boardStops?: readonly string[];
 };
 
 type DayCtx = { day: ServiceDay; midnightUnix: number };
@@ -50,8 +55,10 @@ export function arrivalsForStop(
   const primary = days[0];
   const feed = primary?.day.feed;
   const s = feed?.stops.get(stopId);
-  // Állomásnál (vasútállomás, autóbusz-állomás) az összes vágány / kocsiállás indulásai.
-  const stopIds = feed ? feed.stopsOf(stopId) : [stopId];
+  // Állomásnál (vasútállomás, autóbusz-állomás) az összes vágány / kocsiállás indulásai;
+  // közös megállónál a pár(ok)é is.
+  const board = extras.boardStops?.length ? extras.boardStops : [stopId];
+  const stopIds = feed ? [...new Set(board.flatMap((id) => feed.stopsOf(id)))] : [stopId];
   const pred = new Map<string, { unix: number; delay: number | null; stopId: string }>();
   for (const sid of stopIds) for (const [trip, p] of snap.predByStop.get(sid) ?? []) if (!pred.has(trip)) pred.set(trip, { ...p, stopId: sid });
 
@@ -239,5 +246,6 @@ export function arrivalsForStop(
     now: nowUnix,
     rtError: snap.rtError,
     arrivals,
+    ...(board.length > 1 ? { merged: [...board] } : {}),
   };
 }

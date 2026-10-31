@@ -18,10 +18,13 @@ import {
   MVK_MODES,
   nowUnix,
   parseModes,
+  parseStopMerge,
   progressOnTrip,
   serviceClock,
+  stopTwinsOf,
   type DecodedVehicle,
   type RunOut,
+  type StopMerge,
   type TransitMode,
   type VehicleMotion,
 } from "@mvk/core";
@@ -55,10 +58,12 @@ const MODES_RE = "(?:@(?:tram|bus|coach|rail)(?:,(?:tram|bus|coach|rail))*)?";
 const TOPIC_RE = new RegExp(`^(vehicles${MODES_RE}|sync|parking|stop:[\\w:.-]+${MODES_RE}|trip:[\\w:.-]+|runs:\\d{8})$`);
 
 /** „stop:1:005511387@rail,tram” → { id, modes } */
-function splitTopic(rest: string): { id: string; modes: Set<TransitMode>; rich: boolean } {
+/** `stop:<id>`, `stop:<id>@<módok>` vagy `stop:<id>@<módok>~<összevonás>` (közös megállók, lásd `mergedBoard`) */
+function splitTopic(rest: string): { id: string; modes: Set<TransitMode>; rich: boolean; merge: StopMerge } {
   const at = rest.lastIndexOf("@");
-  if (at < 0) return { id: rest, modes: new Set(MVK_MODES), rich: false };
-  return { id: rest.slice(0, at), modes: parseModes(rest.slice(at + 1)), rich: true };
+  if (at < 0) return { id: rest, modes: new Set(MVK_MODES), rich: false, merge: "off" };
+  const [modes, merge] = rest.slice(at + 1).split("~");
+  return { id: rest.slice(0, at), modes: parseModes(modes), rich: true, merge: parseStopMerge(merge) };
 }
 
 export class Hub {
@@ -154,8 +159,8 @@ export class Hub {
 
   /** `stop:<id>` vagy `stop:<id>@modes` téma adata (a régi téma csak MVK) */
   private stopData(rest: string) {
-    const { id, modes, rich } = splitTopic(rest);
-    return this.insights.arrivals(id, rich ? STOP_LIMIT * 2 : STOP_LIMIT, nowUnix(), modes, rich);
+    const { id, modes, rich, merge } = splitTopic(rest);
+    return this.insights.arrivals(id, rich ? STOP_LIMIT * 2 : STOP_LIMIT, nowUnix(), modes, rich, merge);
   }
 
   /** Melyik jármű megy egy `vehicles` témára (mód nélkül: csak az MVK-é, mint eddig). */
@@ -330,9 +335,12 @@ export class Hub {
     const prefix = `stop:${stopId}`;
     const topics = new Set<string>();
     for (const c of this.clients) for (const t of c.topics) if (t === prefix || t.startsWith(`${prefix}@`)) topics.add(t);
-    // állomásnál a vágányok eseménye az állomás témáját is frissíti
-    const parent = this.engine.feeds.cachedDay(this.engine.today)?.feed.stops.get(stopId)?.parent;
+    // állomásnál a vágányok eseménye az állomás témáját is frissíti, közös megállónál a pár témája is
+    const feed = this.engine.feeds.cachedDay(this.engine.today)?.feed;
+    const parent = feed?.stops.get(stopId)?.parent;
     if (parent) for (const c of this.clients) for (const t of c.topics) if (t === `stop:${parent}` || t.startsWith(`stop:${parent}@`)) topics.add(t);
+    const twin = feed ? stopTwinsOf(feed).toMvk.get(stopId) : undefined;
+    if (twin) for (const c of this.clients) for (const t of c.topics) if (t.startsWith(`stop:${twin}@`) && splitTopic(t.slice(5)).merge !== "off") topics.add(t);
     for (const t of topics) {
       const rest = t.slice(5);
       this.publishIfChanged(t, { t: "stop", id: splitTopic(rest).id, data: this.stopData(rest) });

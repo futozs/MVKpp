@@ -35,4 +35,5 @@ export * from "./transit/modes.ts";
 export * from "./transit/region.ts";
 export * from "./transit/regionalGtfs.ts";
 export * from "./transit/otp2Realtime.ts";
+export * from "./transit/stopTwins.ts";
 export * from "./realtime/relation.ts";
