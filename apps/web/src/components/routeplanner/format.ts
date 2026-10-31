@@ -172,8 +172,8 @@ export function vehiclePhrase(
   if (/^[1-9]\d*$/.test(id)) {
     return `${articleFor(id)} ${withHungarianSuffix(id)} ${MODE_INSTRUMENTAL[mode]}`;
   }
-  // vonatnál a jármű a mozdony / motorvonat pályaszáma
-  if (mode === "RAIL") return `a ${displayVehicleId(id)} pályaszámú járművel`;
+  // vonatnál a mozdony / motorvonat típusa és pályaszáma („KISS 815 038”)
+  if (mode === "RAIL") return `a(z) ${displayVehicleId(id)} járművel`;
   return `a(z) ${displayVehicleId(id)} jelű ${MODE_INSTRUMENTAL[mode]}`;
 }
 

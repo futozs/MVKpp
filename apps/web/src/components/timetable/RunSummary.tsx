@@ -3,6 +3,7 @@ import type { TripJournalEntry } from "@/types";
 import { delayState, delayTone } from "@/components/transit/DelayBar";
 import { delayPastSentence } from "@/lib/tripStatus";
 import { cn } from "@/lib/utils";
+import { displayVehicleId, vehicleIdTitle } from "@/lib/modes";
 
 export function RunSummary({
   entry,
@@ -32,7 +33,7 @@ export function RunSummary({
         {entry.vehicleId ? (
           <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold">
             <Bus aria-hidden className="h-3 w-3 text-muted-foreground" />
-            <span className="font-mono tabular-nums">{entry.vehicleId}</span>
+            <span className="font-mono tabular-nums" title={vehicleIdTitle(entry.vehicleId)}>{displayVehicleId(entry.vehicleId)}</span>
             <span className="font-normal text-muted-foreground">vitte</span>
           </span>
         ) : null}

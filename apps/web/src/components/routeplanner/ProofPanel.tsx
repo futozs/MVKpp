@@ -16,7 +16,7 @@ import {
   transitLegs,
 } from "./format";
 import { buildProofText, pastOutcome } from "./proof";
-import { displayVehicleId } from "@/lib/modes";
+import { displayVehicleId, vehicleIdTitle } from "@/lib/modes";
 
 const COPIED_MS = 2200;
 
@@ -125,7 +125,7 @@ export function ProofPanel({ plan, trip }: { plan: JourneyPlanResponse; trip: Jo
           {vehicles.map((v, i) => (
             <span key={v.key}>
               {i ? ", " : ""}
-              {v.id ? <span className="font-mono font-semibold">{v.id}</span> : <span className="text-muted-foreground">nincs mérés</span>}
+              {v.id ? <span className="font-mono font-semibold" title={vehicleIdTitle(v.id)}>{displayVehicleId(v.id)}</span> : <span className="text-muted-foreground">nincs mérés</span>}
               <span className="text-muted-foreground"> ({v.route})</span>
             </span>
           ))}

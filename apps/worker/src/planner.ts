@@ -634,7 +634,10 @@ async function predicted(engine: Engine, iso: string, trip: PTrip, fromStop: str
   let live: number | null = null;
   let vehicleId: string | null = null;
   if (mode === "now" && iso === engine.today) {
-    live = engine.matcher.liveDelay(trip.id, Math.floor(Date.now() / 1000));
+    // A Volánnál és a vasútnál a MÁV hivatalos késése a pontosabb (a jelük 30–60 mp-cel késik,
+    // a GPS-ből mért késés elmarad tőle) — a térkép, a tábla és az előrejelzés is ezt mutatja.
+    const official = isMvkId(trip.id) ? null : (engine.snapshot.decoded.find((v) => v.tripId === trip.id)?.delaySec ?? null);
+    live = official ?? engine.matcher.liveDelay(trip.id, Math.floor(Date.now() / 1000));
     vehicleId = engine.snapshot.vehicles.find((v) => v.tripId === trip.id)?.id ?? null;
   }
   const histGrowth = hb.avg != null && ha.avg != null ? ha.avg - hb.avg : 0;

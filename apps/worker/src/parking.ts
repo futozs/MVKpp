@@ -7,17 +7,22 @@
 import {
   computeParking,
   dayInfo,
+  feedOfId,
+  inRegion,
   type Feed,
   type FleetKind,
   type FleetVehicle,
   isMvkId,
   type LiveSeen,
   localMidnightUnix,
+  type ParkedVehicle,
   nowUnix,
   type ParkingSnapshot,
   type Place,
+  type RunOut,
   type ServiceDay,
   shiftIso,
+  trainParts,
   type TripEnds,
   type TripTip,
 } from "@mvk/core";
@@ -36,6 +41,12 @@ const ACTIVE_DAYS = 28;
 const HISTORY_DAYS = 56;
 const RECENT_DAYS = 14;
 const BUS_DEPOT_PREFIX = "Szondi György utca";
+/** a Volán és a vasút utolsó jele ennyi ideig marad meg (a végállomáson álló járműhöz) */
+const REGIONAL_SEEN_S = 6 * 3600;
+/** a regionális tippek ennyi órán belül induló menetekre (a megyén belül) */
+const REGIONAL_TIP_HORIZON_S = 3 * 3600;
+/** ennél régebben esedékes, el nem indult menet nem „következő” (mp) */
+const REGIONAL_STALE_NEXT_S = 15 * 60;
 const TRAM_ROUTE_TYPE = "900";
 
 type Places = {
@@ -66,7 +77,13 @@ export class Parking {
   private fleetAt = 0;
   private fleetLoading: Promise<void> | null = null;
   private places: Places | null = null;
-  private tips: { at: number; byVehicle: Map<string, TripTip> } = { at: 0, byVehicle: new Map() };
+  /** a Volán és a vasút járműveinek utolsó jele (a regionális végállomásokhoz) */
+  private seenRegional = new Map<string, LiveSeen>();
+  private regionalPlaces: { feedHash: string; iso: string; terminals: Place[] } | null = null;
+  private tips: Record<"mvk" | "regional", { at: number; byVehicle: Map<string, TripTip> }> = {
+    mvk: { at: 0, byVehicle: new Map() },
+    regional: { at: 0, byVehicle: new Map() },
+  };
   private cache: { at: number; data: ParkingSnapshot } | null = null;
 
   constructor(engine: Engine, predictor: VehiclePredictor) {
@@ -96,13 +113,14 @@ export class Parking {
   private track() {
     const feed = this.engine.feeds.cachedDay(this.engine.today)?.feed;
     for (const v of this.engine.snapshot.vehicles) {
-      // a Parkoló fül az MVK flottájáé (depó, végállomások)
-      if (!isMvkId(v.id)) continue;
       const ts = this.engine.lastTs.get(v.id);
       if (!ts) continue;
       const route = feed?.routes.get(v.routeId)?.short ?? null;
-      this.seen.set(v.id, { ts, lat: v.lat, lon: v.lon, speed: v.speed, route });
+      // a Parkoló az MVK flottájáé (kocsiszín, végállomások); a Volán és a vasút külön
+      (isMvkId(v.id) ? this.seen : this.seenRegional).set(v.id, { ts, lat: v.lat, lon: v.lon, speed: v.speed, route });
     }
+    const old = nowUnix() - REGIONAL_SEEN_S;
+    for (const [id, x] of this.seenRegional) if (x.ts < old) this.seenRegional.delete(id);
   }
 
   /** A pillanatnyi parkoló (10 mp-ig gyorsítótárazva). */
@@ -115,12 +133,14 @@ export class Parking {
     if (Date.now() - this.fleetAt > FLEET_TTL_MS || this.fleetKey !== iso) void this.refreshFleet();
     const places = this.placesFor(day, iso);
     const tips = this.tipsFor(day, iso, now);
+    const runs = [...this.engine.todayRuns.values()];
     const data = computeParking({
       now,
       serviceDate: iso,
       midnight: localMidnightUnix(iso),
       fleet: this.fleet,
-      runs: this.engine.todayRuns.values(),
+      // csak az MVK menetei: a Volán és a vasút nem állhat be a Szondi György utcába
+      runs: runs.filter((r) => isMvkId(r.vehicleId)),
       seen: this.seen,
       tripEnds: (tripId) => places.ends.get(tripId) ?? endsOf(day.feed, tripId),
       terminals: places.terminals,
@@ -129,8 +149,61 @@ export class Parking {
       isTramRoute: (route) => places.tramRoutes.has(route),
       tipFor: (id) => tips.get(id) ?? null,
     });
-    this.cache = { at: now, data };
-    return data;
+    const regional = this.engine.regional?.enabled ? this.regionalTerminals(day, iso, now, runs.filter((r) => !isMvkId(r.vehicleId))) : undefined;
+    const out = regional ? { ...data, regional } : data;
+    this.cache = { at: now, data: out };
+    return out;
+  }
+
+  /**
+   * Volán és vasút a megyén belüli végállomásokon (autóbusz-állomás, Tiszai pu.): ugyanaz a
+   * döntés, mint az MVK-nál, de kocsiszín, flotta-múlt és „1 óra néma = beállt” nélkül — ami
+   * nem áll végállomáson, az nem kerül sehova. A vonal a felületnek szóló címkét kapja
+   * („3765”, „IC 191”), nem a kulcsát.
+   */
+  private regionalTerminals(day: ServiceDay, iso: string, now: number, runs: RunOut[]): { terminals: ParkingSnapshot["terminals"] } {
+    if (!runs.length && !this.seenRegional.size) return { terminals: [] };
+    const feed = day.feed;
+    const terminals = this.regionalPlacesFor(day, iso);
+    const tips = this.tipsFor(day, iso, now, true);
+    const snap = computeParking({
+      now,
+      serviceDate: iso,
+      midnight: localMidnightUnix(iso),
+      fleet: [],
+      runs: runs.map((r) => ({ ...r, routeShort: runLabel(feed, r) })),
+      seen: this.seenRegional,
+      tripEnds: (tripId) => endsOf(feed, tripId),
+      terminals,
+      busDepot: null,
+      isDepotStop: () => false,
+      isTramRoute: () => false,
+      tipFor: (id) => tips.get(id) ?? null,
+    });
+    // A MÁV+ az álló buszra órákig a régi (el nem indult) menetét adhatja: az ilyen nem „következő”.
+    const nowS = now - localMidnightUnix(iso);
+    const fresh = (v: ParkedVehicle): ParkedVehicle => (v.next && v.next.startS < nowS - REGIONAL_STALE_NEXT_S ? { ...v, next: null } : v);
+    return { terminals: snap.terminals.filter((t) => inRegion(t.lat, t.lon)).map((t) => ({ ...t, vehicles: t.vehicles.map(fresh) })) };
+  }
+
+  /** A Volán és a vasút végállomásai a megyén belül (név szerint összevonva), feed-verziónként egyszer. */
+  private regionalPlacesFor(day: ServiceDay, iso: string): Place[] {
+    const feed = day.feed;
+    if (this.regionalPlaces && this.regionalPlaces.feedHash === feed.hash && this.regionalPlaces.iso === iso) return this.regionalPlaces.terminals;
+    const byName = new Map<string, { lat: number; lon: number; n: number }>();
+    for (const t of feed.trips.values()) {
+      if (isMvkId(t.id) || !day.services.has(t.serviceId)) continue;
+      const e = endsOf(feed, t.id);
+      if (!e) continue;
+      for (const p of [e.first, e.last]) {
+        if (!inRegion(p.lat, p.lon)) continue;
+        const x = byName.get(p.name) ?? { lat: 0, lon: 0, n: 0 };
+        byName.set(p.name, { lat: x.lat + p.lat, lon: x.lon + p.lon, n: x.n + 1 });
+      }
+    }
+    const terminals = [...byName].map(([name, x]) => ({ name, lat: x.lat / x.n, lon: x.lon / x.n }));
+    this.regionalPlaces = { feedHash: feed.hash, iso, terminals };
+    return terminals;
   }
 
   /** Végállomások, a buszkocsiszín helye és a villamosvonalak — feed-verziónként egyszer. */
@@ -165,23 +238,35 @@ export class Parking {
     return this.places;
   }
 
-  /** Járművenként a legkorábbi menet, amit az előrejelző neki szán (percenként frissítve). */
-  private tipsFor(day: ServiceDay, iso: string, now: number): Map<string, TripTip> {
-    if (now - this.tips.at < TIPS_TTL_S) return this.tips.byVehicle;
+  /**
+   * Járművenként a legkorábbi menet, amit az előrejelző neki szán (percenként frissítve).
+   * `regional`: a Volán és a vasút menetei — csak a megyén belül induló, a következő 3 órában
+   * (a regionális parkoló is csak a megyén belüli végállomásokat mutatja).
+   */
+  private tipsFor(day: ServiceDay, iso: string, now: number, regional = false): Map<string, TripTip> {
+    const cached = this.tips[regional ? "regional" : "mvk"];
+    if (now - cached.at < TIPS_TTL_S) return cached.byVehicle;
+    const feed = day.feed;
     const nowS = now - localMidnightUnix(iso);
+    const horizon = regional ? REGIONAL_TIP_HORIZON_S : TIP_HORIZON_S;
     const byVehicle = new Map<string, TripTip>();
-    for (const t of day.feed.trips.values()) {
-      if (!isMvkId(t.id) || !day.services.has(t.serviceId) || this.engine.todayRuns.has(t.id)) continue;
-      const startS = day.feed.tripStops.get(t.id)?.[0]?.dep;
-      if (startS == null || startS < nowS - 300 || startS > nowS + TIP_HORIZON_S) continue;
+    for (const t of feed.trips.values()) {
+      if (isMvkId(t.id) === regional || !day.services.has(t.serviceId) || this.engine.todayRuns.has(t.id)) continue;
+      const first = feed.tripStops.get(t.id)?.[0];
+      const startS = first?.dep;
+      if (startS == null || startS < nowS - 300 || startS > nowS + horizon) continue;
+      if (regional) {
+        const s = feed.stops.get(first!.stopId);
+        if (!s || !inRegion(s.lat, s.lon)) continue;
+      }
       const g = this.predictor.predict(t.id);
       if (!g || g.method === "matched") continue;
       const prev = byVehicle.get(g.id);
       if (prev && prev.startS <= startS) continue;
-      const route = day.feed.routes.get(t.routeId)?.short ?? t.routeId;
+      const route = regional ? tripLabel(feed, t.id, t.routeId) : (feed.routes.get(t.routeId)?.short ?? t.routeId);
       byVehicle.set(g.id, { tripId: t.id, route, startS, confidence: g.confidence, certain: false });
     }
-    this.tips = { at: now, byVehicle };
+    this.tips[regional ? "regional" : "mvk"] = { at: now, byVehicle };
     return byVehicle;
   }
 
@@ -199,6 +284,21 @@ export class Parking {
       .finally(() => (this.fleetLoading = null));
     return this.fleetLoading;
   }
+}
+
+/** Egy regionális menet vonal-címkéje: vonatnál kategória és vonatszám („IC 191”), Volánnál a vonalszám. */
+export function runLabel(feed: Feed, r: Pick<RunOut, "tripId" | "routeId" | "routeShort">): string {
+  return tripLabel(feed, r.tripId, r.routeId, r.routeShort);
+}
+
+/** Egy regionális menet címkéje a menetrendből (vonat: „IC 191”, Volán: „3765”); `fallback`, ha nem ismert. */
+export function tripLabel(feed: Feed, tripId: string, routeId: string, fallback = routeId): string {
+  const route = feed.routes.get(routeId);
+  if (feedOfId(tripId) === "rail") {
+    const no = trainParts(feed.trips.get(tripId)?.shortName).no;
+    return [route?.short, no].filter(Boolean).join(" ") || fallback;
+  }
+  return route?.short || fallback;
 }
 
 function endsOf(feed: Feed, tripId: string): TripEnds | null {

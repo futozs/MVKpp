@@ -9,6 +9,7 @@ import {
   delayTone,
 } from "@/components/transit/DelayBar";
 import { cn } from "@/lib/utils";
+import { displayVehicleId } from "@/lib/modes";
 
 const POLL_MS = 5000;
 const ROW_HEIGHT = 34;
@@ -94,7 +95,7 @@ export function TripProgressRail({
       {data.live && data.vehicle ? (
         <div className="mb-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs">
           <span className="rounded bg-primary/12 px-1.5 py-0.5 font-mono text-xs font-bold tabular-nums text-primary">
-            {data.vehicle.id}
+            {displayVehicleId(data.vehicle.id)}
           </span>
           <span className="text-muted-foreground">
             {data.nextStop ? `következő: ${data.nextStop.name}` : "útközben"}

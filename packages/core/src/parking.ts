@@ -87,6 +87,11 @@ export type ParkingSnapshot = {
   service: ServiceVehicle[];
   /** a flotta múltja járművenként (a pillanatképben szereplőkre) */
   fleet: Record<string, FleetVehicle>;
+  /**
+   * Volán és vasút: csak a megyén belüli végállomásokon álló járművek (kocsiszín és
+   * „néma = beállt” szabály nélkül — az az MVK-é). A felület külön kapcsolóval mutatja.
+   */
+  regional?: { terminals: ParkingSnapshot["terminals"] };
 };
 
 export type ParkingInput = {

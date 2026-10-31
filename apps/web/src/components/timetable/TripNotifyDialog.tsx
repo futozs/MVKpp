@@ -22,6 +22,7 @@ import {
   setWatch,
 } from "@/lib/notifications";
 import { registerPushWatch, unregisterPushWatch } from "@/lib/push";
+import { withHungarianSuffix } from "@/lib/utils";
 
 type TripNotifyDialogProps = {
   open: boolean;
@@ -30,6 +31,8 @@ type TripNotifyDialogProps = {
   stopName: string;
   tripId: string;
   routeShort: string;
+  /** a jármű a mondatokba („3743-as busz”, „IC vonat”); hiányában „<vonal>-es busz” */
+  vehicleLabel?: string;
   isDeparture: boolean;
   departureLabel: string;
   /** a menetrend napja (szolgáltatási nap): az egyszeri figyelés csak erre szól */
@@ -70,10 +73,12 @@ export function TripNotifyDialog({
   stopName,
   tripId,
   routeShort,
+  vehicleLabel,
   isDeparture,
   departureLabel,
   date,
 }: TripNotifyDialogProps) {
+  const what = vehicleLabel ?? `${withHungarianSuffix(routeShort)} busz`;
   const [threshold, setThreshold] = useState(DEFAULT_THRESHOLD_MIN);
   const [recurring, setRecurring] = useState(false);
   const [permissionDenied, setPermissionDenied] = useState(false);
@@ -130,7 +135,7 @@ export function TripNotifyDialog({
       <DialogContent className="sm:max-w-sm">
         <DialogHeader className="text-left">
           <DialogTitle>
-            Értesítés — {routeShort}-es busz, {departureLabel}
+            Értesítés — {what}, {departureLabel}
           </DialogTitle>
           <DialogDescription>
             {isDeparture
@@ -167,7 +172,7 @@ export function TripNotifyDialog({
               <p className="text-sm font-medium">Ismétlődő — minden nap</p>
               <p className="text-[11px] text-muted-foreground">
                 Nem csak erre az egy napra, hanem minden napra szól, amikor a{" "}
-                {routeShort}-es busz {departureLabel}-kor közlekedik innen. Ez
+                {what} {departureLabel}-kor közlekedik innen. Ez
                 kell a napi iskolabuszhoz/munkába járáshoz — egyszer állítod
                 be, és nem kell újra minden alkalommal.
               </p>

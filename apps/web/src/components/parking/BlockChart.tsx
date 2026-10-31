@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import type { FleetKind } from "@/services/parkingApi";
 import { hmOfDaySec } from "./format";
 import type { RouteLookup } from "./parts";
+import { displayVehicleId } from "@/lib/modes";
 
 type BlockRun = { t: string; r: string; h: string; s: number; e: number; as: number | null; ae: number | null; st: string; d: number | null };
 type BlockPlan = { t: string; r: string; h: string; s: number; e: number; c: number | null };
@@ -161,7 +162,7 @@ export function BlockChart({ lookup, kind, query, onSelect }: { lookup: RouteLoo
                 className="sticky left-0 z-10 shrink-0 border-r border-border bg-card px-2 text-left font-mono text-[12px] font-bold tabular-nums hover:text-primary"
                 style={{ width: LEFT_W }}
               >
-                {v.id}
+                {displayVehicleId(v.id)}
               </button>
               <div className="relative flex-1">
                 {v.runs.map((r) => {

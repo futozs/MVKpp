@@ -9,7 +9,7 @@ import { LiveDot } from "@/components/transit/LiveDot";
 import { ApproachStrip } from "@/components/transit/ApproachStrip";
 import { cn } from "@/lib/utils";
 import { boardVehicle } from "@/components/ride/RideLayer";
-import { displayVehicleId, rideModeOf, VEHICLE_WORDS } from "@/lib/modes";
+import { displayVehicleId, rideModeOf, VEHICLE_WORDS, vehicleIdTitle } from "@/lib/modes";
 
 type VehicleFocusCardProps = {
   tripId: string;
@@ -76,7 +76,7 @@ export function VehicleFocusCard({
 
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
             {idLabel ? (
-              <span className="rounded bg-primary/12 px-1.5 py-0.5 font-mono text-sm font-bold tabular-nums text-primary">
+              <span title={shownId ? vehicleIdTitle(shownId, vehicle?.plate) : undefined} className="rounded bg-primary/12 px-1.5 py-0.5 font-mono text-sm font-bold tabular-nums text-primary">
                 {idLabel}
               </span>
             ) : null}

@@ -89,6 +89,8 @@ export interface ParkingSnapshot {
   nosignal: (ParkedVehicle & { place: string | null })[];
   service: ServiceVehicle[];
   fleet: Record<string, FleetHistory>;
+  /** Volán és vasút a megyén belüli végállomásokon (a Parkoló kapcsolójával látszik) */
+  regional?: { terminals: TerminalLot[] };
 }
 
 export async function fetchParking(signal?: AbortSignal): Promise<ParkingSnapshot> {

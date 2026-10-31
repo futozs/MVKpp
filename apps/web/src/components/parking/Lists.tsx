@@ -3,6 +3,7 @@ import type { ParkedVehicle, ServiceVehicle } from "@/services/parkingApi";
 import { cn } from "@/lib/utils";
 import { durationText } from "./format";
 import { RouteChip, type RouteLookup } from "./parts";
+import { displayVehicleId, vehicleIdTitle } from "@/lib/modes";
 
 /** Menet közben elnémult járművek — a borostyán sáv az 1 órás határig hátralévő időt mutatja. */
 export function NoSignalList({
@@ -39,7 +40,7 @@ export function NoSignalList({
               className="flex flex-col gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-left hover:border-nosignal/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <span className="flex items-center justify-between">
-                <span className="font-mono text-[15px] font-bold tabular-nums">{v.id}</span>
+                <span className="font-mono text-[15px] font-bold tabular-nums" title={vehicleIdTitle(v.id)}>{displayVehicleId(v.id)}</span>
                 <RouteChip route={v.lastRoute} lookup={lookup} />
               </span>
               <span className="truncate text-[11px] text-muted-foreground">
@@ -80,7 +81,7 @@ export function ServiceList({ vehicles, onSelect, lookup }: { vehicles: ServiceV
               v.deadhead && "border-dashed",
             )}
           >
-            <span className="font-mono text-[12.5px] font-bold tabular-nums">{v.id}</span>
+            <span className="font-mono text-[12.5px] font-bold tabular-nums" title={vehicleIdTitle(v.id)}>{displayVehicleId(v.id)}</span>
             {v.route ? <RouteChip route={v.route} lookup={lookup} /> : <span className="text-[10.5px] text-muted-foreground">úton</span>}
           </button>
         ))}

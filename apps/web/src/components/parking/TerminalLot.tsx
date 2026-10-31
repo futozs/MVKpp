@@ -3,6 +3,7 @@ import type { FleetHistory, ParkedVehicle, TerminalLot } from "@/services/parkin
 import { cn } from "@/lib/utils";
 import { durationText, hmOfDaySec } from "./format";
 import { FavoriteButton, RouteChip, SignalDot, TipChip, type RouteLookup } from "./parts";
+import { displayVehicleId, vehicleIdTitle } from "@/lib/modes";
 
 export interface LotContext {
   now: number;
@@ -11,6 +12,8 @@ export interface LotContext {
   lookup: RouteLookup;
   history: (id: string) => FleetHistory | undefined;
   onSelect: (id: string) => void;
+  /** Volán / vasút: nincs kocsiszín, így a „néma → beáll” sáv sem */
+  regional?: boolean;
 }
 
 /** Egy végállomás parkolója: fejléc a következő indulással, alatta a beállók. */
@@ -41,7 +44,7 @@ export function TerminalLotCard({
               <>
                 Következő innen: <span className="font-mono font-semibold text-foreground">{next.next.route}</span>{" "}
                 <span className="font-mono tabular-nums">{hmOfDaySec(next.next.startS)}</span> ·{" "}
-                <span className="font-mono">{next.id}</span>
+                <span className="font-mono">{displayVehicleId(next.id)}</span>
                 {next.next.certain ? "" : " (tipp)"}
               </>
             ) : (
@@ -78,7 +81,7 @@ export function ParkedTile({ v, ctx }: { v: ParkedVehicle; ctx: LotContext }) {
   const parked = v.since ? Math.max(0, ctx.now - v.since) : null;
   // Néma járműnél az 1 órás határig hátralévő idő: utána a kocsiszínbe soroljuk.
   const silent = !v.online && v.lastSeen ? Math.max(0, ctx.now - v.lastSeen) : null;
-  const toLimit = silent != null ? Math.min(1, silent / ctx.limitS) : null;
+  const toLimit = silent != null && !ctx.regional ? Math.min(1, silent / ctx.limitS) : null;
   return (
     <button
       type="button"
@@ -90,7 +93,7 @@ export function ParkedTile({ v, ctx }: { v: ParkedVehicle; ctx: LotContext }) {
       )}
     >
       <span className="flex items-center justify-between gap-2">
-        <span className="font-mono text-[15px] font-bold leading-none tabular-nums">{v.id}</span>
+        <span className="font-mono text-[15px] font-bold leading-none tabular-nums" title={vehicleIdTitle(v.id)}>{displayVehicleId(v.id)}</span>
         <SignalDot online={v.online} />
       </span>
       <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">

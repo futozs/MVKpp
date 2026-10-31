@@ -157,15 +157,62 @@ export function routeModeOf(r: { id: string; type: string; mode?: TransitMode })
 }
 
 /**
- * Megjeleníthető rendszám: a Volán-azonosító előtag nélkül (`hkir:hkir_LWA387` → `LWA387`),
- * a vasúti jármű 12 jegyű UIC-száma tagolva (`1:925504183227` → `92 55 0418 322-7`).
+ * A megyében járó vasúti járművek sorozata (a 12 jegyű UIC-szám 5–8. jegye) → a köznapi neve.
+ * Ami nincs a listán, annak csak a sorozat- és pályaszáma látszik.
+ */
+const RAIL_CLASS: Record<string, string> = {
+  "1815": "KISS",
+  "1415": "FLIRT",
+  "1416": "Desiro",
+  "0117": "Bzmot",
+  "0418": "M41",
+  "0628": "M62",
+  "0431": "V43",
+  "0432": "V43",
+  "0433": "V43",
+  "0630": "V63",
+  "0470": "Taurus",
+  "0480": "TRAXX",
+};
+/** külföldi (német, osztrák) bejegyzésű mozdonyok a háromjegyű sorozatuk szerint (pl. 91 80 6193 / 7193) */
+const FOREIGN_CLASS: Record<string, string> = { "182": "Taurus", "193": "Vectron" };
+
+/**
+ * Vasúti jármű a UIC-számából: a teljes, tagolt szám (`92 55 0418 322-7`), a megszokott
+ * rövid alak — sorozat és pályaszám (`418 322`) — és a típus köznapi neve (`M41`), ha ismert.
+ */
+export function railVehicle(id: string): { full: string; short: string; model: string | null } | null {
+  const uic = /^1:(\d{2})(\d{2})(\d{4})(\d{3})(\d)$/.exec(id);
+  if (!uic) return null;
+  const cls = uic[3].slice(1);
+  const model = uic[2] === "55" ? RAIL_CLASS[uic[3]] : FOREIGN_CLASS[cls];
+  return { full: `${uic[1]} ${uic[2]} ${uic[3]} ${uic[4]}-${uic[5]}`, short: `${cls} ${uic[4]}`, model: model ?? null };
+}
+
+/** Rendszám a magyar alakjában: `RWE771` → `RWE-771`, az új négybetűs `AAJB306` → `AA JB-306`. */
+function plateText(raw: string): string {
+  const now = /^([A-Z]{2})([A-Z]{2})(\d{3})$/.exec(raw);
+  if (now) return `${now[1]} ${now[2]}-${now[3]}`;
+  const old = /^([A-Z]{3})(\d{3})$/.exec(raw);
+  return old ? `${old[1]}-${old[2]}` : raw;
+}
+
+/**
+ * Megjeleníthető jármű-azonosító: az MVK-é a pályaszám (változatlan), a Volán-buszé a rendszáma
+ * (`hkir:hkir_AAJB306` → `AA JB-306`), a vonaté a típusa, sorozata és pályaszáma
+ * (`1:945518150384` → `KISS 815 038`). A teljes UIC-szám a `vehicleIdTitle`-ben.
  */
 export function displayVehicleId(id: string, plate?: string | null): string {
   if (!isRegionalId(id)) return id;
-  if (plate) return plate;
-  const raw = id.replace(/^hkir:hkir_/, "").replace(/^1:/, "");
-  const uic = /^(\d{2})(\d{2})(\d{4})(\d{3})(\d)$/.exec(raw);
-  return uic && id.startsWith("1:") ? `${uic[1]} ${uic[2]} ${uic[3]} ${uic[4]}-${uic[5]}` : raw;
+  const rail = railVehicle(id);
+  if (rail) return rail.model ? `${rail.model} ${rail.short}` : rail.short;
+  return plateText((plate || id.replace(/^hkir:hkir_/, "").replace(/^1:/, "")).replace(/[\s-]/g, ""));
+}
+
+/** A jármű teljes azonosítója a buborékba: vonatnál a UIC-szám, másutt a megjelenített. */
+export function vehicleIdTitle(id: string, plate?: string | null): string {
+  const rail = railVehicle(id);
+  return rail ? `${rail.model ? `${rail.model} · ` : ""}${rail.full}` : displayVehicleId(id, plate);
 }
 
 /** Mód szerinti főnév: „busz”, „villamos”, „vonat” (a Volán is busz). */

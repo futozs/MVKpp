@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { depotLine, hmOfDaySec, pct, REASON_LABEL } from "./format";
 import { FavoriteButton, PresenceStrip, SignalDot, TipChip } from "./parts";
 import type { LotContext } from "./TerminalLot";
+import { displayVehicleId, vehicleIdTitle } from "@/lib/modes";
 
 const ORDER: DepotReason[] = ["pull-in", "seen", "timeout", "not-today"];
 
@@ -78,7 +79,7 @@ function DepotStall({ v, ctx, serviceDate }: { v: DepotVehicle; ctx: LotContext;
       )}
     >
       <span className="flex items-center justify-between gap-2">
-        <span className="font-mono text-[14px] font-bold leading-none tabular-nums">{v.id}</span>
+        <span className="font-mono text-[14px] font-bold leading-none tabular-nums" title={vehicleIdTitle(v.id)}>{displayVehicleId(v.id)}</span>
         {v.reason === "seen" ? <SignalDot online /> : h ? <PresenceStrip recent={h.recent.slice(-7)} /> : null}
       </span>
       <span className="truncate text-[11px] leading-tight text-muted-foreground">{depotLine(v, h, serviceDate)}</span>

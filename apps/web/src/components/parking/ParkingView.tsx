@@ -4,6 +4,7 @@ import type { Route } from "@/types";
 import type { FleetKind, KindCounts, ParkedVehicle, ParkingSnapshot } from "@/services/parkingApi";
 import { useRealtimeConnected } from "@/lib/realtime";
 import { usePreference } from "@/hooks/usePreference";
+import { displayVehicleId, feedOfId, useEnabledModes } from "@/lib/modes";
 import { cn } from "@/lib/utils";
 import { BlockChart } from "./BlockChart";
 import { DepotLotCard } from "./DepotLot";
@@ -16,6 +17,9 @@ import { useParking } from "./useParking";
 import { VehicleSheet } from "./VehicleSheet";
 
 type KindFilter = "all" | FleetKind;
+
+/** a Volán és a vasút a Parkolóban (alapból csak az MVK flottája látszik) */
+const PREF_PARKING_REGIONAL = "mvk_pref_parking_regional";
 
 const KIND_OPTIONS: { id: KindFilter; label: string }[] = [
   { id: "all", label: "Mind" },
@@ -31,17 +35,30 @@ export function ParkingView({ routes, onFocusVehicle }: { routes: Route[]; onFoc
   const [selected, setSelected] = useState<string | null>(null);
   const [mode, setMode] = usePreference<"lots" | "blocks">("mvk_parking_mode", "lots");
   const [favorites, setFavorites] = usePreference<string[]>(PREF_PARKING_FAVORITES, []);
+  const enabled = useEnabledModes();
+  const canRegional = enabled.includes("coach") || enabled.includes("rail");
+  const [regionalPref, setRegional] = usePreference<boolean>(PREF_PARKING_REGIONAL, false);
+  const regionalOn = canRegional && regionalPref === true;
   const isFav = (key: string) => favorites.includes(key);
   const toggleFav = (key: string) => setFavorites(isFav(key) ? favorites.filter((k) => k !== key) : [...favorites, key]);
 
   const byShort = useMemo(() => new Map(routes.map((r) => [r.short, r])), [routes]);
   const lookup = (short: string | null) => (short ? byShort.get(short) : undefined);
   const view = useMemo(() => (data ? withFavorites(filterSnapshot(data, kind, query), favorites, query) : null), [data, kind, query, favorites]);
+  // Volán és vasút: csak a megyén belüli végállomások, a bekapcsolt módok szerint, a keresővel szűrve
+  const regionalLots = useMemo(() => {
+    if (!regionalOn || !data?.regional || kind === "tram") return [];
+    const q = query.trim().toLowerCase();
+    const keep = (v: ParkedVehicle) =>
+      (feedOfId(v.id) === "rail" ? enabled.includes("rail") : enabled.includes("coach")) &&
+      (!q || displayVehicleId(v.id).toLowerCase().replace(/[\s-]/g, "").startsWith(q.replace(/[\s-]/g, "")) || v.lastRoute?.toLowerCase() === q);
+    return data.regional.terminals.map((t) => ({ ...t, vehicles: t.vehicles.filter(keep) })).filter((t) => t.vehicles.length);
+  }, [regionalOn, data, kind, query, enabled]);
 
   if (!data || !view) {
     return (
       <Shell>
-        <Header live={live} at={null} kind={kind} setKind={setKind} query={query} setQuery={setQuery} />
+        <Header live={live} at={null} kind={kind} setKind={setKind} query={query} setQuery={setQuery} regional={canRegional ? { on: regionalOn, set: setRegional } : null} />
         <div className="rounded-2xl border border-dashed border-border px-6 py-16 text-center text-sm text-muted-foreground">
           {error ?? "A parkoló betöltése…"}
         </div>
@@ -55,7 +72,7 @@ export function ParkingView({ routes, onFocusVehicle }: { routes: Route[]; onFoc
 
   return (
     <Shell>
-      <Header live={live} at={data.at} kind={kind} setKind={setKind} query={query} setQuery={setQuery} />
+      <Header live={live} at={data.at} kind={kind} setKind={setKind} query={query} setQuery={setQuery} regional={canRegional ? { on: regionalOn, set: setRegional } : null} />
       <FleetSummary counts={counts} facts={facts(view, data, now)} />
       <div role="tablist" aria-label="Nézet" className="inline-flex gap-1 rounded-lg border border-border bg-muted/60 p-1">
         {(
@@ -105,6 +122,30 @@ export function ParkingView({ routes, onFocusVehicle }: { routes: Route[]; onFoc
               <p className="rounded-2xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">Most egy végállomáson sem parkol senki.</p>
             )}
             <NoSignalList vehicles={view.nosignal} now={now} limitS={data.limitS} onSelect={setSelected} lookup={lookup} />
+            {regionalOn ? (
+              <section aria-labelledby="parking-regional" className="space-y-3 pt-2">
+                <SectionTitle id="parking-regional" count={regionalLots.reduce((n, t) => n + t.vehicles.length, 0)}>
+                  Volán és vonat — végállomáson
+                </SectionTitle>
+                {regionalLots.length ? (
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {regionalLots.map((t) => (
+                      <TerminalLotCard
+                        key={`r-${t.name}`}
+                        lot={t}
+                        ctx={{ ...ctx, regional: true }}
+                        favorite={isFav(terminalKey(t.name))}
+                        onToggleFavorite={() => toggleFav(terminalKey(t.name))}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <p className="rounded-2xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
+                    Most egy megyei autóbusz-állomáson vagy pályaudvaron sem áll Volán-busz vagy vonat.
+                  </p>
+                )}
+              </section>
+            ) : null}
           </section>
           <aside aria-labelledby="parking-depots" className="min-w-0 space-y-3 xl:sticky xl:top-4">
             <SectionTitle id="parking-depots" count={view.depots.reduce((n, d) => n + d.vehicles.length, 0)}>
@@ -146,6 +187,7 @@ function Header({
   setKind,
   query,
   setQuery,
+  regional,
 }: {
   live: boolean;
   at: number | null;
@@ -153,6 +195,8 @@ function Header({
   setKind: (k: KindFilter) => void;
   query: string;
   setQuery: (q: string) => void;
+  /** a Volán és a vasút kapcsolója (csak ha legalább az egyik mód be van kapcsolva) */
+  regional: { on: boolean; set: (on: boolean) => void } | null;
 }) {
   return (
     <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
@@ -182,6 +226,23 @@ function Header({
             </button>
           ))}
         </div>
+        {regional ? (
+          <button
+            type="button"
+            aria-pressed={regional.on}
+            onClick={() => regional.set(!regional.on)}
+            title="A Volán-buszok és a vonatok a megyei autóbusz-állomásokon és pályaudvarokon (a kocsiszín az MVK-é)"
+            className={cn(
+              "inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-xs font-semibold transition-colors duration-fast focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+              regional.on ? "border-primary/50 bg-primary/10 text-foreground" : "border-border bg-muted/60 text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <span aria-hidden className={cn("relative h-4 w-7 rounded-full transition-colors duration-fast", regional.on ? "bg-primary" : "bg-muted-foreground/40")}>
+              <span className={cn("absolute top-0.5 h-3 w-3 rounded-full bg-card shadow-sm transition-transform duration-fast", regional.on ? "translate-x-3.5" : "translate-x-0.5")} />
+            </span>
+            Volán és vonat
+          </button>
+        ) : null}
         <label className="relative w-full sm:w-56">
           <span className="sr-only">Keresés rendszámra vagy vonalra</span>
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />

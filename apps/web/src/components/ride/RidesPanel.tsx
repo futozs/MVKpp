@@ -8,7 +8,7 @@ import { canFixRide, deleteRide, syncRides, useRides, type Ride } from "@/lib/ri
 import { RideFixSheet } from "./RideFixSheet";
 import { statsApi } from "@/services/statsApi";
 import { cn } from "@/lib/utils";
-import { displayVehicleId } from "@/lib/modes";
+import { displayVehicleId, vehicleIdTitle } from "@/lib/modes";
 
 const nf = new Intl.NumberFormat("hu-HU", { maximumFractionDigits: 1 });
 const DAY = new Intl.DateTimeFormat("hu-HU", { timeZone: "Europe/Budapest", month: "short", day: "numeric", weekday: "short" });
@@ -207,7 +207,7 @@ function LoopRow({ legs, onFix }: { legs: Ride[]; onFix?: () => void }) {
           <span>
             {DAY.format(new Date(first.boardedAt * 1000))} {HM.format(new Date(first.boardedAt * 1000))}
           </span>
-          <span className="font-mono">{first.vehicleId}</span>
+          <span className="font-mono" title={vehicleIdTitle(first.vehicleId)}>{displayVehicleId(first.vehicleId)}</span>
           {mins != null ? <span>{mins} perc</span> : null}
           <span>{stops} megálló</span>
           {meters ? <span>{nf.format(meters / 1000)} km</span> : null}

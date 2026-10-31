@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { boardKey, boardQuery, displayVehicleId, feedOfId, isMergedTwin, modesParam, pickableStops, regionRank, rideModeOf, routeModeOf, vehicleModeOf } from "../src/lib/modes.ts";
+import { boardKey, boardQuery, displayVehicleId, vehicleIdTitle, feedOfId, isMergedTwin, modesParam, pickableStops, regionRank, rideModeOf, routeModeOf, vehicleModeOf } from "../src/lib/modes.ts";
 import { travelEmptyHint, travelSentence } from "../src/components/routeplanner/TravelModes.tsx";
 import { arrivalTileText, arrivalTitle, arrivalVehicleLabel, stopKindLabel } from "../src/components/transit/RegionalBits.tsx";
 import { legTileText, vehiclePhrase } from "../src/components/routeplanner/format.ts";
@@ -30,11 +30,19 @@ describe("azonosítók és módok", () => {
 });
 
 describe("megjelenítés", () => {
-  it("rendszám: az MVK-é változatlan, a Volán előtag nélkül, a vasúti UIC tagolva", () => {
+  it("rendszám: az MVK-é változatlan, a Volán magyar rendszám-alakban, a vonat típussal és pályaszámmal", () => {
     expect(displayVehicleId("1641")).toBe("1641");
-    expect(displayVehicleId("hkir:hkir_LWA387")).toBe("LWA387");
+    expect(displayVehicleId("hkir:hkir_LWA387")).toBe("LWA-387");
     expect(displayVehicleId("hkir:hkir_LWA387", "LWA-387")).toBe("LWA-387");
-    expect(displayVehicleId("1:925504183227")).toBe("92 55 0418 322-7");
+    // az új, négybetűs rendszám
+    expect(displayVehicleId("hkir:hkir_AAJB306")).toBe("AA JB-306");
+    // vonat: típus, sorozat és pályaszám; a teljes UIC-szám a buborékba
+    expect(displayVehicleId("1:925504183227")).toBe("M41 418 322");
+    expect(displayVehicleId("1:945518150384")).toBe("KISS 815 038");
+    expect(displayVehicleId("1:945504140134")).toBe("414 013");
+    // német bejegyzésű Vectron (91 80 6193 / 7193)
+    expect(displayVehicleId("1:918071930252")).toBe("Vectron 193 025");
+    expect(vehicleIdTitle("1:925504183227")).toBe("M41 · 92 55 0418 322-7");
     // nem 12 jegyű vasúti azonosító: csak az előtag megy le
     expect(displayVehicleId("1:ABC")).toBe("ABC");
   });
@@ -58,7 +66,7 @@ describe("megjelenítés", () => {
     expect(arrivalVehicleLabel(train as never)).toBeNull();
     const coach = { route: "4001", mode: "coach" as const, headsign: "Kazincbarcika", vehicle: { id: "hkir:hkir_TDE321" } };
     expect(arrivalTileText(coach)).toBe("4001");
-    expect(arrivalVehicleLabel(coach as never)).toBe("TDE321");
+    expect(arrivalVehicleLabel(coach as never)).toBe("TDE-321");
     expect(arrivalTitle({ headsign: "Diósgyőr" })).toBe("Diósgyőr");
   });
 
@@ -73,13 +81,13 @@ describe("megjelenítés", () => {
     expect(legTileText({ mode: "RAIL", routeShortName: "Sz", trainNo: "5139" })).toBe("Sz 5139");
     expect(legTileText({ mode: "BUS", routeShortName: "21" })).toBe("21");
     expect(vehiclePhrase("1653", "BUS")).toBe("az 1653-as busszal");
-    expect(vehiclePhrase("hkir:hkir_TDE321", "COACH")).toBe("a(z) TDE321 jelű busszal");
-    expect(vehiclePhrase("1:925504183227", "RAIL")).toBe("a 92 55 0418 322-7 pályaszámú járművel");
+    expect(vehiclePhrase("hkir:hkir_TDE321", "COACH")).toBe("a(z) TDE-321 jelű busszal");
+    expect(vehiclePhrase("1:925504183227", "RAIL")).toBe("a(z) M41 418 322 járművel");
   });
 
   it("menetállapot: a regionális jármű olvashatóan", () => {
     expect(tripRunLabel("live", "1641")).toBe("Úton · 1641");
-    expect(tripRunLabel("live", "hkir:hkir_TDE321")).toBe("Úton · TDE321");
+    expect(tripRunLabel("live", "hkir:hkir_TDE321")).toBe("Úton · TDE-321");
   });
 });
 

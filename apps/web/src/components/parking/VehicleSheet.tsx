@@ -5,6 +5,7 @@ import type { DepotVehicle, FleetHistory, ParkedVehicle, ParkingSnapshot, Servic
 import { cn } from "@/lib/utils";
 import { clockOf, daysBetween, depotLine, durationText, hmOfDaySec, pct, REASON_LABEL } from "./format";
 import { PresenceStrip, RouteChip, SignalDot, TipChip, type RouteLookup } from "./parts";
+import { displayVehicleId, vehicleIdTitle } from "@/lib/modes";
 
 type Located =
   | { state: "terminus"; place: string; v: ParkedVehicle }
@@ -13,7 +14,7 @@ type Located =
   | { state: "service"; place: null; v: ServiceVehicle };
 
 export function locate(snap: ParkingSnapshot, id: string): Located | null {
-  for (const t of snap.terminals) {
+  for (const t of [...snap.terminals, ...(snap.regional?.terminals ?? [])]) {
     const v = t.vehicles.find((x) => x.id === id);
     if (v) return { state: "terminus", place: t.name, v };
   }
@@ -59,7 +60,7 @@ export function VehicleSheet({
             <div className="flex items-start gap-3 pr-6">
               <div className="min-w-0 flex-1">
                 <DialogTitle className="flex items-center gap-2.5">
-                  <span className="font-mono text-[28px] font-bold leading-none tabular-nums">{hit.v.id}</span>
+                  <span className="font-mono text-[28px] font-bold leading-none tabular-nums" title={vehicleIdTitle(hit.v.id)}>{displayVehicleId(hit.v.id)}</span>
                   <span className="text-xs font-medium text-muted-foreground">{hit.v.kind === "tram" ? "villamos" : "busz"}</span>
                 </DialogTitle>
                 <DialogDescription className="mt-2 flex flex-wrap items-center gap-2">

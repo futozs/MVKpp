@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { fixRide, type Ride, type RideFix } from "@/lib/rides";
 import { StopChoiceList } from "./StopChoiceList";
 import { tripDetailUrl, type TripDetail, type TripStop } from "./useTripLive";
+import { displayVehicleId, vehicleIdTitle } from "@/lib/modes";
 
 const WHEN = new Intl.DateTimeFormat("hu-HU", { timeZone: "Europe/Budapest", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 
@@ -103,7 +104,7 @@ export function RideFixSheet({ legs, initial, onClose }: { legs: Ride[]; initial
             Hol szálltál fel és le?
           </DialogTitle>
           <DialogDescription className="truncate">
-            {first.headsign} · {WHEN.format(new Date(first.boardedAt * 1000))} · <span className="font-mono">{first.vehicleId}</span>
+            {first.headsign} · {WHEN.format(new Date(first.boardedAt * 1000))} · <span className="font-mono" title={vehicleIdTitle(first.vehicleId)}>{displayVehicleId(first.vehicleId)}</span>
           </DialogDescription>
         </DialogHeader>
 

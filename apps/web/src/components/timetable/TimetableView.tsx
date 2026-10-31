@@ -48,10 +48,10 @@ import {
 } from "@/lib/tripStatus";
 import { getWatch } from "@/lib/notifications";
 import { initialTimetableView, saveTimetableView } from "@/lib/viewState";
-import { cn, normalizeSearchText } from "@/lib/utils";
+import { cn, normalizeSearchText, withHungarianSuffix } from "@/lib/utils";
 import { serviceNow } from "@/lib/serviceDay";
 import { useServerClockVersion } from "@/lib/realtime";
-import { displayVehicleId, modesParam, routeModeOf, useEnabledModes, type TransitMode } from "@/lib/modes";
+import { displayVehicleId, modesParam, routeModeOf, type TransitMode, useEnabledModes, vehicleIdTitle, vehicleNoun } from "@/lib/modes";
 import { usePreference } from "@/hooks/usePreference";
 
 /** a menetrend nézete: minden bekapcsolt mód, vagy csak egy csoport (eszközök között szinkronizálva) */
@@ -845,6 +845,7 @@ export function TimetableView({
                 variantLabel={selectedTrip.variant ? (variantLabels.get(selectedTrip.variant) ?? null) : null}
                 stops={table.stops}
                 routeShort={selectedRoute.short}
+                mode={routeModeOf(selectedRoute)}
                 vehicle={selectedVehicle}
                 cancelled={selectedTripCancelled}
                 dateYmd={isoToYmd(date)}
@@ -867,6 +868,7 @@ function TripDetail({
   variantLabel,
   stops,
   routeShort,
+  mode,
   vehicle,
   cancelled,
   journalEntry,
@@ -881,6 +883,7 @@ function TripDetail({
   variantLabel?: string | null;
   stops: TimetableResponse["stops"];
   routeShort: string;
+  mode: TransitMode;
   vehicle: LiveVehicle | null;
   /** A menet ki van húzva: nem késik, hanem el sem indul. */
   cancelled: boolean;
@@ -1001,11 +1004,11 @@ function TripDetail({
               variant="outline"
               size="sm"
               className="h-8 shrink-0"
-              title={`${pastVehicleId} teljesítette ezt a menetet — megnézem, hol jár most`}
+              title={`${vehicleIdTitle(pastVehicleId)} teljesítette ezt a menetet — megnézem, hol jár most`}
               onClick={() => onFocusTrip(trip.tripId, pastVehicleId)}
             >
               <Bus />
-              <span className="font-mono tabular-nums">{pastVehicleId}</span>
+              <span className="font-mono tabular-nums">{displayVehicleId(pastVehicleId)}</span>
               <span className="hidden sm:inline">
                 {state === "finished" ? "vitte" : "viszi"}
               </span>
@@ -1046,6 +1049,7 @@ function TripDetail({
           stopName={notifyTarget.stop.name}
           tripId={trip.tripId}
           routeShort={routeShort}
+          vehicleLabel={mode === "rail" ? `${routeShort} vonat` : `${withHungarianSuffix(routeShort)} ${vehicleNoun(mode)}`}
           isDeparture={notifyTarget.isDeparture}
           date={dateYmd ? ymdToIso(dateYmd) : todayIso()}
           departureLabel={

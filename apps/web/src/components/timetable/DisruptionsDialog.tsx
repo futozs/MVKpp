@@ -9,6 +9,7 @@ import { distanceKm } from "@/lib/geo";
 import { cn } from "@/lib/utils";
 import type { ArrivalItem, Stop } from "@/types";
 import { StartRiskLine } from "@/components/transit/TripInsights";
+import { displayVehicleId } from "@/lib/modes";
 
 export type DisruptionKind = "cancelled" | "missing" | "unseen";
 
@@ -327,7 +328,7 @@ function TripRow({ t, at, onPick }: { t: DisruptionTrip; at?: DisruptionTrip["ne
             <span className="truncate">
               {at ? `itt ${at.time} · indul ${t.from} ${t.depTime}` : `${t.from} → ${t.to}, ${t.depTime}–${t.arrTime}`}
             </span>
-            {t.plannedVehicle ? <span className="font-mono">{t.plannedVehicle} vitte volna</span> : null}
+            {t.plannedVehicle ? <span className="font-mono">{displayVehicleId(t.plannedVehicle)} vitte volna</span> : null}
           </span>
           {t.replacement ? (
             <span className="mt-1 inline-flex items-center gap-1 rounded-md bg-ontime/10 px-1.5 py-0.5 text-[11px] font-semibold text-ontime">
