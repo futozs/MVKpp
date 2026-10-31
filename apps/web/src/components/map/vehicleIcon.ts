@@ -26,10 +26,11 @@ export function safeHex(color: string | null | undefined, fallback: string): str
  * ki, mint az élő nézet.
  */
 /**
- * A mód szerinti csempe: a Volán szögletesebb, bal oldali sávval; a vonat lekerekített,
- * a kategóriával és a vonatszámmal („IC 519”); a menetrendből becsült helyzet szaggatott.
+ * A mód szerinti csempe: a Volán szögletesebb; a vonat lekerekített, csak a kategóriával
+ * („IC”, „Sz”) — a vonatszám a címkében, ha a térkép azonosítókat mutat; a menetrendből
+ * becsült helyzet szaggatott.
  */
-export type VehicleIconOptions = { mode?: TransitMode; trainNo?: string | null; estimated?: boolean };
+export type VehicleIconOptions = { mode?: TransitMode; estimated?: boolean };
 
 export function createVehicleIcon(
   routeShort: string,
@@ -42,8 +43,7 @@ export function createVehicleIcon(
   const bg = safeHex(color, FALLBACK_BG);
   const fg = safeHex(textColor, FALLBACK_FG);
   const rail = opts.mode === "rail";
-  const label =
-    rail && opts.trainNo ? `<span class="cat">${escapeHtml(routeShort)}</span>${escapeHtml(opts.trainNo)}` : escapeHtml(routeShort);
+  const label = escapeHtml(routeShort);
   const cls = ["mvk-vehicle", tracked ? "tracked" : "", opts.mode === "coach" ? "coach" : "", rail ? "rail" : "", opts.estimated ? "estimated" : ""].filter(Boolean).join(" ");
   return L.divIcon({
     className: "",

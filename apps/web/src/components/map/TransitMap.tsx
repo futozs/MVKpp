@@ -24,7 +24,7 @@ import { initialMapView, saveMapView } from "@/lib/viewState";
 import { token } from "@/lib/theme";
 import { cn, normalizeSearchText } from "@/lib/utils";
 import { MapTimeline } from "./MapTimeline";
-import { createVehicleIcon, escapeHtml, safeHex } from "./vehicleIcon";
+import { createVehicleIcon, escapeHtml, safeHex, type VehicleIconOptions } from "./vehicleIcon";
 import { estimatePosition, type Shown } from "./liveMotion";
 import { trafficColor } from "./trafficColor";
 import { API_BASE } from "@/lib/apiBase";
@@ -766,8 +766,8 @@ export function TransitMap({
           v.routeColor || "1FB574",
           v.routeText || "FFFFFF",
           tracked,
-          showId ? (mode === "rail" ? (v.trainName ?? null) : displayVehicleId(v.id, v.plate)) : null,
-          { mode, trainNo: v.trainNo, estimated: v.estimated },
+          showId ? (mode === "rail" ? (v.trainNo ?? v.trainName ?? null) : displayVehicleId(v.id, v.plate)) : null,
+          { mode, estimated: v.estimated },
         );
 
       // Ha a térkép közben újraépült, a régi marker már nincs a rétegen: újat teszünk ki.
@@ -955,9 +955,10 @@ export function TransitMap({
     const color = live?.routeColor || focusPath?.color || "1FB574";
     const text = live?.routeText || focusPath?.text || "FFFFFF";
     const id = live?.id ?? last?.id ?? focusVehicleId;
-    const iconOpts = live ? { mode: vehicleModeOf(live, routes[live.routeId]?.type), trainNo: live.trainNo, estimated: live.estimated } : {};
-    const shownId = id ? (iconOpts.mode === "rail" ? (live?.trainName ?? null) : displayVehicleId(id, live?.plate)) : null;
-    const iconKey = `${route}|${color}|${text}|${id}|${iconOpts.mode ?? ""}|${iconOpts.trainNo ?? ""}`;
+    const iconOpts: VehicleIconOptions = live ? { mode: vehicleModeOf(live, routes[live.routeId]?.type), estimated: live.estimated } : {};
+    // a követett vonat címkéje a vonatszám (a csempén csak a kategória)
+    const shownId = id ? (iconOpts.mode === "rail" ? (live?.trainNo ?? live?.trainName ?? null) : displayVehicleId(id, live?.plate)) : null;
+    const iconKey = `${route}|${color}|${text}|${id}|${iconOpts.mode ?? ""}|${shownId ?? ""}`;
     const motion = live?.motion ?? null;
 
     const entry = focusMarkerRef.current;

@@ -40,6 +40,7 @@ const MONOREPO_ROOT = path.join(__dirname, "..", "..");
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  ...(process.env.NEXT_DIST_DIR ? { distDir: process.env.NEXT_DIST_DIR } : {}),
   reactStrictMode: true,
   // A workspace-csomagok TypeScript-forrásként érkeznek (.ts importokkal).
   transpilePackages: ["@mvk/api", "@mvk/cache", "@mvk/core", "@mvk/db"],
