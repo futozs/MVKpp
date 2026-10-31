@@ -181,6 +181,8 @@ export interface FilterState {
   follow: boolean;
   /** élő forgalom (dugók) réteg */
   traffic: boolean;
+  /** követés (utazás) közben a többi busz is látszik */
+  others: boolean;
 }
 
 export interface JwtStatus {

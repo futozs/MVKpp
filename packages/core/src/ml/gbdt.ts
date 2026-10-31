@@ -6,6 +6,11 @@
  * A fák a negatív gradiensre illeszkednek (négyzetes hasítási nyereség), a
  * levelek értéke pedig a levélbe esett maradékok alpha-kvantilise (Friedman).
  *
+ * Soronkénti költséggel (`RowCosts`) a veszteség aszimmetrikus és soronként
+ * más: méterenként `over[i]`, ha a becslés a valóság fölé lő, `under[i]`, ha
+ * alá. (A soronkénti alpha önmagában nem elég: egy levélen belül csak az
+ * átlaga számítana — a két költség aránya és nagysága együtt viszi az infót.)
+ *
  * Gyorsítás: a jellemzők legfeljebb 255 rekeszbe kerülnek (+1 a hiányzó
  * értéknek), a hisztogramot csak a kisebbik gyerekre építjük, a nagyobbikét
  * kivonással kapjuk. A hiányzó érték (NaN) mindkét irányba kipróbálva megy.
@@ -63,6 +68,70 @@ export type Matrix = { x: Float32Array; rows: number; cols: number };
 export function pinball(alpha: number, y: number, q: number): number {
   const r = y - q;
   return r >= 0 ? alpha * r : (alpha - 1) * r;
+}
+
+/** Soronkénti költség méterenként: ha a becslés a valóság fölé (`over`) / alá (`under`) lő. */
+export type RowCosts = { over: Float32Array; under: Float32Array };
+
+/** A költséges veszteség egy sorra: `y` a valóság, `q` a becslés. */
+export function rowCost(over: number, under: number, y: number, q: number): number {
+  return q > y ? over * (q - y) : under * (y - q);
+}
+
+/**
+ * A költségekkel súlyozott kvantilis: a sorba rendezett értékek közül az első,
+ * ahol a fölé lövés határköltsége (az addigiak `over`-e) eléri az alá lövésé
+ * (a többiek `under`-e). Rendezés nélkül, súlyozott gyorskiválasztással
+ * (átlagosan O(n)) — a fák minden levelénél lefut.
+ */
+export function costQuantile(values: ArrayLike<number>, over: ArrayLike<number>, under: ArrayLike<number>): number {
+  const n = values.length;
+  if (!n) return 0;
+  const idx = new Uint32Array(n);
+  for (let i = 0; i < n; i++) idx[i] = i;
+  let lo = 0;
+  let hi = n;
+  /** a tartománytól balra lévők `over`-e és a jobbra lévők `under`-e */
+  let leftOver = 0;
+  let rightUnder = 0;
+  for (;;) {
+    const p = values[idx[(lo + hi) >> 1]];
+    // háromfelé osztás: [lo, lt) < p, [lt, gt) = p, [gt, hi) > p
+    let lt = lo;
+    let gt = hi;
+    let k = lo;
+    while (k < gt) {
+      const v = values[idx[k]];
+      if (v < p) {
+        const t = idx[lt];
+        idx[lt++] = idx[k];
+        idx[k++] = t;
+      } else if (v > p) {
+        const t = idx[--gt];
+        idx[gt] = idx[k];
+        idx[k] = t;
+      } else k++;
+    }
+    let oL = 0;
+    let uE = 0;
+    let oE = 0;
+    let uG = 0;
+    for (let j = lo; j < lt; j++) oL += over[idx[j]];
+    for (let j = lt; j < gt; j++) {
+      oE += over[idx[j]];
+      uE += under[idx[j]];
+    }
+    for (let j = gt; j < hi; j++) uG += under[idx[j]];
+    if (lt > lo && leftOver + oL >= uE + uG + rightUnder) {
+      // a határ a kisebbek között van
+      rightUnder += uE + uG;
+      hi = lt;
+    } else if (leftOver + oL + oE >= uG + rightUnder || gt === hi) return p;
+    else {
+      leftOver += oL + oE;
+      lo = gt;
+    }
+  }
 }
 
 function mulberry32(seed: number) {
@@ -127,12 +196,24 @@ type Split = { gain: number; feature: number; bin: number; missingLeft: boolean 
 
 /**
  * Tanítás. `valid` megadásával korai leállás: a legjobb validációs veszteségű
- * fa-számnál vágjuk el a modellt.
+ * fa-számnál vágjuk el a modellt. `costs` megadásával (és a validációs sorok
+ * `costs`-ával) a soronkénti költséges veszteséget minimalizálja — `alpha` ekkor
+ * nem számít.
  */
-export function trainGbdt(train: Matrix, y: Float32Array, features: string[], params: Partial<GbdtParams> = {}, valid?: { m: Matrix; y: Float32Array }): GbdtModel {
+export function trainGbdt(
+  train: Matrix,
+  y: Float32Array,
+  features: string[],
+  params: Partial<GbdtParams> = {},
+  valid?: { m: Matrix; y: Float32Array; costs?: RowCosts },
+  costs?: RowCosts,
+): GbdtModel {
   const p = { ...GBDT_DEFAULTS, ...params };
   const { rows: n, cols } = train;
   if (cols !== features.length) throw new Error("a jellemzők száma nem egyezik");
+  if (costs && (costs.over.length !== n || costs.under.length !== n)) throw new Error("a költségek száma nem egyezik a sorokéval");
+  if (costs && valid && valid.costs?.over.length !== valid.m.rows) throw new Error("a validációs sorokhoz is kell költség");
+  const lossOf = (c: RowCosts | undefined, i: number, yi: number, q: number) => (c ? rowCost(c.over[i], c.under[i], yi, q) : pinball(p.alpha, yi, q));
   const rnd = mulberry32(p.seed);
   const edges = binEdges(train, Math.min(255, p.bins), rnd);
   const nb = edges.map((e) => e.length + 2);
@@ -147,7 +228,7 @@ export function trainGbdt(train: Matrix, y: Float32Array, features: string[], pa
     binned.push(col);
   }
 
-  const base = quantileOf(y, p.alpha);
+  const base = costs ? costQuantile(y, costs.over, costs.under) : quantileOf(y, p.alpha);
   const pred = new Float64Array(n).fill(base);
   const grad = new Float64Array(n);
   const resid = new Float64Array(n);
@@ -166,7 +247,9 @@ export function trainGbdt(train: Matrix, y: Float32Array, features: string[], pa
     for (let k = 0; k < m; k++) {
       const i = rows[k];
       resid[i] = y[i] - pred[i];
-      grad[i] = resid[i] >= 0 ? p.alpha : p.alpha - 1; // negatív gradiens
+      // negatív gradiens (költségnél a pontosan eltalált sor nem húz sehova: sok álló busz pont 0 m-t tesz meg)
+      if (costs) grad[i] = resid[i] > 0 ? costs.under[i] : resid[i] < 0 ? -costs.over[i] : 0;
+      else grad[i] = resid[i] >= 0 ? p.alpha : p.alpha - 1;
     }
 
     const tree: GbdtTree = { feature: [], threshold: [], missingLeft: [], left: [], right: [], value: [] };
@@ -226,7 +309,14 @@ export function trainGbdt(train: Matrix, y: Float32Array, features: string[], pa
     const leafValue = (start: number, end: number) => {
       const r = new Float64Array(end - start);
       for (let k = start; k < end; k++) r[k - start] = resid[rows[k]];
-      return p.lr * quantileOf(r, p.alpha);
+      if (!costs) return p.lr * quantileOf(r, p.alpha);
+      const over = new Float64Array(end - start);
+      const under = new Float64Array(end - start);
+      for (let k = start; k < end; k++) {
+        over[k - start] = costs.over[rows[k]];
+        under[k - start] = costs.under[rows[k]];
+      }
+      return p.lr * costQuantile(r, over, under);
     };
 
     const grow = (node: number, start: number, end: number, depth: number, h: { g: Float64Array; c: Float64Array }) => {
@@ -281,7 +371,7 @@ export function trainGbdt(train: Matrix, y: Float32Array, features: string[], pa
     let trainLoss = 0;
     for (let i = 0; i < n; i++) {
       pred[i] += treeValue(tree, train.x, i * cols);
-      trainLoss += pinball(p.alpha, y[i], pred[i]);
+      trainLoss += lossOf(costs, i, y[i], pred[i]);
     }
     trainLosses.push(trainLoss / n);
     if (valid && validPred) {
@@ -289,7 +379,7 @@ export function trainGbdt(train: Matrix, y: Float32Array, features: string[], pa
       const vc = valid.m.cols;
       for (let i = 0; i < valid.m.rows; i++) {
         validPred[i] += treeValue(tree, valid.m.x, i * vc);
-        vl += pinball(p.alpha, valid.y[i], validPred[i]);
+        vl += lossOf(costs ? valid.costs : undefined, i, valid.y[i], validPred[i]);
       }
       vl /= Math.max(1, valid.m.rows);
       if (vl < best.loss - 1e-6) best = { loss: vl, trees: trees.length };

@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Cloud, CloudOff, Map as MapIcon, Repeat, Trash2 } from "lucide-react";
+import { Cloud, CloudOff, Map as MapIcon, Pencil, Repeat, Trash2 } from "lucide-react";
 import { StatTile, ChartFrame } from "@/components/charts/Charts";
 import { RouteTile } from "@/components/transit/RouteTile";
 import { delayLabel, delayTone } from "@/components/transit/DelayBar";
 import { getSession } from "@/lib/account";
-import { deleteRide, syncRides, useRides, type Ride } from "@/lib/rides";
+import { canFixRide, deleteRide, syncRides, useRides, type Ride } from "@/lib/rides";
+import { RideFixSheet } from "./RideFixSheet";
 import { statsApi } from "@/services/statsApi";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +20,7 @@ const ON_TIME_S = 60;
 export function RidesPanel() {
   const rides = useRides();
   const [fleetSize, setFleetSize] = useState<number | null>(null);
+  const [fixing, setFixing] = useState<Ride[] | null>(null);
   const loggedIn = Boolean(getSession());
 
   useEffect(() => {
@@ -102,17 +104,44 @@ export function RidesPanel() {
           <ChartFrame title="Utazások" hint="A legutóbbi elöl">
             <ul className="divide-y divide-border/60">
               {journeys.slice(0, 200).map((legs) =>
-                legs.length > 1 ? <LoopRow key={legs[0].id} legs={legs} /> : <RideRow key={legs[0].id} r={legs[0]} />,
+                legs.length > 1 ? (
+                  <LoopRow key={legs[0].id} legs={legs} onFix={canFixRide(legs) ? () => setFixing(legs) : undefined} />
+                ) : (
+                  <RideRow key={legs[0].id} r={legs[0]} onFix={canFixRide(legs) ? () => setFixing(legs) : undefined} />
+                ),
               )}
             </ul>
           </ChartFrame>
         </>
       )}
+      {fixing ? <RideFixSheet legs={fixing} initial="from" onClose={() => setFixing(null)} /> : null}
     </div>
   );
 }
 
-function RideRow({ r }: { r: Ride }) {
+/** A sor végén: javítás (hol szállt fel / le) és törlés. */
+function RowActions({ onFix, onDelete, what }: { onFix?: () => void; onDelete: () => void; what: string }) {
+  return (
+    <span className="flex shrink-0 items-center">
+      {onFix ? (
+        <button
+          type="button"
+          onClick={onFix}
+          aria-label={`${what}: hol szálltál fel és le`}
+          title="Hol szálltál fel és le?"
+          className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
+          <Pencil className="h-4 w-4" />
+        </button>
+      ) : null}
+      <button type="button" onClick={onDelete} aria-label={`${what} törlése`} className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground">
+        <Trash2 className="h-4 w-4" />
+      </button>
+    </span>
+  );
+}
+
+function RideRow({ r, onFix }: { r: Ride; onFix?: () => void }) {
   const mins = r.alightedAt ? Math.max(1, Math.round((r.alightedAt - r.boardedAt) / 60)) : null;
   return (
     <li className="flex items-center gap-3 py-2.5">
@@ -133,22 +162,19 @@ function RideRow({ r }: { r: Ride }) {
           {r.detected === "auto" ? <span className="rounded bg-muted px-1">felismert</span> : null}
         </p>
       </div>
-      <button
-        type="button"
-        onClick={() => {
+      <RowActions
+        what="Utazás"
+        onFix={onFix}
+        onDelete={() => {
           if (confirm("Törlöd ezt az utazást?")) void deleteRide(r.id);
         }}
-        aria-label="Utazás törlése"
-        className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-      >
-        <Trash2 className="h-4 w-4" />
-      </button>
+      />
     </li>
   );
 }
 
 /** Körbeutazás: egy buszon, ülve maradva megtett menetek egy sorban. */
-function LoopRow({ legs }: { legs: Ride[] }) {
+function LoopRow({ legs, onFix }: { legs: Ride[]; onFix?: () => void }) {
   const first = legs[0];
   const last = legs[legs.length - 1];
   const mins = last.alightedAt ? Math.max(1, Math.round((last.alightedAt - first.boardedAt) / 60)) : null;
@@ -186,16 +212,13 @@ function LoopRow({ legs }: { legs: Ride[] }) {
           {meters ? <span>{nf.format(meters / 1000)} km</span> : null}
         </p>
       </div>
-      <button
-        type="button"
-        onClick={() => {
+      <RowActions
+        what="Körbeutazás"
+        onFix={onFix}
+        onDelete={() => {
           if (confirm("Törlöd ezt a körbeutazást (minden menetét)?")) for (const r of legs) void deleteRide(r.id);
         }}
-        aria-label="Körbeutazás törlése"
-        className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-      >
-        <Trash2 className="h-4 w-4" />
-      </button>
+      />
     </li>
   );
 }

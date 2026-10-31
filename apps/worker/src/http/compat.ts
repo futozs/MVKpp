@@ -14,6 +14,7 @@ import { mvkFetch } from "../mvk.ts";
 import type { DelayForecaster } from "../forecast.ts";
 import type { TripInsights } from "../insights.ts";
 import type { MotionPredictor } from "../motion/live.ts";
+import type { NewsSource } from "../news.ts";
 import type { TrafficMonitor } from "../traffic.ts";
 import type { Parking } from "../parking.ts";
 import type { VehiclePredictor } from "../predict.ts";
@@ -32,6 +33,7 @@ export type Ctx = {
   traffic: TrafficMonitor;
   insights: TripInsights;
   motion: MotionPredictor;
+  news: NewsSource;
   startedAt: number;
   hubStats: () => unknown;
 };

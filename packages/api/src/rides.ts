@@ -41,9 +41,12 @@ const routes: Route[] = [
     const now = Date.now() / 1000;
     const ok = b.rides.filter((r): r is RideIn => isRide(r, now));
     for (const r of ok) {
+      // Egy utólag javított utazás végleges: sem egy másik eszköz régebbi
+      // példánya, sem egy második javítás nem írja felül.
       await getPool().query(
         `INSERT INTO ride (user_id, ride_id, boarded_at, data) VALUES ($1, $2, to_timestamp($3), $4)
-         ON CONFLICT (user_id, ride_id) DO UPDATE SET data = EXCLUDED.data, boarded_at = EXCLUDED.boarded_at, updated_at = now()`,
+         ON CONFLICT (user_id, ride_id) DO UPDATE SET data = EXCLUDED.data, boarded_at = EXCLUDED.boarded_at, updated_at = now()
+         WHERE ride.data->'editedAt' IS NULL OR jsonb_typeof(ride.data->'editedAt') = 'null'`,
         [u.id, r.id, r.boardedAt, JSON.stringify(r)],
       );
     }

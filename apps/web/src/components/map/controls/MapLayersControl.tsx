@@ -7,7 +7,7 @@ import { TILE_LAYERS } from "../tileLayers";
 import { MapControl } from "./MapControl";
 import { trafficColor } from "../trafficColor";
 
-type LayerKey = "traffic" | "stops" | "onlyWatched" | "shape" | "labels";
+type LayerKey = "traffic" | "others" | "stops" | "onlyWatched" | "shape" | "labels";
 
 /**
  * Térkép (jobb felső sarok): az alaptérkép és a rétegek egy helyen. Korábban
@@ -46,6 +46,7 @@ export function MapLayersControl({
 
   const toggles: { key: LayerKey; label: string; hint?: string; disabled?: boolean }[] = [
     { key: "traffic", label: "Forgalom (dugók)", hint: "élőben, a buszok menetidejéből" },
+    { key: "others", label: "Többi busz követéskor", hint: "utazás közben is, halványan" },
     { key: "stops", label: "Megállók" },
     { key: "onlyWatched", label: "Csak a figyelt megállók", hint: `${watchedStops} figyelt`, disabled: !filters.stops },
     { key: "shape", label: "Járatok nyomvonala", hint: "a kiválasztott járatoké" },

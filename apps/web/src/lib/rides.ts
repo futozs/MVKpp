@@ -35,7 +35,16 @@ export interface Ride {
   detected: "auto" | "manual";
   /** körbeutazás: az egymás után, ülve maradva megtett menetek közös azonosítója */
   chainId?: string | null;
+  /**
+   * Hogyan zárult: „Leszálltam” (user), a kijelölt leszállóhelynél (dest), a telefon
+   * eltávolodott a busztól (away), vagy a menet végén, az utas jelzése nélkül (terminus).
+   */
+  endedBy?: RideEndedBy | null;
+  /** utólagos javítás ideje (unix) — utána a fel- és leszállás helye végleges */
+  editedAt?: number | null;
 }
+
+export type RideEndedBy = "user" | "dest" | "away" | "terminus";
 
 /**
  * A busz a végállomáson fordul, és az utas nem szállt le: a menet véget ért,
@@ -64,6 +73,13 @@ export interface ActiveRide {
   /** felismert felszállás: ahol a telefon a busz mellett állt — ebből lesz a felszállás megállója */
   boardNear?: { lat: number; lon: number } | null;
   fromIdx: number | null;
+  /** az utas megerősítette (vagy maga választotta) a felszállás megállóját */
+  fromConfirmed?: boolean;
+  /**
+   * amikor a telefon utoljára a busszal volt: a busz által addig elhagyott megálló és
+   * az időpont — bezárt app után is megmarad, ebből tudjuk, legkorábban hol szállhatott le
+   */
+  withBus?: { passed: number; at: number } | null;
   fromStopId: string | null;
   fromStopName: string | null;
   delayAtBoardS: number | null;
@@ -153,10 +169,10 @@ export function startRide(r: Omit<ActiveRide, "id" | "destIdx">): ActiveRide {
   return ride;
 }
 
-type RideEnd = Pick<Ride, "alightedAt" | "toStopId" | "toStopName" | "stops" | "distanceM" | "delayAtAlightS">;
+type RideEnd = Pick<Ride, "alightedAt" | "toStopId" | "toStopName" | "stops" | "distanceM" | "delayAtAlightS"> & { endedBy?: RideEndedBy | null };
 
 function closedRide(a: ActiveRide, end: RideEnd, chainId: string | null): StoredRide {
-  const { destIdx: _dest, fromIdx: _from, leg: _leg, turn: _turn, boardNear: _near, ...rest } = a;
+  const { destIdx: _dest, fromIdx: _from, leg: _leg, turn: _turn, boardNear: _near, fromConfirmed: _conf, withBus: _with, ...rest } = a;
   return { ...rest, ...end, chainId, synced: false };
 }
 
@@ -195,6 +211,9 @@ export function continueRide(end: RideEnd, next: NextLeg): ActiveRide | null {
     serviceDate: active.serviceDate,
     vehicleId: active.vehicleId,
     fromIdx: 0,
+    // a végállomáson ülve maradt: a felszállás helye biztos
+    fromConfirmed: true,
+    withBus: null,
     destIdx: null,
     detected: active.detected,
     chainId,
@@ -206,6 +225,31 @@ export function continueRide(end: RideEnd, next: NextLeg): ActiveRide | null {
   setActive(ride);
   void syncRides();
   return ride;
+}
+
+export type RideFix = Partial<
+  Pick<Ride, "fromStopId" | "fromStopName" | "toStopId" | "toStopName" | "boardedAt" | "alightedAt" | "stops" | "distanceM" | "delayAtBoardS" | "delayAtAlightS">
+>;
+
+/** Javítható-e még az utazás (körbeutazásnál bármelyik menete). */
+export const canFixRide = (legs: readonly Ride[]) => legs.length > 0 && legs.every((r) => !r.editedAt);
+
+/**
+ * Utólagos javítás: hol szállt fel és le. Körbeutazásnál az egész út egyszerre
+ * (`legIds` minden menete), menetenként a saját javításával.
+ */
+export function fixRide(legIds: readonly string[], fixes: Readonly<Record<string, RideFix>>): boolean {
+  const ids = new Set(legIds);
+  const legs = rides.filter((r) => ids.has(r.id));
+  if (!canFixRide(legs)) return false;
+  const editedAt = Math.round(Date.now() / 1000);
+  setRides(
+    rides
+      .map((r) => (ids.has(r.id) ? { ...r, ...(fixes[r.id] ?? {}), editedAt, synced: false } : r))
+      .sort((a, b) => b.boardedAt - a.boardedAt),
+  );
+  void syncRides();
+  return true;
 }
 
 /** Mégsem szállt fel (téves felismerés): nyom nélkül eltűnik. */

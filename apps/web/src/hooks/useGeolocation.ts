@@ -8,6 +8,8 @@ export interface GeoPosition {
   lon: number;
   accuracyM: number;
   at: number;
+  /** a telefon sebessége (m/s), ha a GPS megadja */
+  speed?: number | null;
 }
 
 export interface GeoState {
@@ -84,6 +86,7 @@ export function useGeolocation(): GeoState {
           lon: pos.coords.longitude,
           accuracyM: pos.coords.accuracy,
           at: pos.timestamp,
+          speed: pos.coords.speed,
         };
         setPosition(fix);
         setStale(false);

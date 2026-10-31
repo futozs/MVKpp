@@ -20,7 +20,7 @@ import { RoutePlannerView } from "@/components/routeplanner/RoutePlannerView";
 import { StatsView } from "@/components/stats/StatsView";
 import { ParkingView } from "@/components/parking/ParkingView";
 import { RideLayer } from "@/components/ride/RideLayer";
-import { useActiveRide } from "@/lib/rides";
+import { getActiveRide, useActiveRide } from "@/lib/rides";
 import { NotificationsModal } from "@/components/notifications/NotificationsModal";
 import { AccountModal } from "@/components/account/AccountModal";
 import { useCloudBackup } from "@/hooks/useCloudBackup";
@@ -55,6 +55,7 @@ const DEFAULT_FILTERS: FilterState = {
   labels: false,
   follow: false,
   traffic: true,
+  others: true,
 };
 
 export function App() {
@@ -65,7 +66,8 @@ export function App() {
   const restored = initialView();
 
   const [activeTab, setActiveTab] = useState<ActiveTab>(
-    () => INITIAL_LINK?.tab ?? restored?.tab ?? "map",
+    // Folyamatban lévő utazással (bezárt app után is) a térképen nyílik: ott zárul le, ha közben véget ért.
+    () => INITIAL_LINK?.tab ?? (getActiveRide() ? "map" : restored?.tab) ?? "map",
   );
   const [stops, setStops] = useState<Stop[]>([]);
   const [routes, setRoutes] = useState<Record<string, Route>>({});
@@ -412,7 +414,7 @@ export function App() {
                 />
 
                 {}
-                <RideLayer vehicles={liveVehicles} onFollow={handleFocusTrip} onStopFollow={handleExitFocus} />
+                <RideLayer vehicles={liveVehicles} followingTripId={focusTripId} onFollow={handleFocusTrip} onStopFollow={handleExitFocus} />
 
                 {focusTripId && !activeRide ? (
                   <VehicleFocusCard

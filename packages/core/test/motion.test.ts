@@ -1,17 +1,25 @@
 import { describe, expect, it } from "vitest";
 import {
+  CATCH_S,
+  costQuantile,
+  displayCosts,
   fallbackDisp,
   finalizeProfile,
   isotonic,
+  lagSeconds,
   MOTION_FEATURES,
   MOTION_GRID,
   motionAnchor,
   motionFeatures,
   motionTrajectory,
   packProfile,
+  PASS_CAP_S,
+  passTimes,
+  predictGbdt,
   profileSumsOf,
   StretchTraffic,
   sumProfiles,
+  trainGbdt,
   typicalDisp,
   typicalTime,
   unpackProfile,
@@ -156,6 +164,26 @@ describe("a térkép pályája", () => {
     expect(k.map((x) => x[1])).toEqual([...MOTION_GRID]);
   });
 
+  it("a kivárás ideje: álló busznál a hátralévő állás, haladónál egy pillanat", () => {
+    const f = run(T0).fixes; // 0–40 mp halad, 40–70 áll a 400. méteren, utána megy tovább
+    const pass = passTimes(f);
+    const at = (t: number) => pass[f.findIndex((x) => x[0] === T0 + t)];
+    expect(at(15)).toBeCloseTo(1.5, 5); // 10 m/s-mal 15 m
+    // 45. és 60. mp: áll a 400. méteren; 75. mp: 450 m — a kettő között egyenletesen, így a 415. métert a 64,5. mp-ben éri el
+    expect(at(45)).toBeCloseTo(19.5, 5);
+    // a menet végén már nincs mire várni: legfeljebb a menet végéig
+    expect(pass[f.length - 1]).toBe(0);
+    expect(Math.max(...pass)).toBeLessThanOrEqual(PASS_CAP_S);
+  });
+
+  it("a túllövés sosem olcsóbb a lemaradásnál, egy álló busz előtt sokkal drágább", () => {
+    const lag = Float32Array.from([lagSeconds(100, 108), lagSeconds(100, 108)]);
+    expect(lag[0]).toBe(8 + CATCH_S);
+    const c = displayCosts(lag, Float32Array.from([1.5, 40]));
+    expect([c.under[0], c.over[0]]).toEqual([lag[0], lag[0]]);
+    expect(c.over[1]).toBe(40);
+  });
+
   it("tartalék: az álló busz kivárja a hely szokásos állásidejét", () => {
     const prof = finalizeProfile(profileSumsOf([run(T0), run(T0 + 600), run(T0 + 1200)], MIDNIGHT)).all.get("S1")!;
     const trip = { along: [0, 1000], arr: [0, 200], dep: [0, 200] };
@@ -167,5 +195,62 @@ describe("a térkép pályája", () => {
     // haladó busz modell nélkül sem áll meg
     const moving = motionAnchor(f, 1, trip, MIDNIGHT, 0);
     expect(fallbackDisp(moving, 10, prof)).toBeGreaterThan(60);
+  });
+});
+
+describe("költséges tanítás (a térkép költségével)", () => {
+  it("egyforma költséggel a medián; ha a fölé lövés drága, a drága sorok felé húz", () => {
+    const y = [0, 0, 0, 0, 100, 100, 100, 100, 100, 100];
+    const one = y.map(() => 1);
+    expect(costQuantile(y, one, one)).toBe(100);
+    // a 0-n álló sorok (a busz a megállóban vár) túllövése 30-szor drágább
+    const over = y.map((v) => (v === 0 ? 30 : 1));
+    expect(costQuantile(y, over, one)).toBe(0);
+  });
+
+  it("a gyorskiválasztás ugyanazt adja, mint a rendezés (ismétlődő értékekkel is)", () => {
+    let seed = 7;
+    const rnd = () => ((seed = (seed * 1103515245 + 12345) >>> 0) / 4294967296);
+    const reference = (v: number[], o: number[], u: number[]) => {
+      const idx = v.map((_, i) => i).sort((a, b) => v[a] - v[b]);
+      let above = u.reduce((s, x) => s + x, 0);
+      let below = 0;
+      for (const i of idx) {
+        below += o[i];
+        above -= u[i];
+        if (below >= above) return v[i];
+      }
+      return v[idx[idx.length - 1]];
+    };
+    for (let t = 0; t < 300; t++) {
+      const n = 1 + Math.floor(rnd() * 60);
+      const v = Array.from({ length: n }, () => Math.round(rnd() * 20) - 5);
+      const o = Array.from({ length: n }, () => (rnd() < 0.2 ? 0 : rnd() * 40));
+      const u = Array.from({ length: n }, () => rnd() * 10);
+      expect(costQuantile(v, o, u)).toBe(reference(v, o, u));
+    }
+  });
+
+  it("a fa a megálló előtt kivár, egyenesben a mediánt adja", () => {
+    // x=1: a buszok 40%-a megáll (0 m), 60%-a továbbmegy (100 m); x=0: egyenes, 45–55 m
+    const rows = 4000;
+    const x = new Float32Array(rows);
+    const y = new Float32Array(rows);
+    const over = new Float32Array(rows);
+    const under = new Float32Array(rows);
+    for (let i = 0; i < rows; i++) {
+      const stopZone = i % 2 === 1;
+      x[i] = stopZone ? 1 : 0;
+      const stops = stopZone && i % 5 < 2;
+      y[i] = stopZone ? (stops ? 0 : 100) : 45 + (i % 11);
+      under[i] = 6;
+      over[i] = stops ? 30 : 6;
+    }
+    const m = trainGbdt({ x, rows, cols: 1 }, y, ["stop"], { trees: 60, depth: 2, minLeaf: 20, lr: 0.3, subsample: 1 }, undefined, { over, under });
+    expect(predictGbdt(m, [1])).toBeLessThan(5);
+    expect(predictGbdt(m, [0])).toBeCloseTo(50, 0);
+    // ugyanez költség nélkül (medián): a megálló-zónában továbbszaladna
+    const median = trainGbdt({ x, rows, cols: 1 }, y, ["stop"], { trees: 60, depth: 2, minLeaf: 20, lr: 0.3, subsample: 1 });
+    expect(predictGbdt(median, [1])).toBeGreaterThan(90);
   });
 });

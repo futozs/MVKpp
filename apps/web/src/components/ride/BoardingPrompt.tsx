@@ -1,5 +1,5 @@
 import { motion, useReducedMotion } from "framer-motion";
-import { Bus, Check, X } from "lucide-react";
+import { Bus, Check, MapPin, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { RouteTile } from "@/components/transit/RouteTile";
 import type { LiveVehicle } from "@/types";
@@ -40,20 +40,35 @@ export function BoardingPrompt({ vehicle, onYes, onNo }: { vehicle: LiveVehicle;
 
 const fmtKm = (m: number | null) => (m == null ? null : `${(m / 1000).toLocaleString("hu-HU", { maximumFractionDigits: 1 })} km`);
 
-/** Utazás után: rövid összegzés, néhány másodpercig (körbeutazásnál az egész útról). */
-export function RideSavedNote({ ride: last, onClose }: { ride: Ride; onClose: () => void }) {
+/** Az app zárta le (nem a „Leszálltam”): ilyenkor megkérdezzük, jó-e így. */
+export const endedOnItsOwn = (r: Ride) => r.endedBy === "terminus" || r.endedBy === "away";
+
+/**
+ * Utazás után: rövid összegzés (körbeutazásnál az egész útról). Ha az app maga
+ * zárta le — a végállomáson, vagy mert a telefon eltávolodott a busztól —, addig
+ * marad, amíg nem nyugtázod, és itt jelölheted ki, hol szálltál le valójában.
+ */
+export function RideSavedNote({ ride: last, onClose, onFix }: { ride: Ride; onClose: () => void; onFix?: () => void }) {
   const all = useRides();
   const legs = last.chainId ? all.filter((r) => r.chainId === last.chainId).sort((a, b) => a.boardedAt - b.boardedAt) : [last];
   const first = legs[0] ?? last;
   const sum = (pick: (r: Ride) => number | null) => (legs.some((r) => pick(r) != null) ? legs.reduce((a, r) => a + (pick(r) ?? 0), 0) : null);
   const ride = { ...last, fromStopName: first.fromStopName, stops: sum((r) => r.stops), distanceM: sum((r) => r.distanceM), boardedAt: first.boardedAt };
   const mins = ride.alightedAt ? Math.max(1, Math.round((ride.alightedAt - ride.boardedAt) / 60)) : null;
+  const ask = endedOnItsOwn(last) && onFix;
+  const title = ask
+    ? last.endedBy === "terminus"
+      ? "Lezártam az utazásod a végállomáson"
+      : "Úgy láttam, leszálltál — lezártam"
+    : legs.length > 1
+      ? `Körbeutazás elmentve · ${legs.length} menet`
+      : "Utazás elmentve";
   return (
     <div role="status" className="absolute inset-x-3 bottom-3 z-drawer mx-auto max-w-md rounded-2xl border border-border bg-card p-4 shadow-xl md:inset-x-auto md:right-4 md:w-[380px]">
       <div className="flex items-start gap-3">
         <RouteTile short={ride.route} color={ride.color} text={ride.text} />
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-bold">{legs.length > 1 ? `Körbeutazás elmentve · ${legs.length} menet` : "Utazás elmentve"}</p>
+          <p className="text-sm font-bold">{title}</p>
           <p className="mt-0.5 truncate text-xs text-muted-foreground">
             {ride.fromStopName ?? "?"} → {ride.toStopName ?? "?"}
           </p>
@@ -65,6 +80,16 @@ export function RideSavedNote({ ride: last, onClose }: { ride: Ride; onClose: ()
           <X className="h-4 w-4" />
         </button>
       </div>
+      {ask ? (
+        <div className="mt-3 flex gap-2">
+          <Button size="sm" className="flex-1" onClick={onClose}>
+            <Check /> Így jó
+          </Button>
+          <Button size="sm" variant="outline" className="flex-1" onClick={onFix}>
+            <MapPin /> Hol szálltam le?
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }

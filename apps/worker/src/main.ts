@@ -35,6 +35,7 @@ import { trainMotionModelInThread } from "./motion/thread.ts";
 import { TrafficMonitor } from "./traffic.ts";
 import { TripInsights } from "./insights.ts";
 import { Parking } from "./parking.ts";
+import { NewsSource } from "./news.ts";
 import { VehiclePredictor } from "./predict.ts";
 import { PushEngine } from "./push.ts";
 import { loadToken, startRenewLoop, tokenStatus } from "./token.ts";
@@ -82,7 +83,8 @@ async function main() {
   const router = new Router();
   const server = createServer();
   const hub = new Hub(server, engine, predictor, parking, forecaster, insights, motion);
-  const ctx = { engine, feeds, predictor, parking, forecaster, traffic, insights, motion, startedAt: Date.now(), hubStats: () => hub.status() };
+  const news = new NewsSource(feeds);
+  const ctx = { engine, feeds, predictor, parking, forecaster, traffic, insights, motion, news, startedAt: Date.now(), hubStats: () => hub.status() };
   registerCompat(router, ctx);
   registerV3(router, ctx);
   registerAdmin(router, { ...ctx, liveBreakdown: () => hub.liveBreakdown() });
@@ -211,7 +213,8 @@ async function main() {
       });
     }, 3 * 60_000).unref();
   }
-  if (!motion.hasModel()) {
+  // A mozgás-modellnél akkor is, ha még a régi célra tanult (az addig is becsül, a térkép nem áll le).
+  if (!motion.hasModel() || motion.isOutdated()) {
     setTimeout(() => {
       void trainMotionModelInThread().then(async (ok) => {
         if (ok) await motion.load();

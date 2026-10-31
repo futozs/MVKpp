@@ -312,6 +312,13 @@ export function registerV3(r: Router, ctx: Ctx) {
     sendJson(req, res, 200, snap, { "cache-control": "no-store" });
   });
 
+  /** Az MVK hírei szerkezetes blokkokban, a szövegben említett járatok színeivel (lásd core/news.ts). */
+  r.get("/engine/news", async (req, res) => {
+    const feed = await ctx.news.get();
+    if (!feed) throw new HttpError(503, "az MVK hírei most nem érhetők el");
+    sendJson(req, res, 200, feed, { "cache-control": feed.stale ? "no-store" : "public, max-age=120" });
+  });
+
   /**
    * Útvonaltervezés: ?from=stop:SP85 | lat,lon  &to=…  &at=ISO-időpont | unix  &arriveBy=1
    * Múltbeli időpontra a tényleges menetek adataival válaszol.

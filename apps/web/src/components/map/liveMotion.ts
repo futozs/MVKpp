@@ -2,21 +2,22 @@
  * Élő becslés a térképen: két GPS-jel (10–20 mp) között a busz a szerver
  * pályáján (`k`) halad — ezt a tanított mozgás-modell adja (hol tart a busz a
  * jel óta eltelt idő múlva: megállók, lámpák, a mai forgalom). Nem ír ki
- * semmit, csak a marker mozog folyamatosan, mint a valóságban.
+ * semmit, csak a marker mozog folyamatosan, mint a valóságban, és sosem tolat.
+ * Amelyik buszon épp utazol, azt a telefonod GPS-e viszi (lásd `onboard`).
  */
 import type { LiveMotion } from "@/types";
+import type { GeoPosition } from "@/hooks/useGeolocation";
 import { API_BASE } from "@/lib/apiBase";
-import { followPath, type Shown } from "./motionFollow";
+import { followPath, pathAt, type Shown } from "./motionFollow";
+import { onboardPath, type ShapeLine } from "./onboard";
 
 export type { Shown };
 
-type Shape = { pts: [number, number][]; cum: number[] };
+type Shape = ShapeLine;
 
 /** ennél régebbi jelnél nem találgatunk tovább */
 const MAX_EXTRAPOLATE_S = 90;
-/** kis visszaugrás (az új jel a becslés mögött van) helyett a busz megáll */
-const HOLD_BACK_M = 40;
-/** ekkora eltérésig a marker nem ugrik, hanem gyorsan odacsúszik (m) */
+/** ekkora eltérésig a marker nem ugrik, hanem odacsúszik — vagy (ha előrébb jár) megvárja a buszt (m) */
 const EASE_MAX_M = 400;
 /** egy rajzolási lépésben (250 ms) a hátralévő eltérés ekkora része */
 const EASE_SHARE = 0.3;
@@ -70,23 +71,39 @@ function pointAt(shape: Shape, along: number): [number, number] {
 
 /**
  * A busz becsült helye most. `shown` az előzőleg kirajzolt hely: új jelnél a
- * marker nem ugrik, hanem odasiklik (lásd `motionFollow`).
+ * marker nem ugrik, hanem odasiklik, vagy ha előrébb jár, megvárja a buszt
+ * (lásd `motionFollow`). `onboard`: a telefon helyzete, ha épp ezen a buszon utazol.
  */
-export function estimatePosition(m: LiveMotion | null | undefined, nowServer: number, shown: Shown | undefined): { latlng: [number, number]; shown: Shown } | null {
+export function estimatePosition(
+  m: LiveMotion | null | undefined,
+  nowServer: number,
+  shown: Shown | undefined,
+  onboard?: GeoPosition | null,
+): { latlng: [number, number]; shown: Shown } | null {
   if (!m) return null;
   const shape = shapeFor(m.s);
   if (!shape) return null;
-  if (m.k?.length) {
-    const next = followPath({ s: m.s, t: m.t, k: m.k }, nowServer, shown);
+  const path = m.k?.length ? { s: m.s, t: m.t, k: m.k } : null;
+  if (onboard) {
+    const near = shown?.shape === m.s ? shown.along : path ? pathAt(path, nowServer) : m.a;
+    const gps = onboardPath(onboard, shape, m, near, nowServer);
+    if (gps) {
+      const next = followPath(gps, nowServer, shown);
+      return { latlng: pointAt(shape, next.along), shown: next };
+    }
+  }
+  if (path) {
+    const next = followPath(path, nowServer, shown);
     return { latlng: pointAt(shape, next.along), shown: next };
   }
   const dt = Math.max(0, Math.min(MAX_EXTRAPOLATE_S, nowServer - m.t));
   let along = Math.min(m.a + m.v * dt, Math.max(m.a, m.e));
   if (shown && shown.shape === m.s) {
     const gap = along - shown.along;
-    if (gap < 0 && -gap < HOLD_BACK_M) along = shown.along;
-    // Új jelnél (előre vagy a becslés mögé) nem ugrik, hanem gyorsan odacsúszik.
-    else if (Math.abs(gap) > EASE_MIN_STEP_M && Math.abs(gap) < EASE_MAX_M) along = shown.along + Math.sign(gap) * Math.max(EASE_MIN_STEP_M, Math.abs(gap) * EASE_SHARE);
+    // Nem tolat: ha az új jel a becslés mögött van, a busz megáll és kivárja (csak durva hibánál ugrik vissza).
+    if (gap < 0 && -gap < EASE_MAX_M) along = shown.along;
+    // Új jelnél előre nem ugrik, hanem gyorsan odacsúszik.
+    else if (gap > EASE_MIN_STEP_M && gap < EASE_MAX_M) along = shown.along + Math.max(EASE_MIN_STEP_M, gap * EASE_SHARE);
   }
   return { latlng: pointAt(shape, along), shown: { shape: m.s, along } };
 }

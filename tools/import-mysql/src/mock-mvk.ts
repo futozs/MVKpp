@@ -7,12 +7,15 @@
  *   node src/mock-mvk.ts 2026-10-28 8899
  */
 import "@mvk/core/dev-clock";
+import { existsSync, readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import mysql from "mysql2/promise";
 import GtfsRealtimeBindings from "gtfs-realtime-bindings";
 import { budapestOffsetSec, localMidnightUnix, serviceClock } from "@mvk/core";
 
 const { transit_realtime } = GtfsRealtimeBindings;
+/** az MVK egy valódi hírlistája (data/ gitignore-olt): curl …/api/v1/news/available?language=hu > data/dev/news.json */
+const NEWS_FILE = new URL("../../../data/dev/news.json", import.meta.url);
 const day = process.argv[2] ?? "2026-10-28";
 const port = Number(process.argv[3] ?? 8899);
 /** opcionális: a visszajátszás kezdő helyi ideje a rögzített napon, pl. "07:30" */
@@ -84,6 +87,9 @@ createServer((req, res) => {
   } else if (req.url?.startsWith("/api/v1/gtfs/list-cancelled-trips")) {
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify(cancelled));
+  } else if (req.url?.startsWith("/api/v1/news/available")) {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(existsSync(NEWS_FILE) ? readFileSync(NEWS_FILE) : "[]");
   } else {
     res.writeHead(404);
     res.end("{}");

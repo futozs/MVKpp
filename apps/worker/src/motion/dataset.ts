@@ -6,15 +6,22 @@
  *
  * A tanítónapok profilja a nap saját adatai nélkül készül (nem lát előre), a
  * forgalom-jellemző pedig csak a már kiderült áthaladásokat látja.
+ *
+ * Soronként a hiba ára is (lásd core `motion/cost`): meddig látszana egy
+ * lemaradás (`lag`), és meddig kellene egy előreszaladt jelölőnek várnia a
+ * valódi buszra (`pass`) — ez a nap későbbi fixeiből derül ki, de csak a
+ * veszteséghez kell, a modell bemenete nem látja.
  */
 import {
   fallbackDisp,
   finalizeProfile,
   hourClassOf,
   isStanding,
+  lagSeconds,
   MOTION_FEATURES,
   motionAnchor,
   motionFeatures,
+  passTimes,
   profileSumsOf,
   StretchTraffic,
   sumProfiles,
@@ -34,6 +41,10 @@ export type MotionSampleSet = {
   fallback: Float32Array;
   H: Float32Array;
   L: Float32Array;
+  /** meddig látszana itt egy lemaradás (mp) */
+  lag: Float32Array;
+  /** meddig várna itt egy előreszaladt jelölő a valódi buszra (mp) */
+  pass: Float32Array;
   /** a fixnél állt-e a busz */
   standing: Uint8Array;
   days: string[];
@@ -68,11 +79,25 @@ class Builder {
   fb = new Grow();
   H = new Grow();
   L = new Grow();
+  lag = new Grow();
+  pass = new Grow();
   st = new Grow();
   days: string[] = [];
   set(): MotionSampleSet {
     const rows = this.y.n;
-    return { x: this.x.done(), rows, cols: MOTION_FEATURES.length, y: this.y.done(), fallback: this.fb.done(), H: this.H.done(), L: this.L.done(), standing: Uint8Array.from(this.st.done()), days: this.days };
+    return {
+      x: this.x.done(),
+      rows,
+      cols: MOTION_FEATURES.length,
+      y: this.y.done(),
+      fallback: this.fb.done(),
+      H: this.H.done(),
+      L: this.L.done(),
+      lag: this.lag.done(),
+      pass: this.pass.done(),
+      standing: Uint8Array.from(this.st.done()),
+      days: this.days,
+    };
   }
 }
 
@@ -122,6 +147,7 @@ function addDay(b: Builder, d: HistoryDay, prof: RoadProfile, o: RowOptions) {
   for (const r of d.runs) {
     const p = prof.all.get(r.shapeId);
     const f = r.fixes;
+    const pass = passTimes(f);
     for (let i = 1; i < f.length - 1; i++) {
       if (o.rnd() > o.rate) continue;
       const a = anchorWithTraffic(d, r, i, prof, traffic);
@@ -140,6 +166,8 @@ function addDay(b: Builder, d: HistoryDay, prof: RoadProfile, o: RowOptions) {
           b.fb.push(fallbackDisp(a, H, p));
           b.H.push(H);
           b.L.push(L);
+          b.lag.push(lagSeconds(f[j][0], until));
+          b.pass.push(pass[j]);
           b.st.push(isStanding(a.v) ? 1 : 0);
         }
       }

@@ -4,22 +4,30 @@
  *
  * Folyamatosan önellenőriz: minden új fix „leosztályozza” az előző fixből
  * számolt pályát (a térkép szemszögéből: hol mutattuk volna, hol volt
- * valójában). A modell és a profil-alapú tartalék is számol (árnyékban), és ha
- * a modell élesben tartósan rosszabb, magától a tartalékra vált — amíg újra
- * jobb nem lesz. Éjszaka a friss napokból újratanul (lásd thread.ts).
+ * valójában), ugyanazzal a költséggel, amire tanult (core `motion/cost`: az
+ * előreszaladás ára az, ameddig a jelölőnek várnia kellett volna a buszra —
+ * ez a következő fixekből derül ki). A modell és a profil-alapú tartalék is
+ * számol (árnyékban), és ha a modell élesben tartósan rosszabb, magától a
+ * tartalékra vált — amíg újra jobb nem lesz. Éjszaka a friss napokból újratanul
+ * (lásd thread.ts).
  */
 import {
   dayInfo,
   fallbackDisp,
   hourClassOf,
   isStanding,
+  lagSeconds,
   localMidnightUnix,
   MOTION_FEATURES,
   MOTION_GRID,
   motionAnchor,
   motionFeatures,
   motionTrajectory,
+  OVER_WEIGHT,
+  PASS_CAP_S,
+  PASS_M,
   predictGbdt,
+  rowCost,
   StretchTraffic,
   unpackProfile,
   type GbdtModel,
@@ -31,17 +39,23 @@ import {
 import type { Engine } from "../engine.ts";
 import { errMsg, log } from "../log.ts";
 import { loadMotionBundle } from "./store.ts";
-import type { MotionModelBundle } from "./train.ts";
+import { MOTION_OBJECTIVE, type MotionModelBundle } from "./train.ts";
 
 type Path = [number, number][];
 type RunState = { shapeId: string; fixes: MotionFix[]; lastAt: number };
 /** egy fixből számolt pálya: a modellé és a tartaléké (árnyékban), a számításkori késleltetéssel */
 type Computed = { t: number; L: number; model: Path; fallback: Path; standing: boolean };
+/** egy mért pillanat (a fix ideje és helye, a két becslés hibája), amíg ki nem derül, meddig kellett volna várni */
+type Pending = { t: number; x: number; em: number; ef: number; lag: number };
 
 /** menetenként ennyi fixet tartunk meg (a tempó ~2 percet néz vissza) */
 const KEEP_FIXES = 16;
 /** menetenként ennyi még pontozatlan pálya (nagy késleltetésnél egy fix több pálya ablakába is eshet) */
 const KEEP_SCORABLE = 4;
+/** menetenként legfeljebb ennyi mérés vár a költségére (az állás ritkán tart 90 mp-nél tovább) */
+const KEEP_PENDING = 12;
+/** a lemaradás ára legfeljebb ennyi (mp) — egy nagyon késve érkezett jel se torzítson */
+const MAX_LAG_S = 60;
 /** ennyi csend után a menetet elengedjük (mp) */
 const RUN_IDLE_S = 30 * 60;
 /** a pálya ennyi mp-ig tart (lásd MOTION_GRID); a térkép utána a végén marad */
@@ -68,6 +82,11 @@ class Ring {
   mae(): number {
     let s = 0;
     for (let k = 0; k < this.n; k++) s += Math.abs(this.a[k]);
+    return this.n ? s / this.n : NaN;
+  }
+  mean(): number {
+    let s = 0;
+    for (let k = 0; k < this.n; k++) s += this.a[k];
     return this.n ? s / this.n : NaN;
   }
   bias(): number {
@@ -102,23 +121,25 @@ export class MotionPredictor {
   private engine: Engine;
   private model: GbdtModel | null = null;
   private profile: RoadProfile | null = null;
-  private info: Pick<MotionModelBundle, "trainedAt" | "report"> | null = null;
+  private info: Pick<MotionModelBundle, "trainedAt" | "report" | "objective"> | null = null;
   private runs = new Map<string, RunState>();
   private traffic = new StretchTraffic();
   /** menetenként a legutóbbi fixből számolt pálya */
   private computed = new Map<string, Computed>();
   /** menetenként a pályák a mutatás sorrendjében: mindegyik t + L-től a következő t + L-éig látszott */
   private scorable = new Map<string, Computed[]>();
+  /** menetenként a mért pillanatok, amelyeknek a költsége a következő fixekből derül ki */
+  private pending = new Map<string, Pending[]>();
   private trips = new Map<string, MotionTrip>();
   private buf = new Float32Array(MOTION_FEATURES.length);
   private mode: "model" | "fallback" = "model";
   private sinceGate = 0;
   private score = MotionPredictor.freshScore();
-  private switches: { at: string; to: "model" | "fallback"; maeModel: number; maeFallback: number }[] = [];
-  stats = { trajectories: 0, scored: 0, errors: 0 };
+  private switches: { at: string; to: "model" | "fallback"; costModel: number; costFallback: number }[] = [];
+  stats = { trajectories: 0, scored: 0, costed: 0, errors: 0 };
 
   private static freshScore() {
-    return { model: new Ring(), fallback: new Ring(), standing: new Ring(), moving: new Ring() };
+    return { model: new Ring(), fallback: new Ring(), standing: new Ring(), moving: new Ring(), costModel: new Ring(), costFallback: new Ring() };
   }
 
   constructor(engine: Engine) {
@@ -145,14 +166,17 @@ export class MotionPredictor {
       const profile = unpackProfile(b.profile);
       this.model = b.model;
       this.profile = profile;
-      this.info = { trainedAt: b.trainedAt, report: b.report };
+      this.info = { trainedAt: b.trainedAt, report: b.report, objective: b.objective };
       this.computed.clear();
       // Új modell, tiszta lap: a régi modell élő pontszáma (és egy esetleges tartalék-állás) nem öröklődik.
       this.scorable.clear();
+      this.pending.clear();
       this.score = MotionPredictor.freshScore();
       this.mode = "model";
       this.sinceGate = 0;
-      log.info("motion", `mozgás-modell betöltve (${b.trainedAt}; teszten ${b.report.overall.maeModel} m átlagos hiba, a tartalék ${b.report.overall.maeFallback} m)`);
+      const o = b.report.overall;
+      const cost = o.costModel != null ? `, költség ${o.costModel} vs ${o.costFallback}` : "";
+      log.info("motion", `mozgás-modell betöltve (${b.trainedAt}, cél: ${b.objective ?? "medián"}; teszten ${o.maeModel} m átlagos hiba, a tartalék ${o.maeFallback} m${cost})`);
     } catch (e) {
       log.warn("motion", "a mozgás-modell nem töltődött be", errMsg(e));
     }
@@ -162,14 +186,20 @@ export class MotionPredictor {
     return this.model != null;
   }
 
+  /** A betöltött modell még a régi célra tanult (pl. medián) — érdemes mielőbb újratanítani. */
+  isOutdated(): boolean {
+    return this.model != null && this.info?.objective !== MOTION_OBJECTIVE;
+  }
+
   private onFix(vehicleId: string, ts: number, speed: number | null) {
     const m = this.engine.matcher.motion(vehicleId);
     // Csak az illesztő által a saját idején elfogadott jel fix (ugyanaz a szabály, mint a tanításkor).
     if (!m || m.ts !== ts) return;
     const key = `${m.tripId}|${vehicleId}`;
     const fix: MotionFix = [ts, m.alongM, speed ?? -1];
-    this.scoreAgainst(key, fix);
     let r = this.runs.get(key);
+    this.settle(key, r?.fixes[r.fixes.length - 1], fix);
+    this.scoreAgainst(key, fix);
     if (!r) this.runs.set(key, (r = { shapeId: m.shapeId, fixes: [], lastAt: ts }));
     r.fixes.push(fix);
     if (r.fixes.length > KEEP_FIXES) r.fixes.shift();
@@ -203,23 +233,60 @@ export class MotionPredictor {
     this.score.fallback.push(ef);
     (s.standing ? this.score.standing : this.score.moving).push(em);
     this.stats.scored++;
-    if (++this.sinceGate >= GATE_EVERY) {
-      this.sinceGate = 0;
-      this.gate();
-    }
+    // a lemaradás addig látszik, amíg a következő pálya meg nem érkezik: ha már megvan, akkor; különben ez a fix
+    // most jön meg, nagyjából akkora késéssel, mint az előző
+    const until = list[1] ? list[1].t + list[1].L : fix[0] + s.L;
+    let wait = this.pending.get(key);
+    if (!wait) this.pending.set(key, (wait = []));
+    wait.push({ t: fix[0], x: fix[1], em, ef, lag: Math.min(MAX_LAG_S, lagSeconds(fix[0], until)) });
+    if (wait.length > KEEP_PENDING) wait.shift();
   }
 
-  /** Ha a modell élesben tartósan rosszabb a tartaléknál, átvált (és vissza, ha újra jobb). */
+  /**
+   * Az új fix eldönti a korábbi mérések költségét: ha a busz már `PASS_M`-mel
+   * továbbjutott (vagy letelt a `PASS_CAP_S`), kiderült, meddig kellett volna egy
+   * előreszaladt jelölőnek várnia — pont úgy, ahogy a tanításkor (core `passTimes`).
+   */
+  private settle(key: string, prev: MotionFix | undefined, fix: MotionFix) {
+    const list = this.pending.get(key);
+    if (!list?.length) return;
+    const open: Pending[] = [];
+    for (const p of list) {
+      const goal = p.x + PASS_M;
+      let pass: number | null = null;
+      if (fix[1] >= goal) {
+        // az előző fix még nem érte el (különben ott dőlt volna el): a kettő között egyenletesen
+        const [t0, x0] = prev && prev[0] > p.t ? prev : [p.t, p.x];
+        pass = t0 + ((fix[0] - t0) * (goal - x0)) / Math.max(1e-6, fix[1] - x0) - p.t;
+      } else if (fix[0] - p.t >= PASS_CAP_S) pass = PASS_CAP_S;
+      if (pass == null) {
+        open.push(p);
+        continue;
+      }
+      const over = Math.max(p.lag, OVER_WEIGHT * Math.min(PASS_CAP_S, Math.max(0, pass)));
+      this.score.costModel.push(rowCost(over, p.lag, 0, p.em));
+      this.score.costFallback.push(rowCost(over, p.lag, 0, p.ef));
+      this.stats.costed++;
+      if (++this.sinceGate >= GATE_EVERY) {
+        this.sinceGate = 0;
+        this.gate();
+      }
+    }
+    if (open.length) this.pending.set(key, open);
+    else this.pending.delete(key);
+  }
+
+  /** Ha a modell élesben tartósan rosszabb a tartaléknál (a térkép költségén), átvált — és vissza, ha újra jobb. */
   private gate() {
-    if (this.score.model.n < GATE_MIN) return;
-    const mm = this.score.model.mae();
-    const mf = this.score.fallback.mae();
-    const to = this.mode === "model" && mm > mf * DEGRADE_RATIO ? "fallback" : this.mode === "fallback" && mm < mf * RESTORE_RATIO ? "model" : null;
+    if (this.score.costModel.n < GATE_MIN) return;
+    const cm = this.score.costModel.mean();
+    const cf = this.score.costFallback.mean();
+    const to = this.mode === "model" && cm > cf * DEGRADE_RATIO ? "fallback" : this.mode === "fallback" && cm < cf * RESTORE_RATIO ? "model" : null;
     if (!to) return;
     this.mode = to;
-    this.switches.push({ at: new Date().toISOString(), to, maeModel: Math.round(mm * 10) / 10, maeFallback: Math.round(mf * 10) / 10 });
+    this.switches.push({ at: new Date().toISOString(), to, costModel: Math.round(cm), costFallback: Math.round(cf) });
     if (this.switches.length > 20) this.switches.shift();
-    log.warn("motion", `élő pontszám: modell ${mm.toFixed(1)} m, tartalék ${mf.toFixed(1)} m → ${to === "fallback" ? "a TARTALÉK becsül" : "újra a modell becsül"}`);
+    log.warn("motion", `élő pontszám (költség): modell ${cm.toFixed(0)}, tartalék ${cf.toFixed(0)} → ${to === "fallback" ? "a TARTALÉK becsül" : "újra a modell becsül"}`);
   }
 
   private tripOf(serviceDate: string, tripId: string): MotionTrip | null {
@@ -291,6 +358,7 @@ export class MotionPredictor {
       this.runs.delete(k);
       this.computed.delete(k);
       this.scorable.delete(k);
+      this.pending.delete(k);
     }
     this.traffic.prune(now);
   }
@@ -298,10 +366,13 @@ export class MotionPredictor {
   status() {
     const s = this.score;
     return {
-      model: this.info ? { trainedAt: this.info.trainedAt, test: this.info.report.overall, days: this.info.report.days } : null,
+      model: this.info ? { trainedAt: this.info.trainedAt, objective: this.info.objective ?? "median", test: this.info.report.overall, days: this.info.report.days } : null,
       mode: this.model ? this.mode : "legacy",
       live: {
         n: s.model.n,
+        costed: s.costModel.n,
+        costModel: r1(s.costModel.mean()),
+        costFallback: r1(s.costFallback.mean()),
         maeModel: r1(s.model.mae()),
         maeFallback: r1(s.fallback.mae()),
         p90Model: r1(s.model.p90()),

@@ -2,15 +2,19 @@ import { useEffect, useState } from "react";
 import type { LiveVehicle } from "@/types";
 import { useGeo } from "@/context/GeoContext";
 import { serverNow, useServerClockVersion } from "@/lib/realtime";
-import { cancelRide, getActiveRide, startRide, syncRides, useActiveRide, type Ride } from "@/lib/rides";
+import { canFixRide, cancelRide, getActiveRide, startRide, syncRides, useActiveRide, useRides, type Ride } from "@/lib/rides";
 import { serviceNow } from "@/lib/serviceDay";
-import { BoardingPrompt, RideSavedNote } from "./BoardingPrompt";
+import { BoardingPrompt, endedOnItsOwn, RideSavedNote } from "./BoardingPrompt";
+import { RideFixSheet } from "./RideFixSheet";
 import { RidePanel } from "./RidePanel";
 import { useBoardingDetector, type BoardingSpot } from "./useBoardingDetector";
 
 const SAVED_NOTE_MS = 8000;
-/** ennél régebbi, le nem zárt utazás biztosan véget ért (a leghosszabb miskolci menet is ~1 óra) */
-const STALE_RIDE_S = 3 * 3600;
+/**
+ * Végső biztosíték: egy napnál régebbi, le nem zárt utazás, amit a menet adataiból
+ * sem sikerült lezárni (a menet nem tölthető be) — nem hozzuk vissza.
+ */
+const LOST_RIDE_S = 24 * 3600;
 
 export interface BoardInfo {
   tripId: string;
@@ -53,16 +57,21 @@ export function boardVehicle(info: BoardInfo, detected: "auto" | "manual", since
  */
 export function RideLayer({
   vehicles,
+  followingTripId,
   onFollow,
   onStopFollow,
 }: {
   vehicles: LiveVehicle[];
+  /** a térkép épp ezt a menetet követi */
+  followingTripId: string | null;
   onFollow: (tripId: string, vehicleId: string) => void;
   onStopFollow: () => void;
 }) {
   const geo = useGeo();
   const ride = useActiveRide();
+  const all = useRides();
   const [saved, setSaved] = useState<Ride | null>(null);
+  const [fixing, setFixing] = useState<{ legs: Ride[]; initial: "from" | "to" } | null>(null);
   const watching = geo.status === "watching";
   const detector = useBoardingDetector(watching && !ride, geo.position, vehicles);
 
@@ -70,12 +79,14 @@ export function RideLayer({
     void syncRides();
   }, []);
 
-  // Zsebben felejtett, sosem lezárt utazás (a felfüggesztett app nem tudja lezárni): órák múlva
-  // nem hozzuk vissza — a szerver órájához mérve, ami a kapcsolódáskor érkezik.
+  // Lezárt vagy zsebben alvó app: az utazás megmarad, és újranyitáskor a menet adataiból
+  // zárul le (a kijelölt leszállóhelyen, vagy a végállomáson) — lásd RidePanel. Ami egy nap
+  // után sem zárult le, annak a menete nem tölthető be: azt elengedjük.
+  // A készülék órája eltérhet (és egy visszajátszott napon el is tér): csak a szerver órájával döntünk.
   const clockVersion = useServerClockVersion();
   useEffect(() => {
     const a = getActiveRide();
-    if (a && serverNow() - a.boardedAt > STALE_RIDE_S) cancelRide();
+    if (clockVersion > 0 && a && serverNow() - a.boardedAt > LOST_RIDE_S) cancelRide();
   }, [clockVersion]);
 
   // Utazás közben (és újratöltés után is) a térkép a buszt követi.
@@ -84,11 +95,14 @@ export function RideLayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ride?.tripId, ride?.vehicleId]);
 
+  // Az app magától zárta le (végállomás, eltávolodott a busztól): a jegyzet addig marad, amíg nem nyugtázza.
   useEffect(() => {
-    if (!saved) return;
+    if (!saved || endedOnItsOwn(saved)) return;
     const t = setTimeout(() => setSaved(null), SAVED_NOTE_MS);
     return () => clearTimeout(t);
   }, [saved]);
+
+  const savedLegs = saved ? (saved.chainId ? all.filter((r) => r.chainId === saved.chainId) : all.filter((r) => r.id === saved.id)) : [];
 
   return (
     <>
@@ -98,11 +112,13 @@ export function RideLayer({
           key={ride.id}
           ride={ride}
           position={watching ? geo.position : null}
+          following={followingTripId === ride.tripId}
           onFinished={(r) => {
             setSaved(r);
             onStopFollow();
           }}
           onCancel={onStopFollow}
+          onRefollow={() => onFollow(ride.tripId, ride.vehicleId)}
         />
       ) : null}
       {detector.candidate && !ride ? (
@@ -116,7 +132,21 @@ export function RideLayer({
           onNo={detector.dismiss}
         />
       ) : null}
-      {saved && !ride ? <RideSavedNote ride={saved} onClose={() => setSaved(null)} /> : null}
+      {saved && !ride ? (
+        <RideSavedNote
+          ride={saved}
+          onClose={() => setSaved(null)}
+          onFix={
+            canFixRide(savedLegs)
+              ? () => {
+                  setFixing({ legs: savedLegs, initial: "to" });
+                  setSaved(null);
+                }
+              : undefined
+          }
+        />
+      ) : null}
+      {fixing ? <RideFixSheet legs={fixing.legs} initial={fixing.initial} onClose={() => setFixing(null)} /> : null}
     </>
   );
 }
