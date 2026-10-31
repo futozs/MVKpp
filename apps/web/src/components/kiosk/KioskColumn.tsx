@@ -69,10 +69,15 @@ function Platform({ a }: { a: ArrivalItem }) {
     <span
       className={cn(
         "shrink-0 rounded-[0.3em] border px-[0.35em] font-mono font-bold tabular-nums",
-        a.platformChanged ? "border-late/50 bg-late/12 text-late" : "border-border bg-muted text-foreground",
+        a.platformPredicted
+          ? "border-dashed border-muted-foreground/50 text-muted-foreground"
+          : a.platformChanged
+            ? "border-late/50 bg-late/12 text-late"
+            : "border-border bg-muted text-foreground",
       )}
-      title={rail ? `${a.platform}. vágány` : `${a.platform}. kocsiállás`}
+      title={`${a.platformPredicted ? "Várhatóan a " : ""}${a.platform}. ${rail ? "vágány" : "kocsiállás"}${a.platformPredicted ? " — még nincs kiadva" : ""}`}
     >
+      {a.platformPredicted ? "~" : null}
       {a.platform}
       <span className="ml-[0.2em] font-sans text-[0.85em] font-semibold text-muted-foreground">{rail ? "vg." : "k.áll."}</span>
     </span>

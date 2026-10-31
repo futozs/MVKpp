@@ -32,21 +32,45 @@ export function stopKindLabel(stop: Pick<Stop, "id" | "station" | "feed">): stri
   return stop.id;
 }
 
-/** Vágány (vasút) vagy kocsiállás (autóbusz-állomás); a változás kiemelve. */
-export function PlatformBadge({ platform, changed, mode, compact, className }: { platform?: string | null; changed?: boolean; mode?: string; compact?: boolean; className?: string }) {
+/**
+ * Vágány (vasút) vagy kocsiállás (autóbusz-állomás); a változás kiemelve. A még ki nem adott,
+ * a korábbi napok szerinti várható (`predicted`) szaggatott kerettel és „~” jellel.
+ */
+export function PlatformBadge({
+  platform,
+  changed,
+  predicted,
+  mode,
+  compact,
+  className,
+}: {
+  platform?: string | null;
+  changed?: boolean;
+  predicted?: boolean;
+  mode?: string;
+  compact?: boolean;
+  className?: string;
+}) {
   if (!platform) return null;
   const rail = mode === "rail";
   const label = rail ? "vágány" : "kocsiállás";
   return (
     <span
-      title={changed ? `A ${label} változott: most ${platform}.` : `${platform}. ${label}`}
+      title={
+        predicted
+          ? `Várhatóan a ${platform}. ${label} — még nincs kiadva, a korábbi napok alapján`
+          : changed
+            ? `A ${label} változott: most ${platform}.`
+            : `${platform}. ${label}`
+      }
       className={cn(
         "inline-flex shrink-0 items-center gap-1 rounded border px-1.5 py-px font-mono text-[10.5px] font-bold tabular-nums",
-        changed ? "border-late/50 bg-late/12 text-late" : "border-border bg-muted text-foreground",
+        predicted ? "border-dashed border-muted-foreground/50 text-muted-foreground" : changed ? "border-late/50 bg-late/12 text-late" : "border-border bg-muted text-foreground",
         className,
       )}
     >
       {rail ? <TrainTrack aria-hidden className="h-2.5 w-2.5" /> : null}
+      {predicted ? "~" : null}
       {platform}
       {compact ? null : <span className="font-sans text-[10px] font-semibold text-muted-foreground">{rail ? "vg." : "k.áll."}</span>}
     </span>

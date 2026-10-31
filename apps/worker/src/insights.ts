@@ -221,7 +221,13 @@ export class TripInsights {
       trafficAhead: (t, s) => this.trafficAhead(t, s, now),
       modes,
       rich,
-      ...(rt ? { platform: (t: string, s: string) => rt.platform(t, s), notices: (t: string) => rt.noticesOf(t) } : {}),
+      ...(rt
+        ? {
+            platform: (t: string, s: string) => rt.platform(t, s),
+            predictedPlatform: (t: string, s: string) => rt.predictedPlatform(t, s),
+            notices: (t: string) => rt.noticesOf(t),
+          }
+        : {}),
     };
   }
 

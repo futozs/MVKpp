@@ -175,6 +175,8 @@ export interface ArrivalItem {
   /** v3: vágány / kocsiállás (élőben változhat) */
   platform?: string | null;
   platformChanged?: boolean;
+  /** v3: a vágány még nincs kiadva — a korábbi napok szerinti várható */
+  platformPredicted?: boolean;
   /** v3: a megálló (állomásnál a vágány), ahonnan indul */
   stopId?: string;
   /** v3: hivatalos megjegyzések (késés oka, kocsiösszeállítás, pótlóbusz) */
@@ -514,6 +516,8 @@ export interface RelationRow {
   durationMin: number;
   stops: number;
   platform: string | null;
+  /** v3: a vágány még nincs kiadva — a korábbi napok szerinti várható */
+  platformPredicted?: boolean;
   live: boolean;
   cancelled: boolean;
   vehicle: ArrivalVehicle | null;
@@ -535,6 +539,8 @@ export interface TrainStop {
   platform: string | null;
   /** az élő vágány eltér a menetrenditől */
   platformChanged?: boolean;
+  /** v3: a vágány még nincs kiadva — a korábbi napok szerinti várható */
+  platformPredicted?: boolean;
   schedArr: string;
   schedDep: string;
   arrUnix: number;

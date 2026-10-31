@@ -62,7 +62,7 @@ export function registerTransit(r: Router, ctx: Ctx) {
   const today = () => feeds.cachedDay(engine.today);
   const extras = (modes?: ReadonlySet<TransitMode>) => {
     const ex = ctx.insights.extras(nowUnix(), modes, true);
-    return { cancelled: ex.cancelled, platform: ex.platform, notices: ex.notices, modes };
+    return { cancelled: ex.cancelled, platform: ex.platform, predictedPlatform: ex.predictedPlatform, notices: ex.notices, modes };
   };
 
   /**
@@ -203,6 +203,8 @@ type TrainStop = {
   platform: string | null;
   /** az élő vágány eltér a menetrenditől */
   platformChanged: boolean;
+  /** a vágány még nincs kiadva: a korábbi napok szerinti várható */
+  platformPredicted?: boolean;
   schedArr: string;
   schedDep: string;
   arrUnix: number;
@@ -255,19 +257,23 @@ function trainDetail(ctx: Ctx, by: { no: string } | { trip: string }) {
     const s = f.stops.get(x.stopId);
     const delay = p?.delay ?? (run?.lastStopIdx != null && i > run.lastStopIdx ? run.lastDelayS : null);
     const depUnix = p?.unix ?? dc.midnightUnix + x.dep + (delay ?? 0);
+    const passed = run?.lastStopIdx != null ? i <= run.lastStopIdx : depUnix < now - 60;
     const livePlatform = isToday ? ctx.regionalRt.platform(t.id, x.stopId) : null;
     const schedPlatform = s?.platform ?? null;
+    // még nincs kiadva: a korábbi napok szerinti várható vágány (a még el nem hagyott állomásokra)
+    const guessed = isToday && !livePlatform && !schedPlatform && !passed ? ctx.regionalRt.predictedPlatform(t.id, x.stopId) : null;
     return {
       id: x.stopId,
       name: s?.name ?? x.stopId,
-      platform: livePlatform ?? schedPlatform,
+      platform: livePlatform ?? schedPlatform ?? guessed,
       platformChanged: Boolean(livePlatform && schedPlatform && livePlatform !== schedPlatform),
+      ...(guessed ? { platformPredicted: true } : {}),
       schedArr: secToHm(x.arr),
       schedDep: secToHm(x.dep),
       arrUnix: dc.midnightUnix + x.arr + (delay ?? 0),
       depUnix,
       delaySec: delay,
-      passed: run?.lastStopIdx != null ? i <= run.lastStopIdx : depUnix < now - 60,
+      passed,
     };
   });
   const tp = trainParts(t.shortName);

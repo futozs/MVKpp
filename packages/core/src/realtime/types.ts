@@ -117,6 +117,8 @@ export type ArrivalItem = {
   /** v3: vágány / kocsiállás (élőben változhat) és hogy változott-e */
   platform?: string | null;
   platformChanged?: boolean;
+  /** a vágány még nincs kiadva: ez a korábbi napok szerinti várható (lásd `platformGuess`) */
+  platformPredicted?: boolean;
   /** v3: a megálló, ahonnan indul (állomásnál a vágány megállója) */
   stopId?: string;
   /** v3: hivatalos megjegyzések (késés oka, kocsiösszeállítás, pótlóbusz) */

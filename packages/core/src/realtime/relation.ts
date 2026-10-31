@@ -44,6 +44,8 @@ export type RelationRow = {
   /** a megállók száma A és B között (a kettőt is beleértve) */
   stops: number;
   platform: string | null;
+  /** a vágány még nincs kiadva: a korábbi napok szerinti várható */
+  platformPredicted?: boolean;
   live: boolean;
   cancelled: boolean;
   vehicle: LiveVeh | null;
@@ -71,7 +73,7 @@ export function relationBoard(
   snap: RealtimeSnapshot,
   days: DayCtx[],
   nowUnix: number,
-  extras: Pick<ArrivalExtras, "cancelled" | "platform" | "notices" | "modes"> = {},
+  extras: Pick<ArrivalExtras, "cancelled" | "platform" | "predictedPlatform" | "notices" | "modes"> = {},
 ): RelationBoard {
   const feed = days[0]?.day.feed;
   const fromSet = new Set(feed ? feed.stopsOf(fromId) : [fromId]);
@@ -140,7 +142,7 @@ export function relationBoard(
           arrDelaySec: arrDelay,
           durationMin: Math.max(0, Math.round((arrUnix - depUnix) / 60)),
           stops: b - a + 1,
-          platform: (isToday ? extras.platform?.(trip, A.stopId) : null) ?? f.stops.get(A.stopId)?.platform ?? null,
+          ...platformOf(isToday, trip, A.stopId, f.stops.get(A.stopId)?.platform ?? null, extras),
           live: Boolean(pa || pb || (isToday && vehByTrip.has(trip))),
           cancelled,
           vehicle: isToday ? (vehByTrip.get(trip) ?? null) : null,
@@ -167,6 +169,20 @@ export function relationBoard(
     now: nowUnix,
     rows: out,
   };
+}
+
+/** Kiadott (élő) vágány, a menetrendi, vagy — ma, ha egyik sincs — a várható (megjelölve). */
+function platformOf(
+  isToday: boolean,
+  trip: string,
+  stopId: string,
+  sched: string | null,
+  extras: Pick<ArrivalExtras, "platform" | "predictedPlatform">,
+): { platform: string | null; platformPredicted?: boolean } {
+  const live = isToday ? (extras.platform?.(trip, stopId) ?? null) : null;
+  if (live ?? sched) return { platform: live ?? sched };
+  const guess = isToday ? (extras.predictedPlatform?.(trip, stopId) ?? null) : null;
+  return guess ? { platform: guess, platformPredicted: true } : { platform: null };
 }
 
 export type TrainMatch = { tripId: string; dayIndex: number; firstDepUnix: number; lastArrUnix: number };

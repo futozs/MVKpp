@@ -153,7 +153,7 @@ export function TrainCard({
               <li key={`${s.id}-${s.schedDep}`} className={cn("flex items-center gap-3 px-4 py-2", s.passed && "opacity-55")}>
                 <span className={cn("h-2 w-2 shrink-0 rounded-full", s.passed ? "bg-muted-foreground/50" : "bg-primary")} aria-hidden />
                 <span className="min-w-0 flex-1 truncate text-xs font-medium">{s.name}</span>
-                <PlatformBadge platform={s.platform} mode="rail" compact />
+                <PlatformBadge platform={s.platform} changed={s.platformChanged} predicted={s.platformPredicted} mode="rail" compact />
                 <span className="shrink-0 text-right font-mono text-[11px] tabular-nums">
                   <span className={cn(late && "text-muted-foreground line-through decoration-1")}>{s.schedDep}</span>
                   {late ? <span className="ml-1 font-bold text-late">{hmOf(s.depUnix)}</span> : null}

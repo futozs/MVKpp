@@ -122,7 +122,7 @@ export function RelationCard({
                     <span className={cn("font-mono text-xs tabular-nums text-muted-foreground", next.cancelled && "line-through decoration-destructive/70 decoration-2")}>
                       {next.depTime} → {next.arrTime}
                     </span>
-                    <PlatformBadge platform={next.platform} mode={next.mode} />
+                    <PlatformBadge platform={next.platform} predicted={next.platformPredicted} mode={next.mode} />
                     {next.cancelled ? null : <DelayBar delaySec={next.depDelaySec} />}
                   </div>
                   <p className="mt-1 text-[11px] text-muted-foreground">
@@ -170,7 +170,7 @@ export function RelationCard({
                         {titleOf(r)}
                       </p>
                       <div className="mt-1 flex items-center gap-2">
-                        <PlatformBadge platform={r.platform} mode={r.mode} compact />
+                        <PlatformBadge platform={r.platform} predicted={r.platformPredicted} mode={r.mode} compact />
                         {r.cancelled ? <span className="rounded bg-destructive/15 px-1.5 py-px text-[10px] font-bold uppercase text-destructive">törölve</span> : null}
                         <span className={cn("font-mono text-[11px] tabular-nums text-muted-foreground", r.cancelled && "line-through decoration-destructive/70")}>
                           {r.depTime} → {r.arrTime}

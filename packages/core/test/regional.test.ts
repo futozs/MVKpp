@@ -210,6 +210,18 @@ describe("megállótábla több forrásból", () => {
     expect(train.route).toBe("Sz");
     expect(train.platform).toBe("6");
     expect(train.notices).toEqual(["Pálya állapota miatti késés"]);
+    expect(train.platformPredicted).toBeUndefined();
+  });
+
+  it("kiadott vágány nélkül a korábbi napok szerinti várható, megjelölve; a kiadott mindig felülírja", () => {
+    const guess = { predictedPlatform: (t: string) => (t === "1:35051212" ? "5" : null) };
+    const b = arrivalsForStop("1:005511387", 10, EMPTY, days, at, guess);
+    const train = b.arrivals.find((a) => a.tripId === "1:35051212")!;
+    expect(train.platform).toBe("5");
+    expect(train.platformPredicted).toBe(true);
+    const live = arrivalsForStop("1:005511387", 10, EMPTY, days, at, { ...guess, platform: () => "6" }).arrivals.find((a) => a.tripId === "1:35051212")!;
+    expect(live.platform).toBe("6");
+    expect(live.platformPredicted).toBeUndefined();
   });
 });
 

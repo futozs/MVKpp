@@ -10,7 +10,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { api } from "@/services/api";
 import { stopKindLabel } from "@/components/transit/RegionalBits";
 import { MAX_RELATIONS, MAX_TRAINS, type RelationWatch } from "@/lib/transitWatches";
@@ -196,7 +195,7 @@ export function AddStopModal({
               </div>
             </div>
 
-            <ScrollArea className="min-h-0 flex-1">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
               {results.length === 0 ? (
                 <p className="px-5 py-8 text-center text-sm text-muted-foreground">
                   {query.trim() ? `Nincs „${query.trim()}” nevű megálló a menetrendben.` : "Megállók betöltése…"}
@@ -239,7 +238,7 @@ export function AddStopModal({
                   })}
                 </ul>
               )}
-            </ScrollArea>
+            </div>
           </>
         )}
 
@@ -296,7 +295,7 @@ function TrainTab({
         </div>
         <p className="mt-2 text-[11px] text-muted-foreground">A vonat minden nap ugyanazzal a számmal jár: a kártya mindig a ma (vagy ha már elment, a holnap) közlekedőt mutatja.</p>
       </div>
-      <ScrollArea className="min-h-0 flex-1">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         <ul className="divide-y divide-border/60">
           {trains.map((t) => (
             <li key={`w-${t}`} className="flex items-center gap-3 px-5 py-2.5">
@@ -340,7 +339,7 @@ function TrainTab({
         {/^\d{2,6}$/.test(no) && hits && hits.length === 0 && !trains.includes(no) ? (
           <p className="px-5 py-8 text-center text-sm text-muted-foreground">Ma és holnap nincs {withHungarianSuffix(no)} vonat a megyét érintve.</p>
         ) : null}
-      </ScrollArea>
+      </div>
     </>
   );
 }

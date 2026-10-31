@@ -55,7 +55,12 @@ const TRAJ_STOPPED_HOLD_S = 12;
 const SPEED_CAP: Record<TransitMode, number> = { tram: 22, bus: 22, coach: 30, rail: 45 };
 /** `vehicles@tram,bus,coach,rail`, `stop:<id>@…` — a régi téma (mód nélkül) csak MVK */
 const MODES_RE = "(?:@(?:tram|bus|coach|rail)(?:,(?:tram|bus|coach|rail))*)?";
-const TOPIC_RE = new RegExp(`^(vehicles${MODES_RE}|sync|parking|stop:[\\w:.-]+${MODES_RE}|trip:[\\w:.-]+|runs:\\d{8})$`);
+/** a megállótábla témája a közös megállók összevonásával: `stop:<id>@<módok>~all` (lásd `mergedBoard`) */
+const MERGE_RE = "(?:~(?:all|mvk|coach|off))?";
+const TOPIC_RE = new RegExp(`^(vehicles${MODES_RE}|sync|parking|stop:[\\w:.-]+${MODES_RE}${MERGE_RE}|trip:[\\w:.-]+|runs:\\d{8})$`);
+
+/** Feliratkozható-e a téma (minden más csendben eldobódik). */
+export const isTopic = (t: string) => TOPIC_RE.test(t);
 
 /** „stop:1:005511387@rail,tram” → { id, modes } */
 /** `stop:<id>`, `stop:<id>@<módok>` vagy `stop:<id>@<módok>~<összevonás>` (közös megállók, lásd `mergedBoard`) */
@@ -131,7 +136,7 @@ export class Hub {
     if (msg.t === "sub") {
       for (const t of topics) {
         if (c.topics.size >= MAX_TOPICS) break;
-        if (!TOPIC_RE.test(t)) continue;
+        if (!isTopic(t)) continue;
         c.topics.add(t);
         await this.initial(c, t);
       }

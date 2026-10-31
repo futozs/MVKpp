@@ -352,7 +352,7 @@ export function StopCard({
                     <span className={cn("font-mono text-xs tabular-nums text-muted-foreground", next.cancelled && "line-through decoration-destructive/70 decoration-2")}>
                       {next.time}
                     </span>
-                    <PlatformBadge platform={next.platform} changed={next.platformChanged} mode={next.mode} />
+                    <PlatformBadge platform={next.platform} changed={next.platformChanged} predicted={next.platformPredicted} mode={next.mode} />
                     {next.cancelled ? null : <DelayBar delaySec={next.delaySec ?? next.measuredDelaySec ?? null} />}
                   </div>
                 </div>
@@ -468,7 +468,7 @@ export function StopCard({
                         {arrivalTitle(bus)}
                       </p>
                       <div className="mt-1 flex items-center gap-2">
-                        <PlatformBadge platform={bus.platform} changed={bus.platformChanged} mode={bus.mode} compact />
+                        <PlatformBadge platform={bus.platform} changed={bus.platformChanged} predicted={bus.platformPredicted} mode={bus.mode} compact />
                         {arrivalVehicleLabel(bus) ? (
                           <span className="rounded bg-primary/12 px-1.5 py-px font-mono text-[11px] font-bold tabular-nums text-primary">
                             {arrivalVehicleLabel(bus)}

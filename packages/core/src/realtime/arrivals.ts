@@ -31,6 +31,8 @@ export type ArrivalExtras = {
   modes?: ReadonlySet<TransitMode>;
   /** (tripId, stopId) → élő vágány / kocsiállás (vasút, autóbusz-állomás) */
   platform?: (tripId: string, stopId: string) => string | null;
+  /** (tripId, stopId) → várható vágány a korábbi napokból, amíg a MÁV nem adta ki */
+  predictedPlatform?: (tripId: string, stopId: string) => string | null;
   /** tripId → hivatalos megjegyzések (késés oka, kocsiösszeállítás) */
   notices?: (tripId: string) => string[] | null;
   /** az MVK-sorokhoz is kellenek a v3-mezők (mód, vonal-kulcs) — a v2 alapválasza bájtra a régi marad */
@@ -197,6 +199,8 @@ export function arrivalsForStop(
     const childStop = f.stops.get(x.stopId);
     const livePlatform = x.primary ? (extras.platform?.(x.tripId, x.stopId) ?? null) : null;
     const schedPlatform = childStop?.platform || null;
+    // amíg a MÁV nem adta ki: a korábbi napok szerinti várható vágány (jelölve)
+    const guessedPlatform = x.primary && !livePlatform && !schedPlatform ? (extras.predictedPlatform?.(x.tripId, x.stopId) ?? null) : null;
     const tp = tr && isRailTrip(tr) ? trainParts(tr.shortName) : null;
     const notices = x.primary ? (extras.notices?.(x.tripId) ?? null) : null;
     arrivals.push({
@@ -230,8 +234,9 @@ export function arrivalsForStop(
             operator: operatorLabel(r.agencyName),
             trainNo: tp?.no ?? null,
             trainName: tp?.name ?? null,
-            platform: livePlatform ?? schedPlatform,
+            platform: livePlatform ?? schedPlatform ?? guessedPlatform,
             platformChanged: Boolean(livePlatform && schedPlatform && livePlatform !== schedPlatform),
+            ...(guessedPlatform && !livePlatform && !schedPlatform ? { platformPredicted: true } : {}),
             stopId: x.stopId,
             ...(notices?.length ? { notices } : {}),
           }

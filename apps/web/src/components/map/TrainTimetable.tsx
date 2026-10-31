@@ -193,7 +193,7 @@ function StopRow({ stop: s, index: i, last, next, className }: { stop: TrainStop
       </span>
 
       <span className="flex shrink-0 items-center">
-        <PlatformBadge platform={s.platform} changed={s.platformChanged} mode="rail" compact />
+        <PlatformBadge platform={s.platform} changed={s.platformChanged} predicted={s.platformPredicted} mode="rail" compact />
       </span>
     </li>
   );

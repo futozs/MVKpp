@@ -262,7 +262,7 @@ export function StopDetailDrawer({
 
                       <div className="mt-1 flex items-center gap-2">
                         {}
-                        <PlatformBadge platform={arr.platform} changed={arr.platformChanged} mode={arr.mode} compact />
+                        <PlatformBadge platform={arr.platform} changed={arr.platformChanged} predicted={arr.platformPredicted} mode={arr.mode} compact />
                         {arrivalVehicleLabel(arr) ? (
                           <span className="rounded bg-primary/12 px-1.5 py-px font-mono text-[11px] font-bold tabular-nums text-primary">
                             {arrivalVehicleLabel(arr)}

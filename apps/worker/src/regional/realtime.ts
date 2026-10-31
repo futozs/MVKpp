@@ -11,9 +11,14 @@
  * Minden kérés a kliens egyetlen során megy (a MÁV+ korlátja miatt), az élő
  * pozíció a legmagasabb prioritással.
  */
-import { getPool } from "@mvk/db";
+import { getPool, sql } from "@mvk/db";
 import {
+  bumpPlatform,
   isMvkId,
+  LINE_PLATFORM,
+  OWN_PLATFORM,
+  pickPlatform,
+  platformLineKey,
   isoToYmd,
   localMidnightUnix,
   NATIONAL_BBOX,
@@ -57,6 +62,11 @@ const HOT_MAX = 60;
 const NOTICE_LEAD_S = 3 * 3600;
 /** egy figyelt állomás ennyi ideig marad „forró” az utolsó kérés után (ms) */
 const HOT_TTL_MS = 15 * 60_000;
+/** új figyelt állomás táblája ennyi után (több egyszerre érkező kérés egy lekérésbe fut) */
+const BOARD_KICK_MS = 1500;
+/** a vágány-jósláshoz ennyi nap előzménye */
+const PLATFORM_HISTORY_DAYS = 42;
+const LINE_PLATFORM_TTL_MS = 5 * 60_000;
 
 export type NoticeKind = "cause" | "composition" | "replacement" | "other";
 export type Notice = { text: string; kind: NoticeKind };
@@ -119,6 +129,13 @@ export class RegionalRealtime {
   private fallback = false;
   private pollTimer: NodeJS.Timeout | null = null;
   private persistedPlatform = new Map<string, string>();
+  /** a korábbi napok vágányai: `menet|állomás` → vágány → hány napon (lásd `predictedPlatform`) */
+  private platformHistory = new Map<string, Map<string, number>>();
+  /** vonal-szintű vágányok (`vonal|végállomás|állomás`), 5 percig gyorsítótárazva */
+  private linePlatformCache: { at: number; iso: string; map: Map<string, Map<string, number>> } | null = null;
+  /** új figyelt állomás: a táblája hamarabb jön, nem a következő percben */
+  private boardKick: NodeJS.Timeout | null = null;
+  private boardsRunning = false;
   private persistedNotice = new Set<string>();
   stats = { polls: 0, vehicles: 0, rail: 0, escaped: 0, boards: 0, alerts: 0 };
 
@@ -143,6 +160,7 @@ export class RegionalRealtime {
       every(config.otp2.alertsMs, () => this.pollAlerts());
       every(config.otp2.boardsMs, () => this.pollBoards());
       void this.pollAlerts().catch(() => {});
+      void this.loadPlatformHistory().catch((e) => log.warn("otp2", "a vágány-előzmények betöltése sikertelen", errMsg(e)));
     }
     every(TRIP_RT_MS, () => this.pollMvkTrips());
   }
@@ -176,9 +194,18 @@ export class RegionalRealtime {
   touch(stopId: string) {
     if (isMvkId(stopId) && !this.fallback) return;
     if (!this.hot.has(stopId) && !this.knownStop(stopId)) return;
+    const isNew = !this.hot.has(stopId);
     this.hot.delete(stopId);
     this.hot.set(stopId, Date.now());
     while (this.hot.size > HOT_MAX) this.hot.delete(this.hot.keys().next().value as string);
+    // Először nézik: a vágány ne a következő percben jöjjön (a tábla addig üres lenne).
+    if (isNew && !isMvkId(stopId) && config.otp2.regional && !this.boardKick) {
+      this.boardKick = setTimeout(() => {
+        this.boardKick = null;
+        void this.pollBoards().catch((e) => log.warn("otp2", "állomástábla lekérése sikertelen", errMsg(e)));
+      }, BOARD_KICK_MS);
+      this.boardKick.unref();
+    }
   }
 
   private knownStop(id: string): boolean {
@@ -328,6 +355,16 @@ export class RegionalRealtime {
 
   /** A figyelt állomások táblái: a még el nem indult vonat késése, vágány, törlés. */
   private async pollBoards(): Promise<void> {
+    if (this.boardsRunning) return;
+    this.boardsRunning = true;
+    try {
+      await this.pollBoardsOnce();
+    } finally {
+      this.boardsRunning = false;
+    }
+  }
+
+  private async pollBoardsOnce(): Promise<void> {
     const now = Date.now();
     const ids: { id: string; station: boolean }[] = [];
     const feed = this.feeds.cachedDay(serviceClock().iso)?.feed;
@@ -422,6 +459,58 @@ export class RegionalRealtime {
     return this.platforms.get(tripId)?.get(stationKeyOf(stopId)) ?? null;
   }
 
+  /**
+   * Várható vágány, amíg a MÁV nem adta ki: ugyanez a menet a korábbi napokon, különben a vonal
+   * ugyanabba az irányba induló menetei (a mai kiadottakkal együtt). Csak egyértelmű többségnél.
+   */
+  predictedPlatform(tripId: string, stopId: string): string | null {
+    const station = stationKeyOf(stopId);
+    const own = pickPlatform(this.platformHistory.get(`${tripId}|${station}`), OWN_PLATFORM);
+    if (own) return own;
+    const feed = this.feeds.cachedDay(serviceClock().iso)?.feed;
+    const key = feed ? platformLineKey(feed, tripId, station) : null;
+    return key ? pickPlatform(this.linePlatforms()?.get(key), LINE_PLATFORM) : null;
+  }
+
+  /** A vonal-szintű vágány-számlálók: az előzmények és a mai kiadott vágányok a mai menetrendre vetítve. */
+  private linePlatforms(): Map<string, Map<string, number>> | null {
+    const iso = serviceClock().iso;
+    const c = this.linePlatformCache;
+    if (c && c.iso === iso && Date.now() - c.at < LINE_PLATFORM_TTL_MS) return c.map;
+    const feed = this.feeds.cachedDay(iso)?.feed;
+    if (!feed) return null;
+    const map = new Map<string, Map<string, number>>();
+    for (const [k, counts] of this.platformHistory) {
+      const [trip, station] = k.split("|");
+      const key = platformLineKey(feed, trip, station);
+      if (key) for (const [p, n] of counts) bumpPlatform(map, key, p, n);
+    }
+    for (const [trip, m] of this.platforms) {
+      for (const [station, p] of m) {
+        const key = platformLineKey(feed, trip, station);
+        if (key) bumpPlatform(map, key, p);
+      }
+    }
+    this.linePlatformCache = { at: Date.now(), iso, map };
+    return map;
+  }
+
+  /** A korábbi napok kiadott vágányai (az elmúlt 6 hét, a mai nap nélkül) — induláskor és napváltáskor. */
+  async loadPlatformHistory(): Promise<void> {
+    const rows = await sql<{ t: string; s: string; p: string; n: number }>(
+      `SELECT trip_id AS t, regexp_replace(stop_id, '_[^_:]+$', '') AS s, platform AS p, count(DISTINCT service_date)::int AS n
+         FROM transit_platform
+        WHERE service_date >= CURRENT_DATE - $1::int AND service_date < CURRENT_DATE
+        GROUP BY 1, 2, 3`,
+      [PLATFORM_HISTORY_DAYS],
+    );
+    const history = new Map<string, Map<string, number>>();
+    for (const r of rows) bumpPlatform(history, `${r.t}|${r.s}`, r.p, r.n);
+    this.platformHistory = history;
+    this.linePlatformCache = null;
+    log.info("otp2", `vágány-előzmények: ${history.size} menet–állomás pár (${PLATFORM_HISTORY_DAYS} nap)`);
+  }
+
   noticesOf(tripId: string): string[] | null {
     const n = this.notices.get(tripId);
     return n?.length ? n.map((x) => x.text) : null;
@@ -435,6 +524,8 @@ export class RegionalRealtime {
   rollDay() {
     this.cancelled.clear();
     this.platforms.clear();
+    this.linePlatformCache = null;
+    if (this.enabled && config.otp2.regional) void this.loadPlatformHistory().catch((e) => log.warn("otp2", "a vágány-előzmények betöltése sikertelen", errMsg(e)));
     this.board.clear();
     this.persistedPlatform.clear();
     this.persistedNotice.clear();
