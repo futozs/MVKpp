@@ -5,7 +5,7 @@
  * Minden írás idempotens (ON CONFLICT), ezért egy újraindítás vagy egy
  * újrafuttatott replay nem duplikál.
  */
-import { dayInfo, todBucket, type PingOut, type RunOut, type StopEventOut } from "@mvk/core";
+import { dayInfo, feedOfId, todBucket, trainParts, type PingOut, type RunOut, type StopEventOut } from "@mvk/core";
 import { getPool } from "@mvk/db";
 import { errMsg, log } from "./log.ts";
 
@@ -23,6 +23,12 @@ type SegmentRow = {
   dwell: number | null;
   entryDelay: number;
 };
+
+/** A menet rövid neve a statisztikához: vonatnál csak a vonatszám („6612 személyvonat” → „6612”). */
+function tripShortOf(r: RunOut): string | null {
+  if (!r.tripShort) return null;
+  return feedOfId(r.tripId) === "rail" ? (trainParts(r.tripShort).no ?? r.tripShort) : r.tripShort;
+}
 
 export class Persister {
   private pings: PingOut[] = [];
@@ -221,19 +227,23 @@ export class Persister {
     await getPool().query(
       `INSERT INTO trip_run (run_key, service_date, trip_id, vehicle_id, route_short, route_id, direction, pattern, headsign, feed_version,
                              sched_start_s, sched_end_s, stops_total, stops_seen, opened_at, last_seen_at, actual_start, actual_end,
-                             start_delay_s, end_delay_s, last_delay_s, last_stop_idx, dist_m, max_speed, status, close_reason, source, updated_at)
+                             start_delay_s, end_delay_s, last_delay_s, last_stop_idx, dist_m, max_speed, status, close_reason, source, updated_at,
+                             trip_short, rt_source)
        SELECT rk, sd::date, tr, v, rs, ri, dir, pat, hs, fv, ss, se, st, sn, to_timestamp(op), to_timestamp(ls), to_timestamp(a0), to_timestamp(a1),
-              sdl, edl, ldl, lsi, dm, ms, stt, cr, $27, now()
+              sdl, edl, ldl, lsi, dm, ms, stt, cr, $27, now(), tsh, rts
          FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::int2[], $8::text[], $9::text[], $10::text[],
                      $11::int4[], $12::int4[], $13::int2[], $14::int2[], $15::float8[], $16::float8[], $17::float8[], $18::float8[],
-                     $19::int4[], $20::int4[], $21::int4[], $22::int2[], $23::int4[], $24::real[], $25::text[], $26::text[])
-              AS x(rk, sd, tr, v, rs, ri, dir, pat, hs, fv, ss, se, st, sn, op, ls, a0, a1, sdl, edl, ldl, lsi, dm, ms, stt, cr)
+                     $19::int4[], $20::int4[], $21::int4[], $22::int2[], $23::int4[], $24::real[], $25::text[], $26::text[], $28::text[], $29::text[])
+              AS x(rk, sd, tr, v, rs, ri, dir, pat, hs, fv, ss, se, st, sn, op, ls, a0, a1, sdl, edl, ldl, lsi, dm, ms, stt, cr, tsh, rts)
        ON CONFLICT (run_key) DO UPDATE SET
          stops_seen = EXCLUDED.stops_seen, last_seen_at = EXCLUDED.last_seen_at,
          actual_start = COALESCE(EXCLUDED.actual_start, trip_run.actual_start), actual_end = COALESCE(EXCLUDED.actual_end, trip_run.actual_end),
          start_delay_s = COALESCE(EXCLUDED.start_delay_s, trip_run.start_delay_s), end_delay_s = COALESCE(EXCLUDED.end_delay_s, trip_run.end_delay_s),
          last_delay_s = EXCLUDED.last_delay_s, last_stop_idx = EXCLUDED.last_stop_idx, dist_m = EXCLUDED.dist_m, max_speed = EXCLUDED.max_speed,
-         status = EXCLUDED.status, close_reason = EXCLUDED.close_reason, source = EXCLUDED.source, updated_at = now()`,
+         status = EXCLUDED.status, close_reason = EXCLUDED.close_reason, source = EXCLUDED.source, updated_at = now(),
+         trip_short = COALESCE(EXCLUDED.trip_short, trip_run.trip_short),
+         rt_source = CASE WHEN EXCLUDED.rt_source IS NULL THEN trip_run.rt_source
+                          WHEN trip_run.rt_source IS NULL OR trip_run.rt_source = EXCLUDED.rt_source THEN EXCLUDED.rt_source ELSE 'mixed' END`,
       [
         b.map((r) => r.runKey),
         b.map((r) => r.serviceDate),
@@ -262,6 +272,8 @@ export class Persister {
         b.map((r) => r.status),
         b.map((r) => r.closeReason),
         this.source,
+        b.map(tripShortOf),
+        b.map((r) => r.rtSource ?? null),
       ],
     );
   }

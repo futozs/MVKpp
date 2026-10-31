@@ -21,6 +21,7 @@ import { TimelineSlider } from "./TimelineSlider";
 import { useHistoryDays, useHistoryFrames } from "./useHistoryFrames";
 import { useHistoryMarkers } from "./useHistoryMarkers";
 import { SPEEDS, useTimelinePlayback, type PlaybackBounds } from "./useTimelinePlayback";
+import { vehicleModeOf } from "@/lib/modes";
 
 /** Ennél keskenyebb térképen a vezérlők három sorba rendeződnek. */
 const WIDE_MIN_PX = 720;
@@ -183,9 +184,13 @@ function TimelinePlayer({ days, wide, inset, mapRef, routes, filters, onExit }: 
   const range = useMemo(() => serviceDayRange(day), [day]);
   const bounds: PlaybackBounds = { start: range.start, limit: limitFor(range) };
 
+  // A visszajátszás a statisztikai kulccsal jön (MVK: a rövid név; Volán, vasút: a vonal-azonosító).
   const routeByShort = useMemo(() => {
     const map = new Map<string, Route>();
-    for (const r of Object.values(routes)) if (!map.has(r.short)) map.set(r.short, r);
+    for (const r of Object.values(routes)) {
+      const k = r.key ?? r.short;
+      if (!map.has(k)) map.set(k, r);
+    }
     return map;
   }, [routes]);
 
@@ -196,21 +201,21 @@ function TimelinePlayer({ days, wide, inset, mapRef, routes, filters, onExit }: 
     if (q && !targets.includes(q)) targets.push(q);
     const shorts =
       filters.routes.length > 0
-        ? new Set(filters.routes.map((id) => routes[id]?.short).filter(Boolean))
+        ? new Set(filters.routes.map((id) => routes[id]?.key ?? routes[id]?.short).filter(Boolean))
         : null;
-    const type = filters.type;
+    const modes = filters.modes;
     return (id: string, short: string | null): boolean => {
       if (targets.length > 0) {
         const vid = id.toLowerCase();
         return targets.some((t) => vid.includes(t));
       }
-      if (type !== "all") {
-        const isTram = (short ? routeByShort.get(short)?.type : undefined) === "900";
-        if (type === "tram" ? !isTram : isTram) return false;
+      if (modes.length) {
+        const r = short ? routeByShort.get(short) : undefined;
+        if (!modes.includes(vehicleModeOf({ id }, r?.type))) return false;
       }
       return !shorts || (short != null && shorts.has(short));
     };
-  }, [filters.watch, filters.vq, filters.routes, filters.type, routes, routeByShort]);
+  }, [filters.watch, filters.vq, filters.routes, filters.modes, routes, routeByShort]);
 
   const isTracked = useMemo(() => {
     const watch = new Set(filters.watch.map((w) => w.toLowerCase()));

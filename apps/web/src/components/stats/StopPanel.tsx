@@ -21,6 +21,8 @@ import { QueryBoundary } from "./PanelState";
 import { useStatsQuery } from "./useStatsQuery";
 import { cn, normalizeSearchText } from "@/lib/utils";
 import { usePreference } from "@/hooks/usePreference";
+import { isRegionalId, pickableStops } from "@/lib/modes";
+import { stopKindLabel } from "@/components/transit/RegionalBits";
 
 /** Kedvenc megállók a statisztikában — localStorage, így a felhős szinkron is viszi. */
 const FAVORITE_STOPS_KEY = "mvk_stats_favorite_stops";
@@ -49,7 +51,7 @@ function StopPill({
     >
       <button type="button" onClick={onSelect} aria-pressed={active} className="flex min-w-0 items-center focus-visible:outline-none">
         <span className="truncate">{stop.name}</span>
-        <span className="ml-1.5 font-mono text-[10px] opacity-60">{stop.id}</span>
+        <span className="ml-1.5 font-mono text-[10px] opacity-60">{isRegionalId(stop.id) ? stopKindLabel(stop) : stop.id}</span>
       </button>
       <button
         type="button"
@@ -125,19 +127,21 @@ export function StopPanel({ stops }: { stops: Stop[] }) {
 
   const to = serviceToday();
   const from = shiftDate(to, -13);
+  // az állomás a vágányaival együtt egy tétel (a mérései is együtt jönnek)
+  const pickable = useMemo(() => pickableStops(stops), [stops]);
 
   const matches = useMemo(() => {
     const t = normalizeSearchText(search.trim());
     // Kereső nélkül a kedvencek külön sorban vannak — itt a többi.
-    if (!t) return stops.filter((s) => !favoriteIds.includes(s.id)).slice(0, 12);
-    return stops
+    if (!t) return pickable.filter((s) => !favoriteIds.includes(s.id)).slice(0, 12);
+    return pickable
       .filter(
         (s) =>
           normalizeSearchText(s.name).includes(t) ||
           s.id.toLowerCase().includes(t),
       )
       .slice(0, 12);
-  }, [search, stops, favoriteIds]);
+  }, [search, pickable, favoriteIds]);
 
   const q = useStatsQuery(
     useCallback(() => statsApi.stop(stopId!, from, to), [stopId, from, to]),

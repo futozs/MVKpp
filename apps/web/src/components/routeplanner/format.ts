@@ -4,6 +4,7 @@ import type {
   JourneyTrip,
 } from "@/services/api";
 import { withHungarianSuffix } from "@/lib/utils";
+import { displayVehicleId } from "@/lib/modes";
 import { serverNow } from "@/lib/realtime";
 
 /** Ennél kisebb eltérést „pontos”-nak mondunk. */
@@ -147,14 +148,23 @@ function articleFor(numeric: string): "a" | "az" {
 export const MODE_NOUN: Record<JourneyTransitLeg["mode"], string> = {
   BUS: "busz",
   TRAM: "villamos",
+  COACH: "Volán-busz",
+  RAIL: "vonat",
 };
 
 const MODE_INSTRUMENTAL: Record<JourneyTransitLeg["mode"], string> = {
   BUS: "busszal",
   TRAM: "villamossal",
+  COACH: "busszal",
+  RAIL: "vonattal",
 };
 
-/** „az 1653-as busszal” / „a 608-as villamossal” */
+/** A szakasz csempéje: vonatnál a kategória és a vonatszám („IC 582”), máshol a vonalszám. */
+export function legTileText(leg: Pick<JourneyTransitLeg, "mode" | "routeShortName" | "trainNo">): string {
+  return leg.mode === "RAIL" && leg.trainNo ? `${leg.routeShortName} ${leg.trainNo}` : leg.routeShortName;
+}
+
+/** „az 1653-as busszal” / „a 608-as villamossal” / „az LWA-387 jelű busszal” */
 export function vehiclePhrase(
   id: string,
   mode: JourneyTransitLeg["mode"],
@@ -162,7 +172,9 @@ export function vehiclePhrase(
   if (/^[1-9]\d*$/.test(id)) {
     return `${articleFor(id)} ${withHungarianSuffix(id)} ${MODE_INSTRUMENTAL[mode]}`;
   }
-  return `a(z) ${id} jelű ${MODE_INSTRUMENTAL[mode]}`;
+  // vonatnál a jármű a mozdony / motorvonat pályaszáma
+  if (mode === "RAIL") return `a ${displayVehicleId(id)} pályaszámú járművel`;
+  return `a(z) ${displayVehicleId(id)} jelű ${MODE_INSTRUMENTAL[mode]}`;
 }
 
 /* ------------------------------------------------------ itiner ----- */

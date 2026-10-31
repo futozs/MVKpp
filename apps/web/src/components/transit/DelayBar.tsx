@@ -80,7 +80,7 @@ export function DelayBar({
       {showLabel ? (
         <span
           className={cn(
-            "font-mono text-[11px] font-semibold tabular-nums",
+            "whitespace-nowrap font-mono text-[11px] font-semibold tabular-nums",
             tone,
           )}
         >

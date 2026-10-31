@@ -1,6 +1,6 @@
 /** Web-szabványos (Request → Response) segédek; Next.js route handlerből és tesztből is hívható. */
 import { cached as sharedCached } from "@mvk/cache";
-import { isPlausibleIso, serviceClock } from "@mvk/core";
+import { isPlausibleIso, parseModes, serviceClock } from "@mvk/core";
 import { RouteMetrics } from "@mvk/core/ops/metrics";
 
 /**
@@ -87,4 +87,25 @@ export const isoDate = (s: string | null | undefined): string | null => (s && is
 export function intParam(v: string | null, fallback: number, min: number, max: number): number {
   const n = v == null || v === "" ? NaN : Number(v);
   return Number.isFinite(n) ? Math.max(min, Math.min(max, Math.round(n))) : fallback;
+}
+
+/**
+ * `?modes=` → melyik forrás adatai kellenek. Nélküle csak az MVK (előtag nélküli
+ * azonosító), mint eddig — a regionálisak előtagosak (`hkir:` Volán, `1:` vasút).
+ */
+export type Scope = { mvk: boolean; feeds: string[]; key: string };
+
+export function scopeOf(url: URL): Scope {
+  const raw = (url.searchParams.get("modes") ?? "").trim();
+  if (!raw) return { mvk: true, feeds: [], key: "mvk" };
+  const modes = parseModes(raw);
+  const feeds = [...(modes.has("coach") ? ["hkir"] : []), ...(modes.has("rail") ? ["1"] : [])];
+  const mvk = modes.has("bus") || modes.has("tram");
+  return { mvk, feeds, key: `${mvk ? "m" : ""}${feeds.join("+")}` || "none" };
+}
+
+/** SQL-feltétel egy azonosító-oszlopra (csak a fehérlistás előtagok kerülnek a szövegbe). */
+export function scopeSql(s: Scope, col: string): string {
+  const parts = [...(s.mvk ? [`${col} NOT LIKE '%:%'`] : []), ...(s.feeds.length ? [`split_part(${col}, ':', 1) IN (${s.feeds.map((f) => `'${f}'`).join(", ")})`] : [])];
+  return parts.length ? `(${parts.join(" OR ")})` : "false";
 }

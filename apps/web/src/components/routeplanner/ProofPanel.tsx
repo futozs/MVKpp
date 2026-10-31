@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   MODE_NOUN,
+  legTileText,
   TONE_TEXT,
   delayExact,
   hm,
@@ -15,6 +16,7 @@ import {
   transitLegs,
 } from "./format";
 import { buildProofText, pastOutcome } from "./proof";
+import { displayVehicleId } from "@/lib/modes";
 
 const COPIED_MS = 2200;
 
@@ -76,8 +78,8 @@ export function ProofPanel({ plan, trip }: { plan: JourneyPlanResponse; trip: Jo
   const o = pastOutcome(trip);
   const vehicles = transitLegs(trip).map((l) => ({
     key: `${l.tripId}-${l.fromStopId}`,
-    route: `${l.routeShortName} ${MODE_NOUN[l.mode]}`,
-    id: l.actual?.vehicleId ?? null,
+    route: `${legTileText(l)} ${l.trainName ?? MODE_NOUN[l.mode]}`,
+    id: l.actual?.vehicleId ? displayVehicleId(l.actual.vehicleId) : null,
   }));
   const appUrl = typeof window === "undefined" ? "" : window.location.origin;
 

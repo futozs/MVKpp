@@ -18,7 +18,18 @@ export type WorkerMetrics = {
   cache: { backend: string; redis?: string };
   token: { present: boolean; exp?: number; expiresInSec?: number | null; expired?: boolean; rejected?: boolean; source?: string; receivedAt?: string; installationId?: string; lastRenew?: { at: string; ok: boolean; status?: number; note?: string } | null };
   gtfs: { feedVersion: string | null; feeds: number; loaded: string[]; lastCheck?: unknown; today: { feedVersion: string; fallback: boolean } | null };
+  /** MVK ↔ MÁV+ tartalék (a worker 007-es migrációja óta) */
+  source?: SourceBrief;
   startedAt: number;
+};
+
+/** Melyik forrás viszi most az MVK-t, és él-e a MÁV+ (Volán, vasút). */
+export type SourceBrief = {
+  state: "mvk" | "otp2";
+  since: string;
+  reason: string | null;
+  fallbackSecToday: number;
+  regional: { enabled: boolean; vehicles: number; lastOkAt: number | null; lastError: string | null; limited: number };
 };
 
 export type WebMetrics = { at: number; process: { uptimeSec: number; startedAt: number; nodeVersion: string; memory: { rssMb: number; heapUsedMb: number; heapTotalMb: number } }; http: MetricStat[] };

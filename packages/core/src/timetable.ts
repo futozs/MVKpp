@@ -2,6 +2,7 @@
 import type { ServiceDay } from "./gtfs/service.ts";
 import type { Route, Trip } from "./gtfs/feed.ts";
 import { secToHm } from "./time.ts";
+import { modeOfRoute, operatorLabel, type TransitMode } from "./transit/modes.ts";
 import { tripVariants, type TripVariant } from "./tripVariants.ts";
 
 export type TimetableTripRow = {
@@ -41,6 +42,10 @@ export type TimetableRouteRow = {
   color: string;
   text: string;
   directions: { dir: string; headsign: string; tripsToday: number; tripsTotal: number; firstDeparture: string | null }[];
+  /** v3 (?modes=): mód, a vonal kulcsa és az üzemeltető */
+  mode?: TransitMode;
+  key?: string;
+  operator?: string | null;
 };
 
 export type DaySchedule = {
@@ -72,13 +77,20 @@ export function compareRouteShort(a: string, b: string): number {
   return a.localeCompare(b, "hu");
 }
 
-export function buildRouteIndex(day: ServiceDay): TimetableRouteRow[] {
+/**
+ * @param keep  melyik vonal kerüljön bele (a v2 csak az MVK-t kéri)
+ * @param rich  a v3-mezők (mód, kulcs, üzemeltető) is
+ */
+export function buildRouteIndex(day: ServiceDay, keep?: (routeId: string, type: string) => boolean, rich = false): TimetableRouteRow[] {
   const { feed, services } = day;
   type DirAgg = { headsigns: Map<string, number>; today: number; total: number; firstDep: number | null };
   const byRoute = new Map<string, Map<string, DirAgg>>();
 
   for (const t of feed.trips.values()) {
-    if (!feed.routes.has(t.routeId)) continue;
+    const route = feed.routes.get(t.routeId);
+    if (!route || (keep && !keep(route.id, route.type))) continue;
+    // A regionális feed csak a mai napé: a nem közlekedő vonalai nem kellenek (az MVK-é a teljes feed).
+    if (route.key !== route.short && !services.has(t.serviceId)) continue;
     let dirs = byRoute.get(t.routeId);
     if (!dirs) byRoute.set(t.routeId, (dirs = new Map()));
     let agg = dirs.get(t.dir);
@@ -112,7 +124,9 @@ export function buildRouteIndex(day: ServiceDay): TimetableRouteRow[] {
         };
       })
       .sort((a, b) => a.dir.localeCompare(b.dir));
-    return { id: r.id, short: r.short, long: r.long, type: r.type, color: r.color, text: r.text, directions };
+    const row: TimetableRouteRow = { id: r.id, short: r.short, long: r.long, type: r.type, color: r.color, text: r.text, directions };
+    if (rich) Object.assign(row, { mode: modeOfRoute(r.id, r.type), key: r.key, operator: operatorLabel(r.agencyName) });
+    return row;
   });
   out.sort((a, b) => compareRouteShort(a.short, b.short));
   return out;

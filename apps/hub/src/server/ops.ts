@@ -68,8 +68,25 @@ export async function feedOverview() {
     sql(
       `SELECT id, version, fetched_at AS "fetchedAt", start_date::text AS "startDate", end_date::text AS "endDate",
               n_stops AS stops, n_routes AS routes, n_trips AS trips, status, left(validation::text, 600) AS validation, octet_length(zip) AS "zipBytes"
-         FROM gtfs_feed ORDER BY fetched_at DESC LIMIT 25`,
+         FROM gtfs_feed WHERE source = 'mvk' ORDER BY fetched_at DESC LIMIT 25`,
     ),
   ]);
   return { health: health.reverse(), feeds };
+}
+
+/** A MÁV+-ból naponta épített regionális menetrendek (Volán, vasút) és a forrás-egészség 30 napja. */
+export async function regionalOverview() {
+  const [feeds, health] = await Promise.all([
+    sql(
+      `SELECT id, version, service_date::text AS "serviceDate", fetched_at AS "fetchedAt", n_stops AS stops, n_routes AS routes, n_trips AS trips,
+              status, left(validation::text, 600) AS validation, octet_length(zip) AS "zipBytes"
+         FROM gtfs_feed WHERE source = 'regional' ORDER BY service_date DESC, fetched_at DESC LIMIT 21`,
+    ),
+    sql(
+      `SELECT service_date::text AS day, source, polls_ok AS ok, polls_fail AS fail, vehicles_max AS "vehiclesMax",
+              lag_p50_s AS "lagP50", lag_p95_s AS "lagP95", coverage, fallback_s AS "fallbackS"
+         FROM source_health WHERE service_date > CURRENT_DATE - 30 ORDER BY service_date`,
+    ),
+  ]);
+  return { feeds, health };
 }

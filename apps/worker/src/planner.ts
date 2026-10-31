@@ -8,7 +8,23 @@
  *  - múlt: a TÉNYLEGES indulás/érkezés és a jármű a megálló-eseményekből.
  * Miskolc mérete mellett egy keresés néhány ezredmásodperc.
  */
-import { budapestOffsetSec, chanceLevel, dayInfo, fastDistM, localMidnightUnix, serviceClock, spreadOf, transferChance, type DaySchedule, type ServiceDay } from "@mvk/core";
+import {
+  budapestOffsetSec,
+  chanceLevel,
+  dayInfo,
+  fastDistM,
+  isMvkId,
+  localMidnightUnix,
+  modeOfRoute,
+  MVK_MODES,
+  serviceClock,
+  spreadOf,
+  trainParts,
+  transferChance,
+  type DaySchedule,
+  type ServiceDay,
+  type TransitMode,
+} from "@mvk/core";
 import { sql } from "@mvk/db";
 import type { Engine } from "./engine.ts";
 import type { TripInsights } from "./insights.ts";
@@ -18,12 +34,35 @@ const WALK_MPS = 1.25;
 const WALK_DETOUR = 1.3;
 const MAX_FOOTPATH_M = 450;
 const MAX_ACCESS_M = 700;
+/** a tervezett szakasz módja (az MVK API `mode` értékeivel egyezően; COACH, RAIL a regionális) */
+const LEG_MODE: Record<TransitMode, string> = { tram: "TRAM", bus: "BUS", coach: "COACH", rail: "RAIL" };
+
+/**
+ * Vágány / kocsiállás a felszállásnál: mára az élő (a MÁV táblájáról, a változással együtt),
+ * különben a menetrendi. Az állomást figyeltre tesszük, hogy a következő kérésre már élő legyen.
+ */
+function platformOf(engine: Engine, net: Net, tripId: string, stopId: string): { fromPlatform?: string } {
+  let live: string | null = null;
+  if (net.iso === engine.today && !isMvkId(stopId) && engine.regional) {
+    engine.regional.touch(stopId);
+    live = engine.regional.platform(tripId, stopId);
+  }
+  const p = live ?? net.day?.feed.stops.get(stopId)?.platform;
+  return p ? { fromPlatform: p } : {};
+}
+
+/** a vonatszám és a vonat neve a menet rövid nevéből („582 TOKAJ InterCity” → 582, TOKAJ) */
+function trainOf(tripShort: string): { trainNo?: string; trainName?: string } {
+  const t = trainParts(tripShort);
+  return { ...(t.no ? { trainNo: t.no } : {}), ...(t.name ? { trainName: t.name } : {}) };
+}
 const MIN_TRANSFER_S = 60;
 const MAX_ROUNDS = 4;
 const INF = 1e12;
 
 type PStop = { id: string; name: string; lat: number; lon: number };
-type PTrip = { id: string; routeId: string; short: string; long: string; color: string; text: string; type: string; headsign: string; dep: number[]; arr: number[] };
+/** `key`: a vonal kulcsa a statisztikában (MVK: a rövid név, máshol a vonal-azonosító); `mode`: a közlekedési mód */
+type PTrip = { id: string; routeId: string; short: string; key: string; mode: TransitMode; long: string; color: string; text: string; type: string; headsign: string; dep: number[]; arr: number[]; tripShort?: string };
 type Pattern = { stops: number[]; trips: PTrip[]; shapeId: string | null };
 type Net = {
   iso: string;
@@ -86,8 +125,8 @@ function netFromFeed(day: ServiceDay): Net {
     if (!p) byKey.set(key, (p = { stops: st.map((x) => idx(x.stopId)), trips: [], shapeId: t.shapeId || null }));
     const r = feed.routes.get(t.routeId);
     p.trips.push({
-      id: t.id, routeId: t.routeId, short: r?.short ?? t.routeId, long: r?.long ?? "", color: r?.color ?? "888888", text: r?.text ?? "FFFFFF",
-      type: r?.type ?? "3", headsign: t.headsign, dep: st.map((x) => x.dep), arr: st.map((x) => x.arr),
+      id: t.id, routeId: t.routeId, short: r?.short ?? t.routeId, key: r?.key ?? t.routeId, mode: modeOfRoute(t.routeId, r?.type ?? ""), long: r?.long ?? "", color: r?.color ?? "888888", text: r?.text ?? "FFFFFF",
+      type: r?.type ?? "3", headsign: t.headsign, dep: st.map((x) => x.dep), arr: st.map((x) => x.arr), ...(t.shortName ? { tripShort: t.shortName } : {}),
     });
   }
   return finishNet({ iso: day.iso, feedVersion: day.feed.version, source: "feed", fallback: day.fallback?.templateIso ?? null, stops, stopIdx, patterns: [...byKey.values()], day });
@@ -127,7 +166,7 @@ function netFromLegacy(iso: string, data: DaySchedule, fallback: string | null):
       let p = byKey.get(key);
       if (!p) byKey.set(key, (p = { stops: seq, trips: [], shapeId: null }));
       const r = table.route;
-      p.trips.push({ id: trip.tripId, routeId: r.id, short: r.short, long: r.long, color: r.color, text: r.text, type: r.type, headsign: trip.headsign, dep: times, arr: times });
+      p.trips.push({ id: trip.tripId, routeId: r.id, short: r.short, key: r.short, mode: modeOfRoute(r.id, r.type), long: r.long, color: r.color, text: r.text, type: r.type, headsign: trip.headsign, dep: times, arr: times });
     }
   }
   return finishNet({ iso, feedVersion: data.feedVersion, source: "legacy", fallback, stops, stopIdx, patterns: [...byKey.values()], day: null });
@@ -156,8 +195,11 @@ type Parent =
 
 type Endpoint = { stop: number; walk: number };
 
-/** `skip`: kihagyandó menetek (az MVK által ma kihúzottak — azokra nem tervezünk). */
-function raptor(net: Net, origins: Endpoint[], dests: Endpoint[], dep: number, skip: ReadonlySet<string> = new Set()) {
+/**
+ * `skip`: kihagyandó menetek (az MVK által ma kihúzottak — azokra nem tervezünk);
+ * `modes`: csak ezekkel a közlekedési módokkal (a felhasználó beállítása szerint).
+ */
+function raptor(net: Net, origins: Endpoint[], dests: Endpoint[], dep: number, skip: ReadonlySet<string> = new Set(), modes: ReadonlySet<TransitMode> | null = null) {
   const n = net.stops.length;
   const tau: Float64Array[] = Array.from({ length: MAX_ROUNDS + 1 }, () => new Float64Array(n).fill(INF));
   const parent: (Parent | null)[][] = Array.from({ length: MAX_ROUNDS + 1 }, () => new Array(n).fill(null));
@@ -207,7 +249,7 @@ function raptor(net: Net, origins: Endpoint[], dests: Endpoint[], dep: number, s
         if (prevArr < INF && (!trip || prevArr + (k > 1 ? MIN_TRANSFER_S : 0) <= trip.dep[i])) {
           const need = prevArr + (k > 1 ? MIN_TRANSFER_S : 0);
           let cand: PTrip | null = null;
-          for (const t of pat.trips) if (!skip.has(t.id) && t.dep[i] >= need && (!cand || t.dep[i] < cand.dep[i])) cand = t;
+          for (const t of pat.trips) if (!skip.has(t.id) && (!modes || modes.has(t.mode)) && t.dep[i] >= need && (!cand || t.dep[i] < cand.dep[i])) cand = t;
           if (cand && (!trip || cand.dep[i] < trip.dep[i])) {
             trip = cand;
             boardPos = i;
@@ -269,7 +311,8 @@ function raptor(net: Net, origins: Endpoint[], dests: Endpoint[], dep: number, s
 
 // ── lekérdezés ─────────────────────────────────────────────────────────
 
-export type PlanQuery = { from: string; to: string; at: number; arriveBy?: boolean; limit?: number };
+/** `modes`: a tervezésben használható módok (alapból csak az MVK, mint eddig) */
+export type PlanQuery = { from: string; to: string; at: number; arriveBy?: boolean; limit?: number; modes?: ReadonlySet<TransitMode> };
 
 function endpoints(net: Net, spec: string, maxWalk: number, lookup: (id: string) => { lat: number; lon: number; name: string } | null): { eps: Endpoint[]; point: { lat: number; lon: number; name: string } } | null {
   let lat: number;
@@ -313,7 +356,9 @@ export async function plan(engine: Engine, q: PlanQuery, insights?: TripInsights
   const midnight = localMidnightUnix(clock.iso);
   const limit = Math.max(1, Math.min(6, q.limit ?? 4));
   // a mai kihúzott menetekkel nem tervezünk (más napra nincs ilyen lista)
-  const skip: ReadonlySet<string> = net.iso === engine.today ? engine.cancelled.ids : new Set();
+  const skip: ReadonlySet<string> =
+    net.iso === engine.today ? (engine.regional?.cancelled.size ? new Set([...engine.cancelled.ids, ...engine.regional.cancelled]) : engine.cancelled.ids) : new Set();
+  const modes = q.modes ?? new Set(MVK_MODES);
 
   type J = ReturnType<typeof raptor>[number];
   const found = new Map<string, J & { dep: number }>();
@@ -322,7 +367,7 @@ export async function plan(engine: Engine, q: PlanQuery, insights?: TripInsights
   // Indulási időre: néhány egymást követő indulás elég. Érkezésire: a célidőig végigmegyünk.
   const more = (iter: number) => (q.arriveBy ? iter < 60 && t < target : iter < 16 && found.size < limit * 3);
   for (let iter = 0; more(iter); iter++) {
-    const js = raptor(net, o.eps, d.eps, t, skip);
+    const js = raptor(net, o.eps, d.eps, t, skip, modes);
     if (!js.length) break;
     let nextT = INF;
     for (const j of js) {
@@ -401,8 +446,14 @@ async function describe(engine: Engine, net: Net, j: ReturnType<typeof raptor>[n
       const shape = shapeSlice(net, L.trip.id, pat.stops.slice(L.board, L.alight + 1).map((s) => net.stops[s]));
       const info = mode === "past" ? await actual(iso, L.trip, a.id, b.id, dep, arr) : await predicted(engine, iso, L.trip, a.id, b.id, midnight + dep, mode);
       legs.push({
-        mode: L.trip.type === "900" || L.trip.type === "0" ? "TRAM" : "BUS",
+        mode: LEG_MODE[L.trip.mode],
         routeShortName: L.trip.short,
+        // v3: a vonal kulcsa, a menet neve (vasút: „5139 személyvonat”) és a vágány / kocsiállás
+        routeKey: L.trip.key,
+        ...(L.trip.tripShort ? { tripShortName: L.trip.tripShort } : {}),
+        // vonatnál a szám és a név külön (a csempén „IC 582”, mellette „TOKAJ”)
+        ...(L.trip.mode === "rail" && L.trip.tripShort ? trainOf(L.trip.tripShort) : {}),
+        ...platformOf(engine, net, L.trip.id, a.id),
         routeLongName: L.trip.long,
         routeColor: L.trip.color,
         routeTextColor: L.trip.text,
@@ -527,7 +578,7 @@ async function actual(iso: string, trip: PTrip, fromStop: string, toStop: string
     `SELECT stop_id, run_key, vehicle_id, extract(epoch FROM ts)::int AS arr, extract(epoch FROM dep_ts)::int AS dep, delay_s, sched_dep_s, src
        FROM stop_event WHERE service_date = $1 AND route_short = $2 AND
             ((stop_id = $3 AND abs(sched_dep_s - $4) <= 60) OR (stop_id = $5 AND abs(sched_arr_s - $6) <= 60))`,
-    [iso, trip.short, fromStop, depS, toStop, arrS],
+    [iso, trip.key, fromStop, depS, toStop, arrS],
   );
   const boardEv = ev.find((e) => e.stop_id === fromStop);
   const alightEv = ev.find((e) => e.stop_id === toStop && (!boardEv || e.run_key === boardEv.run_key));
@@ -579,7 +630,7 @@ async function historyDelay(route: string, stop: string, iso: string, unix: numb
 
 /** Jövő / most: várható késés a felszálláskor és a leszálláskor. */
 async function predicted(engine: Engine, iso: string, trip: PTrip, fromStop: string, toStop: string, depUnix: number, mode: Mode) {
-  const [hb, ha] = await Promise.all([historyDelay(trip.short, fromStop, iso, depUnix), historyDelay(trip.short, toStop, iso, depUnix)]);
+  const [hb, ha] = await Promise.all([historyDelay(trip.key, fromStop, iso, depUnix), historyDelay(trip.key, toStop, iso, depUnix)]);
   let live: number | null = null;
   let vehicleId: string | null = null;
   if (mode === "now" && iso === engine.today) {

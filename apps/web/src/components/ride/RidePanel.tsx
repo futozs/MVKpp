@@ -16,11 +16,9 @@ import { useTrafficAhead, type TrafficAhead } from "./useTrafficAhead";
 import { StopChoiceList } from "./StopChoiceList";
 import { turnDecision } from "@mvk/core/loops";
 import { serverNow, useServerClockVersion } from "@/lib/realtime";
+import { displayVehicleId, RIDE_PROXIMITY, rideModeOf, VEHICLE_WORDS } from "@/lib/modes";
 
-/** az indulás pillanatában ennyire lehet a telefon a busztól, hogy vele maradt (m) */
-const WITH_BUS_M = 200;
-/** ennél messzebb a busztól a telefon már nincs rajta (m) */
-const AWAY_M = 300;
+// A telefon és a jármű távolságai módonként (vonatnál tágabbak): lásd RIDE_PROXIMITY.
 /** a telefon helye ennyi ideig számít frissnek (ms) */
 const FRESH_POS_MS = 60_000;
 /** „Felszálltam” után ennyi ideig a telefon helye még a felszállás helye (mp) */
@@ -62,6 +60,8 @@ export function RidePanel({
   onRefollow: () => void;
 }) {
   const trip = useTripLive(ride.tripId, ride.serviceDate);
+  // vonatnál a csempén a vonatszám is („Sz 5169”), mint a térképen
+  const trainNo = rideModeOf(ride.vehicleId, ride.tripId) === "rail" ? (/^\d+/.exec(trip?.tripShort ?? "")?.[0] ?? null) : null;
   const turn = ride.turn ?? null;
   const cont = useContinuation(ride.tripId, ride.vehicleId, Boolean(turn));
   // Fordulás közben a busz már a következő menetén van: a helyét a folytatás adja.
@@ -69,6 +69,11 @@ export function RidePanel({
   const vLat = live?.lat ?? null;
   const vLon = live?.lon ?? null;
   const busPos = useMemo(() => (vLat != null && vLon != null ? { lat: vLat, lon: vLon } : null), [vLat, vLon]);
+  // „Vele maradt” / „már nincs rajta” / „a megállóban áll” — módonként (a vonat hosszú, a jele késik)
+  const px = RIDE_PROXIMITY[rideModeOf(ride.vehicleId, ride.tripId)];
+  const withBusM = px.withBus;
+  const awayM = px.away;
+  const words = VEHICLE_WORDS[rideModeOf(ride.vehicleId, ride.tripId)];
   const reduce = useReducedMotion();
   const [collapsed, setCollapsed] = useState(false);
   const [picker, setPicker] = useState<Picker | null>(null);
@@ -76,9 +81,9 @@ export function RidePanel({
   const passed = trip?.run?.lastStopIdx ?? -1;
   const times = useMemo(() => stopTimes(trip?.events ?? []), [trip?.events]);
   const fresh = position && Date.now() - position.at <= FRESH_POS_MS ? position : null;
-  const away = Boolean(fresh && busPos && distM(fresh, busPos) > AWAY_M);
+  const away = Boolean(fresh && busPos && distM(fresh, busPos) > awayM);
   // ahol a busz most tart (ha a megállóban áll, az már az a megálló)
-  const cur = trip ? currentStopIdx(trip.stops, passed, busPos) : 0;
+  const cur = trip ? currentStopIdx(trip.stops, passed, busPos, px.atStop) : 0;
   const fromIdx = ride.fromIdx ?? 0;
   // Az időn múló döntések (későn észrevett végállomás, órák óta le nem zárt utazás) a szerver
   // órájával: a készüléké eltérhet, a kapcsolódásig csak az ismert.
@@ -95,7 +100,7 @@ export function RidePanel({
   useEffect(() => {
     if (!trip || ride.fromIdx != null || !trip.stops.length) return;
     const justBoarded = serverNow() - ride.boardedAt <= BOARD_POS_S;
-    const phoneNearBus = position && (!busPos || distM(position, busPos) <= AWAY_M);
+    const phoneNearBus = position && (!busPos || distM(position, busPos) <= awayM);
     const spot = ride.boardNear ?? (justBoarded && phoneNearBus ? { lat: position.lat, lon: position.lon } : null);
     const idx = guessBoardIdx(trip.stops, passed, spot, busPos);
     // A busz még ott áll (nincs indulási esemény): a felszállás ideje a gombnyomásé.
@@ -107,7 +112,7 @@ export function RidePanel({
   // Amikor a telefon a busszal van: megjegyezzük, meddig jutott vele (bezárt app után is) —
   // ennél korábban biztosan nem szállt le.
   useEffect(() => {
-    if (turn || !position || !busPos || distM(position, busPos) > WITH_BUS_M) return;
+    if (turn || !position || !busPos || distM(position, busPos) > withBusM) return;
     if (ride.withBus?.passed === passed) return;
     patchActiveRide({ withBus: { passed, at: Math.round(serverNow()) } });
   }, [turn, position, busPos, passed, ride.withBus?.passed]);
@@ -150,7 +155,7 @@ export function RidePanel({
   // Körbeutazás: a végállomáson a busz a következő menettel folytatja.
   useEffect(() => {
     if (!turn || !trip) return;
-    const withBus = position && busPos ? distM(position, busPos) <= WITH_BUS_M : null;
+    const withBus = position && busPos ? distM(position, busPos) <= withBusM : null;
     const decision = turnDecision(turn, cont, Math.round(serverNow()), withBus);
     if (decision === "alight") finish(turn.atIdx, turn.stay === false ? "user" : "terminus", turn.arrivedAt);
     else if (decision === "continue" && cont?.next) chainNext(ride, trip, times, turn, cont.next);
@@ -197,7 +202,7 @@ export function RidePanel({
     if (turn) return finish(turn.atIdx, "user", turn.arrivedAt);
     // A telefon már messze a busztól: korábban szállt le — megkérdezzük, hol.
     if (away) return setPicker("to");
-    finish(Math.max(currentStopIdx(trip.stops, passed, fresh ?? busPos), fromIdx), "user", Math.round(serverNow()));
+    finish(Math.max(currentStopIdx(trip.stops, passed, fresh ?? busPos, px.atStop), fromIdx), "user", Math.round(serverNow()));
   };
 
   const alightSuggest = trip ? guessAlightIdx(trip.stops, fromIdx, passed, fresh, ride.withBus?.passed ?? null) : null;
@@ -212,7 +217,7 @@ export function RidePanel({
       className="absolute inset-x-0 bottom-0 z-drawer flex max-h-[70dvh] flex-col overflow-hidden border-t border-border bg-card shadow-xl md:inset-x-auto md:bottom-4 md:right-4 md:max-h-[calc(100%-2rem)] md:w-[400px] md:rounded-xl md:border"
     >
       <header className="flex items-start gap-3 px-4 pb-3 pt-3.5">
-        <RouteTile short={ride.route} color={ride.color} text={ride.text} size="lg" />
+        <RouteTile short={trainNo ? `${ride.route} ${trainNo}` : ride.route} color={ride.color} text={ride.text} size="lg" />
         <div className="min-w-0 flex-1">
           {(ride.leg ?? 1) > 1 ? (
             <p className="mb-0.5 flex items-center gap-1 text-[10.5px] font-semibold uppercase tracking-wide text-primary">
@@ -221,7 +226,7 @@ export function RidePanel({
           ) : null}
           <p className="truncate text-sm font-bold tracking-tight">{ride.headsign}</p>
           <p className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs">
-            <span className="rounded bg-primary/15 px-1.5 py-0.5 font-mono font-bold text-primary">{ride.vehicleId}</span>
+            <span className="rounded bg-primary/15 px-1.5 py-0.5 font-mono font-bold text-primary">{displayVehicleId(ride.vehicleId)}</span>
             <span className="text-muted-foreground">most</span>
             <span className={cn("font-mono font-semibold", delayTone(trip?.delayS))}>{trip ? delayLabel(trip.delayS) : "…"}</span>
             {trip?.vehicle?.speed != null ? <span className="font-mono text-muted-foreground">{Math.round(trip.vehicle.speed * 3.6)} km/h</span> : null}
@@ -242,7 +247,7 @@ export function RidePanel({
         </div>
         <div className="flex shrink-0 gap-1">
           {following ? null : (
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onRefollow} aria-label="A buszom a térképen" title="A buszom a térképen">
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onRefollow} aria-label={`A ${words.om} a térképen`} title={`A ${words.om} a térképen`}>
               <Crosshair />
             </Button>
           )}
@@ -350,7 +355,7 @@ export function RidePanel({
                 // a térkép se kövesse tovább a téves buszt
                 onCancel?.();
               }}
-              title="Mégsem ezen a buszon vagyok"
+              title={`Mégsem ezen a ${words.on} vagyok`}
             >
               <X /> Mégse
             </Button>

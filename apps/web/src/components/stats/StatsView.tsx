@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   Bus,
@@ -6,6 +6,7 @@ import {
   MapPinned,
   Route as RouteIcon,
   Wrench,
+  TrainFront,
   TrendingUp,
   type LucideIcon,
 } from "lucide-react";
@@ -17,7 +18,9 @@ import { RoutePanel } from "./RoutePanel";
 import { StopPanel } from "./StopPanel";
 import { NetworkPanel } from "./NetworkPanel";
 import { HeatPanel } from "./HeatPanel";
+import { RegionalPanel } from "./RegionalPanel";
 import { cn } from "@/lib/utils";
+import { hasRegional, isRegionalId, useEnabledModes } from "@/lib/modes";
 
 type PanelId =
   | "overview"
@@ -26,7 +29,8 @@ type PanelId =
   | "route"
   | "stop"
   | "network"
-  | "heat";
+  | "heat"
+  | "regional";
 
 const OVERVIEW_PANEL: { id: PanelId; label: string; short: string; icon: LucideIcon } = {
   id: "overview",
@@ -49,6 +53,9 @@ const PANELS: {
   { id: "heat", label: "Hőtérkép", short: "Hőtérkép", icon: Flame },
 ];
 
+/** a Volán és a vasút saját panele — csak ha legalább az egyik be van kapcsolva */
+const REGIONAL_PANEL = { id: "regional" as PanelId, label: "Vasút és Volán", short: "Vasút", icon: TrainFront };
+
 export function StatsView({
   stops,
   routes,
@@ -66,6 +73,15 @@ export function StatsView({
 }) {
   const [panel, setPanel] = useState<PanelId>(() => (liveIncidents ? "incident" : "vehicle"));
   const navRef = useRef<HTMLUListElement>(null);
+  const modes = useEnabledModes();
+  const regional = hasRegional(modes);
+  const panels = regional ? [...PANELS, REGIONAL_PANEL] : PANELS;
+  // az üzemzavar és a hőtérkép az MVK hálózatáé (a regionálisra nincs ilyen mérés)
+  const mvkRoutes = useMemo(() => routes.filter((r) => !isRegionalId(r.id)), [routes]);
+  // a kikapcsolt regionális módnál ne maradjon a panelen
+  useEffect(() => {
+    if (!regional && panel === "regional") setPanel("vehicle");
+  }, [regional, panel]);
 
   useEffect(() => {
     navRef.current
@@ -87,7 +103,7 @@ export function StatsView({
             "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
           )}
         >
-          {PANELS.map((p) => {
+          {panels.map((p) => {
             const Icon = p.icon;
             const active = panel === p.id;
             return (
@@ -138,13 +154,14 @@ export function StatsView({
             <OverviewPanel onJumpToVehicles={() => setPanel("vehicle")} />
           )}
           {panel === "vehicle" && (
-            <VehiclePanel onFocusVehicle={onFocusVehicle} />
+            <VehiclePanel onFocusVehicle={onFocusVehicle} routes={routes} />
           )}
-          {panel === "incident" && <IncidentPanel routes={routes} onOpenDisruptions={onOpenDisruptions} />}
+          {panel === "incident" && <IncidentPanel routes={mvkRoutes} onOpenDisruptions={onOpenDisruptions} />}
           {panel === "route" && <RoutePanel routes={routes} />}
           {panel === "stop" && <StopPanel stops={stops} />}
           {panel === "network" && <NetworkPanel />}
-          {panel === "heat" && <HeatPanel routes={routes} />}
+          {panel === "heat" && <HeatPanel routes={mvkRoutes} />}
+          {panel === "regional" && regional && <RegionalPanel modes={modes} />}
         </div>
       </div>
     </div>

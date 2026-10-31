@@ -10,6 +10,10 @@
 import {
   arrivalsForStop,
   fastDistM,
+  isMvkId,
+  MVK_MODES,
+  onlyMvk,
+  type TransitMode,
   localMidnightUnix,
   nowUnix,
   spreadOf,
@@ -198,19 +202,29 @@ export class TripInsights {
   }
 
   /** A megállótáblák közös kiegészítői (WS, v2 kompatibilis végpontok, push). */
-  extras(now = nowUnix()): ArrivalExtras {
+  /**
+   * A megállótábla kiegészítői. `modes`: csak ezek a közlekedési módok (a v2 alapból
+   * csak MVK); `rich`: az MVK-sorok is kapják a v3-mezőket (mód, vonal-kulcs).
+   */
+  extras(now = nowUnix(), modes?: ReadonlySet<TransitMode>, rich = false): ArrivalExtras {
+    const rt = this.engine.regional;
+    const cancelled = rt?.cancelled.size ? new Set([...this.engine.cancelled.ids, ...rt.cancelled]) : this.engine.cancelled.ids;
     return {
       measuredDelay: (t) => this.engine.matcher.liveDelay(t, now),
       forecast: (t, s) => this.forecast(t, s, now),
       predictedVehicle: (t) => this.predictor.predict(t),
-      cancelled: this.engine.cancelled.ids,
+      cancelled,
       startRisk: (t) => this.startRisk(t, now),
       trafficAhead: (t, s) => this.trafficAhead(t, s, now),
+      modes,
+      rich,
+      ...(rt ? { platform: (t: string, s: string) => rt.platform(t, s), notices: (t: string) => rt.noticesOf(t) } : {}),
     };
   }
 
   /** Egy megálló táblája a közös kiegészítőkkel. */
-  arrivals(stopId: string, limit: number, now = nowUnix()) {
-    return arrivalsForStop(stopId, limit, this.engine.snapshot, this.engine.feeds.arrivalDays(now), now, this.extras(now));
+  arrivals(stopId: string, limit: number, now = nowUnix(), modes: ReadonlySet<TransitMode> = new Set(MVK_MODES), rich = false) {
+    if (!isMvkId(stopId) || !onlyMvk(modes)) this.engine.regional?.touch(stopId);
+    return arrivalsForStop(stopId, limit, this.engine.snapshot, this.engine.feeds.arrivalDays(now), now, this.extras(now, modes, rich));
   }
 }

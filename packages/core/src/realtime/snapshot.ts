@@ -9,6 +9,9 @@ import GtfsRealtimeBindings from "gtfs-realtime-bindings";
 import type { ServiceDay } from "../gtfs/service.ts";
 import { resolveTripNear } from "../gtfs/service.ts";
 import { localMidnightUnix } from "../time.ts";
+import { isMvkId, modeOfRoute, stationKeyOf } from "../transit/modes.ts";
+import type { RtVehicle } from "../transit/otp2Realtime.ts";
+import { isRailTrip, trainParts } from "../transit/regionalGtfs.ts";
 import type { DecodedVehicle, LiveVeh, RealtimeSnapshot, StopPrediction } from "./types.ts";
 
 const { transit_realtime } = GtfsRealtimeBindings;
@@ -32,6 +35,17 @@ export type DecodeInput = {
   rtError?: string | null;
   /** a lekérés ideje (unix): ugyanaz a menetazonosító több napon is él, ehhez a legközelebbi */
   now?: number;
+  /**
+   * További járművek a MÁV+ OTP2-ből: a Volán és a vasút, illetve tartalék
+   * üzemben az MVK is. Valódi UTC időbélyeggel; a natív MVK-jármű elsőbbséget élvez.
+   */
+  extra?: RtVehicle[];
+  /**
+   * Jármű nélküli előrejelzések (a MÁV+ állomástábláiból: a még el nem indult vonat
+   * késése; tartalék üzemben az MVK-menetek megállónkénti ideje). `exact`: csak arra a
+   * megállóra; különben a menet hátralévő megállóira is.
+   */
+  extraPreds?: { tripId: string; stopId: string; delay: number; exact?: boolean }[];
 };
 
 /** A menet a `now`-hoz időben legközelebbi napon (03:00 után a még futó éjszakai menet a tegnapi napé). */
@@ -41,7 +55,7 @@ function resolveIn(days: ServiceDay[], rtTripId: string, now: number | null) {
     rtTripId,
     now,
   );
-  return hit ? { trip: hit.trip, day: hit.dc.day } : null;
+  return hit ? { trip: hit.trip, day: hit.dc.day, midnightUnix: hit.dc.midnightUnix } : null;
 }
 
 export function buildSnapshot(input: DecodeInput): RealtimeSnapshot {
@@ -88,6 +102,51 @@ export function buildSnapshot(input: DecodeInput): RealtimeSnapshot {
     }
   }
 
+  const seenIds = new Set(decoded.map((v) => v.id));
+  /** tripId → (megálló-index, késés, nap) a tartalék / regionális előrejelzéshez */
+  const extraDelays: { tripId: string; stopId: string; delay: number; feed: ServiceDay["feed"]; midnightUnix: number }[] = [];
+  for (const v of input.extra ?? []) {
+    if (seenIds.has(v.id)) continue;
+    seenIds.add(v.id);
+    const hit = v.rtTripId ? resolveIn(input.days, v.rtTripId, input.now ?? null) : null;
+    const feedOf = hit?.day.feed ?? primary?.feed;
+    const routeId = hit?.trip.routeId ?? v.routeId;
+    const r = feedOf?.routes.get(routeId);
+    const mvk = isMvkId(v.id);
+    const mode = modeOfRoute(routeId, r?.type ?? "");
+    const tp = hit && isRailTrip(hit.trip) ? trainParts(hit.trip.shortName) : null;
+    const item: DecodedVehicle = {
+      id: v.id,
+      // A natív MVK-feedben a label a jármű fajtája; a rendszám külön mezőben jön.
+      label: mvk ? (mode === "tram" ? "TRAM" : "BUS") : v.label,
+      routeId,
+      routeShort: r?.short || routeId,
+      routeColor: r?.color || "888888",
+      routeText: r?.text || "FFFFFF",
+      headsign: hit?.trip.headsign || "",
+      lat: v.lat,
+      lon: v.lon,
+      bearing: v.bearing,
+      speed: v.speed,
+      tripId: hit?.trip.id ?? v.rtTripId,
+      // A v2-mező helyi időt hordoz unixként (mint az MVK feedje) — a fogyasztók levonják az eltolást.
+      timestamp: v.ts + input.offset,
+      mode,
+      routeKey: r?.key ?? routeId,
+      source: "otp2",
+      delaySec: v.delayS,
+      ...(v.label ? { plate: v.label } : {}),
+      ...(tp?.no ? { trainNo: tp.no } : {}),
+      ...(tp?.name ? { trainName: tp.name } : {}),
+      ...(v.estimated ? { estimated: true } : {}),
+    };
+    decoded.push(item);
+    vehicles.push({ id: item.id, lat: v.lat, lon: v.lon, bearing: v.bearing, speed: v.speed, routeId, tripId: item.tripId });
+    if (hit && v.delayS != null && v.nextStopId) {
+      extraDelays.push({ tripId: hit.trip.id, stopId: v.nextStopId, delay: v.delayS, feed: hit.day.feed, midnightUnix: hit.midnightUnix });
+    }
+  }
+
   const predByStop = new Map<string, Map<string, StopPrediction>>();
   let updatesHeaderTs = 0;
   let updatesCount = 0;
@@ -122,6 +181,39 @@ export function buildSnapshot(input: DecodeInput): RealtimeSnapshot {
         if (!byTrip) predByStop.set(stopId, (byTrip = new Map()));
         byTrip.set(tripId, { unix, delay });
       }
+    }
+  }
+
+  // Jármű nélküli előrejelzések: a pontos (megállónkénti) értékek előbb, a vetítettek csak a hézagokba.
+  const preds = [...(input.extraPreds ?? [])].sort((a, b) => Number(Boolean(b.exact)) - Number(Boolean(a.exact)));
+  for (const p of preds) {
+    const hit = resolveIn(input.days, p.tripId, input.now ?? null);
+    if (!hit) continue;
+    if (p.exact) {
+      const s = hit.day.feed.tripStops.get(hit.trip.id)?.find((x) => x.stopId === p.stopId || stationKeyOf(x.stopId) === stationKeyOf(p.stopId));
+      if (!s) continue;
+      let byTrip = predByStop.get(s.stopId);
+      if (byTrip?.has(hit.trip.id)) continue;
+      if (!byTrip) predByStop.set(s.stopId, (byTrip = new Map()));
+      byTrip.set(hit.trip.id, { unix: hit.midnightUnix + s.dep + p.delay, delay: p.delay });
+    } else extraDelays.push({ tripId: hit.trip.id, stopId: p.stopId, delay: p.delay, feed: hit.day.feed, midnightUnix: hit.midnightUnix });
+  }
+
+  // Tartalék / regionális előrejelzés: a következő megállóban mért hivatalos késés a menet hátralévő
+  // megállóira (az OTP2 maga is így vetíti előre; a natív MVK-előrejelzés elsőbbséget élvez).
+  for (const d of extraDelays) {
+    const sched = d.feed.tripStops.get(d.tripId);
+    if (!sched) continue;
+    // A MÁV+ a vágány-megállót adja (…_3), a menetrend az állomásszintűt (…_0): az állomás kulcsán párosítunk.
+    let from = sched.findIndex((x) => x.stopId === d.stopId);
+    if (from < 0) from = sched.findIndex((x) => stationKeyOf(x.stopId) === stationKeyOf(d.stopId));
+    if (from < 0) continue;
+    for (let i = from; i < sched.length; i++) {
+      const s = sched[i];
+      let byTrip = predByStop.get(s.stopId);
+      if (byTrip?.has(d.tripId)) continue;
+      if (!byTrip) predByStop.set(s.stopId, (byTrip = new Map()));
+      byTrip.set(d.tripId, { unix: d.midnightUnix + s.dep + d.delay, delay: d.delay });
     }
   }
 

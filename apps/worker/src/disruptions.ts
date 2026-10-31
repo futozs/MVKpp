@@ -8,7 +8,19 @@
  * Menetenként a pótló indulás (ugyanaz a vonal és irány, ugyanonnan) és — ha
  * a kliens megadja a közelében lévő megállókat — hogy ott mikor állt volna meg.
  */
-import { findMissingTrips, isOnDemandTrip, localMidnightUnix, MISSING, nowUnix, secToHm, type MissingCandidate, type MissingRun, type ServiceDay, type StartRisk } from "@mvk/core";
+import {
+  findMissingTrips,
+  isMvkId,
+  isOnDemandTrip,
+  localMidnightUnix,
+  MISSING,
+  type MissingCandidate,
+  type MissingRun,
+  nowUnix,
+  secToHm,
+  type ServiceDay,
+  type StartRisk,
+} from "@mvk/core";
 import type { Engine } from "./engine.ts";
 import type { TripInsights } from "./insights.ts";
 import type { VehiclePredictor } from "./predict.ts";
@@ -50,7 +62,8 @@ export function liveMissing(engine: Engine, day: ServiceDay, now: number) {
   const nowS = now - localMidnightUnix(engine.today);
   const candidates: MissingCandidate[] = [];
   for (const t of day.feed.trips.values()) {
-    if (!day.services.has(t.serviceId) || engine.todayRuns.has(t.id) || engine.cancelled.ids.has(t.id)) continue;
+    // a kimaradás-észlelés az MVK-é (a regionális törlést a MÁV+ hivatalosan jelzi)
+    if (!isMvkId(t.id) || !day.services.has(t.serviceId) || engine.todayRuns.has(t.id) || engine.cancelled.ids.has(t.id)) continue;
     const st = day.feed.tripStops.get(t.id);
     const from = st?.length ? day.feed.stops.get(st[0].stopId) : undefined;
     if (!st || !from || nowS - st[0].dep < MISSING.MIN_LATE_S || nowS - st[0].dep > MISSING.MAX_LATE_S) continue;
@@ -82,7 +95,7 @@ function atRiskTrips(engine: Engine, insights: TripInsights, day: ServiceDay, no
   const feed = day.feed;
   const out: AtRiskTrip[] = [];
   for (const t of feed.trips.values()) {
-    if (!day.services.has(t.serviceId) || skip.has(t.id)) continue;
+    if (!isMvkId(t.id) || !day.services.has(t.serviceId) || skip.has(t.id)) continue;
     const st = feed.tripStops.get(t.id);
     if (!st?.length) continue;
     const dep = st[0].dep;
@@ -139,7 +152,7 @@ export function disruptions(engine: Engine, predictor: VehiclePredictor, day: Se
   };
   if (engine.poll.lastOkAt) {
     for (const t of feed.trips.values()) {
-      if (kinds.has(t.id) || !day.services.has(t.serviceId) || engine.todayRuns.has(t.id) || isOnDemandTrip(t.headsign)) continue;
+      if (!isMvkId(t.id) || kinds.has(t.id) || !day.services.has(t.serviceId) || engine.todayRuns.has(t.id) || isOnDemandTrip(t.headsign)) continue;
       const st = feed.tripStops.get(t.id);
       if (!st?.length) continue;
       const dep = st[0].dep;
@@ -158,7 +171,7 @@ export function disruptions(engine: Engine, predictor: VehiclePredictor, day: Se
   // Pótló indulás: ugyanazon a vonalon, irányban, ugyanabból a megállóból a következő, ami nem esik ki.
   const departures = new Map<string, { tripId: string; dep: number }[]>();
   for (const t of feed.trips.values()) {
-    if (!day.services.has(t.serviceId)) continue;
+    if (!isMvkId(t.id) || !day.services.has(t.serviceId)) continue;
     const st = feed.tripStops.get(t.id);
     if (!st?.length) continue;
     const key = `${t.routeId}|${t.dir}|${st[0].stopId}`;

@@ -1,5 +1,6 @@
 import { API_BASE } from "@/lib/apiBase";
 import { getNotificationSettings } from "@/lib/notifications";
+import { modesParam } from "@/lib/modes";
 
 const log = (...args: unknown[]) => console.log("[push]", ...args);
 
@@ -122,7 +123,8 @@ export async function registerPushWatch(
     const res = await fetch(`${API_BASE}/push/watch`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ subscription: result.sub.toJSON(), ...config }),
+      // a figyelés a bekapcsolt módokat nézi (Volán, vonat is) — ahogy a megállótábla
+      body: JSON.stringify({ subscription: result.sub.toJSON(), ...config, params: { modes: modesParam(), ...config.params } }),
     });
     if (!res.ok) {
       const text = await res.text().catch(() => "");

@@ -4,7 +4,25 @@
  * meglévő mező nem tűnik el és nem változik a típusa.
  */
 import { cacheStatus, cached } from "@mvk/cache";
-import { arrivalsForStop, isPlausibleIso, nowUnix, progressOnTrip, secToHm, serviceClock, tripStopRows, type ServiceDay } from "@mvk/core";
+import {
+  arrivalsForStop,
+  type DecodedVehicle,
+  type Feed,
+  isMvkId,
+  isPlausibleIso,
+  modeOfRoute,
+  nowUnix,
+  onlyMvk,
+  operatorLabel,
+  parseModes,
+  progressOnTrip,
+  secToHm,
+  serviceClock,
+  stopAllowed,
+  type TransitMode,
+  tripStopRows,
+  type ServiceDay,
+} from "@mvk/core";
 import { sql } from "@mvk/db";
 import { safeEqual, verifyAgentRequest } from "@mvk/db/crypto";
 import { config } from "../config.ts";
@@ -18,6 +36,8 @@ import type { NewsSource } from "../news.ts";
 import type { TrafficMonitor } from "../traffic.ts";
 import type { Parking } from "../parking.ts";
 import type { VehiclePredictor } from "../predict.ts";
+import type { RegionalFeeds } from "../regional/feeds.ts";
+import type { RegionalRealtime } from "../regional/realtime.ts";
 import { archiveRange, routeIndexFor, tableFor } from "../schedule.ts";
 import { currentJwt, ingestToken, lastRenewInfo, renewToken, tokenRejectedRecently, tokenStatus } from "../token.ts";
 import { errMsg, log } from "../log.ts";
@@ -34,9 +54,36 @@ export type Ctx = {
   insights: TripInsights;
   motion: MotionPredictor;
   news: NewsSource;
+  regionalFeeds: RegionalFeeds;
+  regionalRt: RegionalRealtime;
   startedAt: number;
   hubStats: () => unknown;
 };
+
+/**
+ * `?modes=tram,bus,coach,rail` — a v2-végpontok opcionális paramétere. Nélküle a
+ * válasz pontosan az, ami eddig (csak MVK: az iOS app ezt kapja); vele a Volán
+ * és a vasút is jön, ugyanabban az alakban, néhány új mezővel.
+ */
+/** A v3-ban jött többletmezők (MÁV+): a v2-válaszban nincsenek (az iOS app a régi alakot olvassa). */
+const V3_VEHICLE_KEYS = ["mode", "routeKey", "plate", "trainNo", "trainName", "delaySec", "estimated", "source"] as const;
+
+function v2Vehicle(v: DecodedVehicle): DecodedVehicle {
+  if (!V3_VEHICLE_KEYS.some((k) => k in v)) return v;
+  const out = { ...v };
+  for (const k of V3_VEHICLE_KEYS) delete out[k];
+  return out;
+}
+
+export function modesOf(req: Req): { modes: Set<TransitMode>; rich: boolean } {
+  const raw = req.query.get("modes");
+  return { modes: parseModes(raw), rich: raw != null && raw !== "" };
+}
+
+/** Egy jármű módja (a natív MVK-jármű nem hordozza, a vonalából derül ki). */
+export function vehicleMode(v: DecodedVehicle, feed: Feed | null | undefined): TransitMode {
+  return v.mode ?? modeOfRoute(v.routeId, feed?.routes.get(v.routeId)?.type ?? "");
+}
 
 const ymdRe = /^\d{8}$/;
 const isoOfYmd = (ymd: string) => `${ymd.slice(0, 4)}-${ymd.slice(4, 6)}-${ymd.slice(6, 8)}`;
@@ -71,14 +118,24 @@ function dateParam(req: Req, fallbackYmd: string): string {
 
 export function registerCompat(r: Router, ctx: Ctx) {
   const { engine, feeds, predictor } = ctx;
-  const extras = () => ctx.insights.extras(nowUnix());
   const today = () => engine.feeds.cachedDay(engine.today);
+  /** a mai összefésült feed (MVK + regionális), ha még nincs, az MVK legfrissebbje */
+  const catalogFeed = () => today()?.feed ?? feeds.latest();
+  const vehiclesFor = (req: Req) => {
+    const { modes, rich } = modesOf(req);
+    const feed = catalogFeed();
+    // ?modes= nélkül a v2-alak: tartalék üzemben se kerüljenek bele a MÁV+ többletmezői
+    // (a menetrendből becsült, nem GPS-es helyzet sem: a v2 csak mért pozíciót ad)
+    if (!rich) return engine.snapshot.decoded.filter((v) => isMvkId(v.id) && !v.estimated).map(v2Vehicle);
+    if (onlyMvk(modes) && modes.has("tram") && modes.has("bus")) return engine.snapshot.decoded.filter((v) => isMvkId(v.id));
+    return engine.snapshot.decoded.filter((v) => modes.has(vehicleMode(v, feed)));
+  };
 
   // ── élő adatok ────────────────────────────────────────────────────────
   r.get("/live/positions", (req, res) => {
     const s = engine.snapshot;
     if (!s.fetchedAt) throw new HttpError(502, s.rtError ?? "get-positions nem elérhető");
-    sendJson(req, res, 200, { header: s.header, vehicles: s.decoded }, { "cache-control": "no-store" });
+    sendJson(req, res, 200, { header: s.header, vehicles: vehiclesFor(req), ...(modesOf(req).rich ? { source: s.source ?? null, regionalAt: s.regionalAt || null } : {}) }, { "cache-control": "no-store" });
   });
 
   r.get("/live/updates", (req, res) => {
@@ -89,18 +146,21 @@ export function registerCompat(r: Router, ctx: Ctx) {
   r.get("/live/vehicle", (req, res) => {
     const q = (req.query.get("id") || "").trim().toLowerCase();
     if (!q) throw new HttpError(400, "hiányzó ?id=");
-    const all = engine.snapshot.decoded.filter((v) => v.lat != null);
-    const exact = all.filter((v) => v.id.toLowerCase() === q);
-    const hits = exact.length ? exact : all.filter((v) => v.id.toLowerCase().includes(q));
+    // A rendszámra is keres (a Volán-buszok azonosítója `hkir:hkir_LWA387`, a rendszám `LWA387`).
+    const all = vehiclesFor(req).filter((v) => v.lat != null);
+    const keys = (v: DecodedVehicle) => [v.id.toLowerCase(), (v.plate ?? "").toLowerCase(), (v.trainNo ?? "").toLowerCase()].filter(Boolean);
+    const exact = all.filter((v) => keys(v).includes(q));
+    const hits = exact.length ? exact : all.filter((v) => keys(v).some((k) => k.includes(q)));
     sendJson(req, res, 200, { query: q, inService: hits.length > 0, count: hits.length, vehicles: hits });
   });
 
   r.get("/live/arrivals", (req, res) => {
     const stop = req.query.get("stop");
     if (!stop) throw new HttpError(400, "hiányzó ?stop=SP...");
-    const limit = Math.min(20, Math.max(1, Number(req.query.get("limit") ?? 10) || 10));
-    const now = nowUnix();
-    sendJson(req, res, 200, arrivalsForStop(stop, limit, engine.snapshot, feeds.arrivalDays(now), now, extras()), { "cache-control": "no-store" });
+    const { modes, rich } = modesOf(req);
+    // egy állomás (pl. Tiszai pu.) táblája hosszabb lehet
+    const limit = Math.min(rich ? 30 : 20, Math.max(1, Number(req.query.get("limit") ?? 10) || 10));
+    sendJson(req, res, 200, ctx.insights.arrivals(stop, limit, nowUnix(), modes, rich), { "cache-control": "no-store" });
   });
 
   r.get("/live/multi-arrivals", (req, res) => {
@@ -109,7 +169,9 @@ export function registerCompat(r: Router, ctx: Ctx) {
     const limit = Math.min(10, Math.max(1, Number(req.query.get("limit") ?? 5) || 5));
     const now = nowUnix();
     const days = feeds.arrivalDays(now);
-    const ex = extras();
+    const { modes, rich } = modesOf(req);
+    const ex = ctx.insights.extras(now, modes, rich);
+    for (const id of list) if (!isMvkId(id) || !onlyMvk(modes)) ctx.regionalRt.touch(id);
     sendJson(req, res, 200, { results: list.map((id) => arrivalsForStop(id, limit, engine.snapshot, days, now, ex)) });
   });
 
@@ -152,6 +214,9 @@ export function registerCompat(r: Router, ctx: Ctx) {
     const rt = tr ? feed!.routes.get(tr.routeId) : undefined;
     const shape = tr?.shapeId ? (feed!.shapes.get(tr.shapeId)?.points ?? []) : [];
     const prog = veh && feed ? progressOnTrip(feed, tripId, veh, serviceClock().secOfDay) : null;
+    // a regionális járműhöz a mód, a rendszám és a vonatszám is (az MVK-é változatlan, a v2-alak)
+    const full = veh && !isMvkId(veh.id) ? engine.snapshot.decoded.find((d) => d.id === veh!.id) : undefined;
+    const vehicle = veh && full ? { ...veh, mode: full.mode, ...(full.plate ? { plate: full.plate } : {}), ...(full.trainNo ? { trainNo: full.trainNo } : {}), ...(full.trainName ? { trainName: full.trainName } : {}) } : veh;
     sendJson(req, res, 200, {
       trip: tripId,
       route: rt?.short || tr?.routeId || "",
@@ -159,7 +224,7 @@ export function registerCompat(r: Router, ctx: Ctx) {
       text: rt?.text || "FFFFFF",
       headsign: tr?.headsign || "",
       shape,
-      vehicle: veh,
+      vehicle,
       nextStop: prog?.nextStop ?? null,
       scheduleDeviationSec: prog?.scheduleDeviationSec ?? null,
       measuredDelaySec: tripId ? engine.matcher.liveDelay(tripId, nowUnix()) : null,
@@ -174,14 +239,17 @@ export function registerCompat(r: Router, ctx: Ctx) {
     const rowOf = (id: string) => cancelledRow(day, id);
     const sortRows = (rows: ReturnType<typeof rowOf>[]) =>
       rows.sort((a, b) => (a.departureSec ?? Infinity) - (b.departureSec ?? Infinity) || a.tripId.localeCompare(b.tripId));
+    const { modes } = modesOf(req);
+    // a regionális (Volán, vasút) törlések csak kérésre — a v2 alapválasza az MVK-é
+    const keep = (id: string) => (isMvkId(id) ? modes.has("bus") || modes.has("tram") : modes.has(id.startsWith("1:") ? "rail" : "coach"));
     if (ymd !== todayYmd) {
-      const ids = (await sql<{ trip_id: string }>(`SELECT trip_id FROM cancelled_trip WHERE service_date = $1 ORDER BY trip_id`, [iso])).map((x) => x.trip_id);
+      const ids = (await sql<{ trip_id: string }>(`SELECT trip_id FROM cancelled_trip WHERE service_date = $1 ORDER BY trip_id`, [iso])).map((x) => x.trip_id).filter(keep);
       sendJson(req, res, 200, { date: ymd, count: ids.length, stale: false, archived: true, fetchedAt: null, tripIds: ids, trips: sortRows(ids.map(rowOf)) });
       return;
     }
     const c = engine.cancelled;
-    if (!c.at && c.error) throw new HttpError(502, c.error);
-    const ids = [...c.ids];
+    if (!c.at && c.error && onlyMvk(modes)) throw new HttpError(502, c.error);
+    const ids = [...new Set([...c.ids, ...ctx.regionalRt.cancelled])].filter(keep);
     sendJson(req, res, 200, {
       date: ymd,
       count: ids.length,
@@ -210,15 +278,36 @@ export function registerCompat(r: Router, ctx: Ctx) {
 
   // ── GTFS ──────────────────────────────────────────────────────────────
   r.get("/gtfs/stops.json", (req, res) => {
-    const feed = feeds.latest();
+    const { modes, rich } = modesOf(req);
+    if (!rich) {
+      const feed = feeds.latest();
+      if (!feed) throw new HttpError(503, "nincs menetrend");
+      sendJson(req, res, 200, [...feed.stops.values()].map((s) => [s.id, s.code, s.name, s.lat, s.lon]), { "cache-control": "public, max-age=300" });
+      return;
+    }
+    // v3: [id, kód, név, lat, lon, mód, szülő-állomás, állomás-e (1/0)] — a Volán és a vasút is
+    const feed = catalogFeed();
     if (!feed) throw new HttpError(503, "nincs menetrend");
-    sendJson(req, res, 200, [...feed.stops.values()].map((s) => [s.id, s.code, s.name, s.lat, s.lon]), { "cache-control": "public, max-age=300" });
+    const modeOfStop = (id: string): TransitMode | "mvk" => (isMvkId(id) ? "mvk" : id.startsWith("1:") ? "rail" : "coach");
+    const out = [...feed.stops.values()]
+      .filter((s) => stopAllowed(s.id, modes) && (s.station || (feed.stopSched.get(s.id)?.length ?? 0) > 0))
+      .map((s) => [s.id, s.code, s.name, s.lat, s.lon, modeOfStop(s.id), s.parent ?? "", s.station ? 1 : 0]);
+    sendJson(req, res, 200, out, { "cache-control": "public, max-age=300" });
   });
 
   r.get("/gtfs/routes.json", (req, res) => {
-    const feed = feeds.latest();
+    const { modes, rich } = modesOf(req);
+    const feed = rich ? catalogFeed() : feeds.latest();
     if (!feed) throw new HttpError(503, "nincs menetrend");
-    sendJson(req, res, 200, [...feed.routes.values()].map((x) => [x.id, x.short, x.long, x.type, x.color, x.text]), { "cache-control": "public, max-age=300" });
+    const routes = [...feed.routes.values()].filter((x) => !rich || modes.has(modeOfRoute(x.id, x.type)));
+    // v3 (?modes=): + [mód, kulcs, üzemeltető]
+    sendJson(
+      req,
+      res,
+      200,
+      routes.map((x) => (rich ? [x.id, x.short, x.long, x.type, x.color, x.text, modeOfRoute(x.id, x.type), x.key, operatorLabel(x.agencyName) ?? ""] : [x.id, x.short, x.long, x.type, x.color, x.text])),
+      { "cache-control": "public, max-age=300" },
+    );
   });
 
   /**
@@ -239,7 +328,8 @@ export function registerCompat(r: Router, ctx: Ctx) {
   r.get("/gtfs/route-geo", (req, res) => {
     const want = (req.query.get("route") || "").split(",").map((x) => x.trim()).filter(Boolean).slice(0, 16);
     if (!want.length) throw new HttpError(400, "hiányzó ?route=");
-    const feed = feeds.latest();
+    // a regionális vonal (előtagos azonosító) a mai összefésült feedben van
+    const feed = want.some((x) => !isMvkId(x)) ? catalogFeed() : feeds.latest();
     if (!feed) throw new HttpError(503, "nincs menetrend");
     const out = want
       .map((name) => {
@@ -273,7 +363,9 @@ export function registerCompat(r: Router, ctx: Ctx) {
 
   r.get("/gtfs/timetable/routes", async (req, res) => {
     const ymd = dateParam(req, engine.today.replace(/-/g, ""));
-    const idx = await cached(`tt-routes:${ymd}:${feedTag()}`, ttFor(ymd), () => routeIndexFor(feeds, isoOfYmd(ymd)));
+    const { modes, rich } = modesOf(req);
+    const mk = rich ? [...modes].sort().join(",") : "mvk";
+    const idx = await cached(`tt-routes:${ymd}:${feedTag()}:${mk}`, ttFor(ymd), () => routeIndexFor(feeds, isoOfYmd(ymd), rich ? modes : null));
     if (!idx) {
       sendJson(req, res, 200, { date: ymd, routes: [], note: "Erre a napra nincs elrakva menetrend." });
       return;
@@ -295,10 +387,12 @@ export function registerCompat(r: Router, ctx: Ctx) {
     const todayYmd = engine.today.replace(/-/g, "");
     const ymd = dateParam(req, todayYmd);
     const out: Record<string, unknown> = {};
+    const { modes, rich } = modesOf(req);
+    const keepTrip = (id: string) => (isMvkId(id) ? !rich || modes.has("bus") || modes.has("tram") : rich && modes.has(id.startsWith("1:") ? "rail" : "coach"));
     if (ymd === todayYmd) {
       const now = nowUnix();
-      for (const [tripId, run] of engine.todayRuns) out[tripId] = journalRecord(run, engine.matcher.liveDelay(tripId, now));
-      sendJson(req, res, 200, { date: ymd, count: engine.todayRuns.size, source: "live", trips: out }, { "cache-control": "no-store" });
+      for (const [tripId, run] of engine.todayRuns) if (keepTrip(tripId)) out[tripId] = journalRecord(run, engine.matcher.liveDelay(tripId, now));
+      sendJson(req, res, 200, { date: ymd, count: Object.keys(out).length, source: "live", trips: out }, { "cache-control": "no-store" });
       return;
     }
     const rows = await cached(`journal:${ymd}`, ymd < todayYmd ? 6 * 3600 : 300, () => sql(
@@ -309,6 +403,7 @@ export function registerCompat(r: Router, ctx: Ctx) {
       [isoOfYmd(ymd)],
     ));
     for (const x of rows as Record<string, any>[]) {
+      if (!keepTrip(x.trip_id)) continue;
       out[x.trip_id] = {
         vehicleId: x.vehicle_id,
         samples: x.stops_seen,
@@ -324,7 +419,7 @@ export function registerCompat(r: Router, ctx: Ctx) {
         lastDelaySec: x.last_delay_s,
       };
     }
-    sendJson(req, res, 200, { date: ymd, count: rows.length, source: "db", trips: out });
+    sendJson(req, res, 200, { date: ymd, count: Object.keys(out).length, source: "db", trips: out });
   });
 
   r.get("/weather", (req, res) => {
@@ -343,6 +438,9 @@ export function registerCompat(r: Router, ctx: Ctx) {
       gtfs: { feedVersion: feeds.latest()?.version ?? "", stops: feeds.latest()?.stops.size ?? 0 },
       installationIdKnown: Boolean(st.installationId),
       poll: { ...engine.poll, rtError: engine.snapshot.rtError },
+      // v3: az MVK-adat forrása (tartalékban a MÁV+) és a regionális adat
+      source: engine.sources.status(),
+      regional: { feeds: ctx.regionalFeeds.status(), realtime: ctx.regionalRt.status(), shadow: engine.shadowStats() },
     });
   });
 

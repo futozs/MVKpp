@@ -73,7 +73,8 @@ export async function cityHeat(day: ServiceDay, q: HeatQuery) {
               round(approx_percentile(0.5, rollup(travel_pct)) - sum(avg_sched_s * n) / nullif(sum(n), 0))::int AS ex,
               round(sum(avg_sched_s * n) / nullif(sum(n), 0))::int AS sched
          FROM segment_daily
-        WHERE bucket >= now() - make_interval(days => $1) AND bucket < ((((now() AT TIME ZONE 'Europe/Budapest') - interval '3 hours')::date)::timestamp + interval '3 hours') AT TIME ZONE 'Europe/Budapest' AND daytype = $2
+        -- a városi hőtérkép az MVK-é: a regionális (előtagos) megállók szakaszai nem kellenek
+        WHERE from_stop NOT LIKE '%:%' AND to_stop NOT LIKE '%:%' AND bucket >= now() - make_interval(days => $1) AND bucket < ((((now() AT TIME ZONE 'Europe/Budapest') - interval '3 hours')::date)::timestamp + interval '3 hours') AT TIME ZONE 'Europe/Budapest' AND daytype = $2
         GROUP BY 1, 2, 3 HAVING sum(n) >= $3`,
       [q.days, q.daytype, MIN_N],
     ),

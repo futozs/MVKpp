@@ -25,6 +25,8 @@ import { CatchLine, CatchPill, ReplacementNote, replacementFor, StartRiskLine, T
 import { expectedArrival, useCatchFor } from "@/hooks/useCatch";
 import { addAlert, noPushNote, notifyLocallyOnce, removeAlert, useAlerts } from "@/lib/alerts";
 import { useWatchFeatures } from "@/lib/watchPrefs";
+import { displayVehicleId, modesParam, useEnabledModes } from "@/lib/modes";
+import { arrivalTileText, arrivalTitle, arrivalVehicleLabel, NoticeList, PlatformBadge, stopKindLabel } from "@/components/transit/RegionalBits";
 import { RefreshCw } from "lucide-react";
 
 /** hiba után ennyi idő múlva próbáljuk újra (duplázva, legfeljebb 30 mp-ig) */
@@ -84,6 +86,10 @@ export function StopCard({
 
   // A Beállításokban egyenként kikapcsolható funkciók (felhőben szinkronizálva).
   const f = useWatchFeatures();
+  // A bekapcsolt módok indulásai (a Tiszai pu. MVK-megállóján a Volán is megáll); az állomás táblája hosszabb.
+  const modesKey = modesParam(useEnabledModes());
+  const isStation = Boolean(stop.station || stop.feed === "rail");
+  const listLimit = isStation ? 12 : 8;
   const showPredicted = f.predictedVehicle;
 
   const apply = (res: StopArrivalsResponse) => {
@@ -97,7 +103,7 @@ export function StopCard({
   // Hiba esetén nem a nyers hibaszöveg: rövid ok a kódból, és magától újrapróbálja.
   const load = async () => {
     try {
-      apply(await api.getArrivals(stop.id, 8));
+      apply(await api.getArrivals(stop.id, listLimit, modesKey));
     } catch (err) {
       if (!mounted.current) return;
       setError(describeApiError(err));
@@ -120,16 +126,16 @@ export function StopCard({
 
   // A szerver magától küldi, amint a tábla változik (busz beért, elindult,
   // új késés) — nincs 4 mp-es várakozás. Pollozás csak kapcsolat nélkül.
-  useTopic(`stop:${stop.id}`, (m) => apply(m.data as StopArrivalsResponse));
+  useTopic(`stop:${stop.id}@${modesKey}`, (m) => apply(m.data as StopArrivalsResponse));
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stop.id]);
+  }, [stop.id, modesKey]);
   useFallbackPoll(load, POLL_MS);
 
   const arrivals = data?.arrivals ?? [];
   const next: ArrivalItem | undefined = arrivals[0];
-  const rest = arrivals.slice(1, 6);
+  const rest = arrivals.slice(1, isStation ? 11 : 6);
 
   // „Elérem?”: a helyzetedből a séta, indulásonként a verdikt; „szólj, ha indulni kell”.
   const catchFor = useCatchFor(stop);
@@ -192,7 +198,7 @@ export function StopCard({
                 {formatDistance(distanceKm)}
               </span>
             ) : null}
-            {stop.id}
+            {stopKindLabel(stop)}
           </p>
         </div>
 
@@ -324,7 +330,7 @@ export function StopCard({
             <div className="flex items-start justify-between gap-3">
               <div className="flex min-w-0 items-start gap-3">
                 <RouteTile
-                  short={next.route}
+                  short={arrivalTileText(next)}
                   color={next.color}
                   text={next.text}
                   size="lg"
@@ -332,14 +338,15 @@ export function StopCard({
                 <div className="min-w-0 pt-0.5">
                   <p
                     className="truncate text-sm font-semibold"
-                    title={next.headsign}
+                    title={arrivalTitle(next)}
                   >
-                    {next.headsign}
+                    {arrivalTitle(next)}
                   </p>
-                  <div className="mt-1.5 flex items-center gap-2">
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
                     <span className={cn("font-mono text-xs tabular-nums text-muted-foreground", next.cancelled && "line-through decoration-destructive/70 decoration-2")}>
                       {next.time}
                     </span>
+                    <PlatformBadge platform={next.platform} changed={next.platformChanged} mode={next.mode} />
                     {next.cancelled ? null : <DelayBar delaySec={next.delaySec ?? next.measuredDelaySec ?? null} />}
                   </div>
                 </div>
@@ -353,8 +360,9 @@ export function StopCard({
               )}
             </div>
 
+            <NoticeList notices={next.notices} className="mt-2.5" />
             {next.cancelled && f.replacement ? <ReplacementNote cancelled={next} instead={replacementFor(arrivals, next)} /> : null}
-            {!next.vehicle && next.predictedVehicle && showPredicted && !next.cancelled ? (
+            {!next.vehicle && next.predictedVehicle && showPredicted && !next.cancelled && next.mode !== "rail" ? (
               <p
                 className="mt-3 text-[11px] text-muted-foreground"
                 title={predictedTitle(next.predictedVehicle)}
@@ -363,7 +371,7 @@ export function StopCard({
                   <>
                     A{" "}
                     <span className="rounded bg-primary/12 px-1.5 py-px font-mono font-bold tabular-nums text-primary">
-                      {next.predictedVehicle.id}
+                      {displayVehicleId(next.predictedVehicle.id)}
                     </span>{" "}
                     jön: most a végállomás felé tart, onnan fordul vissza
                   </>
@@ -371,7 +379,7 @@ export function StopCard({
                   <>
                     Várhatóan a{" "}
                     <span className="rounded border border-dashed border-primary/50 px-1.5 py-px font-mono font-bold tabular-nums text-primary">
-                      {next.predictedVehicle.id}
+                      {displayVehicleId(next.predictedVehicle.id)}
                     </span>{" "}
                     jön
                   </>
@@ -394,6 +402,7 @@ export function StopCard({
               <VehicleTrack
                 className="mt-3"
                 vehicle={next.vehicle}
+                label={next.mode === "rail" ? arrivalTileText(next) : null}
                 progressDesc={next.progressDesc}
                 onTrack={
                   next.vehicle
@@ -440,7 +449,7 @@ export function StopCard({
                     )}
                   >
                     <RouteTile
-                      short={bus.route}
+                      short={arrivalTileText(bus)}
                       color={bus.color}
                       text={bus.text}
                     />
@@ -448,30 +457,30 @@ export function StopCard({
                     <div className="min-w-0 flex-1">
                       <p
                         className="truncate text-xs font-medium"
-                        title={bus.headsign}
+                        title={arrivalTitle(bus)}
                       >
-                        {bus.headsign}
+                        {arrivalTitle(bus)}
                       </p>
                       <div className="mt-1 flex items-center gap-2">
-                        {}
-                        {bus.vehicle ? (
+                        <PlatformBadge platform={bus.platform} changed={bus.platformChanged} mode={bus.mode} compact />
+                        {arrivalVehicleLabel(bus) ? (
                           <span className="rounded bg-primary/12 px-1.5 py-px font-mono text-[11px] font-bold tabular-nums text-primary">
-                            {bus.vehicle.id}
+                            {arrivalVehicleLabel(bus)}
                           </span>
-                        ) : bus.predictedVehicle && showPredicted && !bus.cancelled ? (
+                        ) : bus.predictedVehicle && showPredicted && !bus.cancelled && bus.mode !== "rail" ? (
                           isLoopVehicle(bus.predictedVehicle) ? (
                             <span
                               className="rounded bg-primary/12 px-1.5 py-px font-mono text-[11px] font-bold tabular-nums text-primary"
                               title={predictedTitle(bus.predictedVehicle)}
                             >
-                              {bus.predictedVehicle.id}
+                              {displayVehicleId(bus.predictedVehicle.id)}
                             </span>
                           ) : (
                             <span
                               className="rounded border border-dashed border-primary/40 px-1.5 py-px font-mono text-[11px] font-bold tabular-nums text-primary/80"
                               title={predictedTitle(bus.predictedVehicle)}
                             >
-                              ~{bus.predictedVehicle.id}
+                              ~{displayVehicleId(bus.predictedVehicle.id)}
                             </span>
                           )
                         ) : null}
@@ -501,6 +510,7 @@ export function StopCard({
                           {bus.progressDesc}
                         </p>
                       ) : null}
+                      <NoticeList notices={bus.notices} compact className="mt-1" />
                     </div>
 
                     <span className="shrink-0 font-mono text-base font-bold tabular-nums">

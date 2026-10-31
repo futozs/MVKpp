@@ -1,12 +1,13 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { LocateFixed, Plus, RotateCcw, X } from "lucide-react";
-import type { FilterState, LiveVehicle, Route } from "@/types";
+import type { DelayFilter, FilterState, LiveVehicle, Route, TransitMode } from "@/types";
 import { RouteChips } from "@/components/fleet/RouteChips";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { RouteTile } from "@/components/transit/RouteTile";
 import { LiveDot } from "@/components/transit/LiveDot";
 import { cn } from "@/lib/utils";
+import { displayVehicleId, MODE_ITEMS, useEnabledModes, vehicleModeOf } from "@/lib/modes";
 import { activeFilterCount, MAX_WATCHED } from "./filterState";
 
 const RADIUS_OPTIONS: { value: number | null; label: string }[] = [
@@ -58,6 +59,27 @@ export function FilterPanel({
 }) {
   const [tab, setTab] = useState<Tab>("filters");
   const [typedId, setTypedId] = useState("");
+  const enabledModes = useEnabledModes();
+  // A Volán-egységek és a vasúti kategóriák a most élő járművekből (a ritkák is látszódjanak, ha élnek).
+  const { operators, railKinds, modeCounts } = useMemo(() => {
+    const ops = new Map<string, number>();
+    const kinds = new Map<string, number>();
+    const counts: Partial<Record<TransitMode, number>> = {};
+    for (const v of vehicles) {
+      const r = routes[v.routeId];
+      const m = vehicleModeOf(v, r?.type);
+      counts[m] = (counts[m] ?? 0) + 1;
+      if (m === "coach" && r?.operator) ops.set(r.operator, (ops.get(r.operator) ?? 0) + 1);
+      if (m === "rail") kinds.set(r?.short ?? v.routeShort, (kinds.get(r?.short ?? v.routeShort) ?? 0) + 1);
+    }
+    const byCount = (m: Map<string, number>) => [...m.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "hu"));
+    return { operators: byCount(ops), railKinds: byCount(kinds), modeCounts: counts };
+  }, [vehicles, routes]);
+  const toggleIn = <K extends "modes" | "operators" | "railKinds">(key: K, value: FilterState[K][number]) =>
+    setFilters((prev) => {
+      const list = prev[key] as string[];
+      return { ...prev, [key]: list.includes(value) ? list.filter((x) => x !== value) : [...list, value] };
+    });
   const active = activeFilterCount(filters);
   const set = <K extends keyof FilterState>(key: K, value: FilterState[K]) => setFilters((prev) => ({ ...prev, [key]: value }));
 
@@ -165,12 +187,11 @@ export function FilterPanel({
               >
                 <input
                   value={typedId}
-                  onChange={(e) => setTypedId(e.target.value.replace(/[^0-9]/g, ""))}
-                  inputMode="numeric"
-                  pattern="[0-9]*"
+                  onChange={(e) => setTypedId(e.target.value.replace(/[^0-9a-zA-Z]/g, "").toUpperCase())}
+                  autoCapitalize="characters"
                   autoComplete="off"
                   enterKeyHint="done"
-                  placeholder="Rendszám, pl. 1641"
+                  placeholder="Rendszám vagy vonatszám, pl. 1641"
                   aria-label="Kiemelendő jármű rendszáma"
                   className="h-10 min-w-0 flex-1 rounded-lg border border-input bg-background px-3 font-mono text-sm tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 />
@@ -200,17 +221,41 @@ export function FilterPanel({
               ) : null}
             </Section>
 
+            {enabledModes.length > 1 ? (
+              <Section
+                title="Közlekedési mód"
+                aside={
+                  filters.modes.length ? (
+                    <button type="button" onClick={() => set("modes", [])} className="text-[11px] font-semibold text-primary hover:underline">
+                      mind
+                    </button>
+                  ) : (
+                    <span className="text-[11px] text-muted-foreground">mind látszik</span>
+                  )
+                }
+              >
+                <ChipRow
+                  label="Közlekedési mód"
+                  items={MODE_ITEMS.filter((m) => enabledModes.includes(m.id)).map((m) => ({ id: m.id, label: m.short, count: modeCounts[m.id] ?? 0 }))}
+                  selected={filters.modes}
+                  onToggle={(id) => toggleIn("modes", id as TransitMode)}
+                />
+              </Section>
+            ) : null}
+
+            {enabledModes.includes("coach") && operators.length > 1 && (!filters.modes.length || filters.modes.includes("coach")) ? (
+              <Section title="Volán" aside={filters.operators.length ? <ClearLink onClick={() => set("operators", [])} /> : undefined}>
+                <ChipRow label="Volán-egység" items={operators.map(([id, n]) => ({ id, label: id, count: n }))} selected={filters.operators} onToggle={(id) => toggleIn("operators", id)} />
+              </Section>
+            ) : null}
+
+            {enabledModes.includes("rail") && railKinds.length > 1 && (!filters.modes.length || filters.modes.includes("rail")) ? (
+              <Section title="Vonat" aside={filters.railKinds.length ? <ClearLink onClick={() => set("railKinds", [])} /> : undefined}>
+                <ChipRow label="Vonatnem" items={railKinds.map(([id, n]) => ({ id, label: RAIL_KIND_LABEL[id] ?? id, count: n }))} selected={filters.railKinds} onToggle={(id) => toggleIn("railKinds", id)} />
+              </Section>
+            ) : null}
+
             <Section title="Jármű">
-              <Segmented
-                label="Típus"
-                value={filters.type}
-                onChange={(v) => set("type", v)}
-                options={[
-                  { id: "all", label: "Mind" },
-                  { id: "bus", label: "Busz" },
-                  { id: "tram", label: "Villamos" },
-                ]}
-              />
               <Segmented
                 label="Mozgás"
                 value={filters.speed}
@@ -219,6 +264,16 @@ export function FilterPanel({
                   { id: "all", label: "Mind" },
                   { id: "moving", label: "Mozgó" },
                   { id: "idle", label: "Álló" },
+                ]}
+              />
+              <Segmented<DelayFilter>
+                label="Késés"
+                value={filters.delay}
+                onChange={(v) => set("delay", v)}
+                options={[
+                  { id: "all", label: "Mind" },
+                  { id: "late", label: "5+ perc" },
+                  { id: "ontime", label: "Pontos" },
                 ]}
               />
             </Section>
@@ -285,7 +340,7 @@ export function FilterPanel({
                       <RouteTile short={v.routeShort} color={v.routeColor} text={v.routeText} />
                       <span className="min-w-0 flex-1">
                         <span className="flex items-center gap-1.5 font-mono text-sm font-bold tabular-nums">
-                          {v.id}
+                          {v.mode === "rail" ? `${v.trainNo ?? ""}${v.trainName ? ` ${v.trainName}` : ""}`.trim() || "Vonat" : displayVehicleId(v.id, v.plate)}
                           <LiveDot />
                         </span>
                         <span className="block truncate text-[11px] text-muted-foreground">{v.headsign}</span>
@@ -343,6 +398,44 @@ function Segmented<T extends string>({ label, value, onChange, options }: { labe
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+/** a vasúti kategóriák kiírva (a csempén a rövidítés marad) */
+const RAIL_KIND_LABEL: Record<string, string> = { Sz: "Személy", IR: "InterRégió", IC: "InterCity", S: "Sebes", G: "Gyors", EC: "EuroCity", EN: "EuroNight", RJ: "Railjet", "Pót": "Pótlóbusz" };
+
+function ClearLink({ onClick }: { onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} className="text-[11px] font-semibold text-primary hover:underline">
+      mind
+    </button>
+  );
+}
+
+/** Több közül választható szűrő-csempék (üres kiválasztás = mind). */
+function ChipRow({ label, items, selected, onToggle }: { label: string; items: { id: string; label: string; count: number }[]; selected: readonly string[]; onToggle: (id: string) => void }) {
+  return (
+    <div role="group" aria-label={label} className="flex flex-wrap gap-1.5">
+      {items.map((it) => {
+        const on = selected.includes(it.id);
+        return (
+          <button
+            key={it.id}
+            type="button"
+            aria-pressed={on}
+            onClick={() => onToggle(it.id)}
+            className={cn(
+              "inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-semibold transition-colors duration-fast",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+              on ? "border-primary/40 bg-primary text-primary-foreground shadow-sm" : "border-border bg-muted/60 text-muted-foreground hover:bg-accent hover:text-foreground",
+            )}
+          >
+            {it.label}
+            <span className={cn("rounded px-1 font-mono text-[10px] font-bold tabular-nums", on ? "bg-primary-foreground/20" : "bg-background/70")}>{it.count}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }

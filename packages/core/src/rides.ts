@@ -44,10 +44,11 @@ const distTo = (p: RidePoint, s: RideStop) => (s.lat == null || s.lon == null ? 
  * Hol tart most a busz: az utolsó elhagyott megálló, vagy a következő, ha a
  * megadott hely (a busz vagy a mellette álló telefon) már ott van.
  */
-export function currentStopIdx(stops: RideStop[], passedIdx: number, at: RidePoint | null): number {
+export function currentStopIdx(stops: RideStop[], passedIdx: number, at: RidePoint | null, atStopM = AT_STOP_M): number {
   if (!stops.length) return 0;
   const next = stops[passedIdx + 1];
-  if (at && next && distTo(at, next) <= AT_STOP_M) return passedIdx + 1;
+  // `atStopM`: a vonat 150–300 m-es peronon áll meg, az állomás pontja ettől messzebb lehet
+  if (at && next && distTo(at, next) <= atStopM) return passedIdx + 1;
   return Math.max(0, Math.min(passedIdx, stops.length - 1));
 }
 

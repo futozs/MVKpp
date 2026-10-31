@@ -2,6 +2,8 @@
 
 Az MVK MobilON+ app (fejlesztő: HC Linear, belső neve **metaccaze**) backendje egy Spring Boot szerver. Ez a leírás minden végpontot tartalmaz, amit a projekt használ vagy kipróbált. A valódi szerveren **2026-10-31-én élőben ellenőrizve** (a ✅ jelűek 200-at adtak).
 
+Tartalék adatforrás (token nélkül, MVK + Volán + vasút): [MAVPLUSZ_OTP2.md](MAVPLUSZ_OTP2.md).
+
 ```
 Alap URL:   https://mccaze.mvkzrt.hu:8443
 GTFS zip:   http://84.206.68.21:8080/MVK_mobilapp/GTFS/MVK_GTFS.zip   (nem kell token)

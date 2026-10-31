@@ -7,16 +7,17 @@
 import {
   computeParking,
   dayInfo,
-  localMidnightUnix,
-  nowUnix,
-  shiftIso,
   type Feed,
   type FleetKind,
   type FleetVehicle,
+  isMvkId,
   type LiveSeen,
+  localMidnightUnix,
+  nowUnix,
   type ParkingSnapshot,
   type Place,
   type ServiceDay,
+  shiftIso,
   type TripEnds,
   type TripTip,
 } from "@mvk/core";
@@ -79,7 +80,7 @@ export class Parking {
     const now = nowUnix();
     const rows = await sql<{ id: string; ts: number; lat: number; lon: number; speed: number | null; route_short: string | null }>(
       `SELECT DISTINCT ON (vehicle_id) vehicle_id AS id, extract(epoch FROM ts)::int AS ts, lat, lon, speed, route_short
-         FROM veh_ping WHERE ts BETWEEN to_timestamp($1) - interval '18 hours' AND to_timestamp($1)
+         FROM veh_ping WHERE ts BETWEEN to_timestamp($1) - interval '18 hours' AND to_timestamp($1) AND vehicle_id NOT LIKE '%:%'
         ORDER BY vehicle_id, ts DESC`,
       [now],
     );
@@ -95,6 +96,8 @@ export class Parking {
   private track() {
     const feed = this.engine.feeds.cachedDay(this.engine.today)?.feed;
     for (const v of this.engine.snapshot.vehicles) {
+      // a Parkoló fül az MVK flottájáé (depó, végállomások)
+      if (!isMvkId(v.id)) continue;
       const ts = this.engine.lastTs.get(v.id);
       if (!ts) continue;
       const route = feed?.routes.get(v.routeId)?.short ?? null;
@@ -144,7 +147,7 @@ export class Parking {
       byName.set(p.name, x);
     };
     for (const t of feed.trips.values()) {
-      if (!day.services.has(t.serviceId)) continue;
+      if (!isMvkId(t.id) || !day.services.has(t.serviceId)) continue;
       const e = endsOf(feed, t.id);
       if (!e) continue;
       ends.set(t.id, e);
@@ -168,7 +171,7 @@ export class Parking {
     const nowS = now - localMidnightUnix(iso);
     const byVehicle = new Map<string, TripTip>();
     for (const t of day.feed.trips.values()) {
-      if (!day.services.has(t.serviceId) || this.engine.todayRuns.has(t.id)) continue;
+      if (!isMvkId(t.id) || !day.services.has(t.serviceId) || this.engine.todayRuns.has(t.id)) continue;
       const startS = day.feed.tripStops.get(t.id)?.[0]?.dep;
       if (startS == null || startS < nowS - 300 || startS > nowS + TIP_HORIZON_S) continue;
       const g = this.predictor.predict(t.id);
@@ -214,7 +217,7 @@ async function loadFleet(iso: string, isTramRoute: (route: string) => boolean): 
     `WITH days AS (
        SELECT r.vehicle_id, r.service_date, min(r.sched_start_s) AS first_s
          FROM trip_run r
-        WHERE r.service_date >= $1::date - $3::int AND r.service_date < $1::date AND r.status <> 'aborted'
+        WHERE r.service_date >= $1::date - $3::int AND r.service_date < $1::date AND r.status <> 'aborted' AND r.vehicle_id NOT LIKE '%:%'
         GROUP BY 1, 2),
      dt AS (
        SELECT c.service_date FROM calendar_day c
@@ -232,7 +235,7 @@ async function loadFleet(iso: string, isTramRoute: (route: string) => boolean): 
   );
   const routeRows = await sql<{ id: string; r: string; n: number }>(
     `SELECT vehicle_id AS id, route_short AS r, count(*)::int AS n FROM trip_run
-      WHERE service_date >= $1::date - $2::int AND service_date < $1::date AND status <> 'aborted'
+      WHERE service_date >= $1::date - $2::int AND service_date < $1::date AND status <> 'aborted' AND vehicle_id NOT LIKE '%:%'
       GROUP BY 1, 2`,
     [iso, ACTIVE_DAYS],
   );

@@ -13,7 +13,7 @@
  *                 és NEM ismert térerő-hiányos helyen (ahol ugyanez a minta
  *                 más napokon is rendszeresen elhallgat)
  */
-import { budapestOffsetSec, isOnDemandTrip, localMidnightUnix, secToHm, type ServiceDay } from "@mvk/core";
+import { budapestOffsetSec, isMvkId, isOnDemandTrip, localMidnightUnix, secToHm, type ServiceDay } from "@mvk/core";
 import { getPool, sql } from "@mvk/db";
 import type { FeedManager } from "./feeds.ts";
 import { log } from "./log.ts";
@@ -67,7 +67,7 @@ export async function detectIncidentsForDay(feeds: FeedManager, iso: string): Pr
 }
 
 async function officialCancellations(day: ServiceDay, iso: string): Promise<IncidentIn[]> {
-  const rows = await sql<{ trip_id: string; first_seen: Date }>(`SELECT trip_id, first_seen FROM cancelled_trip WHERE service_date = $1`, [iso]);
+  const rows = await sql<{ trip_id: string; first_seen: Date }>(`SELECT trip_id, first_seen FROM cancelled_trip WHERE service_date = $1 AND trip_id NOT LIKE '%:%'`, [iso]);
   const midnight = localMidnightUnix(iso);
   return rows.map((r) => {
     const t = day.feed.trips.get(r.trip_id);
@@ -95,10 +95,10 @@ async function officialCancellations(day: ServiceDay, iso: string): Promise<Inci
 
 async function missedTrips(day: ServiceDay, iso: string): Promise<IncidentIn[]> {
   const ran = await sql<{ trip_id: string; route_short: string; sched_start_s: number }>(
-    `SELECT trip_id, route_short, sched_start_s FROM trip_run WHERE service_date = $1 AND status <> 'aborted'`,
+    `SELECT trip_id, route_short, sched_start_s FROM trip_run WHERE service_date = $1 AND status <> 'aborted' AND trip_id NOT LIKE '%:%'`,
     [iso],
   );
-  const cancelled = new Set((await sql<{ trip_id: string }>(`SELECT trip_id FROM cancelled_trip WHERE service_date = $1`, [iso])).map((x) => x.trip_id));
+  const cancelled = new Set((await sql<{ trip_id: string }>(`SELECT trip_id FROM cancelled_trip WHERE service_date = $1 AND trip_id NOT LIKE '%:%'`, [iso])).map((x) => x.trip_id));
   const ranIds = new Set(ran.map((r) => r.trip_id));
   const byRoute = new Map<string, number[]>();
   for (const r of ran) {
@@ -109,7 +109,8 @@ async function missedTrips(day: ServiceDay, iso: string): Promise<IncidentIn[]> 
   const midnight = localMidnightUnix(iso);
   const out: IncidentIn[] = [];
   for (const t of day.feed.trips.values()) {
-    if (!day.services.has(t.serviceId) || ranIds.has(t.id) || cancelled.has(t.id)) continue;
+    // Az üzemzavar-észlelés az MVK-ra hangolt (a regionális GPS-lefedettség hézagos lenne „kimaradásnak”).
+    if (!isMvkId(t.id) || !day.services.has(t.serviceId) || ranIds.has(t.id) || cancelled.has(t.id)) continue;
     // „igény esetén” menet kérés nélkül el sem indul — nem kimaradás
     if (isOnDemandTrip(t.headsign)) continue;
     const st = day.feed.tripStops.get(t.id);
@@ -154,7 +155,7 @@ async function breakdowns(day: ServiceDay, iso: string): Promise<IncidentIn[]> {
   }>(
     `SELECT run_key, trip_id, vehicle_id, route_short, pattern, stops_seen, stops_total, last_stop_idx,
             extract(epoch FROM last_seen_at)::int AS last_seen, sched_end_s
-       FROM trip_run WHERE service_date = $1 AND status = 'partial' AND last_stop_idx IS NOT NULL
+       FROM trip_run WHERE service_date = $1 AND status = 'partial' AND last_stop_idx IS NOT NULL AND trip_id NOT LIKE '%:%'
         -- egy megállónyi „menet” vagy az újraindításkor lezárt futás nem bizonyítja a meghibásodást
         AND stops_seen >= 2 AND coalesce(close_reason, '') <> 'restart'`,
     [iso],

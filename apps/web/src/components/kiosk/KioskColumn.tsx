@@ -1,10 +1,12 @@
-import { Bus, Radio } from "lucide-react";
+import { Bus, Info, Radio, TrainFront } from "lucide-react";
 import type { ArrivalItem, Stop } from "@/types";
 import { cn } from "@/lib/utils";
 import { delayState } from "@/components/transit/DelayBar";
 import { PREF_PREDICTED_VEHICLE, usePreference } from "@/hooks/usePreference";
 import { useStopBoard } from "./useStopBoard";
 import { ForecastLine } from "@/components/transit/ForecastLine";
+import { arrivalTileText, arrivalTitle, arrivalVehicleLabel, stopKindLabel } from "@/components/transit/RegionalBits";
+import { displayVehicleId, isRegionalId } from "@/lib/modes";
 
 const hex = (v: string | undefined, fb: string) => `#${/^[0-9a-fA-F]{6}$/.test(v ?? "") ? v : fb}`;
 
@@ -20,7 +22,7 @@ export function KioskColumn({ stop, stopId, rows }: { stop: Stop | undefined; st
   const next = arrivals[0];
   const rest = arrivals.slice(1, 1 + rows);
   const name = stop?.name ?? data?.stop.name ?? stopId;
-  const code = stop?.code ?? data?.stop.code;
+  const code = isRegionalId(stopId) ? stopKindLabel(stop ?? { id: stopId }) : (stop?.code ?? data?.stop.code);
   return (
     <section className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[0.9em] border border-border bg-card">
       <header className="flex items-baseline justify-between gap-[0.6em] px-[1.1em] pb-[0.6em] pt-[0.9em]">
@@ -54,7 +56,25 @@ function RouteTile({ a, big = false }: { a: ArrivalItem; big?: boolean }) {
       )}
       style={{ background: hex(a.color, "3A4A44"), color: hex(a.text, "FFFFFF") }}
     >
-      {a.route}
+      {arrivalTileText(a)}
+    </span>
+  );
+}
+
+/** Vágány (vasút) vagy kocsiállás (autóbusz-állomás) — a változás kiemelve, mint a figyelőben. */
+function Platform({ a }: { a: ArrivalItem }) {
+  if (!a.platform) return null;
+  const rail = a.mode === "rail";
+  return (
+    <span
+      className={cn(
+        "shrink-0 rounded-[0.3em] border px-[0.35em] font-mono font-bold tabular-nums",
+        a.platformChanged ? "border-late/50 bg-late/12 text-late" : "border-border bg-muted text-foreground",
+      )}
+      title={rail ? `${a.platform}. vágány` : `${a.platform}. kocsiállás`}
+    >
+      {a.platform}
+      <span className="ml-[0.2em] font-sans text-[0.85em] font-semibold text-muted-foreground">{rail ? "vg." : "k.áll."}</span>
     </span>
   );
 }
@@ -72,22 +92,25 @@ function Delay({ a }: { a: ArrivalItem }) {
 
 /** Melyik jármű jön: élő rendszám, vagy előrejelzett (szaggatott keret, mint a figyelőben). */
 function Vehicle({ a, showPredicted }: { a: ArrivalItem; showPredicted: boolean }) {
-  if (a.vehicle)
+  if (a.vehicle) {
+    // vonatnál a vonatszám a csempén van, a Volánnál a rendszám előtag nélkül
+    const label = arrivalVehicleLabel(a);
     return (
       <span className="inline-flex items-center gap-[0.3em]">
         <Radio className="h-[1em] w-[1em] text-live" aria-label="élő" />
-        <span className="font-mono font-bold text-foreground">{a.vehicle.id}</span>
+        {label ? <span className="font-mono font-bold text-foreground">{label}</span> : null}
       </span>
     );
-  if (a.predictedVehicle && showPredicted)
+  }
+  if (a.predictedVehicle && showPredicted && a.mode !== "rail")
     // fordulóhurkon nem tipp: ugyanaz a busz fordul vissza, ami most odafelé jár
     return a.predictedVehicle.method === "loop" ? (
       <span className="font-mono font-bold text-foreground" title="Ez a busz fordul vissza a végállomáson">
-        {a.predictedVehicle.id}
+        {displayVehicleId(a.predictedVehicle.id)}
       </span>
     ) : (
       <span className="rounded-[0.25em] border border-dashed border-primary/50 px-[0.35em] font-mono font-bold text-primary" title="Előrejelzett rendszám">
-        ~{a.predictedVehicle.id}
+        ~{displayVehicleId(a.predictedVehicle.id)}
       </span>
     );
   return null;
@@ -117,9 +140,10 @@ function Featured({ a, showPredicted }: { a: ArrivalItem; showPredicted: boolean
       <div className="flex items-center gap-[0.75em]">
         <RouteTile a={a} big />
         <div className="min-w-0 flex-1">
-          <p className={cn("truncate text-[1.1em] font-bold leading-tight", a.cancelled && "line-through")}>{a.headsign}</p>
+          <p className={cn("truncate text-[1.1em] font-bold leading-tight", a.cancelled && "line-through")}>{arrivalTitle(a)}</p>
           <p className="mt-[0.3em] flex items-center gap-[0.6em] text-[0.72em] text-muted-foreground">
             <span className="font-mono tabular-nums">{a.time}</span>
+            <Platform a={a} />
             <Delay a={a} />
           </p>
         </div>
@@ -127,12 +151,18 @@ function Featured({ a, showPredicted }: { a: ArrivalItem; showPredicted: boolean
       </div>
       {where || a.vehicle || a.predictedVehicle ? (
         <p className="mt-[0.65em] flex items-center gap-[0.5em] border-t border-border/70 pt-[0.55em] text-[0.78em] text-muted-foreground">
-          <Bus className="h-[1.1em] w-[1.1em] shrink-0" />
+          {a.mode === "rail" ? <TrainFront className="h-[1.1em] w-[1.1em] shrink-0" /> : <Bus className="h-[1.1em] w-[1.1em] shrink-0" />}
           <span className="min-w-0 flex-1 truncate">{where ?? (a.vehicle ? "úton" : "még nem indult el")}</span>
           <Vehicle a={a} showPredicted={showPredicted} />
         </p>
       ) : null}
       <ForecastLine className="mt-[0.45em] text-[0.72em]" mode="worst" delayS={a.forecastDelaySec} upperS={a.forecastUpperSec} />
+      {a.notices?.length ? (
+        <p className="mt-[0.45em] flex items-start gap-[0.4em] text-[0.7em] text-muted-foreground">
+          <Info aria-hidden className="mt-[0.15em] h-[1em] w-[1em] shrink-0 text-late" />
+          <span className="min-w-0 truncate">{a.notices[0]}</span>
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -143,9 +173,10 @@ function Row({ a, showPredicted }: { a: ArrivalItem; showPredicted: boolean }) {
     <li className={cn("flex min-h-0 items-center gap-[0.7em] py-[0.62em]", a.cancelled && "opacity-60")}>
       <RouteTile a={a} />
       <div className="min-w-0 flex-1">
-        <p className={cn("truncate text-[0.92em] font-semibold leading-tight", a.cancelled && "line-through")}>{a.headsign}</p>
+        <p className={cn("truncate text-[0.92em] font-semibold leading-tight", a.cancelled && "line-through")}>{arrivalTitle(a)}</p>
         <p className="mt-[0.25em] flex items-center gap-[0.55em] truncate text-[0.66em] text-muted-foreground">
           <span className="font-mono tabular-nums">{a.time}</span>
+          <Platform a={a} />
           <Delay a={a} />
           {where ? <span className="truncate">· {where}</span> : null}
           <Vehicle a={a} showPredicted={showPredicted} />

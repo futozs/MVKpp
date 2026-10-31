@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { Stop } from "@/types";
 import { StopCard } from "./StopCard";
@@ -17,6 +17,8 @@ type StopCarouselProps = {
   nearestId?: string | null;
   /** értesítésből nyitott megálló: ennek a kártyájára lapozunk (és ott is maradunk) */
   focusStop?: { id: string } | null;
+  /** további kártyák a megállók után (viszonylat, vonatszám) */
+  extra?: { key: string; label: string; node: ReactNode }[];
 };
 
 export function StopCarousel({
@@ -28,7 +30,9 @@ export function StopCarousel({
   distances,
   nearestId,
   focusStop,
+  extra = [],
 }: StopCarouselProps) {
+  const total = stops.length + extra.length;
   const trackRef = useRef<HTMLDivElement>(null);
   const [index, setIndex] = useState(0);
   const appliedFocusRef = useRef<{ id: string } | null>(null);
@@ -61,8 +65,21 @@ export function StopCarousel({
   }, [nearestIndex]);
 
   useEffect(() => {
-    setIndex((prev) => Math.min(prev, Math.max(0, stops.length - 1)));
-  }, [stops.length]);
+    setIndex((prev) => Math.min(prev, Math.max(0, total - 1)));
+  }, [total]);
+
+  // A megállók a viszonylat- és vonatkártyák után töltődnek be (a GTFS-listából): a böngésző
+  // ilyenkor a már látott kártyán tartaná a görgetést — az első betöltéskor az elejére ugrunk.
+  const hadStopsRef = useRef(stops.length > 0);
+  useEffect(() => {
+    if (hadStopsRef.current || !stops.length) return;
+    hadStopsRef.current = true;
+    if (appliedFocusRef.current || !extra.length) return;
+    requestAnimationFrame(() => {
+      trackRef.current?.scrollTo({ left: 0 });
+      setIndex(0);
+    });
+  }, [stops.length, extra.length]);
 
   useEffect(() => {
     // A hivatkozott megálló kártyáját nem lapozza el a „legközelebbi elöl”.
@@ -76,7 +93,7 @@ export function StopCarousel({
   const scrollToCard = (target: number) => {
     const track = trackRef.current;
     if (!track) return;
-    const clamped = Math.min(stops.length - 1, Math.max(0, target));
+    const clamped = Math.min(total - 1, Math.max(0, target));
     const child = track.children[clamped] as HTMLElement | undefined;
     if (!child) return;
 
@@ -105,7 +122,7 @@ export function StopCarousel({
   }, [focusStop, stops]);
 
   const atStart = index <= 0;
-  const atEnd = index >= stops.length - 1;
+  const atEnd = index >= total - 1;
 
   return (
     <div className="flex h-full flex-col">
@@ -141,10 +158,15 @@ export function StopCarousel({
             />
           </div>
         ))}
+        {extra.map((x) => (
+          <div key={x.key} className="flex h-full w-full shrink-0 snap-center">
+            {x.node}
+          </div>
+        ))}
       </div>
 
       {}
-      {stops.length > 1 ? (
+      {total > 1 ? (
         <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border bg-card px-4 py-2.5">
           <Button
             variant="outline"
@@ -159,14 +181,14 @@ export function StopCarousel({
 
           {}
           <div className="flex min-w-0 flex-1 items-center justify-center">
-            {stops.length <= 8 ? (
+            {total <= 8 ? (
               <div className="flex items-center gap-1.5">
-                {stops.map((stop, i) => (
+                {[...stops.map((s) => ({ key: s.id, label: s.name })), ...extra].map((stop, i) => (
                   <button
-                    key={stop.id}
+                    key={stop.key}
                     type="button"
                     onClick={() => scrollToCard(i)}
-                    aria-label={`Ugrás ide: ${stop.name}`}
+                    aria-label={`Ugrás ide: ${stop.label}`}
                     aria-current={i === index ? "true" : undefined}
                     className={cn(
                       "h-2 rounded-full transition-all duration-fast",
@@ -180,7 +202,7 @@ export function StopCarousel({
               </div>
             ) : (
               <p className="font-mono text-[11px] font-bold tabular-nums text-muted-foreground">
-                {index + 1} / {stops.length}
+                {index + 1} / {total}
               </p>
             )}
           </div>

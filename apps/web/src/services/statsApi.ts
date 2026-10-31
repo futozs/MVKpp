@@ -382,7 +382,33 @@ async function getRoot<T>(path: string): Promise<T> {
   return res.json();
 }
 
+/** A Volán és a vasút összesítője (`/v3/stats/regional`). */
+export type RegionalStats = {
+  days: number;
+  feeds: string[];
+  summary: { n: number | null; ontime: number | null; late: number | null; avg_delay_s: number | null; p85_delay_s: number | null } | null;
+  /** vonatonként (vonatszám) / Volán-menetenként (vonal/menet), a végállomáson mért késés */
+  trains: {
+    name: string;
+    route_short: string;
+    short_name: string | null;
+    color: string | null;
+    text_color: string | null;
+    kind: string | null;
+    runs: number;
+    avg_end_delay_s: number | null;
+    p85_end_delay_s: number | null;
+    ontime_pct: number | null;
+  }[];
+  /** a MÁV megjegyzései (késés oka, kocsiösszeállítás, pótlóbusz), hány menetnél */
+  causes: { text: string; kind: string; n: number }[];
+  platforms: { n: number; changed: number } | null;
+  daily: { date: string; n: number; ontime: number | null; avg_delay_s: number | null }[];
+};
+
 export const statsV3 = {
+  /** modes: „coach,rail” részhalmaza (üresen mindkettő) */
+  regional: (days: number, modes: string) => getRoot<RegionalStats>(`/v3/stats/regional?days=${days}${modes ? `&modes=${modes}` : ""}`),
   network: (daytype: number, days: number, fromHour: number, toHour: number) =>
     getRoot<NetworkProfile>(`/v3/stats/network?daytype=${daytype}&days=${days}&fromHour=${fromHour}&toHour=${toHour}`),
   incidents: (from: string, to: string, kind?: string, minConfidence = 50) =>
@@ -394,7 +420,8 @@ export const statsV3 = {
 export const statsApi = {
   health: () => get<StatsHealth>("/health"),
 
-  vehicles: () => get<{ vehicles: VehicleListItem[] }>("/vehicles"),
+  /** modes nélkül csak az MVK flottája; vele a Volán-buszok és a vonatok is */
+  vehicles: (modes?: string) => get<{ vehicles: VehicleListItem[] }>(`/vehicles${modes ? `?modes=${modes}` : ""}`),
 
   vehicle: (id: string, date: string) =>
     get<VehicleDetail>(`/vehicle/${encodeURIComponent(id)}?date=${date}`),

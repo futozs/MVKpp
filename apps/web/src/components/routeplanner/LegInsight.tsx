@@ -12,6 +12,7 @@ import {
   vehiclePhrase,
 } from "./format";
 import { basisLabel } from "./forecast";
+import { displayVehicleId } from "@/lib/modes";
 
 type Props = { leg: JourneyTransitLeg; mode: JourneyMode };
 
@@ -89,7 +90,14 @@ function ForecastInsight({ leg }: { leg: JourneyTransitLeg }) {
         {basisLabel(p)}
         {live && p.vehicleId ? (
           <span className="font-normal text-muted-foreground">
-            · <span className="font-mono">{p.vehicleId}</span> úton
+            ·{" "}
+            {leg.mode === "RAIL" ? (
+              "a vonat úton"
+            ) : (
+              <>
+                <span className="font-mono">{displayVehicleId(p.vehicleId)}</span> úton
+              </>
+            )}
           </span>
         ) : null}
       </p>
@@ -121,7 +129,7 @@ function ActualInsight({ leg }: { leg: JourneyTransitLeg }) {
         </p>
       ) : (
         <p className="text-muted-foreground">
-          Az indulásról nincs mérés{a.vehicleId ? ` (jármű: ${a.vehicleId})` : ""}.
+          Az indulásról nincs mérés{a.vehicleId ? ` (jármű: ${displayVehicleId(a.vehicleId)})` : ""}.
         </p>
       )}
       {a.arrTs != null && a.arrDelayS != null ? (

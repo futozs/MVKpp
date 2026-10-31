@@ -6,12 +6,36 @@ import { api } from "@/services/api";
 import { distanceKm, formatDistance } from "@/lib/geo";
 import { cn, normalizeSearchText } from "@/lib/utils";
 import { MapControl } from "./MapControl";
+import { displayVehicleId, isRegionalId, pickableStops, regionRank, vehicleModeOf } from "@/lib/modes";
+import { stopKindLabel } from "@/components/transit/RegionalBits";
 
 const MAX_STOPS = 40;
 const MAX_VEHICLES = 8;
 const NEAR_KM = 0.6;
 
 type StopGroup = { name: string; group: Stop[]; lat: number; lon: number; km: number | null };
+
+const compact = (t: string) => t.replace(/[\s-]/g, "").toUpperCase();
+
+/**
+ * Egy jármű illik-e a kereséshez: az MVK-é a rendszám számjegyeire (mint eddig), a
+ * Volán-buszé a rendszámára (betűkkel is), a vonaté a vonatszámára.
+ */
+function vehicleMatches(v: LiveVehicle, raw: string, digits: string | null): boolean {
+  const mode = vehicleModeOf(v);
+  if (mode === "rail") return Boolean(digits && digits.length >= 2 && v.trainNo?.startsWith(digits));
+  if (mode === "coach") {
+    const qv = compact(raw);
+    return qv.length >= 2 && /^[A-Z0-9]+$/.test(qv) && compact(displayVehicleId(v.id, v.plate)).includes(qv);
+  }
+  return Boolean(digits && v.id.includes(digits));
+}
+
+/** a megálló sora alatt: az MVK-é a táblán látható kód, a regionálisé a fajtája (Vasútállomás…) */
+const stopSub = (s: Stop) => (isRegionalId(s.id) ? stopKindLabel(s) : `kód ${s.id.replace(/^SP/i, "")}`);
+
+/** a találat sorában: a vonat a vonatszámával, a Volán-busz a rendszámával */
+const vehicleTitle = (v: LiveVehicle) => (vehicleModeOf(v) === "rail" && v.trainNo ? `${v.trainNo}${v.trainName ? ` ${v.trainName}` : ""}` : displayVehicleId(v.id, v.plate));
 
 /**
  * Keresés (bal alsó sarok): megálló neve vagy a táblán látható kódja, és
@@ -74,11 +98,13 @@ export function MapSearch({
   // Kódra pontos egyezés: a táblán csak a szám áll, a GTFS-azonosító „SP” + kód.
   const byCode = useMemo(() => (digits ? (stops.find((s) => s.id.toLowerCase() === `sp${digits}`) ?? null) : null), [digits, stops]);
 
+  // az állomás a vágányaival egy tétel (a vágányok külön nem kellenek a keresőben)
+  const pickable = useMemo(() => pickableStops(stops), [stops]);
   const groups = useMemo((): StopGroup[] => {
     const source = term
-      ? stops.filter((s) => normalizeSearchText(s.name).includes(term) || (s.code && normalizeSearchText(s.code) === term))
+      ? pickable.filter((s) => normalizeSearchText(s.name).includes(term) || (s.code && normalizeSearchText(s.code) === term))
       : position
-        ? stops.filter((s) => distanceKm(position.lat, position.lon, s.lat, s.lon) <= NEAR_KM)
+        ? pickable.filter((s) => distanceKm(position.lat, position.lon, s.lat, s.lon) <= NEAR_KM)
         : [];
     const byName = new Map<string, Stop[]>();
     for (const s of source) byName.set(s.name, [...(byName.get(s.name) ?? []), s]);
@@ -87,13 +113,14 @@ export function MapSearch({
       const lon = group.reduce((a, s) => a + s.lon, 0) / group.length;
       return { name, group, lat, lon, km: position ? distanceKm(position.lat, position.lon, lat, lon) : null };
     });
-    out.sort((a, b) => (term ? a.name.localeCompare(b.name, "hu") : (a.km ?? 0) - (b.km ?? 0)));
+    out.sort((a, b) => (term ? regionRank(a.group[0]) - regionRank(b.group[0]) || a.name.localeCompare(b.name, "hu") : (a.km ?? 0) - (b.km ?? 0)));
     return out.slice(0, MAX_STOPS);
-  }, [stops, term, position]);
+  }, [pickable, term, position]);
 
+  const raw = q.trim();
   const vehicleHits = useMemo(
-    () => (digits ? vehicles.filter((v) => v.id.includes(digits)).sort((a, b) => a.id.length - b.id.length).slice(0, MAX_VEHICLES) : []),
-    [digits, vehicles],
+    () => (raw.length >= 1 ? vehicles.filter((v) => vehicleMatches(v, raw, digits)).sort((a, b) => a.id.length - b.id.length).slice(0, MAX_VEHICLES) : []),
+    [raw, digits, vehicles],
   );
 
   // Kód, ami nincs a betöltött listában: a szerver még ismerheti.
@@ -168,8 +195,8 @@ export function MapSearch({
                   }}
                   enterKeyHint="search"
                   autoComplete="off"
-                  placeholder="Megálló, kód vagy rendszám"
-                  aria-label="Megálló neve, megállókód vagy rendszám"
+                  placeholder="Megálló, kód, rendszám vagy vonatszám"
+                  aria-label="Megálló neve, megállókód, rendszám vagy vonatszám"
                   className="h-11 w-full rounded-xl border border-input bg-background pl-9 pr-3 text-[15px] outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 />
               </div>
@@ -216,7 +243,7 @@ export function MapSearch({
                         >
                           <RouteTile short={v.routeShort} color={v.routeColor} text={v.routeText} />
                           <span className="min-w-0">
-                            <span className="block font-mono text-sm font-bold tabular-nums">{v.id}</span>
+                            <span className="block font-mono text-sm font-bold tabular-nums">{vehicleTitle(v)}</span>
                             <span className="block truncate text-[11.5px] text-muted-foreground">{v.headsign}</span>
                           </span>
                         </button>
@@ -224,7 +251,7 @@ export function MapSearch({
                           type="button"
                           onClick={() => onToggleWatch(v.id)}
                           aria-pressed={on}
-                          aria-label={on ? `${v.id} kiemelésének levétele` : `${v.id} kiemelése a térképen`}
+                          aria-label={on ? `${vehicleTitle(v)} kiemelésének levétele` : `${vehicleTitle(v)} kiemelése a térképen`}
                           title={on ? "Kiemelés levétele" : "Kiemelés a térképen"}
                           className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg hover:bg-accent", on ? "text-primary" : "text-muted-foreground")}
                         >
@@ -245,7 +272,7 @@ export function MapSearch({
                         key={g.name}
                         name={g.name}
                         multi={!single}
-                        sub={[single ? `kód ${single.id.replace(/^SP/i, "")}` : `${g.group.length} kocsiállás`, g.km != null ? formatDistance(g.km) : null].filter(Boolean).join(" · ")}
+                        sub={[single ? stopSub(single) : `${g.group.length} kocsiállás`, g.km != null ? formatDistance(g.km) : null].filter(Boolean).join(" · ")}
                         watched={single ? monitoredStopIds.includes(single.id) : undefined}
                         onPick={() => pickGroup(g)}
                         onToggleWatch={single ? () => onToggleMonitorStop(single.id) : undefined}
@@ -263,7 +290,7 @@ export function MapSearch({
 
               {!term && !groups.length ? (
                 <p className="px-4 py-6 text-center text-[13px] text-muted-foreground">
-                  Írd be a megálló nevét, a táblán látható kódját, vagy egy busz rendszámát.
+                  Írd be a megálló nevét, a táblán látható kódját, egy busz rendszámát vagy egy vonat számát.
                 </p>
               ) : null}
             </div>

@@ -11,6 +11,8 @@ import type { ServiceDay } from "../gtfs/service.ts";
 import { haversineKm } from "../geo.ts";
 import { hmOfUnix } from "../time.ts";
 import type { StartRisk } from "../startRisk.ts";
+import { isMvkId, modeOfRoute, operatorLabel, type TransitMode } from "../transit/modes.ts";
+import { isRailTrip, trainParts } from "../transit/regionalGtfs.ts";
 import type { ArrivalItem, LiveVeh, RealtimeSnapshot, StopArrivals } from "./types.ts";
 
 export type ArrivalExtras = {
@@ -25,6 +27,14 @@ export type ArrivalExtras = {
   startRisk?: (tripId: string) => StartRisk | null;
   /** (tripId, stopId) → dugó a busz előtt a megállóig */
   trafficAhead?: (tripId: string, stopId: string) => ArrivalItem["trafficAhead"];
+  /** csak ezek a módok (a v2 alapból csak MVK) — hiányában minden */
+  modes?: ReadonlySet<TransitMode>;
+  /** (tripId, stopId) → élő vágány / kocsiállás (vasút, autóbusz-állomás) */
+  platform?: (tripId: string, stopId: string) => string | null;
+  /** tripId → hivatalos megjegyzések (késés oka, kocsiösszeállítás) */
+  notices?: (tripId: string) => string[] | null;
+  /** az MVK-sorokhoz is kellenek a v3-mezők (mód, vonal-kulcs) — a v2 alapválasza bájtra a régi marad */
+  rich?: boolean;
 };
 
 type DayCtx = { day: ServiceDay; midnightUnix: number };
@@ -40,28 +50,34 @@ export function arrivalsForStop(
   const primary = days[0];
   const feed = primary?.day.feed;
   const s = feed?.stops.get(stopId);
-  const pred = snap.predByStop.get(stopId) ?? new Map();
+  // Állomásnál (vasútállomás, autóbusz-állomás) az összes vágány / kocsiállás indulásai.
+  const stopIds = feed ? feed.stopsOf(stopId) : [stopId];
+  const pred = new Map<string, { unix: number; delay: number | null; stopId: string }>();
+  for (const sid of stopIds) for (const [trip, p] of snap.predByStop.get(sid) ?? []) if (!pred.has(trip)) pred.set(trip, { ...p, stopId: sid });
 
   // A menet-azonosítók napról napra ismétlődnek: ugyanaz a trip_id ma és holnap is
   // közlekedhet. Ezért a jelöltek kulcsa nap + menet — különben este a holnapi
   // (hajnali) indulások kiesnének, mert a mai, már elment példány foglalja a helyet.
   // Az élő adat (előrejelzés, jármű, törlés) csak a mai szolgáltatási napra vonatkozik.
-  type Cand = { tripId: string; unix: number; delay: number | null; hasRT: boolean; dc: DayCtx; primary: boolean };
+  type Cand = { tripId: string; unix: number; delay: number | null; hasRT: boolean; dc: DayCtx; primary: boolean; stopId: string };
   const cand = new Map<string, Cand>();
   days.forEach((dc, di) => {
     const isPrimary = dc === primary;
-    for (const { trip, dep } of dc.day.feed.stopSched.get(stopId) || []) {
-      const tr = dc.day.feed.trips.get(trip);
-      if (!tr || !dc.day.services.has(tr.serviceId)) continue;
-      const key = `${di}|${trip}`;
-      if (cand.has(key)) continue;
-      const p = isPrimary ? pred.get(trip) : undefined;
-      cand.set(key, { tripId: trip, unix: p?.unix ?? dc.midnightUnix + dep, delay: p?.delay ?? null, hasRT: !!p, dc, primary: isPrimary });
+    for (const sid of stopIds) {
+      for (const { trip, dep } of dc.day.feed.stopSched.get(sid) || []) {
+        const tr = dc.day.feed.trips.get(trip);
+        if (!tr || !dc.day.services.has(tr.serviceId)) continue;
+        const key = `${di}|${trip}`;
+        if (cand.has(key)) continue;
+        const p = isPrimary ? pred.get(trip) : undefined;
+        cand.set(key, { tripId: trip, unix: p?.unix ?? dc.midnightUnix + dep, delay: p?.delay ?? null, hasRT: !!p, dc, primary: isPrimary, stopId: sid });
+      }
     }
   });
   if (primary) {
-    for (const [trip, p] of pred) if (!cand.has(`0|${trip}`)) cand.set(`0|${trip}`, { tripId: trip, unix: p.unix, delay: p.delay, hasRT: true, dc: primary, primary: true });
+    for (const [trip, p] of pred) if (!cand.has(`0|${trip}`)) cand.set(`0|${trip}`, { tripId: trip, unix: p.unix, delay: p.delay, hasRT: true, dc: primary, primary: true, stopId: p.stopId });
   }
+  const modeOk = (routeId: string, dc: DayCtx) => !extras.modes || extras.modes.has(modeOfRoute(routeId, dc.day.feed.routes.get(routeId)?.type ?? ""));
 
   const tripOf = (tripId: string, dc: DayCtx) => dc.day.feed.trips.get(tripId);
 
@@ -72,22 +88,26 @@ export function arrivalsForStop(
   const rows = [...cand.values()]
     .map((x) => {
       const t = tripOf(x.tripId, x.dc);
-      return { ...x, routeId: t?.routeId || "", headsign: t?.headsign || "" };
+      return { ...x, routeId: t?.routeId || "", headsign: t?.headsign || "", trainNo: t && isRailTrip(t) ? trainParts(t.shortName).no : null };
     })
-    .filter((x) => x.unix >= nowUnix - 60)
+    .filter((x) => x.unix >= nowUnix - 60 && modeOk(x.routeId, x.dc))
     .sort((a, b) => a.unix - b.unix || (b.hasRT ? 1 : 0) - (a.hasRT ? 1 : 0))
     .filter((x) => {
-      const k = `${x.routeId}|${hmOfUnix(x.unix)}|${x.headsign}`;
+      // Ugyanaz a vonat két menetként is szerepelhet (520 HERNÁD-ZEMPLÉN és 520 ZEMPLÉN): vonatszám szerint egy sor.
+      const k = x.trainNo ? `T${x.trainNo}|${hmOfUnix(x.unix)}` : `${x.routeId}|${hmOfUnix(x.unix)}|${x.headsign}`;
       if (seen.has(k)) return false;
       seen.add(k);
       return true;
     });
 
-  const findNearestStop = (lat: number, lon: number) => {
+  const findNearestStop = (lat: number, lon: number, tripId: string, f: ServiceDay["feed"]) => {
     let bestDist = Infinity;
     let best: { id: string; name: string } | null = null;
     if (!feed) return best;
-    for (const st of feed.stops.values()) {
+    // A regionális menetnél a menet saját megállói közül (egy vonat ne „egy buszmegálló közelében” legyen);
+    // az MVK-é a régi algoritmus (minden megálló közül).
+    const own = isMvkId(tripId) ? null : (f.tripStops.get(tripId) ?? []).map((x) => f.stops.get(x.stopId)).filter((x) => x != null);
+    for (const st of own ?? feed.stops.values()) {
       const d = haversineKm(lat, lon, st.lat, st.lon);
       if (d < bestDist) {
         bestDist = d;
@@ -126,7 +146,7 @@ export function arrivalsForStop(
 
     if (veh && s) {
       distanceToStopKm = +haversineKm(veh.lat, veh.lon, s.lat, s.lon).toFixed(1);
-      const nearest = findNearestStop(veh.lat, veh.lon);
+      const nearest = findNearestStop(veh.lat, veh.lon, x.tripId, f);
       currentStopName = nearest?.name ?? null;
       currentStopId = nearest?.id ?? null;
       const atStop = distanceToStopKm < 0.25;
@@ -165,8 +185,13 @@ export function arrivalsForStop(
 
     const cancelled = x.primary ? (extras.cancelled?.has(x.tripId) ?? false) : false;
     // Az előrejelzés élő és még el sem indult (de hamarosan induló) menetre is jár.
-    const fc = x.primary && !cancelled ? (extras.forecast?.(x.tripId, stopId) ?? null) : null;
-    const schedDep = x.dc.day.feed.stopSched.get(stopId)?.find((q) => q.trip === x.tripId)?.dep;
+    const fc = x.primary && !cancelled ? (extras.forecast?.(x.tripId, x.stopId) ?? null) : null;
+    const schedDep = x.dc.day.feed.stopSched.get(x.stopId)?.find((q) => q.trip === x.tripId)?.dep;
+    const childStop = f.stops.get(x.stopId);
+    const livePlatform = x.primary ? (extras.platform?.(x.tripId, x.stopId) ?? null) : null;
+    const schedPlatform = childStop?.platform || null;
+    const tp = tr && isRailTrip(tr) ? trainParts(tr.shortName) : null;
+    const notices = x.primary ? (extras.notices?.(x.tripId) ?? null) : null;
     arrivals.push({
       route: r?.short || tr?.routeId || "?",
       color: r?.color || "888888",
@@ -190,7 +215,22 @@ export function arrivalsForStop(
       schedUnix: schedDep != null ? x.dc.midnightUnix + schedDep : null,
       // A kiosztott busz is lehet még az előző menetén: az el nem indult menetet a jóslás dönti el.
       startRisk: x.primary && !cancelled ? (extras.startRisk?.(x.tripId) ?? null) : null,
-      trafficAhead: x.primary && veh ? (extras.trafficAhead?.(x.tripId, stopId) ?? null) : null,
+      trafficAhead: x.primary && veh ? (extras.trafficAhead?.(x.tripId, x.stopId) ?? null) : null,
+      ...(r && r.key !== r.short
+        ? {
+            mode: modeOfRoute(r.id, r.type),
+            routeKey: r.key,
+            operator: operatorLabel(r.agencyName),
+            trainNo: tp?.no ?? null,
+            trainName: tp?.name ?? null,
+            platform: livePlatform ?? schedPlatform,
+            platformChanged: Boolean(livePlatform && schedPlatform && livePlatform !== schedPlatform),
+            stopId: x.stopId,
+            ...(notices?.length ? { notices } : {}),
+          }
+        : extras.rich
+          ? { mode: modeOfRoute(tr?.routeId ?? "", r?.type ?? ""), routeKey: r?.key ?? tr?.routeId ?? "", stopId: x.stopId }
+          : {}),
     });
   }
 

@@ -16,6 +16,19 @@ import {
 } from "@/components/charts/Charts";
 import { QueryBoundary, PillPicker, SearchablePicker } from "./PanelState";
 import { useStatsQuery } from "./useStatsQuery";
+import { routeModeOf } from "@/lib/modes";
+
+/** a statisztika vonalkulcsa: az MVK-nál a vonalszám, a regionálisnál a vonal azonosítója */
+const keyOf = (r: Route) => r.key ?? r.short;
+const MODE_ORDER = { tram: 0, bus: 0, coach: 1, rail: 2 } as const;
+
+/** a pill alatti felirat: Volánnál a település / üzem, vonatnál az útvonal */
+function routeSub(r: Route): string | undefined {
+  const m = routeModeOf(r);
+  if (m === "coach") return r.operator ?? undefined;
+  if (m === "rail") return r.long.replace(/^[^:]+:\s*/, "");
+  return undefined;
+}
 
 const RANGES = [
   { id: "7", label: "7 nap" },
@@ -50,7 +63,7 @@ function mergeDirections(days: RouteDay[]) {
 }
 
 export function RoutePanel({ routes }: { routes: Route[] }) {
-  const [short, setShort] = useState<string | null>(routes[0]?.short ?? null);
+  const [short, setShort] = useState<string | null>(routes[0] ? keyOf(routes[0]) : null);
   const [range, setRange] = useState<(typeof RANGES)[number]["id"]>("30");
 
   const to = serviceToday();
@@ -64,8 +77,12 @@ export function RoutePanel({ routes }: { routes: Route[] }) {
 
   const sorted = useMemo(
     () =>
-      [...routes].sort((a, b) =>
-        a.short.localeCompare(b.short, "hu", { numeric: true }),
+      // MVK elöl, utána a Volán (üzemenként), végül a vonatok
+      [...routes].sort(
+        (a, b) =>
+          MODE_ORDER[routeModeOf(a)] - MODE_ORDER[routeModeOf(b)] ||
+          (a.operator ?? "").localeCompare(b.operator ?? "", "hu") ||
+          a.short.localeCompare(b.short, "hu", { numeric: true }),
       ),
     [routes],
   );
@@ -80,9 +97,10 @@ export function RoutePanel({ routes }: { routes: Route[] }) {
           value={short}
           onChange={setShort}
           items={sorted.map((r) => ({
-            id: r.short,
+            id: keyOf(r),
             label: r.short,
-            search: r.long,
+            sub: routeSub(r),
+            search: `${r.long} ${r.operator ?? ""}`,
             color: r.color,
           }))}
         />

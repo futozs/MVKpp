@@ -13,6 +13,11 @@ import { RidesPanel } from "@/components/ride/RidesPanel";
 import { CommuteCard } from "./CommuteCard";
 import { MENU_ITEM, MoreMenu } from "./MoreMenu";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { RelationCard } from "./RelationCard";
+import { TrainCard } from "./TrainCard";
+import { relationKey, useRelationWatches, useTrainWatches } from "@/lib/transitWatches";
+import { feedOfId, useEnabledModes } from "@/lib/modes";
+import { withHungarianSuffix } from "@/lib/utils";
 
 /** a megállókártyák rácsa asztalon: 340–400 px széles oszlopok, középre igazítva */
 // auto-fit: az üres oszlopok összeesnek, így a meglévő kártyák valóban középre kerülnek (auto-fill mellett
@@ -26,8 +31,10 @@ const WATCH_VIEWS: { id: WatchView; label: string; icon: typeof Radar }[] = [
   { id: "rides", label: "Utazásaim", icon: Ticket },
 ];
 
-const QUICK_STOPS = [
+const QUICK_STOPS: { label: string; match: string; mode?: "rail" | "coach" }[] = [
   { label: "Tiszai pályaudvar", match: "Tiszai" },
+  { label: "Miskolc-Tiszai (vasút)", match: "Miskolc-Tiszai", mode: "rail" },
+  { label: "Autóbusz-állomás (Volán)", match: "Miskolc, autóbusz-állomás", mode: "coach" },
   { label: "Búza tér", match: "Búza" },
   { label: "Villanyrendőr", match: "Villany" },
   { label: "Újgyőri főtér", match: "Újgyőri" },
@@ -42,6 +49,8 @@ interface MultiStopDashboardProps {
   onFocusMap: (stop: Stop, vehicleTripId?: string, vehicleId?: string) => void;
   /** értesítésből nyitott megálló: a kártyája kerüljön elő */
   focusStop?: { id: string } | null;
+  /** egy menet követése a térképen (a viszonylat- és vonatkártyákról) */
+  onFocusTrip?: (tripId: string, vehicleId?: string) => void;
 }
 
 export function MultiStopDashboard({
@@ -50,7 +59,19 @@ export function MultiStopDashboard({
   setSelectedStopIds,
   onFocusMap,
   focusStop,
+  onFocusTrip,
 }: MultiStopDashboardProps) {
+  const enabledModes = useEnabledModes();
+  const [relations, setRelations] = useRelationWatches();
+  const [trains, setTrains] = useTrainWatches();
+  // a vonatszám- és a viszonylat-kártya csak bekapcsolt módjával él (a figyelés megmarad, ha később visszakapcsolod)
+  const shownTrains = enabledModes.includes("rail") ? trains : [];
+  const feedOn = (id: string) => {
+    const f = feedOfId(id);
+    return f === "mvk" || enabledModes.includes(f);
+  };
+  const shownRelations = relations.filter((r) => feedOn(r.from) && feedOn(r.to));
+  const shownStopCount = selectedStopIds.filter(feedOn).length;
   const isWide = useMediaQuery("(min-width: 768px)");
   const [isPickerOpen, setPickerOpen] = useState(false);
   const [isReordering, setReordering] = useState(false);
@@ -161,13 +182,38 @@ export function MultiStopDashboard({
 
   const addByName = (needle: string) => {
     const q = normalizeSearchText(needle);
+    // az állomás (nem a vágánya) kerüljön fel
+    const ids = new Set(stops.map((s) => s.id));
     const found = stops.find(
       (s) =>
-        normalizeSearchText(s.name).includes(q) ||
-        s.id.toLowerCase().includes(q),
+        !(s.parent && ids.has(s.parent)) &&
+        (normalizeSearchText(s.name).includes(q) || s.id.toLowerCase().includes(q)),
     );
     if (found) toggleStop(found.id);
   };
+
+  const addRelation = (r: { from: string; to: string }) => {
+    if (relations.some((x) => relationKey(x) === relationKey(r))) return;
+    setRelations([...relations, r]);
+  };
+  const removeRelation = (key: string) => setRelations(relations.filter((x) => relationKey(x) !== key));
+  const toggleTrain = (no: string) => setTrains(trains.includes(no) ? trains.filter((t) => t !== no) : [...trains, no]);
+
+  // A viszonylat- és vonatkártyák a megállók után (asztalon a rácsban, telefonon a lapozóban).
+  const stopName = (id: string) => stopById.get(id)?.name ?? id;
+  const extraCards = [
+    ...shownRelations.map((r) => ({
+      key: `rel:${relationKey(r)}`,
+      label: `${stopName(r.from)} → ${stopName(r.to)}`,
+      node: (cls?: string) => <RelationCard relation={r} stops={stops} onRemove={() => removeRelation(relationKey(r))} onFocusTrip={onFocusTrip} className={cls} />,
+    })),
+    ...shownTrains.map((t) => ({
+      key: `train:${t}`,
+      label: `${withHungarianSuffix(t)} vonat`,
+      node: (cls?: string) => <TrainCard trainNo={t} onRemove={() => toggleTrain(t)} onFocusTrip={onFocusTrip} className={cls} />,
+    })),
+  ];
+  const watchedCount = watched.length + extraCards.length;
 
   const canNearest = manualOrder.length > 1 && Boolean(geo.position);
   // helyzet nélkül a „legközelebbi elöl” nem rendez: ilyenkor is lehessen kézzel sorba tenni
@@ -263,9 +309,9 @@ export function MultiStopDashboard({
             <Button onClick={() => setPickerOpen(true)} className="h-10 shrink-0" aria-label="Megálló felvétele">
               <Plus />
               <span className="hidden sm:inline">Megálló felvétele</span>
-              {selectedStopIds.length > 0 ? (
+              {shownStopCount + extraCards.length > 0 ? (
                 <span className="rounded bg-primary-foreground/20 px-1.5 py-px font-mono text-[10px] font-bold tabular-nums">
-                  {selectedStopIds.length}
+                  {shownStopCount + extraCards.length}
                 </span>
               ) : null}
             </Button>
@@ -286,9 +332,10 @@ export function MultiStopDashboard({
       {/* A naplóból felismert szokásos utad (csak a szokásos idő körül látszik). */}
       {view === "stops" && !isWide ? <CommuteCard className="mx-4 mt-3 shrink-0" /> : null}
 
-      {view === "stops" && watched.length > 0 && !isWide ? (
+      {view === "stops" && watchedCount > 0 && !isWide ? (
         <div className="min-h-0 flex-1 overflow-hidden pt-4">
           <StopCarousel
+            extra={extraCards.map((x) => ({ key: x.key, label: x.label, node: x.node("h-full w-full") }))}
             stops={watched}
             onRemove={removeStop}
             onFocusMap={onFocusMap}
@@ -301,13 +348,13 @@ export function MultiStopDashboard({
         </div>
       ) : null}
 
-      {view === "stops" && (watched.length === 0 || isWide) ? (
+      {view === "stops" && (watchedCount === 0 || isWide) ? (
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
         {isWide ? <CommuteCard className="mx-auto mb-4 w-full max-w-[400px]" /> : null}
-        {watched.length === 0 && stops.length === 0 && selectedStopIds.length > 0 ? (
+        {watchedCount === 0 && stops.length === 0 && selectedStopIds.length > 0 ? (
           // a megállólista még nem jött meg: a figyelt megállók nem vesztek el
           <p className="mx-auto max-w-xl py-10 text-center text-sm text-muted-foreground">Megállók betöltése…</p>
-        ) : watched.length === 0 ? (
+        ) : watchedCount === 0 ? (
           <Card className="mx-auto max-w-xl p-6 text-center shadow-lg sm:p-8">
             <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-primary/12 text-primary">
               <Radar className="h-7 w-7" />
@@ -329,7 +376,7 @@ export function MultiStopDashboard({
                 Gyakori csomópontok
               </p>
               <div className="mt-3 flex flex-wrap justify-center gap-2">
-                {QUICK_STOPS.map((preset) => (
+                {QUICK_STOPS.filter((p) => !p.mode || enabledModes.includes(p.mode)).map((preset) => (
                   <Button
                     key={preset.match}
                     variant="outline"
@@ -367,6 +414,11 @@ export function MultiStopDashboard({
                 }
               />
             ))}
+            {extraCards.map((x) => (
+              <div key={x.key} className="flex min-h-[340px]">
+                {x.node("w-full")}
+              </div>
+            ))}
           </div>
         )}
       </div>
@@ -378,6 +430,11 @@ export function MultiStopDashboard({
         stops={stops}
         selectedStopIds={selectedStopIds}
         onToggleStop={toggleStop}
+        relations={relations}
+        onAddRelation={addRelation}
+        trains={trains}
+        onToggleTrain={toggleTrain}
+        showRail={enabledModes.includes("rail")}
       />
     </div>
   );

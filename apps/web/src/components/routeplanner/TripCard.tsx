@@ -14,6 +14,7 @@ import {
   transfersLabel,
   transitLegs,
   walkTotalSec,
+  legTileText,
 } from "./format";
 import { tripForecast, worstTransfer } from "./forecast";
 import { outcomeHeadline, pastOutcome, transferMeasured } from "./proof";
@@ -31,7 +32,7 @@ function RouteChain({ trip }: { trip: JourneyTrip }) {
       {rides.map((l, i) => (
         <span key={`${l.tripId}-${i}`} className="inline-flex items-center gap-1">
           {i ? <ChevronRight aria-hidden className="h-3 w-3 text-muted-foreground" /> : null}
-          <RouteTile short={l.routeShortName} color={l.routeColor} text={l.routeTextColor} size="sm" />
+          <RouteTile short={legTileText(l)} color={l.routeColor} text={l.routeTextColor} size="sm" />
         </span>
       ))}
     </div>

@@ -16,6 +16,8 @@ import { CatchPill, ReplacementNote, replacementFor, StartRiskLine, TrafficLine 
 import { useCatchFor } from "@/hooks/useCatch";
 import { useWatchFeatures } from "@/lib/watchPrefs";
 import { cn } from "@/lib/utils";
+import { arrivalTileText, arrivalTitle, arrivalVehicleLabel, NoticeList, PlatformBadge, stopKindLabel } from "@/components/transit/RegionalBits";
+import { modesParam, useEnabledModes } from "@/lib/modes";
 
 const POLL_MS = 4000;
 
@@ -36,6 +38,8 @@ export function StopDetailDrawer({
   monitoredStopIds,
   onToggleMonitorStop,
 }: StopDetailDrawerProps) {
+  // a bekapcsolt módok indulásai (a közös MVK-megállón a Volán is)
+  const modesKey = modesParam(useEnabledModes());
   const [data, setData] = useState<StopArrivalsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,7 +69,7 @@ export function StopDetailDrawer({
     const load = async (silent: boolean) => {
       if (!silent) setLoading(true);
       try {
-        const res = await api.getArrivals(stopId, 16);
+        const res = await api.getArrivals(stopId, 16, modesKey);
         if (!alive || !mounted.current) return;
         setData(res);
         setError(null);
@@ -82,7 +86,7 @@ export function StopDetailDrawer({
       alive = false;
       clearInterval(timer);
     };
-  }, [stopId]);
+  }, [stopId, modesKey]);
 
   useEffect(() => {
     if (!stopId) return;
@@ -143,7 +147,7 @@ export function StopDetailDrawer({
             {stop.name}
           </h3>
           <p className="mt-0.5 flex items-center gap-1.5 font-mono text-[11px] tabular-nums text-muted-foreground">
-            <span>{stop.id}</span>
+            <span>{stopKindLabel(stop)}</span>
             <span aria-hidden>·</span>
             {data?.rtError ? (
               <span>menetrendi</span>
@@ -239,22 +243,23 @@ export function StopDetailDrawer({
                     )}
                   >
                     <RouteTile
-                      short={arr.route}
+                      short={arrivalTileText(arr)}
                       color={arr.color}
                       text={arr.text}
                     />
 
                     <div className="min-w-0 flex-1">
                       <p className="flex items-center gap-1.5 truncate text-xs font-medium">
-                        <span className="truncate">{arr.headsign}</span>
+                        <span className="truncate">{arrivalTitle(arr)}</span>
                         {arr.live && (!arr.cancelled || arr.vehicle) ? <LiveDot /> : null}
                       </p>
 
                       <div className="mt-1 flex items-center gap-2">
                         {}
-                        {arr.vehicle ? (
+                        <PlatformBadge platform={arr.platform} changed={arr.platformChanged} mode={arr.mode} compact />
+                        {arrivalVehicleLabel(arr) ? (
                           <span className="rounded bg-primary/12 px-1.5 py-px font-mono text-[11px] font-bold tabular-nums text-primary">
-                            {arr.vehicle.id}
+                            {arrivalVehicleLabel(arr)}
                           </span>
                         ) : null}
                         <span className={cn("font-mono text-[11px] tabular-nums text-muted-foreground", arr.cancelled && "line-through decoration-destructive/70")}>
@@ -282,6 +287,7 @@ export function StopDetailDrawer({
                           {arr.progressDesc}
                         </p>
                       ) : null}
+                      <NoticeList notices={arr.notices} compact className="mt-1" />
                     </div>
 
                     <span className={cn("shrink-0 font-mono text-sm font-bold tabular-nums", arr.cancelled && "opacity-40 line-through")}>

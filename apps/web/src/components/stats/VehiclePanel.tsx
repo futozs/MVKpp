@@ -30,6 +30,13 @@ import { QueryBoundary, SearchablePicker } from "./PanelState";
 import { useStatsQuery } from "./useStatsQuery";
 import { useFavoriteVehicles } from "@/hooks/useFavoriteVehicles";
 import { cn } from "@/lib/utils";
+import { displayVehicleId, isRegionalId, modesParam, useEnabledModes } from "@/lib/modes";
+import type { Route } from "@/types";
+
+/** a menet vonala a statisztikában: a regionálisé a vonal azonosítója, a feliratra a rövid neve kell */
+type RouteLabel = (routeShort: string) => string;
+
+const KIND_SUB: Record<string, string | undefined> = { TRAM: "🚋", COACH: "Volán", RAIL: "vonat" };
 
 const FAST_DMS = 100;
 
@@ -135,7 +142,7 @@ function TrackTrace({ track }: { track: TrackPoint[] }) {
   );
 }
 
-function RunTimeline({ runs }: { runs: VehicleRun[] }) {
+function RunTimeline({ runs, label }: { runs: VehicleRun[]; label: RouteLabel }) {
   const { ref, width } = useMeasure<HTMLDivElement>();
   if (!runs.length)
     return <EmptyChart>Ezen a napon nem futott menet.</EmptyChart>;
@@ -183,7 +190,7 @@ function RunTimeline({ runs }: { runs: VehicleRun[] }) {
                 opacity={r.status === "ghost" ? 0.25 : 0.85}
               >
                 <title>
-                  {`${r.route_short} · ${r.headsign ?? ""}\n` +
+                  {`${label(r.route_short)} · ${r.headsign ?? ""}\n` +
                     `terv ${fmtSchedTime(r.sched_start_s)}–${fmtSchedTime(r.sched_end_s)}\n` +
                     `megálló ${r.stops_seen}/${r.stops_total} (${r.quality}%)\n` +
                     `indulási késés: ${fmtDelay(r.start_delay_s)}`}
@@ -194,7 +201,7 @@ function RunTimeline({ runs }: { runs: VehicleRun[] }) {
                 y={y + 12}
                 className="pointer-events-none fill-background text-[10px] font-bold"
               >
-                {bw > 26 ? r.route_short : ""}
+                {bw > 26 ? label(r.route_short) : ""}
               </text>
             </g>
           );
@@ -206,9 +213,16 @@ function RunTimeline({ runs }: { runs: VehicleRun[] }) {
 
 export function VehiclePanel({
   onFocusVehicle,
+  routes = [],
 }: {
   onFocusVehicle?: (id: string) => void;
+  routes?: Route[];
 }) {
+  const modesKey = modesParam(useEnabledModes());
+  const routeLabel = useMemo<RouteLabel>(() => {
+    const byKey = new Map(routes.filter((r) => r.key && r.key !== r.short).map((r) => [r.key!, r.short]));
+    return (rs) => byKey.get(rs) ?? rs;
+  }, [routes]);
   const [vehicleId, setVehicleId] = useState<string | null>(null);
   // A választott nap járművenként: új járműnél a legutóbbi olyan nap, amikor
   // ténylegesen közlekedett (a szerver dönti el) — sosem egy üres nap.
@@ -218,8 +232,8 @@ export function VehiclePanel({
   const { isFavoriteVehicle, toggleFavoriteVehicle } = useFavoriteVehicles();
 
   const listQ = useStatsQuery(
-    useCallback(() => statsApi.vehicles(), []),
-    [],
+    useCallback(() => statsApi.vehicles(modesKey), [modesKey]),
+    [modesKey],
   );
 
   useEffect(() => {
@@ -273,19 +287,21 @@ export function VehiclePanel({
             </h2>
             <SearchablePicker
               ariaLabel="Jármű keresése"
-              placeholder="Rendszám, pl. 1641"
+              placeholder={modesKey.includes("coach") || modesKey.includes("rail") ? "Rendszám vagy pályaszám, pl. 1641, LWA387" : "Rendszám, pl. 1641"}
               value={vehicleId}
               onChange={setVehicleId}
               items={[...d.vehicles]
                 .sort((a, b) => {
                   const fa = isFavoriteVehicle(a.vehicle_id) ? 0 : 1;
                   const fb = isFavoriteVehicle(b.vehicle_id) ? 0 : 1;
-                  return fa - fb;
+                  // a kedvencek után az MVK flottája, majd a Volán és a vonatok
+                  return fa - fb || Number(isRegionalId(a.vehicle_id)) - Number(isRegionalId(b.vehicle_id));
                 })
                 .map((v) => ({
                   id: v.vehicle_id,
-                  label: v.vehicle_id,
-                  sub: v.kind === "TRAM" ? "🚋" : undefined,
+                  label: displayVehicleId(v.vehicle_id),
+                  sub: KIND_SUB[v.kind],
+                  search: v.vehicle_id,
                 }))}
               isFavorite={isFavoriteVehicle}
               onToggleFavorite={toggleFavoriteVehicle}
@@ -412,7 +428,7 @@ export function VehiclePanel({
                   <ChartFrame
                     title="A nap menetei"
                   >
-                    <RunTimeline runs={d.runs} />
+                    <RunTimeline runs={d.runs} label={routeLabel} />
                   </ChartFrame>
 
                   {d.runs.length ? (
@@ -451,7 +467,7 @@ export function VehiclePanel({
                                       color: "hsl(var(--background))",
                                     }}
                                   >
-                                    {r.route_short}
+                                    {routeLabel(r.route_short)}
                                   </span>
                                 </td>
                                 <td className="px-2 py-2 tabular-nums text-muted-foreground">
@@ -524,7 +540,7 @@ export function VehiclePanel({
                 centerLabel={`${latestRoutes[0].share_pct}%`}
                 centerSub={`${latestRoutes.reduce((a, r) => a + r.runs, 0)} menet ebben a hónapban, ${latestRoutes[0].days_active} aktív nap`}
                 slices={latestRoutes.map((r) => ({
-                  label: `${r.route_short} — ${r.runs} menet`,
+                  label: `${routeLabel(r.route_short)} — ${r.runs} menet`,
                   value: r.runs,
                   color: r.color,
                 }))}

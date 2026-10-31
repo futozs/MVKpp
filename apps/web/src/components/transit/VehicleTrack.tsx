@@ -1,19 +1,24 @@
 import { Navigation, Radio } from "lucide-react";
 import type { ArrivalVehicle } from "@/types";
+import { displayVehicleId } from "@/lib/modes";
 import { cn } from "@/lib/utils";
 
 export function VehicleTrack({
   vehicle,
+  label,
   progressDesc,
   onTrack,
   className,
 }: {
   vehicle: ArrivalVehicle | null;
+  /** a jármű felirata (vonatnál a vonatszám); alapból a rendszám (a Volán-azonosító előtag nélkül) */
+  label?: string | null;
   progressDesc?: string | null;
   onTrack?: () => void;
   className?: string;
 }) {
   if (!vehicle && !progressDesc) return null;
+  const vehicleText = label ?? (vehicle ? displayVehicleId(vehicle.id) : "");
 
   const speedKmh =
     vehicle?.speed != null ? Math.round(vehicle.speed * 3.6) : null;
@@ -31,7 +36,7 @@ export function VehicleTrack({
         <Radio aria-hidden className="h-3.5 w-3.5 shrink-0 text-primary" />
         {vehicle ? (
           <span className="font-mono text-base font-bold leading-none tabular-nums">
-            {vehicle.id}
+            {vehicleText}
           </span>
         ) : (
           <span className="text-xs text-muted-foreground">nincs jármű</span>
@@ -73,7 +78,7 @@ export function VehicleTrack({
               </p>
               {vehicle ? (
                 <p className="font-mono text-xl font-bold leading-tight tabular-nums text-foreground">
-                  {vehicle.id}
+                  {vehicleText}
                 </p>
               ) : (
                 <p className="text-sm text-muted-foreground">

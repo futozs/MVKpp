@@ -8,7 +8,7 @@ import { DEPLOYABLE, deployLogs, gitFetch, gitStatus, previousDeploys, recentCom
 import { configProblems, env } from "./env.ts";
 import { HubError, json, readJson, route, settle } from "./http.ts";
 import { logSources, logStream } from "./logs.ts";
-import { feedOverview, jobsOverview } from "./ops.ts";
+import { feedOverview, jobsOverview, regionalOverview } from "./ops.ts";
 import { overview, type WebMetrics, type WorkerMetrics } from "./overview.ts";
 import { latestProbes, probeSeries, probeUptime, probeTargets } from "./probes.ts";
 import { postJson, webJson, workerJson } from "./services.ts";
@@ -179,6 +179,17 @@ const mvkRoutes = [
   route("POST", "/api/mvk/reload-gtfs", async ({ ip }) => {
     const r = await workerJson("/system/reload-gtfs", { method: "POST", timeoutMs: 120_000 });
     await audit("gtfs:reload", null, true, r, ip);
+    return json(r);
+  }),
+  /** Adatforrások: MVK ↔ MÁV+ átváltás, árnyék-összevetés, a regionális menetrend építései. */
+  route("GET", "/api/sources", async () => {
+    const [live, data] = await Promise.all([settle(workerJson("/system/sources")), settle(regionalOverview())]);
+    return json({ live, data });
+  }),
+  route("POST", "/api/sources/regional-build", async ({ ip }) => {
+    // a worker a háttérben épít (3 nap, egyenként pár perc) — itt csak elindítjuk
+    const r = await workerJson("/system/regional-build", { method: "POST", timeoutMs: 15_000 });
+    await audit("regional:build", null, true, r, ip);
     return json(r);
   }),
 ];

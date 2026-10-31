@@ -12,8 +12,11 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import {
-  type Feed,
+  Feed,
   type ServiceDay,
+  isMvkId,
+  modeOfRoute,
+  operatorLabel,
   feedFromFiles,
   feedFromZip,
   localMidnightUnix,
@@ -22,14 +25,17 @@ import {
   shiftIso,
   ymdToIso,
   dayInfo,
+  isoToYmd,
 } from "@mvk/core";
 import { getPool, sql } from "@mvk/db";
 import { config } from "./config.ts";
 import { errMsg, log } from "./log.ts";
+import type { RegionalFeeds } from "./regional/feeds.ts";
 
 type FeedRow = { id: number; version: string; sha256: string; fetched_at: Date };
 
 const LOADED_MAX = 4;
+const COMPOSED_MAX = 8;
 
 export class FeedManager {
   /** betöltött, érvényes feedek (id → Feed) */
@@ -39,7 +45,21 @@ export class FeedManager {
   /** új feed betöltése közben a korábbi napok (hogy addig se maradjon üresen az élő motor) */
   private warming: Map<string, ServiceDay | null> | null = null;
   private recorded = new Set<string>();
+  /** MVK + regionális kompozitok (`mvkHash|regHash` → Feed): a napok ugyanazt a példányt kapják */
+  private composed = new Map<string, Feed>();
+  readonly regional: RegionalFeeds | null;
   lastCheck: { at: string; result: string } | null = null;
+
+  constructor(regional: RegionalFeeds | null = null) {
+    this.regional = regional;
+    // Új regionális nap: azt az egy napot fésüljük újra (csere, nem ürítés — közben a régi él).
+    regional?.onUpdate((iso) => {
+      if (!this.dayCache.has(iso)) return;
+      this.dayCache.delete(iso);
+      this.recorded.delete(iso);
+      void this.serviceDay(iso).catch((e) => log.warn("gtfs", `${iso}: újrafésülés sikertelen`, errMsg(e)));
+    });
+  }
 
   async init(): Promise<void> {
     await this.reloadMeta();
@@ -52,7 +72,7 @@ export class FeedManager {
   }
 
   private async reloadMeta() {
-    this.meta = await sql<FeedRow>(`SELECT id, version, sha256, fetched_at FROM gtfs_feed WHERE status = 'ok' ORDER BY version DESC, fetched_at DESC`);
+    this.meta = await sql<FeedRow>(`SELECT id, version, sha256, fetched_at FROM gtfs_feed WHERE status = 'ok' AND source = 'mvk' ORDER BY version DESC, fetched_at DESC`);
   }
 
   private async load(id: number): Promise<Feed | null> {
@@ -169,11 +189,13 @@ export class FeedManager {
     if (this.dayCache.has(iso)) return this.dayCache.get(iso)!;
     const today = serviceClock().iso;
     let day: ServiceDay | null = null;
+    let regionalId: number | null = null;
     if (iso < today) {
-      const rec = await sql<{ feed_id: number | null; fallback_template: string | null }>(
-        `SELECT feed_id, fallback_template FROM service_day WHERE service_date = $1`,
+      const rec = await sql<{ feed_id: number | null; fallback_template: string | null; regional_feed_id: number | null }>(
+        `SELECT feed_id, fallback_template, regional_feed_id FROM service_day WHERE service_date = $1`,
         [iso],
       );
+      regionalId = rec[0]?.regional_feed_id ?? null;
       if (rec[0]?.feed_id) {
         const feed = await this.load(rec[0].feed_id);
         if (feed) day = resolveServiceDay([feed], iso);
@@ -187,6 +209,7 @@ export class FeedManager {
       }
       day = resolveServiceDay(feeds, iso);
     }
+    day = await this.withRegional(day, iso, regionalId);
     this.dayCache.set(iso, day);
     // A tegnap/ma/holnap sosem eshet ki: a menetrend-lekérdezések (?date=) nem szoríthatják ki az élő motor napjait.
     if (this.dayCache.size > 40) {
@@ -199,6 +222,29 @@ export class FeedManager {
     return day;
   }
 
+  /**
+   * Az MVK-nap + a regionális (Volán, vasút) nap egy közös nézetben. A régi napot
+   * a service_day-ben rögzített regionális feeddel; a mostaniakat a legfrissebbel.
+   * Ha nincs regionális adat (kikapcsolva, még épül), a nap MVK-only — mint eddig.
+   */
+  private async withRegional(day: ServiceDay | null, iso: string, feedId: number | null): Promise<ServiceDay | null> {
+    const reg = this.regional ? await this.regional.feedFor(iso, { feedId }).catch(() => null) : null;
+    if (!reg) return day;
+    const ymd = isoToYmd(iso);
+    if (!day) {
+      const only = resolveServiceDay([reg], iso);
+      return only && !only.fallback ? only : null;
+    }
+    const key = `${day.feed.hash}|${reg.hash}`;
+    let feed = this.composed.get(key);
+    if (!feed) {
+      feed = Feed.compose([day.feed, reg]);
+      this.composed.set(key, feed);
+      while (this.composed.size > COMPOSED_MAX) this.composed.delete(this.composed.keys().next().value as string);
+    }
+    return { ...day, feed, services: new Set([...day.services, ...reg.activeServices(ymd)]) };
+  }
+
   /** Szinkron változat a forró úthoz (csak a már feloldott napokra). */
   cachedDay(iso: string): ServiceDay | null {
     return this.dayCache.get(iso) ?? this.warming?.get(iso) ?? null;
@@ -206,16 +252,24 @@ export class FeedManager {
 
   private async record(day: ServiceDay) {
     this.recorded.add(day.iso);
-    const id = this.meta.find((m) => this.loaded.get(m.id) === day.feed)?.id ?? null;
+    const mvkVersion = day.feed.version.split("+")[0];
+    const id = this.meta.find((m) => m.version === mvkVersion && this.loaded.has(m.id))?.id ?? null;
     let nTrips = 0;
-    for (const t of day.feed.trips.values()) if (day.services.has(t.serviceId)) nTrips++;
+    let nRegional = 0;
+    for (const t of day.feed.trips.values()) {
+      if (!day.services.has(t.serviceId)) continue;
+      if (isMvkId(t.id)) nTrips++;
+      else nRegional++;
+    }
+    const reg = this.regional?.cachedEntry(day.iso) ?? null;
     await getPool().query(
-      `INSERT INTO service_day (service_date, feed_id, feed_version, fallback_template, fallback_reason, n_trips)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO service_day (service_date, feed_id, feed_version, fallback_template, fallback_reason, n_trips, regional_feed_id, regional_trips)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        ON CONFLICT (service_date) DO UPDATE SET feed_id = EXCLUDED.feed_id, feed_version = EXCLUDED.feed_version,
          fallback_template = EXCLUDED.fallback_template, fallback_reason = EXCLUDED.fallback_reason,
-         n_trips = EXCLUDED.n_trips, decided_at = now()`,
-      [day.iso, id, day.feed.version, day.fallback?.templateIso ?? null, day.fallback?.reason ?? null, nTrips],
+         n_trips = EXCLUDED.n_trips, regional_feed_id = COALESCE(EXCLUDED.regional_feed_id, service_day.regional_feed_id),
+         regional_trips = COALESCE(EXCLUDED.regional_trips, service_day.regional_trips), decided_at = now()`,
+      [day.iso, id, mvkVersion, day.fallback?.templateIso ?? null, day.fallback?.reason ?? null, nTrips, reg?.id ?? null, reg ? nRegional : null],
     );
     if (day.fallback) log.warn("gtfs", `${day.iso}: nincs rá MVK-menetrend → FALLBACK a ${day.feed.version} feed ${day.fallback.templateIso}-i napjával`);
   }
@@ -282,33 +336,51 @@ export async function syncDimensions(feed: Feed): Promise<void> {
   const range = feed.serviceRange();
   const from = range ? ymdToIso(range.from) : serviceClock().iso;
   const to = range ? ymdToIso(range.to) : from;
-  const stops = [...feed.stops.values()];
+  // A regionális feedben a közös MVK-megállók is benne vannak (a Volán ott is megáll): azokat az MVK feedje írja.
+  const regional = feed.version.startsWith("R");
+  const stops = [...feed.stops.values()].filter((s) => !regional || !isMvkId(s.id));
+  const stopMode = (id: string) => (isMvkId(id) ? null : id.startsWith("1:") ? "rail" : "coach");
   if (stops.length) {
     await getPool().query(
-      `INSERT INTO stop (stop_id, code, name, lat, lon, first_seen, last_seen)
-       SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::float8[], $5::float8[], $6::date[], $7::date[])
+      `INSERT INTO stop (stop_id, code, name, lat, lon, first_seen, last_seen, parent_station, platform, mode)
+       SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::float8[], $5::float8[], $6::date[], $7::date[], $8::text[], $9::text[], $10::text[])
        ON CONFLICT (stop_id) DO UPDATE SET code = EXCLUDED.code, name = EXCLUDED.name, lat = EXCLUDED.lat, lon = EXCLUDED.lon,
+         parent_station = EXCLUDED.parent_station, platform = EXCLUDED.platform, mode = EXCLUDED.mode,
          last_seen = GREATEST(stop.last_seen, EXCLUDED.last_seen), first_seen = LEAST(stop.first_seen, EXCLUDED.first_seen)`,
-      [stops.map((s) => s.id), stops.map((s) => s.code || null), stops.map((s) => s.name), stops.map((s) => s.lat), stops.map((s) => s.lon), stops.map(() => from), stops.map(() => to)],
+      [
+        stops.map((s) => s.id),
+        stops.map((s) => s.code || null),
+        stops.map((s) => s.name),
+        stops.map((s) => s.lat),
+        stops.map((s) => s.lon),
+        stops.map(() => from),
+        stops.map(() => to),
+        stops.map((s) => s.parent ?? null),
+        stops.map((s) => s.platform ?? null),
+        stops.map((s) => stopMode(s.id)),
+      ],
     );
   }
   const routes = [...feed.routes.values()];
   if (routes.length) {
     await getPool().query(
-      `INSERT INTO route (route_short, gtfs_route_id, long_name, kind, color, text_color, first_seen, last_seen)
-       SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::date[], $8::date[])
+      `INSERT INTO route (route_short, gtfs_route_id, long_name, kind, color, text_color, first_seen, last_seen, short_name, operator)
+       SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::date[], $8::date[], $9::text[], $10::text[])
        ON CONFLICT (route_short) DO UPDATE SET gtfs_route_id = EXCLUDED.gtfs_route_id, long_name = EXCLUDED.long_name,
          kind = EXCLUDED.kind, color = EXCLUDED.color, text_color = EXCLUDED.text_color,
+         short_name = EXCLUDED.short_name, operator = EXCLUDED.operator,
          last_seen = GREATEST(route.last_seen, EXCLUDED.last_seen), first_seen = LEAST(route.first_seen, EXCLUDED.first_seen)`,
       [
-        routes.map((r) => r.short),
+        routes.map((r) => r.key),
         routes.map((r) => r.id),
         routes.map((r) => r.long || null),
-        routes.map((r) => (feed.isTram(r.id) ? "TRAM" : "BUS")),
+        routes.map((r) => modeOfRoute(r.id, r.type).toUpperCase()),
         routes.map((r) => r.color),
         routes.map((r) => r.text),
         routes.map(() => from),
         routes.map(() => to),
+        routes.map((r) => r.short),
+        routes.map((r) => operatorLabel(r.agencyName)),
       ],
     );
   }

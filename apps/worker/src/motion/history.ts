@@ -31,7 +31,7 @@ export async function replayDay(feeds: FeedManager, iso: string): Promise<Histor
   const to = localMidnightUnix(shiftIso(iso, 1)) + DAY_START_H * 3600;
   const rows = await sql<{ v: string; ts: number; lat: number; lon: number; speed: number | null; bearing: number | null; rt: string | null }>(
     `SELECT vehicle_id AS v, extract(epoch FROM ts)::int AS ts, lat, lon, speed, bearing, rt_trip_id AS rt
-       FROM veh_ping WHERE ts >= to_timestamp($1) AND ts < to_timestamp($2) ORDER BY ts, vehicle_id`,
+       FROM veh_ping WHERE ts >= to_timestamp($1) AND ts < to_timestamp($2) AND vehicle_id NOT LIKE '%:%' ORDER BY ts, vehicle_id`,
     [from, to],
   );
   const runs = new Map<string, HistoryRun>();

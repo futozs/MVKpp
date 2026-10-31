@@ -2,6 +2,7 @@ import type { ArrivalItem } from "@/types";
 import { budapestMinuteOfDay, serviceNow } from "@/lib/serviceDay";
 import { withHungarianSuffix } from "@/lib/utils";
 import { openLink, stopLink } from "@/lib/deepLink";
+import { displayVehicleId, isRegionalId } from "@/lib/modes";
 
 const STORAGE_KEY = "mvk_notify_watches";
 export const DEFAULT_THRESHOLD_MIN = 5;
@@ -209,19 +210,25 @@ export function checkAndNotify(
 
   if (fresh.length) {
     const minEta = Math.max(0, Math.round(Math.min(...fresh.map((a) => a.etaMin))));
-    const label = (a: ArrivalItem) =>
-      a.vehicle?.id
-        ? `${withHungarianSuffix(a.route)} busz (${a.vehicle.id})`
-        : `${withHungarianSuffix(a.route)} busz`;
+    // vonatnál a vonatszám („IC 582 vonat”), villamosnál villamos, a Volán-busz a rendszámával
+    const label = (a: ArrivalItem) => {
+      if (a.mode === "rail") return `${a.route}${a.trainNo ? ` ${a.trainNo}` : ""} vonat`;
+      const noun = a.mode === "tram" ? "villamos" : "busz";
+      return a.vehicle?.id
+        ? `${withHungarianSuffix(a.route)} ${noun} (${displayVehicleId(a.vehicle.id)})`
+        : `${withHungarianSuffix(a.route)} ${noun}`;
+    };
     const title =
       fresh.length > 1
         ? `${fresh.map(label).join(", ")}`
         : label(fresh[0]);
     const delayNote = fresh.length === 1 ? delaySuffix(fresh[0].delaySec) : "";
     const isSchedulePinned = watch.tripId != null || watch.schedMin != null;
+    // a regionális megálló azonosítója (`1:005510009`) nem mond semmit — ott csak a név
+    const where = isRegionalId(stopId) ? stopName : `${stopName} (${stopId})`;
     const body = isSchedulePinned
-      ? `kb. ${minEta} percen belül ${watch.isDeparture ? "indul" : "ér ide"}${delayNote} — ${stopName} (${stopId})`
-      : `${stopName} (${stopId}) — kb. ${minEta} percen belül${delayNote}`;
+      ? `kb. ${minEta} percen belül ${watch.isDeparture ? "indul" : "ér ide"}${delayNote} — ${where}`
+      : `${where} — kb. ${minEta} percen belül${delayNote}`;
 
     try {
       const n = new Notification(title, {

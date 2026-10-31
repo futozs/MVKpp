@@ -17,8 +17,12 @@ import type {
   WeatherResponse,
   RoutePlanPoint,
   RoutePlanResponse,
+  RelationBoardResponse,
+  TrainDetailResponse,
+  TransitSearchResponse,
 } from "../types";
 import { API_BASE } from "@/lib/apiBase";
+import { modesParam } from "@/lib/modes";
 
 /* ---------------------------------------------------------------------------
    Saját útvonaltervező (/engine/plan) — a menetrend, a mért késések és az élő
@@ -71,8 +75,17 @@ export interface JourneyWalkLeg extends JourneyLegBase {
 }
 
 export interface JourneyTransitLeg extends JourneyLegBase {
-  mode: "BUS" | "TRAM";
+  mode: "BUS" | "TRAM" | "COACH" | "RAIL";
   routeShortName: string;
+  /** v3: a vonal kulcsa (a regionálisé a vonal azonosítója) */
+  routeKey?: string;
+  /** v3: a menet rövid neve (Volán: „4001/748”, vasút: „582 TOKAJ InterCity”) */
+  tripShortName?: string;
+  /** v3, vasút: a vonatszám és a név külön */
+  trainNo?: string;
+  trainName?: string;
+  /** v3: vágány (vasút) / kocsiállás (autóbusz-állomás) a felszállásnál */
+  fromPlatform?: string;
   routeLongName: string | null;
   routeColor: string | null;
   routeTextColor: string | null;
@@ -163,30 +176,38 @@ async function handleResponse<T>(res: Response, endpoint: string): Promise<T> {
 }
 
 export const api = {
-  async getStops(): Promise<Stop[]> {
+  /** A bekapcsolt módok megállói (v3: + forrás, szülő-állomás, állomás-e). */
+  async getStops(modes = modesParam()): Promise<Stop[]> {
     const raw = await handleResponse<
-      [string, string, string, number, number][]
-    >(await fetch(`${API_BASE}/gtfs/stops.json`), "/gtfs/stops.json");
-    return raw.map(([id, code, name, lat, lon]) => ({
+      [string, string, string, number, number, string?, string?, number?][]
+    >(await fetch(`${API_BASE}/gtfs/stops.json?modes=${modes}`), "/gtfs/stops.json");
+    return raw.map(([id, code, name, lat, lon, feed, parent, station]) => ({
       id,
       code,
       name,
       lat,
       lon,
+      ...(feed ? { feed: feed as Stop["feed"] } : {}),
+      ...(parent ? { parent } : {}),
+      ...(station ? { station: true } : {}),
     }));
   },
 
-  async getRoutes(): Promise<Route[]> {
+  /** A bekapcsolt módok vonalai (v3: + mód, kulcs, üzemeltető). */
+  async getRoutes(modes = modesParam()): Promise<Route[]> {
     const raw = await handleResponse<
-      [string, string, string, string, string, string][]
-    >(await fetch(`${API_BASE}/gtfs/routes.json`), "/gtfs/routes.json");
-    return raw.map(([id, short, long, type, color, text]) => ({
+      [string, string, string, string, string, string, string?, string?, string?][]
+    >(await fetch(`${API_BASE}/gtfs/routes.json?modes=${modes}`), "/gtfs/routes.json");
+    return raw.map(([id, short, long, type, color, text, mode, key, operator]) => ({
       id,
       short,
       long,
       type,
       color: color ? color.replace(/^#/, "") : "888888",
       text: text ? text.replace(/^#/, "") : "FFFFFF",
+      ...(mode ? { mode: mode as Route["mode"] } : {}),
+      ...(key ? { key } : {}),
+      ...(operator ? { operator } : {}),
     }));
   },
 
@@ -219,10 +240,11 @@ export const api = {
     );
   },
 
-  async getTimetableRoutes(date?: string): Promise<TimetableRoutesResponse> {
-    const q = date ? `?date=${encodeURIComponent(date)}` : "";
+  async getTimetableRoutes(date?: string, modes = modesParam()): Promise<TimetableRoutesResponse> {
+    const params = new URLSearchParams({ modes });
+    if (date) params.set("date", date);
     return handleResponse<TimetableRoutesResponse>(
-      await fetch(`${API_BASE}/gtfs/timetable/routes${q}`),
+      await fetch(`${API_BASE}/gtfs/timetable/routes?${params.toString()}`),
       "/gtfs/timetable/routes",
     );
   },
@@ -240,18 +262,20 @@ export const api = {
     );
   },
 
-  async getCancelledTrips(date?: string): Promise<CancelledTripsResponse> {
-    const q = date ? `?date=${encodeURIComponent(date)}` : "";
+  async getCancelledTrips(date?: string, modes = modesParam()): Promise<CancelledTripsResponse> {
+    const params = new URLSearchParams({ modes });
+    if (date) params.set("date", date);
     return handleResponse<CancelledTripsResponse>(
-      await fetch(`${API_BASE}/live/cancelled${q}`),
+      await fetch(`${API_BASE}/live/cancelled?${params.toString()}`),
       "/live/cancelled",
     );
   },
 
-  async getTripJournal(date?: string): Promise<TripJournalResponse> {
-    const q = date ? `?date=${encodeURIComponent(date)}` : "";
+  async getTripJournal(date?: string, modes = modesParam()): Promise<TripJournalResponse> {
+    const params = new URLSearchParams({ modes });
+    if (date) params.set("date", date);
     return handleResponse<TripJournalResponse>(
-      await fetch(`${API_BASE}/gtfs/trip-journal${q}`),
+      await fetch(`${API_BASE}/gtfs/trip-journal?${params.toString()}`),
       "/gtfs/trip-journal",
     );
   },
@@ -263,9 +287,9 @@ export const api = {
     );
   },
 
-  async getLivePositions(): Promise<VehiclePositionsResponse> {
+  async getLivePositions(modes = modesParam()): Promise<VehiclePositionsResponse> {
     return handleResponse<VehiclePositionsResponse>(
-      await fetch(`${API_BASE}/live/positions`),
+      await fetch(`${API_BASE}/live/positions?modes=${modes}`),
       "/live/positions",
     );
   },
@@ -277,15 +301,15 @@ export const api = {
       count: number;
       vehicles: Record<string, unknown>[];
     }>(
-      await fetch(`${API_BASE}/live/vehicle?id=${encodeURIComponent(id)}`),
+      await fetch(`${API_BASE}/live/vehicle?id=${encodeURIComponent(id)}&modes=${modesParam()}`),
       "/live/vehicle",
     );
   },
 
-  async getArrivals(stopId: string, limit = 12): Promise<StopArrivalsResponse> {
+  async getArrivals(stopId: string, limit = 12, modes = modesParam()): Promise<StopArrivalsResponse> {
     return handleResponse<StopArrivalsResponse>(
       await fetch(
-        `${API_BASE}/live/arrivals?stop=${encodeURIComponent(stopId)}&limit=${limit}`,
+        `${API_BASE}/live/arrivals?stop=${encodeURIComponent(stopId)}&limit=${limit}&modes=${modes}`,
       ),
       "/live/arrivals",
     );
@@ -298,10 +322,27 @@ export const api = {
     if (!stopIds.length) return { results: [] };
     return handleResponse<MultiArrivalsResponse>(
       await fetch(
-        `${API_BASE}/live/multi-arrivals?stops=${encodeURIComponent(stopIds.join(","))}&limit=${limit}`,
+        `${API_BASE}/live/multi-arrivals?stops=${encodeURIComponent(stopIds.join(","))}&limit=${limit}&modes=${modesParam()}`,
       ),
       "/live/multi-arrivals",
     );
+  },
+
+  /** Viszonylat-tábla: A-ból B-be közvetlenül (pl. Miskolc-Tiszai → Füzesabony), a bekapcsolt módokkal. */
+  async getRelation(from: string, to: string, limit = 8): Promise<RelationBoardResponse> {
+    const params = new URLSearchParams({ from, to, limit: String(limit), modes: modesParam() });
+    return handleResponse<RelationBoardResponse>(await fetch(`${API_BASE}/engine/transit/relation?${params.toString()}`), "/engine/transit/relation");
+  },
+
+  /** Egy vonat vonatszám szerint (a ma vagy holnap közlekedő példány, megállónként). */
+  async getTrain(no: string): Promise<TrainDetailResponse> {
+    return handleResponse<TrainDetailResponse>(await fetch(`${API_BASE}/engine/transit/train?no=${encodeURIComponent(no)}`), "/engine/transit/train");
+  },
+
+  /** Megálló-, állomás- és vonatszám-keresés minden bekapcsolt módban. */
+  async searchTransit(q: string, signal?: AbortSignal): Promise<TransitSearchResponse> {
+    const params = new URLSearchParams({ q, modes: modesParam() });
+    return handleResponse<TransitSearchResponse>(await fetch(`${API_BASE}/engine/transit/search?${params.toString()}`, { signal }), "/engine/transit/search");
   },
 
   async getTripPath(
@@ -398,6 +439,7 @@ export const api = {
       to: q.to,
       at: String(Math.floor(q.at)),
       limit: String(q.limit ?? 4),
+      modes: modesParam(),
     });
     if (q.arriveBy) params.set("arriveBy", "1");
     const res = await fetch(`${API_BASE}/engine/plan?${params.toString()}`, {

@@ -4,15 +4,14 @@ import type { GeoPosition } from "@/hooks/useGeolocation";
 import { distM } from "./useTripLive";
 import { estimatePosition } from "@/components/map/liveMotion";
 import { serverNow } from "@/lib/realtime";
+import { RIDE_PROXIMITY, rideModeOf } from "@/lib/modes";
 
 /** két minta között legalább ennyi idő teljen el (a GPS másodpercenként jelezhet) */
 const SAMPLE_MS = 10_000;
 /** ennyi közös, mozgó minta és ennyi idő kell a kérdéshez */
 const HITS = 3;
 const MIN_SPAN_MS = 40_000;
-/** a telefon és a busz távolsága (m), a GPS pontatlanságával megnövelve */
-const NEAR_M = 50;
-const FAR_M = 150;
+/** a telefon és a jármű távolsága (m), a GPS pontatlanságával megnövelve — módonként (lásd RIDE_PROXIMITY) */
 /** a minták között legalább ennyit mozdult a telefon (m) — álló buszra nem kérdezünk */
 const MOVED_M = 30;
 /** „Nem” után ennyi ideig nem kérdezünk újra ugyanarra a buszra */
@@ -41,17 +40,21 @@ export function useBoardingDetector(enabled: boolean, position: GeoPosition | nu
     if (prev && position.at - prev.at < SAMPLE_MS) return;
     last.current = { at: position.at, lat: position.lat, lon: position.lon };
     const moved = prev ? distM(prev, position) >= MOVED_M : false;
-    const near = Math.max(NEAR_M, Math.min(120, position.accuracyM ?? NEAR_M));
     const now = Date.now();
 
     for (const v of vehiclesRef.current) {
       if (v.lat == null || v.lon == null || !v.tripId) continue;
       if ((snoozed.current.get(v.id) ?? 0) > now) continue;
+      // A menetrendből becsült (nem GPS) helyzetű jármű mellől nem kérdezünk.
+      if (v.estimated) continue;
+      const px = RIDE_PROXIMITY[v.mode ?? rideModeOf(v.id, v.tripId)];
+      const near = Math.max(px.near, Math.min(px.near + 70, position.accuracyM ?? px.near));
+      const far = px.far;
       // A busz jele 0–15 mp-es (gyors szakaszon 150+ m lemaradás): a becsült mostani helyéhez mérünk.
       const est = estimatePosition(v.motion, serverNow(), undefined);
       const d = distM(position, est ? { lat: est.latlng[0], lon: est.latlng[1] } : { lat: v.lat, lon: v.lon });
       const h = hits.current.get(v.id);
-      if (d > FAR_M) {
+      if (d > far) {
         if (h) hits.current.delete(v.id);
         continue;
       }

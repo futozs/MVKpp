@@ -51,6 +51,18 @@ import { initialTimetableView, saveTimetableView } from "@/lib/viewState";
 import { cn, normalizeSearchText } from "@/lib/utils";
 import { serviceNow } from "@/lib/serviceDay";
 import { useServerClockVersion } from "@/lib/realtime";
+import { displayVehicleId, modesParam, routeModeOf, useEnabledModes, type TransitMode } from "@/lib/modes";
+import { usePreference } from "@/hooks/usePreference";
+
+/** a menetrend nézete: minden bekapcsolt mód, vagy csak egy csoport (eszközök között szinkronizálva) */
+type TimetableGroup = "all" | "mvk" | "coach" | "rail";
+const TT_GROUP_KEY = "mvk_pref_tt_group";
+const TT_GROUPS: { id: TimetableGroup; label: string; title: string; modes: TransitMode[] }[] = [
+  { id: "all", label: "Mind", title: "", modes: [] },
+  { id: "mvk", label: "MVK", title: "MVK — busz és villamos", modes: ["bus", "tram"] },
+  { id: "coach", label: "Volán", title: "Volán — helyközi busz", modes: ["coach"] },
+  { id: "rail", label: "Vonat", title: "Vonat", modes: ["rail"] },
+];
 
 interface TimetableViewProps {
   stops: Stop[];
@@ -202,10 +214,14 @@ export function TimetableView({
     return () => clearInterval(timer);
   }, []);
 
+  // A bekapcsolt módok vonalai (MVK, Volán, vasút); a nézet-csempe ezen belül szűkít.
+  const enabledModes = useEnabledModes();
+  const modesKey = modesParam(enabledModes);
+  const [group, setGroup] = usePreference<TimetableGroup>(TT_GROUP_KEY, "all");
   useEffect(() => {
     let alive = true;
     api
-      .getTimetableRoutes(isoToYmd(date))
+      .getTimetableRoutes(isoToYmd(date), modesKey)
       .then((res) => {
         if (!alive) return;
         setRoutes(res.routes);
@@ -215,7 +231,7 @@ export function TimetableView({
     return () => {
       alive = false;
     };
-  }, [date]);
+  }, [date, modesKey]);
 
   useEffect(() => {
     saveTimetableView({
@@ -300,16 +316,28 @@ export function TimetableView({
     return out;
   }, [favorites, routes]);
 
+  // A csoportok: MVK, Volán, vasút — a nézet-csempével egyre szűkíthető; „Mind”-nél csoportfejlécekkel.
+  const groupOf = (r: TimetableRoute): Exclude<TimetableGroup, "all"> => {
+    const m = routeModeOf(r);
+    return m === "coach" ? "coach" : m === "rail" ? "rail" : "mvk";
+  };
+  const groups = TT_GROUPS.filter((g) => g.id === "all" || g.modes.some((m) => enabledModes.includes(m)));
+  const activeGroup = groups.some((g) => g.id === group) ? group : "all";
   const visibleRoutes = useMemo(() => {
     const q = normalizeSearchText(query.trim());
-    if (!q) return routes;
-    return routes.filter(
+    const inGroup = activeGroup === "all" ? routes : routes.filter((r) => groupOf(r) === activeGroup);
+    const order = (r: TimetableRoute) => ["mvk", "coach", "rail"].indexOf(groupOf(r));
+    const sorted = [...inGroup].sort((a, b) => order(a) - order(b));
+    if (!q) return sorted;
+    return sorted.filter(
       (r) =>
         normalizeSearchText(r.short).includes(q) ||
         normalizeSearchText(r.long).includes(q) ||
+        (r.operator ? normalizeSearchText(r.operator).includes(q) : false) ||
         r.directions.some((d) => normalizeSearchText(d.headsign).includes(q)),
     );
-  }, [routes, query]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routes, query, activeGroup]);
 
   // A zavar-összesítőből választott menet: a mai nap, a vonal és irány, a menet kijelölve.
   const openDisruptedTrip = (t: DisruptionTrip) => {
@@ -399,6 +427,25 @@ export function TimetableView({
               className="pl-9"
             />
           </div>
+          {groups.length > 2 ? (
+            <div role="group" aria-label="Melyik járatok" className="mt-2 grid gap-1 rounded-lg border border-border bg-muted/60 p-1" style={{ gridTemplateColumns: `repeat(${groups.length}, minmax(0, 1fr))` }}>
+              {groups.map((g) => (
+                <button
+                  key={g.id}
+                  type="button"
+                  onClick={() => setGroup(g.id)}
+                  aria-pressed={activeGroup === g.id}
+                  className={cn(
+                    "rounded-md py-1.5 text-[11px] font-semibold transition-colors duration-fast",
+                    "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                    activeGroup === g.id ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                  )}
+                >
+                  {g.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
           <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
             <p className="text-[11px] text-muted-foreground">
               {visibleRoutes.length} járat · {dayLabel}
@@ -503,8 +550,11 @@ export function TimetableView({
               ) : null}
 
               <ul className="divide-y divide-border/60">
-                {visibleRoutes.map((route) => {
+                {visibleRoutes.map((route, i) => {
                   const isActive = route.id === selectedRouteId;
+                  // „Mind” nézetben a csoportok fejléccel (MVK, Volán, Vonat)
+                  const g = groupOf(route);
+                  const header = activeGroup === "all" && groups.length > 2 && (i === 0 || groupOf(visibleRoutes[i - 1]) !== g) ? TT_GROUPS.find((x) => x.id === g)?.title : null;
                   const tripsToday = route.directions.reduce(
                     (n, d) => n + d.tripsToday,
                     0,
@@ -512,6 +562,7 @@ export function TimetableView({
                   const cancelledOnRoute = cancelledByRoute.get(route.id) ?? 0;
                   return (
                     <li key={route.id}>
+                      {header ? <p className="bg-muted/40 px-3 py-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground">{header}</p> : null}
                       <button
                         type="button"
                         onClick={() => selectRoute(route)}
@@ -533,6 +584,7 @@ export function TimetableView({
                             {route.long}
                           </span>
                           <span className="block text-[11px] text-muted-foreground">
+                            {route.mode === "coach" && route.operator && route.operator !== "Helyközi busz" ? `${route.operator} · ` : ""}
                             {tripsToday > 0
                               ? `${tripsToday} ${runsWord}`
                               : isToday
@@ -941,7 +993,7 @@ function TripDetail({
               onClick={() => onFocusTrip(trip.tripId, vehicle.id)}
             >
               <Crosshair />
-              <span className="font-mono tabular-nums">{vehicle.id}</span>
+              <span className="font-mono tabular-nums">{displayVehicleId(vehicle.id, vehicle.plate)}</span>
               <span className="hidden sm:inline">a térképen</span>
             </Button>
           ) : pastVehicleId ? (

@@ -80,6 +80,8 @@ export function registerAdmin(r: Router, ctx: AdminCtx) {
       cache: cacheStatus(),
       token: { ...tokenStatus(), lastRenew: lastRenewInfo() },
       gtfs: ctx.feeds.status(),
+      // MVK ↔ MÁV+ (a hub oldalsávjának és riasztásainak); a részletek: /system/sources
+      source: sourceBrief(ctx),
       startedAt: ctx.startedAt,
     });
   });
@@ -204,4 +206,17 @@ function parseJson(raw: Buffer | undefined): Record<string, unknown> | null {
 function clampInt(v: string | null, fallback: number, min: number, max: number): number {
   const n = v == null || v === "" ? NaN : Number(v);
   return Number.isFinite(n) ? Math.max(min, Math.min(max, Math.trunc(n))) : fallback;
+}
+
+/** Az adatforrás röviden: melyik viszi az MVK-t, és él-e a MÁV+ (Volán, vasút). */
+function sourceBrief(ctx: Ctx) {
+  const st = ctx.engine.sources.status();
+  const rt = ctx.regionalRt.status();
+  return {
+    state: st.state,
+    since: st.since,
+    reason: st.reason,
+    fallbackSecToday: st.fallbackSecToday,
+    regional: { enabled: rt.enabled, vehicles: rt.vehicles, lastOkAt: rt.client.lastOkAt || null, lastError: rt.error ?? rt.client.lastError, limited: rt.client.limited },
+  };
 }

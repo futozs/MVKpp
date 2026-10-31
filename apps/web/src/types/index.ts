@@ -1,9 +1,18 @@
+/** Közlekedési mód: MVK villamos, MVK busz, Volán (helyközi busz), vasút. */
+export type TransitMode = "tram" | "bus" | "coach" | "rail";
+
 export interface Stop {
   id: string;
   code: string;
   name: string;
   lat: number;
   lon: number;
+  /** v3 (?modes=): melyik forrásé — "mvk", "coach" (Volán) vagy "rail" */
+  feed?: "mvk" | "coach" | "rail";
+  /** v3: a szülő-állomás (vasútállomás, autóbusz-állomás) — a vágány / kocsiállás így tartozik hozzá */
+  parent?: string;
+  /** v3: maga az állomás */
+  station?: boolean;
 }
 
 export interface Route {
@@ -13,6 +22,10 @@ export interface Route {
   type: string;
   color: string;
   text: string;
+  /** v3 (?modes=): mód, a statisztikai kulcs (MVK: a rövid név), üzemeltető */
+  mode?: TransitMode;
+  key?: string;
+  operator?: string;
 }
 
 export interface RouteGeo {
@@ -66,6 +79,22 @@ export interface LiveVehicle {
   speed: number | null;
   tripId: string;
   timestamp: number | null;
+  /** v3: közlekedési mód és a vonal kulcsa (a natív MVK-jármű nem hordozza) */
+  mode?: TransitMode;
+  routeKey?: string;
+  /** v3: rendszám (Volán, és az MVK-é a tartalék forrásból) */
+  plate?: string;
+  /** v3: vasút: vonatszám és név (TOKAJ) */
+  trainNo?: string;
+  trainName?: string;
+  /** v3: hivatalos késés a következő megállónál (mp) — Volán, vasút, tartalék üzem */
+  delaySec?: number | null;
+  /** v3: menetrendből becsült helyzet (nem GPS) */
+  estimated?: boolean;
+  /** v3: "otp2" = a MÁV+ adatából (regionális, vagy MVK tartalékban) */
+  source?: "otp2";
+  /** v3 (WebSocket): a saját illesztőnk mért késése most (mp) */
+  liveDelaySec?: number | null;
 }
 
 export interface VehiclePositionsResponse {
@@ -84,6 +113,11 @@ export interface ArrivalVehicle {
   speed: number | null;
   routeId: string;
   tripId: string;
+  /** v3, regionális jármű (a menet-követésben): mód, rendszám, vonatszám és -név */
+  mode?: TransitMode;
+  plate?: string;
+  trainNo?: string;
+  trainName?: string;
 }
 
 export interface ArrivalItem {
@@ -122,6 +156,20 @@ export interface ArrivalItem {
   } | null;
   /** v3: dugó a busz előtt a megállóig */
   trafficAhead?: { excessS: number; level: number; fromName: string; toName: string } | null;
+  /** v3 (?modes=): mód, vonal-kulcs, üzemeltető */
+  mode?: TransitMode;
+  routeKey?: string;
+  operator?: string | null;
+  /** v3: vasút: vonatszám, név (TOKAJ) */
+  trainNo?: string | null;
+  trainName?: string | null;
+  /** v3: vágány / kocsiállás (élőben változhat) */
+  platform?: string | null;
+  platformChanged?: boolean;
+  /** v3: a megálló (állomásnál a vágány), ahonnan indul */
+  stopId?: string;
+  /** v3: hivatalos megjegyzések (késés oka, kocsiösszeállítás, pótlóbusz) */
+  notices?: string[];
 }
 
 export interface StopArrivalsResponse {
@@ -165,11 +213,20 @@ export type SpeedFilter = "all" | "moving" | "idle";
 
 export type VehicleSort = "route" | "id" | "speed";
 
+/** A térkép késés-szűrője: a hivatalos (MÁV+) vagy a saját illesztőnk mért késése alapján. */
+export type DelayFilter = "all" | "late" | "ontime";
+
 export interface FilterState {
   vq: string;
   watch: string[];
   routes: string[];
-  type: "all" | "bus" | "tram";
+  /** a térképen látszó módok ([] = minden bekapcsolt mód) — a régi `type` (busz / villamos) helyett */
+  modes: TransitMode[];
+  /** Volán: üzemeltető-egység (pl. „Helyközi busz”, „Tiszaújváros”); [] = mind */
+  operators: string[];
+  /** vasút: kategória (Sz, IR, IC…); [] = mind */
+  railKinds: string[];
+  delay: DelayFilter;
   speed: SpeedFilter;
   nearMeKm: number | null;
   sort: VehicleSort;
@@ -279,6 +336,10 @@ export interface TimetableRoute {
   color: string;
   text: string;
   directions: TimetableDirection[];
+  /** v3 (?modes=): mód, kulcs, üzemeltető */
+  mode?: TransitMode;
+  key?: string;
+  operator?: string | null;
 }
 
 export interface TimetableRoutesResponse {
@@ -415,4 +476,82 @@ export interface RoutePlanTrip {
 export interface RoutePlanResponse {
   logHeaderId: number;
   trips: RoutePlanTrip[];
+}
+
+/** v3: viszonylat-tábla (A → B közvetlenül), lásd /engine/transit/relation */
+export interface RelationRow {
+  tripId: string;
+  route: string;
+  routeKey: string;
+  color: string;
+  text: string;
+  mode: TransitMode;
+  operator: string | null;
+  trainNo: string | null;
+  trainName: string | null;
+  headsign: string;
+  depStopId: string;
+  arrStopId: string;
+  depTime: string;
+  depUnix: number;
+  schedDepUnix: number;
+  depDelaySec: number | null;
+  arrTime: string;
+  arrUnix: number;
+  schedArrUnix: number;
+  arrDelaySec: number | null;
+  durationMin: number;
+  stops: number;
+  platform: string | null;
+  live: boolean;
+  cancelled: boolean;
+  vehicle: ArrivalVehicle | null;
+  notices: string[] | null;
+  today: boolean;
+}
+
+export interface RelationBoardResponse {
+  from: { id: string; name: string | null };
+  to: { id: string; name: string | null };
+  now: number;
+  rows: RelationRow[];
+}
+
+/** v3: egy vonat vonatszám szerint, lásd /engine/transit/train */
+export interface TrainStop {
+  id: string;
+  name: string;
+  platform: string | null;
+  schedArr: string;
+  schedDep: string;
+  arrUnix: number;
+  depUnix: number;
+  delaySec: number | null;
+  passed: boolean;
+}
+
+export interface TrainDetailResponse {
+  no: string;
+  found: boolean;
+  tripId?: string;
+  date?: string;
+  today?: boolean;
+  name?: string;
+  trainName?: string | null;
+  category?: string | null;
+  route?: { key: string; short: string; long: string; color: string; text: string; mode: TransitMode; operator: string | null } | null;
+  headsign?: string;
+  stops?: TrainStop[];
+  vehicle?: LiveVehicle | null;
+  liveDelaySec?: number | null;
+  officialDelaySec?: number | null;
+  notices?: { text: string; kind: string }[];
+  cancelled?: boolean;
+}
+
+/** v3: keresés minden feedben (megálló, állomás, vonatszám) */
+export interface TransitSearchResponse {
+  q: string;
+  stops: { id: string; name: string; mode: "mvk" | "coach" | "rail"; station: boolean; platforms: number; lat: number; lon: number; routes: { short: string; color: string; text: string; mode: TransitMode }[] }[];
+  trains: { tripId: string; no: string; name: string; headsign: string; from: string; departure: string; today: boolean }[];
 }

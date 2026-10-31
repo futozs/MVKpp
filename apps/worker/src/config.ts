@@ -25,4 +25,26 @@ export const config = {
     subject: (process.env.VAPID_SUBJECT ?? "").trim(),
   },
   weather: { lat: 48.104, lon: 20.79 },
+  /** MÁV+ OTP2: a Volán és a vasút, és az MVK tartaléka (docs/MAVPLUSZ_OTP2.md) */
+  otp2: {
+    enabled: process.env.OTP2_ENABLED !== "0",
+    url: process.env.OTP2_URL ?? "https://mavplusz.hu/otp2-backend/otp/routers/default/index/graphql",
+    userAgent: process.env.OTP2_USER_AGENT ?? "mvk-zsombi-modra/3 (+https://mvk.futozs.hu)",
+    /** a regionális járművek lekérdezése (ms) — az OTP2 adata maga is 20–60 mp-enként frissül */
+    pollMs: num(process.env.OTP2_POLL_MS, 15_000),
+    /** tartalék üzemben az MVK-járművek miatt sűrűbben */
+    fallbackPollMs: num(process.env.OTP2_FALLBACK_POLL_MS, 10_000),
+    alertsMs: num(process.env.OTP2_ALERTS_MS, 120_000),
+    /** a figyelt állomások táblája (vágány, késés még el nem indult vonatra) */
+    boardsMs: num(process.env.OTP2_BOARDS_MS, 60_000),
+    /** a Volán és a vasút (a menetrend és a valós idő); "0" = csak az MVK-tartalék */
+    regional: process.env.REGIONAL !== "0",
+    /** ennyi napra előre épül a regionális menetrend */
+    daysAhead: num(process.env.REGIONAL_DAYS_AHEAD, 2),
+  },
+  /** az MVK → MÁV+ átállás: tokenhiba (401/403) azonnal, kiesés ennyi idő után; vissza ennyi jó poll után */
+  fallback: {
+    outageMs: num(process.env.FALLBACK_OUTAGE_MS, 60_000),
+    recoverPolls: num(process.env.FALLBACK_RECOVER_POLLS, 5),
+  },
 } as const;

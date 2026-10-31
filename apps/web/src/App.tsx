@@ -33,6 +33,8 @@ import { useAppHeight } from "@/hooks/useAppHeight";
 import { useLiveIncidents } from "@/hooks/useLiveIncidents";
 import { useStorageRefresh } from "@/hooks/useStorageRefresh";
 import { realtime, useFallbackPoll, useTopic } from "@/lib/realtime";
+import { feedOfId, modesParam, useEnabledModes } from "@/lib/modes";
+import { RegionalIntroBanner } from "@/components/layout/RegionalIntroBanner";
 import { consumeInitialLink, OPEN_LINK_EVENT, parseLink, type ParsedLink } from "@/lib/deepLink";
 
 // Értesítésből (vagy könyvjelzőből) nyitott hivatkozás: egyszer, betöltéskor olvassuk ki.
@@ -44,7 +46,10 @@ const DEFAULT_FILTERS: FilterState = {
   vq: "",
   watch: [],
   routes: [],
-  type: "all",
+  modes: [],
+  operators: [],
+  railKinds: [],
+  delay: "all",
   speed: "all",
   nearMeKm: null,
   sort: "route",
@@ -58,10 +63,20 @@ const DEFAULT_FILTERS: FilterState = {
   others: true,
 };
 
+/** Az elmentett szűrés a mostani alakra: a régi `type` (busz / villamos) a `modes` szűrővé válik. */
+function migrateFilters(saved: Partial<FilterState> & { type?: string }): FilterState {
+  const { type, ...rest } = saved;
+  const modes = Array.isArray(rest.modes) ? rest.modes : type === "bus" ? (["bus"] as FilterState["modes"]) : type === "tram" ? (["tram"] as FilterState["modes"]) : [];
+  return { ...DEFAULT_FILTERS, ...rest, modes };
+}
+
 export function App() {
   useAppHeight();
   const liveIncidentCount = useLiveIncidents();
   const activeRide = useActiveRide();
+  // A bekapcsolt közlekedési módok (Beállítások): ezek megállói, vonalai és járművei töltődnek be.
+  const enabledModes = useEnabledModes();
+  const modesKey = modesParam(enabledModes);
 
   const restored = initialView();
 
@@ -116,6 +131,11 @@ export function App() {
       return ["SP1"];
     }
   });
+  // a kikapcsolt mód megállói (pl. vasútállomás csak-MVK módban) nem számítanak a fül jelvényébe
+  const shownMonitoredCount = monitoredStopIds.filter((id) => {
+    const f = feedOfId(id);
+    return f === "mvk" || enabledModes.includes(f);
+  }).length;
 
   useEffect(() => {
     try {
@@ -168,9 +188,7 @@ export function App() {
       const saved = localStorage.getItem("mvk_filter_state");
       // A régi, gépelés közbeni rendszám-keresés (vq) nem marad bent: már nincs hozzá mező,
       // így egy elmentett érték láthatatlanul szűrné a térképet.
-      return saved
-        ? { ...DEFAULT_FILTERS, ...JSON.parse(saved), vq: "" }
-        : DEFAULT_FILTERS;
+      return saved ? { ...migrateFilters(JSON.parse(saved)), vq: "" } : DEFAULT_FILTERS;
     } catch {
       return DEFAULT_FILTERS;
     }
@@ -184,13 +202,14 @@ export function App() {
   useStorageRefresh("mvk_filter_state", () => {
     try {
       const saved = JSON.parse(localStorage.getItem("mvk_filter_state") ?? "null");
-      if (saved && typeof saved === "object") setFilters({ ...DEFAULT_FILTERS, ...saved });
+      if (saved && typeof saved === "object") setFilters(migrateFilters(saved));
     } catch {}
   });
 
   // A menetrend alapadatai. Gyenge térerőnél vagy a worker újraindulása alatt
   // az első kérés elbukhat — ilyenkor visszalépő várakozással újrapróbáljuk
   // (és hálózat-visszatéréskor azonnal), különben üres maradna a térkép.
+  // A módok változásakor (Volán, vonat be/ki) újratöltődik.
   useEffect(() => {
     let alive = true;
     let attempt = 0;
@@ -200,8 +219,8 @@ export function App() {
       if (loaded || !alive) return;
       try {
         const [loadedStops, loadedRoutes, meta] = await Promise.all([
-          api.getStops(),
-          api.getRoutes(),
+          api.getStops(modesKey),
+          api.getRoutes(modesKey),
           api.getGtfsMeta(),
         ]);
         if (!alive) return;
@@ -231,12 +250,12 @@ export function App() {
       if (timer) clearTimeout(timer);
       window.removeEventListener("online", retryNow);
     };
-  }, []);
+  }, [modesKey]);
 
   const fetchLivePositions = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      const res = await api.getLivePositions();
+      const res = await api.getLivePositions(modesKey);
       const valid = (res.vehicles || []).filter(
         (v) => v.lat != null && v.lon != null,
       );
@@ -249,7 +268,7 @@ export function App() {
     } finally {
       setIsRefreshing(false);
     }
-  }, []);
+  }, [modesKey]);
 
   // Élő járművek: a szerver WebSocketen küldi (induláskor a teljes listát,
   // utána csak a változott járműveket). Pollozás csak tartalékként, ha a
@@ -257,7 +276,8 @@ export function App() {
   // Menetkövetés (és utazás) közben is frissül: a fejléc száma és „utolsó adat”
   // ideje, a felszállás-felismerő és a Menetrend élő jelzései ebből dolgoznak.
   const vehicleMap = useRef(new Map<string, LiveVehicle>());
-  useTopic("vehicles", (m) => {
+  // A téma a bekapcsolt módokat is hordozza: váltáskor a szerver a teljes új listát küldi.
+  useTopic(`vehicles@${modesKey}`, (m) => {
     if (Array.isArray(m.full)) {
       vehicleMap.current = new Map((m.full as LiveVehicle[]).map((v) => [v.id, v]));
     } else {
@@ -367,7 +387,7 @@ export function App() {
             lastUpdated={lastUpdated}
             isRefreshing={isRefreshing}
             onManualRefresh={fetchLivePositions}
-            monitoredStopsCount={monitoredStopIds.length}
+            monitoredStopsCount={shownMonitoredCount}
             liveIncidentCount={liveIncidentCount}
             onOpenNotifications={() => setNotificationsOpen(true)}
             onOpenAccount={() => setAccountOpen(true)}
@@ -379,7 +399,7 @@ export function App() {
             lastUpdated={lastUpdated}
             isRefreshing={isRefreshing}
             onManualRefresh={fetchLivePositions}
-            monitoredStopsCount={monitoredStopIds.length}
+            monitoredStopsCount={shownMonitoredCount}
             liveIncidentCount={liveIncidentCount}
             onOpenNotifications={() => setNotificationsOpen(true)}
             onOpenAccount={() => setAccountOpen(true)}
@@ -387,6 +407,7 @@ export function App() {
 
           <InstallBanner />
           <SyncBanner />
+          <RegionalIntroBanner />
 
           {}
           <div className="flex-1 flex overflow-hidden relative">
@@ -446,6 +467,7 @@ export function App() {
                 setSelectedStopIds={setMonitoredStopIds}
                 onFocusMap={handleFocusStopOnMap}
                 focusStop={linkStop}
+                onFocusTrip={handleFocusTripOnMap}
               />
             )}
 

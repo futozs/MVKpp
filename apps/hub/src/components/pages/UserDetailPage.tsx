@@ -38,7 +38,7 @@ function Chips({ items, empty }: { items: { key: string; node: React.ReactNode }
 function rideLine(r: Record<string, unknown>): string {
   const from = r.fromStopName ? String(r.fromStopName) : "";
   const to = r.toStopName ? String(r.toStopName) : "";
-  return [r.route ? String(r.route) : "", from && to ? `${from} → ${to}` : from || to, r.vehicleId ? `#${String(r.vehicleId)}` : ""].filter(Boolean).join(" · ") || "utazás";
+  return [r.route ? String(r.route) : "", from && to ? `${from} → ${to}` : from || to, r.vehicleId ? `#${String(r.vehicleId).replace(/^hkir:hkir_|^1:/, "")}` : ""].filter(Boolean).join(" · ") || "utazás";
 }
 
 export function UserDetailPage({ id }: { id: string }) {

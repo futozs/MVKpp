@@ -4,10 +4,13 @@ import { Button } from "@/components/ui/button";
 import { RouteTile } from "@/components/transit/RouteTile";
 import type { LiveVehicle } from "@/types";
 import { useRides, type Ride } from "@/lib/rides";
+import { displayVehicleId, rideModeOf, VEHICLE_WORDS } from "@/lib/modes";
 
 /** „Éppen erre a buszra szálltál fel?” — a felismerő kérdése a térkép tetején. */
 export function BoardingPrompt({ vehicle, onYes, onNo }: { vehicle: LiveVehicle; onYes: () => void; onNo: () => void }) {
   const reduce = useReducedMotion();
+  const w = VEHICLE_WORDS[vehicle.mode ?? rideModeOf(vehicle.id, vehicle.tripId)];
+  const rail = vehicle.mode === "rail";
   return (
     <motion.div
       role="alertdialog"
@@ -17,13 +20,13 @@ export function BoardingPrompt({ vehicle, onYes, onNo }: { vehicle: LiveVehicle;
       className="absolute inset-x-3 top-3 z-drawer mx-auto max-w-md rounded-2xl border border-primary/40 bg-card p-4 shadow-xl"
     >
       <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-primary">
-        <Bus className="h-3.5 w-3.5" /> Együtt mozogsz egy busszal
+        <Bus className="h-3.5 w-3.5" /> Együtt mozogsz egy {w.val}
       </p>
       <div className="mt-2 flex items-center gap-3">
-        <RouteTile short={vehicle.routeShort} color={vehicle.routeColor} text={vehicle.routeText} size="lg" />
+        <RouteTile short={rail && vehicle.trainNo ? `${vehicle.routeShort} ${vehicle.trainNo}` : vehicle.routeShort} color={vehicle.routeColor} text={vehicle.routeText} size="lg" />
         <p className="min-w-0 flex-1 text-sm">
-          Éppen erre a buszra szálltál fel? <span className="block truncate font-semibold">{vehicle.headsign}</span>
-          <span className="font-mono text-xs text-muted-foreground">{vehicle.id}</span>
+          Éppen erre a {w.ra} szálltál fel? <span className="block truncate font-semibold">{vehicle.headsign}</span>
+          <span className="font-mono text-xs text-muted-foreground">{rail ? (vehicle.trainName ?? "") : displayVehicleId(vehicle.id, vehicle.plate)}</span>
         </p>
       </div>
       <div className="mt-3 flex gap-2">

@@ -40,6 +40,9 @@ services:
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-}
       REDIS_URL: ${REDIS_URL:-}
+      # MÁV+ (OTP2): Volán, vasút és az MVK tartaléka — docs/MAVPLUSZ_OTP2.md, M. fejezet
+      OTP2_ENABLED: ${OTP2_ENABLED:-1}
+      REGIONAL: ${REGIONAL:-1}
       DB_POOL: "12"
     stop_grace_period: 20s
 

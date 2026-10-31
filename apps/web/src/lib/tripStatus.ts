@@ -1,3 +1,5 @@
+import { displayVehicleId } from "@/lib/modes";
+
 export type TripRunState =
   | "cancelled"
   | "live"
@@ -51,8 +53,9 @@ export function showsJournalVehicle(state: TripRunState): boolean {
 
 export function tripRunLabel(
   state: TripRunState,
-  vehicleId?: string | null,
+  rawVehicleId?: string | null,
 ): string | null {
+  const vehicleId = rawVehicleId ? displayVehicleId(rawVehicleId) : rawVehicleId;
   switch (state) {
     case "cancelled":
       return "Törölve";

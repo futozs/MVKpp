@@ -22,6 +22,7 @@
 import {
   dayInfo,
   fastDistM,
+  feedOfId,
   localMidnightUnix,
   loopTermini,
   nowUnix,
@@ -341,7 +342,15 @@ export class VehiclePredictor {
     if (!day) return null;
     const midnight = localMidnightUnix(iso);
     const nowS = now - midnight;
-    const plan = planRotations(this.planSlots(day.feed, day.services, nowS), this.planSeeds(day.feed, now, midnight), this.next);
+    // Forrásonként külön terv: MVK-busz sosem kerül Volán-menetre, és fordítva (a vonat is külön).
+    const slots = this.planSlots(day.feed, day.services, nowS);
+    const seeds = this.planSeeds(day.feed, now, midnight);
+    const plan: RotationPlan = { byTrip: new Map(), byVehicle: new Map() };
+    for (const f of ["mvk", "hkir", "rail"] as const) {
+      const p = planRotations(slots.filter((s) => feedOfId(s.tripId) === f), seeds.filter((s) => feedOfId(s.vehicle) === f), this.next);
+      for (const [k, v] of p.byTrip) plan.byTrip.set(k, v);
+      for (const [k, v] of p.byVehicle) plan.byVehicle.set(k, v);
+    }
     this.plan = { at: now, iso, plan };
     return plan;
   }
@@ -360,7 +369,7 @@ export class VehiclePredictor {
       if (!a || !b) continue;
       const key = runKeyOf(feed.patternHash(t.id) ?? "", startS);
       const r = feed.routes.get(t.routeId);
-      const route = r?.short ?? t.routeId;
+      const route = r?.key ?? t.routeId;
       const tram = r?.type === TRAM_ROUTE_TYPE;
       out.push({ tripId: t.id, key, route, tram, startS, endS: st[st.length - 1].arr, lat: a.lat, lon: a.lon, endLat: b.lat, endLon: b.lon });
     }
@@ -393,7 +402,7 @@ export class VehiclePredictor {
         out.push({ vehicle: v.id, availS: Math.max(nowS, ended - midnight), lat: end.lat, lon: end.lon, key, route: last.routeShort, tram, idle: false });
         continue;
       }
-      out.push({ vehicle: v.id, availS: nowS, lat: v.lat, lon: v.lon, key: null, route: feed.routes.get(v.routeId)?.short ?? null, tram, idle: true });
+      out.push({ vehicle: v.id, availS: nowS, lat: v.lat, lon: v.lon, key: null, route: feed.routes.get(v.routeId)?.key ?? null, tram, idle: true });
     }
     return out;
   }
@@ -417,7 +426,7 @@ export class VehiclePredictor {
       const g = this.predict(t.id);
       // a futó és a fordulóhurkon visszaforduló busz nem tipp: nem számít a pontosságba
       if (!g || g.method === "matched" || g.method === "loop") continue;
-      rows.push([iso, t.id, day.feed.routes.get(t.routeId)?.short ?? t.routeId, st[0].dep, h, g.id, g.confidence, g.method, JSON.stringify(g.signals)]);
+      rows.push([iso, t.id, day.feed.routes.get(t.routeId)?.key ?? t.routeId, st[0].dep, h, g.id, g.confidence, g.method, JSON.stringify(g.signals)]);
     }
     for (const r of rows) {
       await getPool().query(

@@ -6,6 +6,7 @@ import type {
 } from "@/services/api";
 import {
   MODE_NOUN,
+  legTileText,
   delayExact,
   hm,
   hms,
@@ -18,6 +19,7 @@ import {
   trailingWalkSec,
   transitLegs,
 } from "./format";
+import { displayVehicleId } from "@/lib/modes";
 
 /**
  * Múltbeli utazás összegzése — mit mutat a mérés a menetrendhez képest.
@@ -90,7 +92,7 @@ function arrivalVerdict(delayS: number): string {
 
 function legLines(leg: JourneyTransitLeg, n: number): string[] {
   const a = leg.actual;
-  const head = `${n}. ${leg.routeShortName} ${MODE_NOUN[leg.mode]}${leg.headsign ? ` (${leg.headsign})` : ""}`;
+  const head = `${n}. ${legTileText(leg)} ${leg.trainName ?? MODE_NOUN[leg.mode]}${leg.headsign ? ` (${leg.headsign})` : ""}`;
   const lines = [head];
   if (!a?.tracked) {
     lines.push(`   Felszállás: ${leg.fromName}, menetrend szerint ${hm(leg.schedDep)}`);
@@ -108,7 +110,7 @@ function legLines(leg: JourneyTransitLeg, n: number): string[] {
       : "az érkezésről nincs mérés";
   lines.push(`   Felszállás: ${leg.fromName}, menetrend szerint ${hm(leg.schedDep)}, ${dep}`);
   lines.push(`   Leszállás: ${leg.toName}, menetrend szerint ${hm(leg.schedArr)}, ${arr}`);
-  if (a.vehicleId) lines.push(`   Jármű: ${a.vehicleId}`);
+  if (a.vehicleId) lines.push(`   Jármű: ${displayVehicleId(a.vehicleId)}`);
   return lines;
 }
 

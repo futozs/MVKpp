@@ -89,6 +89,36 @@
   user-select: none;
 }
 
+/* Volán: szögletesebb csempe, bal oldali sávval */
+.mvk-vehicle.coach .tile {
+  border-radius: 3px;
+  padding-left: 7px;
+  box-shadow:
+    inset 3px 0 0 hsl(0 0% 100% / 0.55),
+    0 3px 9px hsl(160 40% 2% / 0.75),
+    0 1px 3px hsl(160 40% 2% / 0.6);
+}
+
+/* Vonat: lekerekített, a kategória (IC, Sz) kicsiben a vonatszám előtt */
+.mvk-vehicle.rail .tile {
+  gap: 3px;
+  padding: 0 7px;
+  border-radius: 999px;
+}
+
+.mvk-vehicle.rail .tile .cat {
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  opacity: 0.85;
+}
+
+/* Menetrendből becsült helyzet (nem GPS) */
+.mvk-vehicle.estimated .tile {
+  border-style: dashed;
+  opacity: 0.72;
+}
+
 .mvk-vehicle .vid {
   position: absolute;
   top: 100%;

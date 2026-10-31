@@ -5,7 +5,7 @@
  */
 import { budapestOffsetSec, dayInfo, serviceClock, shiftIso } from "@mvk/core";
 import { sql, sqlOne } from "@mvk/db";
-import { ApiError, body, cached, dispatch, intParam, isoDate, json, route, type Route } from "./http.ts";
+import { ApiError, body, cached, dispatch, intParam, isoDate, json, route, scopeOf, scopeSql, type Route } from "./http.ts";
 
 const today = () => serviceClock().iso;
 const yesterday = () => shiftIso(today(), -1);
@@ -33,20 +33,23 @@ const routes: Route[] = [
     return json({ today: h, counts, jobs });
   }),
 
-  route("GET", "/stats/vehicles", async () =>
-    json({
-      vehicles: await cached("vehicles", 5 * 60_000, () =>
+  route("GET", "/stats/vehicles", async (_req, _p, url) => {
+    // ?modes= nélkül csak az MVK flottája (a v2 alapválasza); vele a Volán-buszok és a vonatok is
+    const sc = scopeOf(url);
+    return json({
+      vehicles: await cached(`vehicles:${sc.key}`, 5 * 60_000, () =>
         sql(
-          `SELECT v.vehicle_id, coalesce(v.kind, 'BUS') AS kind, v.last_seen, coalesce(a.runs, 0)::int AS runs, coalesce(a.days, 0)::int AS days,
+          `SELECT v.vehicle_id, coalesce(v.kind, CASE WHEN v.vehicle_id LIKE '1:%' THEN 'RAIL' WHEN v.vehicle_id LIKE '%:%' THEN 'COACH' ELSE 'BUS' END) AS kind, v.last_seen, coalesce(a.runs, 0)::int AS runs, coalesce(a.days, 0)::int AS days,
                   a.last_date, round(coalesce(a.dist, 0) / 1000.0)::int AS dist_km
              FROM vehicle v LEFT JOIN (
                SELECT vehicle_id, count(*) AS runs, count(DISTINCT service_date) AS days, max(service_date)::text AS last_date, sum(dist_m) AS dist
                  FROM trip_run WHERE status <> 'aborted' GROUP BY vehicle_id) a USING (vehicle_id)
+            WHERE ${scopeSql(sc, "v.vehicle_id")}
             ORDER BY v.last_seen DESC`,
         ),
       ),
-    }),
-  ),
+    });
+  }),
 
   /**
    * Egy jármű napja. ÚJ: `days` — azok a napok, amelyeken a jármű ténylegesen
@@ -138,18 +141,19 @@ const routes: Route[] = [
   route("GET", "/stats/predictions/accuracy", async (_req, _p, url) => {
     const to = isoDate(url.searchParams.get("to")) ?? today();
     const from = isoDate(url.searchParams.get("from")) ?? shiftIso(to, -59);
+    const sc = scopeSql(scopeOf(url), "trip_id");
     const overall = await sqlOne<{ n: number; correct: number }>(
-      `SELECT count(*)::int AS n, count(*) FILTER (WHERE correct)::int AS correct FROM vehicle_prediction WHERE correct IS NOT NULL AND service_date BETWEEN $1 AND $2`,
+      `SELECT count(*)::int AS n, count(*) FILTER (WHERE correct)::int AS correct FROM vehicle_prediction WHERE correct IS NOT NULL AND service_date BETWEEN $1 AND $2 AND ${sc}`,
       [from, to],
     );
     const daily = await sql(
       `SELECT service_date::text, count(*)::int AS n, count(*) FILTER (WHERE correct)::int AS correct FROM vehicle_prediction
-        WHERE correct IS NOT NULL AND service_date BETWEEN $1 AND $2 GROUP BY 1 ORDER BY 1`,
+        WHERE correct IS NOT NULL AND service_date BETWEEN $1 AND $2 AND ${sc} GROUP BY 1 ORDER BY 1`,
       [from, to],
     );
     const byVehicle = await sql(
       `SELECT actual_vehicle AS vehicle_id, count(*)::int AS n, count(*) FILTER (WHERE correct)::int AS correct FROM vehicle_prediction
-        WHERE correct IS NOT NULL AND service_date BETWEEN $1 AND $2 GROUP BY 1 HAVING count(*) >= 3 ORDER BY n DESC LIMIT 30`,
+        WHERE correct IS NOT NULL AND service_date BETWEEN $1 AND $2 AND ${sc} GROUP BY 1 HAVING count(*) >= 3 ORDER BY n DESC LIMIT 30`,
       [from, to],
     );
     return json({ from, to, total: overall?.n ?? 0, correct: overall?.correct ?? 0, accuracyPct: overall?.n ? Math.round((100 * overall.correct) / overall.n) : null, daily, byVehicle });
@@ -173,7 +177,7 @@ const routes: Route[] = [
     const fleet = await sql(
       `WITH p AS (SELECT vehicle_id, count(DISTINCT service_date) AS days_active, count(*) AS runs,
                          round((sum(extract(epoch FROM actual_end - actual_start)) FILTER (WHERE actual_end > actual_start) / 3600.0)::numeric, 1) AS service_h
-                    FROM trip_run WHERE service_date BETWEEN $1 AND $2 AND status <> 'aborted' GROUP BY 1),
+                    FROM trip_run WHERE service_date BETWEEN $1 AND $2 AND status <> 'aborted' AND vehicle_id NOT LIKE '%:%' GROUP BY 1),
             i AS (SELECT vehicle_id, count(*) AS n FROM incident WHERE kind = 'breakdown' AND service_date BETWEEN $1 AND $2 AND confidence >= $3 GROUP BY 1)
        SELECT p.vehicle_id, coalesce(v.kind, 'BUS') AS vehicle_kind, p.days_active::int, p.runs::int, coalesce(p.service_h, 0)::float8 AS service_h,
               coalesce(i.n, 0)::int AS incidents, coalesce(i.n, 0)::int AS mid_trip, 0 AS stuck, 0 AS no_signal, 0 AS absences, 0 AS absent_days,
@@ -239,6 +243,8 @@ const routes: Route[] = [
   route("GET", "/stats/stop/:id", async (_req, p, url) => {
     const to = isoDate(url.searchParams.get("to")) ?? yesterday();
     const from = isoDate(url.searchParams.get("from")) ?? shiftIso(to, -6);
+    // a regionális állomás (Tiszai pu., Búza téri autóbusz-állomás) a vágányaival / kocsiállásaival együtt
+    const stopMatch = p.id.includes(":") ? `(stop_id = $1 OR stop_id IN (SELECT stop_id FROM stop WHERE parent_station = $1))` : `stop_id = $1`;
     const hours = await cached(`stop:${p.id}:${from}:${to}`, to >= today() ? 60_000 : 600_000, () =>
       sql(
         `SELECT service_date::text,
@@ -248,7 +254,7 @@ const routes: Route[] = [
                 round(approx_percentile(0.85, rollup(delay_pct)))::int AS p85_delay_s,
                 round(sum(avg_dwell_s * n) / nullif(sum(n) FILTER (WHERE avg_dwell_s IS NOT NULL), 0))::int AS avg_dwell_s,
                 round(avg(avg_headway_s))::int AS avg_headway_s
-           FROM stop_event_hourly WHERE stop_id = $1 AND service_date BETWEEN $2 AND $3
+           FROM stop_event_hourly WHERE ${stopMatch} AND service_date BETWEEN $2 AND $3
           GROUP BY 1, 2 ORDER BY 1, 2`,
         [p.id, from, to],
       ),
@@ -261,13 +267,15 @@ const routes: Route[] = [
     const bf = Math.max(0, Math.min(95, Number(url.searchParams.get("from") ?? 28) || 0));
     const bt = Math.max(bf, Math.min(95, Number(url.searchParams.get("to") ?? 36) || 0));
     const daytype = intParam(url.searchParams.get("daytype"), 0, 0, 2);
-    const segments = await cached(`slow:${bf}:${bt}:${daytype}`, 10 * 60_000, () =>
+    const sc = scopeOf(url);
+    const segments = await cached(`slow:${bf}:${bt}:${daytype}:${sc.key}`, 10 * 60_000, () =>
       sql(
         `WITH s AS (
            SELECT from_stop, to_stop, sum(n)::int AS n, approx_percentile(0.5, rollup(travel_pct)) AS p50,
                   sum(avg_sched_s * n) / nullif(sum(n), 0) AS sched
              FROM segment_daily
             WHERE bucket >= now() - interval '60 days' AND tod_bucket BETWEEN $1 AND $2 AND daytype = $3
+              AND ${scopeSql(sc, "from_stop")} AND ${scopeSql(sc, "to_stop")}
             GROUP BY 1, 2 HAVING sum(n) >= 5)
          SELECT sf.name AS from_name, st.name AS to_name,
                 round(sf.lat * 1e7)::int AS from_lat, round(sf.lon * 1e7)::int AS from_lon,

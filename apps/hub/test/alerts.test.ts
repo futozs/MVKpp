@@ -42,6 +42,26 @@ describe("buildAlerts", () => {
     expect(ids({ workerReachable: false, token: null, poll: null })).toEqual(["crit:worker-down"]);
   });
 
+  it("flags the MÁV+ fallback and a stalled regional feed", () => {
+    const regional = { enabled: true, vehicles: 190, lastOkAt: NOW - 10_000, lastError: null, limited: 0 };
+    const source = { state: "mvk" as const, since: new Date(NOW - 3_600_000).toISOString(), reason: null, fallbackSecToday: 0, regional };
+    const ids = (i: Partial<AlertInput>) => buildAlerts({ ...healthy, ...i }).map((a) => `${a.severity}:${a.id}`);
+    expect(ids({ source })).toEqual([]);
+    // a tartalék fut: figyelmeztetés, és a token hiánya mellett ott a magyarázat
+    const fb = { ...source, state: "otp2" as const, since: new Date(NOW - 12 * 60_000).toISOString(), reason: "nincs MVK token" };
+    expect(ids({ source: fb })).toEqual(["warn:source-fallback"]);
+    const missing = buildAlerts({ ...healthy, token: { present: false }, source: fb });
+    expect(missing.map((a) => a.id)).toEqual(["token-missing", "source-fallback"]);
+    expect(missing[0].detail).toContain("MÁV+");
+    expect(missing[1].detail).toContain("12 perce");
+    // a MÁV+ hallgat: tartalék közben kritikus, máskor figyelmeztetés
+    const stale = { ...regional, lastOkAt: NOW - 20 * 60_000, lastError: "OTP2 host limit" };
+    expect(ids({ source: { ...source, regional: stale } })).toEqual(["warn:regional-stale"]);
+    expect(ids({ source: { ...fb, regional: stale } })).toEqual(["crit:regional-stale", "warn:source-fallback"]);
+    // kikapcsolt regionális: nincs mit figyelni
+    expect(ids({ source: { ...source, regional: { ...stale, enabled: false } } })).toEqual([]);
+  });
+
   it("ignores container state when Docker is not visible", () => {
     expect(buildAlerts({ ...healthy, dockerAvailable: false, containers: [{ service: "web", state: "exited", health: null }] })).toEqual([]);
   });

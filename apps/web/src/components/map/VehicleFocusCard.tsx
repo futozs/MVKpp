@@ -9,6 +9,7 @@ import { LiveDot } from "@/components/transit/LiveDot";
 import { ApproachStrip } from "@/components/transit/ApproachStrip";
 import { cn } from "@/lib/utils";
 import { boardVehicle } from "@/components/ride/RideLayer";
+import { displayVehicleId, rideModeOf, VEHICLE_WORDS } from "@/lib/modes";
 
 type VehicleFocusCardProps = {
   tripId: string;
@@ -40,6 +41,11 @@ export function VehicleFocusCard({
     vehicle?.speed != null ? Math.round(vehicle.speed * 3.6) : null;
   const moving = speedKmh != null && speedKmh > 2;
   const shownId = vehicle?.id ?? vehicleId;
+  const tripMode = shownId ? rideModeOf(shownId, data?.trip ?? tripId) : null;
+  // vonatnál a csempén a vonatszám („Sz 6612”), a címben a neve; a pirulán a jármű (pályaszám, rendszám)
+  const trainNo = tripMode === "rail" ? (vehicle?.trainNo ?? null) : null;
+  const idLabel = shownId ? displayVehicleId(shownId, vehicle?.plate) : null;
+  const title = data ? (vehicle?.trainName ? `${vehicle.trainName} → ${data.headsign}` : data.headsign) : null;
 
   return (
     <motion.aside
@@ -57,7 +63,7 @@ export function VehicleFocusCard({
     >
       <div className="flex items-start gap-3 px-4 py-3">
         <RouteTile
-          short={data?.route ?? "…"}
+          short={data ? (trainNo ? `${data.route} ${trainNo}` : data.route) : "…"}
           color={data?.color}
           text={data?.text}
           size="lg"
@@ -66,15 +72,15 @@ export function VehicleFocusCard({
         <div className="min-w-0 flex-1">
           <p className="flex items-center gap-1.5 truncate text-sm font-bold tracking-tight">
             <span className="truncate">
-              {data?.headsign ?? "Menet betöltése…"}
+              {title ?? "Menet betöltése…"}
             </span>
             {vehicle ? <LiveDot /> : null}
           </p>
 
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
-            {shownId ? (
+            {idLabel ? (
               <span className="rounded bg-primary/12 px-1.5 py-0.5 font-mono text-sm font-bold tabular-nums text-primary">
-                {shownId}
+                {idLabel}
               </span>
             ) : null}
 
@@ -119,7 +125,7 @@ export function VehicleFocusCard({
               )
             }
           >
-            <TicketCheck /> Felszálltam erre a buszra
+            <TicketCheck /> Felszálltam erre a {VEHICLE_WORDS[tripMode ?? "bus"].ra}
           </Button>
         </div>
       ) : null}

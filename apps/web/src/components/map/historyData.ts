@@ -1,4 +1,5 @@
 import { API_BASE } from "@/lib/apiBase";
+import { modesParam } from "@/lib/modes";
 
 /**
  * Az idővonal nyers adatai: az `/engine/history/*` végpontok válaszai, már
@@ -148,7 +149,7 @@ export async function fetchHistoryWindow(
   signal?: AbortSignal,
 ): Promise<HistoryWindow> {
   const end = start + WINDOW_SEC;
-  const raw = await getJson(`/engine/history/frames?from=${start}&to=${end}`, signal);
+  const raw = await getJson(`/engine/history/frames?from=${start}&to=${end}&modes=${modesParam()}`, signal);
   const vehicles = isRecord(raw) && isRecord(raw.vehicles) ? raw.vehicles : {};
   const tracks = new Map<string, VehicleTrack>();
   for (const [id, value] of Object.entries(vehicles)) {

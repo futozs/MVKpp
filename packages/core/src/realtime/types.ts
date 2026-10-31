@@ -1,4 +1,5 @@
 /** A régi API-val bájtra kompatibilis valós idejű típusok (az iOS app ezt olvassa). */
+import type { TransitMode } from "../transit/modes.ts";
 
 export type LiveVeh = {
   id: string;
@@ -27,6 +28,21 @@ export type DecodedVehicle = {
   timestamp: number | null;
   /** v3: az MVK által küldött eredeti trip_id (ha a feloldás miatt eltér) */
   rtTripId?: string;
+  /** v3: közlekedési mód (tram, bus, coach, rail) — a v2-ben csak MVK (tram/bus) jön */
+  mode?: TransitMode;
+  /** v3: a vonal kulcsa (MVK-nál a rövid név, máshol a vonal-azonosító) */
+  routeKey?: string;
+  /** v3: rendszám (Volán, és az MVK-é a tartalék forrásból) */
+  plate?: string;
+  /** v3: vonatszám és név (vasút) */
+  trainNo?: string;
+  trainName?: string;
+  /** v3: a hivatalos (OTP2) késés a következő megállónál, mp */
+  delaySec?: number | null;
+  /** v3: menetrendből becsült helyzet, nem GPS */
+  estimated?: boolean;
+  /** v3: honnan jött a jel ("otp2" = MÁV+; hiányzik = natív MVK) */
+  source?: "otp2";
 };
 
 export type StopPrediction = { unix: number; delay: number | null };
@@ -45,6 +61,10 @@ export type RealtimeSnapshot = {
   updatesHeaderTs: number;
   updatesCount: number;
   rtError: string | null;
+  /** v3: az MVK-adat forrása ebben a körben ("otp2" = tartalék, MÁV+) */
+  source?: "mvk" | "otp2" | null;
+  /** v3: a regionális (Volán, vasút) adat utolsó sikeres frissítése (ms) */
+  regionalAt?: number;
 };
 
 export type ArrivalItem = {
@@ -86,6 +106,21 @@ export type ArrivalItem = {
   } | null;
   /** v3: dugó a busz előtt a megállóig (többletidő és a legrosszabb szakasz) */
   trafficAhead?: { excessS: number; level: number; fromName: string; toName: string } | null;
+  /** v3: közlekedési mód és a vonal kulcsa (a v2 csak MVK-t ad, ott hiányozhat) */
+  mode?: TransitMode;
+  routeKey?: string;
+  /** v3: üzemeltető (pl. „Helyközi busz”, „Tiszaújváros”) */
+  operator?: string | null;
+  /** v3: vasút: vonatszám, név (TOKAJ), kategória (IC, Sz) */
+  trainNo?: string | null;
+  trainName?: string | null;
+  /** v3: vágány / kocsiállás (élőben változhat) és hogy változott-e */
+  platform?: string | null;
+  platformChanged?: boolean;
+  /** v3: a megálló, ahonnan indul (állomásnál a vágány megállója) */
+  stopId?: string;
+  /** v3: hivatalos megjegyzések (késés oka, kocsiösszeállítás, pótlóbusz) */
+  notices?: string[];
 };
 
 export type StopArrivals = {

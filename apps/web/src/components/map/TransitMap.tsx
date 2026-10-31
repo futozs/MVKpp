@@ -38,7 +38,8 @@ import { MapLayersControl } from "./controls/MapLayersControl";
 import { MapSearch } from "./controls/MapSearch";
 import { NewsButton } from "@/components/news/NewsButton";
 import { FilterPanel } from "./filter/FilterPanel";
-import { activeFilterCount, filterSummary, MAX_WATCHED } from "./filter/filterState";
+import { activeFilterCount, filterSummary, matchesModeFilters, MAX_WATCHED, vehicleDelay } from "./filter/filterState";
+import { displayVehicleId, isRegionalId, vehicleModeOf } from "@/lib/modes";
 
 /** a forgalom-réteg frissítése (ms) */
 const TRAFFIC_POLL_MS = 30_000;
@@ -119,6 +120,13 @@ const HIT_TOLERANCE = IS_TOUCH ? 15 : 6;
 /** A megállópöttyök rajzolt mérete — érintésre nagyobb, hogy látszódjon is. */
 const STOP_R = IS_TOUCH ? 5 : 3.5;
 const STOP_R_ACTIVE = IS_TOUCH ? 7.5 : 6;
+/** a Volán-megállók csak ettől a nagyítástól látszanak (a megyében ~3500 van belőlük) */
+const COACH_STOPS_ZOOM = 14;
+/** a vasútállomás pöttye nagyobb, MÁV-kék */
+const RAIL_STOP_R = IS_TOUCH ? 6.5 : 5;
+const RAIL_COLOR = "#1E5AA8";
+/** a regionális járművek mozgásbecslése ettől a nagyítástól (távolról csak a GPS-helyük látszik) */
+const REGIONAL_MOTION_ZOOM = 11;
 
 interface TransitMapProps {
   stops: Stop[];
@@ -207,18 +215,27 @@ function vehiclePopupHtml(raw: LiveVehicle, actions = true): string {
     routeText: safeHex(raw.routeText, "FFFFFF"),
   };
   const speed = v.speed != null ? `${Math.round(v.speed * 3.6)} km/h` : "—";
+  const rail = raw.mode === "rail";
+  // vonatnál a vonatszám (és a név), máshol a rendszám — a Volán-azonosító előtag nélkül
+  const idTitle = rail ? "Vonat" : "Rendszám";
+  const idText = rail ? escapeHtml(`${raw.trainNo ?? ""}${raw.trainName ? ` ${raw.trainName}` : ""}`.trim() || "—") : escapeHtml(displayVehicleId(raw.id, raw.plate));
+  const delay = vehicleDelay(raw);
+  const delayText =
+    delay == null ? null : Math.abs(delay) < 60 ? "pontos" : `${delay > 0 ? "+" : "−"}${Math.round(Math.abs(delay) / 60)} perc${raw.delaySec != null && raw.mode !== "bus" && raw.mode !== "tram" ? " (MÁV)" : ""}`;
   return `
         <div style="min-width:210px">
           <div style="display:flex;align-items:center;gap:9px;margin-bottom:10px">
-            <span style="display:inline-flex;align-items:center;justify-content:center;min-width:40px;height:26px;padding:0 8px;border-radius:8px;font-weight:800;font-size:14px;background:#${v.routeColor || "1FB574"};color:#${v.routeText || "FFFFFF"}">${v.routeShort}</span>
+            <span style="display:inline-flex;align-items:center;justify-content:center;min-width:40px;height:26px;padding:0 8px;border-radius:${rail ? "999px" : "8px"};font-weight:800;font-size:14px;background:#${v.routeColor || "1FB574"};color:#${v.routeText || "FFFFFF"}">${v.routeShort}</span>
             <strong style="font-size:13px">${v.headsign || "Járat"}</strong>
           </div>
           <div style="border-radius:10px;background:hsl(var(--primary)/0.09);border:1px solid hsl(var(--primary)/0.25);padding:9px 11px;margin-bottom:8px">
-            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:hsl(var(--muted-foreground))">Rendszám</div>
-            <div style="font-family:var(--font-mono);font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;color:hsl(var(--foreground))">${v.id}</div>
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:hsl(var(--muted-foreground))">${idTitle}</div>
+            <div style="font-family:var(--font-mono);font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;color:hsl(var(--foreground))">${idText}</div>
           </div>
           <div style="font-family:var(--font-mono);font-size:12px;color:hsl(var(--muted-foreground));display:grid;gap:3px">
             <div>Sebesség <strong style="color:hsl(var(--foreground))">${speed}</strong></div>
+            ${delayText ? `<div>Késés <strong style="color:hsl(var(--foreground))">${delayText}</strong></div>` : ""}
+            ${raw.estimated ? `<div>Helyzet <strong style="color:hsl(var(--foreground))">menetrendből becsült</strong></div>` : ""}
           </div>
           ${
             v.tripId && actions
@@ -269,6 +286,11 @@ export function TransitMap({
   const [followPaused, setFollowPaused] = useState(false);
   const geoCacheRef = useRef<Record<string, [number, number][][]>>({});
   const lastFocusKeyRef = useRef<string>("");
+  /**
+   * A Volán-megállók (a megyében ~3500) csak közelről és csak a látott részen kerülnek
+   * ki: a nézet (nagyítás + kivágat) változása ezt a számlálót lépteti.
+   */
+  const [stopView, setStopView] = useState<{ zoom: number; bounds: L.LatLngBounds | null }>({ zoom: 13, bounds: null });
 
   // A szűrőpanel asztalon nyitva maradhat (eszközönként megjegyezzük); telefonon mindig zárva indul.
   const [isPanelOpen, setPanelOpenState] = useState(() => {
@@ -345,8 +367,12 @@ export function TransitMap({
     const rememberView = () => {
       const c = map.getCenter();
       saveMapView({ lat: c.lat, lon: c.lng, zoom: map.getZoom() });
+      // A Volán-megállók kivágata: csak közeli nagyításnál számít (távolról nem rajzoljuk őket).
+      const z = map.getZoom();
+      setStopView((prev) => (z < COACH_STOPS_ZOOM && prev.zoom < COACH_STOPS_ZOOM ? prev : { zoom: z, bounds: map.getBounds().pad(0.35) }));
     };
     map.on("moveend", rememberView);
+    setStopView({ zoom: map.getZoom(), bounds: map.getBounds().pad(0.35) });
 
     const revalidateSize = () => {
       if (document.visibilityState === "visible") map.invalidateSize();
@@ -392,21 +418,13 @@ export function TransitMap({
       const targets = [...watchList];
       if (q && !targets.includes(q)) targets.push(q);
       return vehicles.filter((v) => {
-        const vid = normalizeSearchText(String(v.id || ""));
-        const label = normalizeSearchText(String(v.label || ""));
-        return targets.some((t) => vid.includes(t) || label.includes(t));
+        // rendszám (Volán: LWA387), vonatszám (5139) vagy MVK-azonosító
+        const keys = [v.id, v.label, v.plate, v.trainNo].filter(Boolean).map((x) => normalizeSearchText(String(x)));
+        return targets.some((t) => keys.some((k) => k.includes(t)));
       });
     }
 
-    let list = vehicles.slice();
-
-    if (filters.type !== "all") {
-      list = list.filter((v) => {
-        const r = routes[v.routeId];
-        const isTram = r?.type === "900" || v.label === "TRAM";
-        return filters.type === "tram" ? isTram : !isTram;
-      });
-    }
+    let list = vehicles.filter((v) => matchesModeFilters(v, filters, routes));
 
     if (filters.routes.length > 0) {
       const routeSet = new Set(filters.routes);
@@ -621,20 +639,26 @@ export function TransitMap({
     const brand = token("--primary");
     const outline = token("--background");
     const watched = new Set(monitoredStopIds);
-    const list = filters.onlyWatched
-      ? stops.filter((s) => watched.has(s.id))
-      : stops;
+    const ids = new Set(stops.map((s) => s.id));
+    const close = stopView.zoom >= COACH_STOPS_ZOOM;
+    const list = (filters.onlyWatched ? stops.filter((s) => watched.has(s.id)) : stops).filter((s) => {
+      // a vágány / kocsiállás az állomásán keresztül látszik (egy pötty az állomás)
+      if (s.parent && ids.has(s.parent)) return false;
+      if (s.feed !== "coach" || s.station || watched.has(s.id) || selectedStopId === s.id) return true;
+      return close && (!stopView.bounds || stopView.bounds.contains([s.lat, s.lon]));
+    });
 
     list.forEach((s) => {
       const isWatched = watched.has(s.id);
       const isSelected = selectedStopId === s.id;
       const active = isWatched || isSelected;
+      const rail = s.feed === "rail";
 
       const marker = L.circleMarker([s.lat, s.lon], {
-        radius: active ? STOP_R_ACTIVE : STOP_R,
+        radius: active ? STOP_R_ACTIVE : rail ? RAIL_STOP_R : STOP_R,
         color: outline,
-        weight: 1.5,
-        fillColor: active ? brand : neutral,
+        weight: rail ? 2 : 1.5,
+        fillColor: active ? brand : rail ? RAIL_COLOR : neutral,
         fillOpacity: 1,
         // A renderer 15 képpontos ráhagyásával együtt ez adja a
         // hüvelykujjnak elég nagy érzékeny felületet.
@@ -644,8 +668,10 @@ export function TransitMap({
       // Érintőképernyőn a tooltip csak egy fölösleges lebegő doboz, amit a
       // koppintás azonnal ki is vált — ott a részletlap a válasz.
       if (!IS_TOUCH) {
+        // a név a feedből jön: escape-elve
+        const kind = rail ? "Vasútállomás" : s.station ? "Autóbusz-állomás" : s.feed === "coach" ? "Volán-megálló" : s.id;
         marker.bindTooltip(
-          `<strong>${s.name}</strong><br><span style="opacity:.65">${s.id}</span>`,
+          `<strong>${escapeHtml(s.name)}</strong><br><span style="opacity:.65">${escapeHtml(kind)}</span>`,
           { direction: "top", offset: [0, -4] },
         );
       }
@@ -660,6 +686,7 @@ export function TransitMap({
     onSelectStop,
     monitoredStopIds,
     selectedStopId,
+    stopView,
   ]);
 
   // Amikor a kijelölt megálló máshonnan (megállófigyelő "cél a térképen"
@@ -705,14 +732,16 @@ export function TransitMap({
         watchSet.has(v.id.toLowerCase()) ||
         (activeQ ? v.id.toLowerCase().includes(activeQ) : false);
       const showId = filters.labels || tracked;
-      const iconKey = `${v.routeShort}|${v.routeColor}|${v.routeText}|${tracked}|${showId}|${dim}`;
+      const mode = vehicleModeOf(v, routes[v.routeId]?.type);
+      const iconKey = `${v.routeShort}|${v.routeColor}|${v.routeText}|${tracked}|${showId}|${dim}|${mode}|${v.trainNo ?? ""}|${v.estimated ? 1 : 0}`;
       const icon = () =>
         createVehicleIcon(
           v.routeShort || "?",
           v.routeColor || "1FB574",
           v.routeText || "FFFFFF",
           tracked,
-          showId ? v.id : null,
+          showId ? (mode === "rail" ? (v.trainName ?? null) : displayVehicleId(v.id, v.plate)) : null,
+          { mode, trainNo: v.trainNo, estimated: v.estimated },
         );
 
       // Ha a térkép közben újraépült, a régi marker már nincs a rétegen: újat teszünk ki.
@@ -819,7 +848,17 @@ export function TransitMap({
       // Utazás közben a busz, amin ülsz, a telefon GPS-ével megy (ha az friss és a buszhoz illik).
       const ridden = getActiveRide()?.vehicleId ?? null;
       const gps = ridden ? geoPosRef.current : null;
+      // A Volán- és vasúti járművek (a megyében ~250) csak a látott részen és közelről mozognak a becsléssel:
+      // a többi a valós jel helyén áll, így a nyomvonaluk sem töltődik le feleslegesen.
+      const map = mapRef.current;
+      const view = map && map.getZoom() >= REGIONAL_MOTION_ZOOM ? map.getBounds().pad(0.3) : null;
       for (const entry of liveMarkersRef.current.values()) {
+        const v = entry.v;
+        if (isRegionalId(v.id) && v.id !== ridden && v.lat != null && v.lon != null && (!view || !view.contains([v.lat, v.lon]))) {
+          entry.shown = undefined;
+          moveIfChanged(entry.marker, v.lat, v.lon);
+          continue;
+        }
         const est = estimatePosition(entry.v.motion, now, entry.shown, gps && entry.v.id === ridden ? gps : null);
         if (!est) {
           // nincs (még) nyomvonal a becsléshez: a valós jel helyén mutatjuk, nem a régi helyén
@@ -890,7 +929,9 @@ export function TransitMap({
     const color = live?.routeColor || focusPath?.color || "1FB574";
     const text = live?.routeText || focusPath?.text || "FFFFFF";
     const id = live?.id ?? last?.id ?? focusVehicleId;
-    const iconKey = `${route}|${color}|${text}|${id}`;
+    const iconOpts = live ? { mode: vehicleModeOf(live, routes[live.routeId]?.type), trainNo: live.trainNo, estimated: live.estimated } : {};
+    const shownId = id ? (iconOpts.mode === "rail" ? (live?.trainName ?? null) : displayVehicleId(id, live?.plate)) : null;
+    const iconKey = `${route}|${color}|${text}|${id}|${iconOpts.mode ?? ""}|${iconOpts.trainNo ?? ""}`;
     const motion = live?.motion ?? null;
 
     const entry = focusMarkerRef.current;
@@ -904,7 +945,7 @@ export function TransitMap({
       entry.raw = [lat, lon];
       entry.id = id ?? null;
       if (entry.iconKey !== iconKey) {
-        entry.marker.setIcon(createVehicleIcon(route, color, text, true, id));
+        entry.marker.setIcon(createVehicleIcon(route, color, text, true, shownId, iconOpts));
         entry.iconKey = iconKey;
       }
       if (!motion) {
@@ -913,9 +954,9 @@ export function TransitMap({
       }
       return;
     }
-    const marker = L.marker([lat, lon], { icon: createVehicleIcon(route, color, text, true, id), zIndexOffset: 1200, interactive: false }).addTo(layer);
+    const marker = L.marker([lat, lon], { icon: createVehicleIcon(route, color, text, true, shownId, iconOpts), zIndexOffset: 1200, interactive: false }).addTo(layer);
     focusMarkerRef.current = { marker, iconKey, id: id ?? null, motion, shown: undefined, raw: [lat, lon] };
-  }, [vehicles, focusTripId, focusVehicleId, focusPath]);
+  }, [vehicles, focusTripId, focusVehicleId, focusPath, routes]);
 
   // Követés közben: elhúzásra a térkép megáll (körül lehet nézni), nagyításkor nem rángatjuk.
   useEffect(() => {
@@ -972,6 +1013,12 @@ export function TransitMap({
   }, [vehicles, filters, geo.position]);
 
   const flyToVehicle = (v: LiveVehicle) => {
+    // Volán / vonat: követés. A jele 30–60 mp-cel késhet, és a látott részen kívül nem
+    // becsüljük a helyét — a követés becsli és középen tartja (mint a figyelőből indítva).
+    if (isRegionalId(v.id) && v.tripId) {
+      onFocusTrip(v.tripId, v.id);
+      return;
+    }
     if (v.lat != null && v.lon != null && mapRef.current) {
       mapRef.current.flyTo([v.lat, v.lon], 16, { duration: 0.5 });
     }

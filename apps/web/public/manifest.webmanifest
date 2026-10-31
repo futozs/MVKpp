@@ -1,7 +1,7 @@
 {
-  "name": "MVK++ — Élő forgalmi pult",
+  "name": "MVK++ — Miskolc és Borsod közlekedése",
   "short_name": "MVK++",
-  "description": "Miskolci tömegközlekedés élőben: forgalmi térkép, megállófigyelő és menetrendkönyv.",
+  "description": "Miskolc és Borsod közlekedése élőben — MVK, Volán és vonat: forgalmi térkép, megállófigyelő és menetrendkönyv.",
   "lang": "hu",
   "start_url": "/?source=pwa",
   "scope": "/",

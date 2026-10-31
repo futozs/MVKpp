@@ -168,6 +168,8 @@ class RealtimeClient {
 const WAKE_PROBE_MS = 3000;
 
 function topicOf(m: Msg): string | null {
+  // A szerver a témát is küldi (a módos témáknál, pl. `vehicles@tram,bus,rail`, ez dönt).
+  if (typeof m.topic === "string") return m.topic;
   switch (m.t) {
     case "vehicles":
       return "vehicles";

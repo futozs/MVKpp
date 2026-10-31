@@ -4,7 +4,7 @@
  */
 import { sql, sqlOne } from "@mvk/db";
 import type { MetricStat } from "@mvk/core/ops/metrics";
-import { buildAlerts } from "./alerts.ts";
+import { buildAlerts, type SourceBrief } from "./alerts.ts";
 import { diskUsage, listBackups } from "./backup.ts";
 import { gitStatus } from "./deploy.ts";
 import { dockerAvailable, listContainers } from "./docker.ts";
@@ -25,6 +25,7 @@ export type WorkerMetrics = {
   cache: { backend: string; redis?: string };
   token: { present: boolean; expiresInSec?: number | null; rejected?: boolean; source?: string; receivedAt?: string; lastRenew?: unknown };
   gtfs: { feedVersion: string | null; today: { feedVersion: string; fallback: boolean } | null; lastCheck?: unknown };
+  source?: SourceBrief;
   startedAt: number;
 };
 
@@ -81,6 +82,7 @@ export async function overview() {
     eventLoopP99Ms: w?.process.eventLoop.p99Ms ?? null,
     probes,
     gtfsFallback: w?.gtfs.today?.fallback ?? null,
+    source: w?.source ?? null,
     behind: g?.available ? (g.behind ?? 0) : null,
   });
 

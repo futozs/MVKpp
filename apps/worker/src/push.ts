@@ -18,7 +18,20 @@
  */
 import webpush from "web-push";
 import type { PgBoss } from "pg-boss";
-import { budapestOffsetSec, catchVerdict, dayKindOf, isoDow, nowUnix, withHungarianSuffix, type ArrivalItem } from "@mvk/core";
+import {
+  ALL_MODES,
+  budapestOffsetSec,
+  catchVerdict,
+  dayKindOf,
+  isMvkId,
+  isoDow,
+  MVK_MODES,
+  nowUnix,
+  onlyMvk,
+  parseModes,
+  withHungarianSuffix,
+  type ArrivalItem,
+} from "@mvk/core";
 import { getPool, sql } from "@mvk/db";
 import { config } from "./config.ts";
 import type { Engine } from "./engine.ts";
@@ -60,6 +73,8 @@ type WatchParams = {
   fromRoute?: string;
   toRoute?: string;
   boardStopName?: string;
+  /** a figyelés közlekedési módjai (pl. „rail” vagy „tram,bus,coach”); hiányában MVK-megállónál csak MVK */
+  modes?: string;
 };
 
 type WatchRow = {
@@ -103,11 +118,19 @@ function isWatchDay(days: WatchParams["days"], date: string): boolean {
 }
 
 const minText = (s: number) => `${Math.max(1, Math.round(s / 60))} perc`;
+/** „21-es busz (1644)”, „1-es villamos”, „5139-es vonat (IC TOKAJ)” — a mód szerint */
 const busLabel = (a: ArrivalItem) => {
+  if (a.mode === "rail") return `${withHungarianSuffix(a.trainNo ?? a.route)} vonat${a.trainName ? ` (${a.trainName})` : ""}`;
   const p = a.predictedVehicle;
-  const veh = a.vehicle?.id ?? (p ? (p.method === "loop" ? p.id : `~${p.id}`) : null);
-  return `${withHungarianSuffix(a.route)} busz${veh ? ` (${veh})` : ""}`;
+  // a Volán-rendszám előtag nélkül (`hkir:hkir_LWA387` → `LWA387`), a jósolt is
+  const plate = (id: string) => id.replace(/^hkir:hkir_/, "");
+  const veh = a.vehicle?.id ? plate(a.vehicle.id) : p ? (p.method === "loop" ? plate(p.id) : `~${plate(p.id)}`) : null;
+  return `${withHungarianSuffix(a.route)} ${a.mode === "tram" ? "villamos" : "busz"}${veh ? ` (${veh})` : ""}`;
 };
+/** vágány / kocsiállás a szövegbe: „, 6. vágány” */
+const platformSuffix = (a: ArrivalItem) => (a.platform ? `, ${a.platform}. ${a.mode === "rail" ? "vágány" : "kocsiállás"}${a.platformChanged ? " (változott)" : ""}` : "");
+/** a törlést ki jelentette: az MVK, vagy a regionálisnál a MÁV-Volán */
+const cancelledBy = (tripId: string) => (isMvkId(tripId) ? "az MVK" : "a MÁV-Volán");
 /** A busz várható érkezése a megállóba (unix) és a 85%-os felső becslés. */
 function expectedAt(a: ArrivalItem, now: number): { at: number; upper: number | null } {
   if (a.schedUnix != null && a.forecastDelaySec != null) return { at: a.schedUnix + a.forecastDelaySec, upper: a.forecastUpperSec != null ? a.schedUnix + a.forecastUpperSec : null };
@@ -189,8 +212,20 @@ export class PushEngine {
     }
 
     for (const [stopId, list] of byStop) {
-      const arrivals = this.insights.arrivals(stopId, SCAN_LIMIT, now).arrivals;
+      // A figyelés módjai: ha nincs megadva, MVK-megállón csak az MVK (a régi figyelések így maradnak), másutt minden.
+      const boards = new Map<string, ArrivalItem[]>();
+      const arrivalsFor = (w: WatchRow) => {
+        const key = w.params?.modes ?? (isMvkId(stopId) ? "mvk" : "all");
+        let b = boards.get(key);
+        if (!b) {
+          const modes = key === "mvk" ? new Set(MVK_MODES) : parseModes(key, ALL_MODES);
+          b = this.insights.arrivals(stopId, SCAN_LIMIT, now, modes, !onlyMvk(modes)).arrivals;
+          boards.set(key, b);
+        }
+        return b;
+      };
       for (const w of list) {
+        const arrivals = arrivalsFor(w);
         if (inDnd(w.dnd_start_min, w.dnd_end_min, nowMin)) continue;
         if (w.kind === "leave") await this.evalLeave(w, arrivals, now, nowMin, date);
         else if (w.kind === "traffic") await this.evalTraffic(w, arrivals, date);
@@ -219,10 +254,10 @@ export class PushEngine {
     // Egy napra szóló menet-figyelés: más napon ugyanez a menetazonosító nem ez a menet.
     if (w.trip_id && w.sched_min == null && w.params?.date && w.params.date !== date) return;
     // Törölt menet: a konkrét menetre feliratkozottak azonnal értesítést kapnak.
-    if (w.trip_id && this.engine.cancelled.ids.has(w.trip_id)) {
+    if (w.trip_id && this.isCancelled(w.trip_id)) {
       await this.enqueue(w, date, w.trip_id, "cancelled", {
         title: "Menet kimaradt",
-        body: `A ${w.stop_name} ${w.is_departure ? "megállóból induló" : "megállóba érkező"} járatot az MVK törölte — nem fog közlekedni.`,
+        body: `A ${w.stop_name} ${w.is_departure ? "megállóból induló" : "megállóba érkező"} járatot ${cancelledBy(w.trip_id)} törölte — nem fog közlekedni.`,
       });
       return;
     }
@@ -240,7 +275,7 @@ export class PushEngine {
     for (const a of due) {
       const delay = delaySuffix(a.measuredDelaySec ?? a.delaySec);
       const verb = w.is_departure ? "indul" : "ér ide";
-      const body = a.etaMin <= 0 ? `most ${verb}${delay} — ${w.stop_name}` : `kb. ${a.etaMin} perc múlva ${verb}${delay} — ${w.stop_name}`;
+      const body = a.etaMin <= 0 ? `most ${verb}${delay} — ${w.stop_name}${platformSuffix(a)}` : `kb. ${a.etaMin} perc múlva ${verb}${delay} — ${w.stop_name}${platformSuffix(a)}`;
       await this.enqueue(w, date, a.tripId, "arrival", { title: `${busLabel(a)} → ${a.headsign}`, body });
     }
   }
@@ -258,7 +293,7 @@ export class PushEngine {
         const next = this.insights.nextDeparture(w.stop_id, a.route, now + walkS, now);
         await this.enqueue(w, date, a.tripId, "cancelled", {
           title: `${busLabel(a)} kimarad`,
-          body: `Az MVK kihúzta a ${a.time}-s menetet (${w.stop_name}).${next ? ` A következő ${withHungarianSuffix(a.route)}: ${next.time}.` : ""}`,
+          body: `${isMvkId(a.tripId) ? "Az MVK kihúzta" : "Törölték"} a ${a.time}-s menetet (${w.stop_name}).${next ? ` A következő ${withHungarianSuffix(a.route)}: ${next.time}.` : ""}`,
         });
         continue;
       }
@@ -305,10 +340,10 @@ export class PushEngine {
     const o = this.insights.transferOutlook({ fromTrip: p.fromTrip, alightStopId: p.alightStopId, toTrip: w.trip_id, boardStopId: w.stop_id, walkS }, now);
     // a második busz már elment, vagy még messze vagyunk tőle
     if (!o || o.departUnix < now - 60 || o.departUnix - now > 3600) return;
-    if (this.engine.cancelled.ids.has(w.trip_id)) {
+    if (this.isCancelled(w.trip_id)) {
       await this.enqueue(w, date, w.trip_id, "cancelled", {
         title: "Az átszállás járata kimaradt",
-        body: `A ${p.toRoute ? withHungarianSuffix(p.toRoute) + " " : ""}járatot a ${w.stop_name} megállóban az MVK törölte.`,
+        body: `A ${p.toRoute ? withHungarianSuffix(p.toRoute) + " " : ""}járatot a ${w.stop_name} megállóban ${cancelledBy(w.trip_id)} törölte.`,
       });
       return;
     }
@@ -319,6 +354,11 @@ export class PushEngine {
       title: `Veszélyben az átszállás (${pct}% esély)`,
       body: `A ${p.fromRoute ? withHungarianSuffix(p.fromRoute) + " " : ""}busz várhatóan ${o.marginS < 0 ? `${minText(-o.marginS)} késéssel` : "épp csak"} ér ide a ${p.toRoute ? withHungarianSuffix(p.toRoute) : "csatlakozás"} indulásához — ${w.stop_name}.${next ? ` Ha lekésed: ${next.time}.` : ""}`,
     });
+  }
+
+  /** Az MVK hivatalos törléslistája vagy a MÁV+ (Volán, vasút) törlése. */
+  private isCancelled(tripId: string): boolean {
+    return this.engine.cancelled.ids.has(tripId) || Boolean(this.engine.regional?.cancelled.has(tripId));
   }
 
   private async enqueue(w: WatchRow, date: string, tripId: string, kind: DeliveryKind, msg: { title: string; body: string }) {

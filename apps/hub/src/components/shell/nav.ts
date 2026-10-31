@@ -2,7 +2,7 @@
  * A navigáció egyben állapotjelző: minden menüpont mellett az alrendszer élő
  * száma és színe (az /api/overview-ból), így az oldalsáv maga a vezérlőpult.
  */
-import { Boxes, Database, Gauge, HardDriveDownload, KeyRound, LayoutDashboard, ListChecks, Radio, Rocket, ScrollText, Smartphone, Users, BellRing } from "lucide-react";
+import { ArrowLeftRight, Boxes, Database, Gauge, HardDriveDownload, KeyRound, LayoutDashboard, ListChecks, Radio, Rocket, ScrollText, Smartphone, Users, BellRing } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { isErr } from "@/lib/api";
 import { ago, bytes, duration } from "@/lib/format";
@@ -78,6 +78,17 @@ export const NAV: NavGroup[] = [
           if (!p) return null;
           const age = p.lastOkAt ? (now - p.lastOkAt) / 1000 : Infinity;
           return { text: age === Infinity ? "nincs adat" : `${worker(o)?.poll.vehicles ?? 0} jármű`, tone: age > 60 ? "crit" : age > 15 ? "warn" : "ok" };
+        },
+      },
+      {
+        href: "/forrasok",
+        label: "Adatforrások",
+        icon: ArrowLeftRight,
+        readout: (o) => {
+          const src = worker(o)?.source;
+          if (!src) return null;
+          if (src.state === "otp2") return { text: "tartalék", tone: "warn" };
+          return src.regional.enabled ? { text: `+${src.regional.vehicles} regionális`, tone: "ok" } : { text: "MVK", tone: "ok" };
         },
       },
       { href: "/feladatok", label: "Feladatok", icon: ListChecks },

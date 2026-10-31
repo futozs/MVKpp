@@ -3,6 +3,10 @@ import { Search } from "lucide-react";
 import type { LiveVehicle, Route } from "@/types";
 import { Input } from "@/components/ui/input";
 import { cn, normalizeSearchText } from "@/lib/utils";
+import { routeModeOf } from "@/lib/modes";
+
+/** az MVK vonalai elöl, utána a Volán-vonalak (azonos számok — pl. az ózdi 1-es — ne keveredjenek) */
+const GROUP = { tram: 0, bus: 0, coach: 1, rail: 2 } as const;
 
 interface RouteChipsProps {
   routes: Record<string, Route>;
@@ -29,13 +33,19 @@ export function RouteChips({
 
   const ordered = useMemo(
     () =>
-      Object.values(routes).sort((a, b) => {
-        const na = parseInt(a.short, 10);
-        const nb = parseInt(b.short, 10);
-        if (!isNaN(na) && !isNaN(nb))
-          return na - nb || a.short.localeCompare(b.short, "hu");
-        return a.short.localeCompare(b.short, "hu");
-      }),
+      // a vonatoknak nincs vonalszáma (a csempe a kategória: Sz, IC…) — azokat a vasúti szűrő kezeli
+      Object.values(routes)
+        .filter((r) => routeModeOf(r) !== "rail")
+        .sort((a, b) => {
+          const ga = GROUP[routeModeOf(a)];
+          const gb = GROUP[routeModeOf(b)];
+          if (ga !== gb) return ga - gb;
+          const na = parseInt(a.short, 10);
+          const nb = parseInt(b.short, 10);
+          if (!isNaN(na) && !isNaN(nb))
+            return na - nb || a.short.localeCompare(b.short, "hu");
+          return a.short.localeCompare(b.short, "hu");
+        }),
     [routes],
   );
 
@@ -54,7 +64,7 @@ export function RouteChips({
     return [...list.filter((r) => selectedRoutes.includes(r.id)), ...list.filter((r) => !selectedRoutes.includes(r.id))];
   }, [ordered, query, onlyLive, liveCountByRoute, selectedRoutes]);
 
-  const liveRoutes = Object.keys(liveCountByRoute).filter((id) => routes[id]).length;
+  const liveRoutes = Object.keys(liveCountByRoute).filter((id) => routes[id] && routeModeOf(routes[id]) !== "rail").length;
 
   return (
     <div className="space-y-2.5">
@@ -105,7 +115,7 @@ export function RouteChips({
                 type="button"
                 onClick={() => onToggleRoute(route.id)}
                 aria-pressed={isOn}
-                title={route.long || route.short}
+                title={route.operator ? `${route.long || route.short} · ${route.operator}` : route.long || route.short}
                 className={cn(
                   "inline-flex h-7 items-center gap-1.5 rounded-md border px-2",
                   "text-xs font-bold tabular-nums tracking-tight",

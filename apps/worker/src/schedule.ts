@@ -4,7 +4,7 @@
  * (legacy_schedule_day) → fallback a legfrissebb feedből.
  */
 import { gunzipSync } from "node:zlib";
-import { buildRouteIndex, buildTable, dayInfo, serviceClock, shiftIso, type DaySchedule, type ServiceDay } from "@mvk/core";
+import { buildRouteIndex, buildTable, dayInfo, isMvkId, modeOfRoute, serviceClock, shiftIso, type DaySchedule, type ServiceDay, type TransitMode } from "@mvk/core";
 import { sql } from "@mvk/db";
 import type { FeedManager } from "./feeds.ts";
 
@@ -58,11 +58,13 @@ export async function scheduleFor(feeds: FeedManager, iso: string): Promise<Sche
   return day ? { kind: "feed", day, archived: true } : null;
 }
 
-export async function routeIndexFor(feeds: FeedManager, iso: string) {
+/** @param modes null = a v2 alapválasza (csak MVK); különben a kért módok vonalai */
+export async function routeIndexFor(feeds: FeedManager, iso: string, modes: ReadonlySet<TransitMode> | null = null) {
   const src = await scheduleFor(feeds, iso);
   if (!src) return null;
   if (src.kind === "legacy") return { archived: true, routes: src.data.routes, fallback: src.fallbackFrom ? { templateIso: src.fallbackFrom } : null };
-  return { archived: src.archived, routes: buildRouteIndex(src.day), fallback: src.day.fallback };
+  const keep = modes ? (routeId: string, type: string) => modes.has(modeOfRoute(routeId, type)) : (routeId: string) => isMvkId(routeId);
+  return { archived: src.archived, routes: buildRouteIndex(src.day, keep, modes != null), fallback: src.day.fallback };
 }
 
 export async function tableFor(feeds: FeedManager, iso: string, routeId: string, dir: string) {

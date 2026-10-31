@@ -11,8 +11,36 @@ import { parseCsv } from "./csv.ts";
 import { hmsToSec, isoToYmd, ymdToIso, isoDow, shiftIso, SERVICE_DAY_CUTOFF_SEC } from "../time.ts";
 import { ProjectedShape, type LatLon } from "../geo.ts";
 
-export type Stop = { id: string; code: string; name: string; lat: number; lon: number };
-export type Route = { id: string; short: string; long: string; type: string; color: string; text: string };
+export type Stop = {
+  id: string;
+  code: string;
+  name: string;
+  lat: number;
+  lon: number;
+  /** szülő-állomás (vasútállomás, autóbusz-állomás), ha a megálló egy vágány / kocsiállás */
+  parent?: string;
+  /** vágány vagy kocsiállás jele */
+  platform?: string;
+  /** true: maga az állomás (GTFS location_type = 1), menet nem áll meg rajta közvetlenül */
+  station?: boolean;
+};
+export type Route = {
+  id: string;
+  short: string;
+  long: string;
+  type: string;
+  color: string;
+  text: string;
+  /**
+   * A vonal kulcsa az adatbázisban és a statisztikában (`route_short` oszlop).
+   * MVK-nál a rövid név (ahogy eddig), más forrásnál a vonal-azonosító: a
+   * Volán helyi vonalainak száma városonként ismétlődik („3” Ózdon és Tiszaújvárosban).
+   */
+  key: string;
+  /** üzemeltető (GTFS agency_id) és a neve — a regionális feedben */
+  agency?: string;
+  agencyName?: string;
+};
 export type Trip = {
   id: string;
   routeId: string;
@@ -20,6 +48,8 @@ export type Trip = {
   headsign: string;
   dir: string;
   shapeId: string;
+  /** a menet kiírt neve (vasútnál „5139 személyvonat”) */
+  shortName?: string;
 };
 export type StopTime = { stopId: string; arr: number; dep: number; seq: number };
 
@@ -76,15 +106,17 @@ export class Feed {
   readonly routeShapeIds = new Map<string, Set<string>>();
   /** `${shapeId}|${elsőIndulásMp}` → menetek — a feed-verziók közti menet-azonosításhoz */
   readonly tripsByShapeStart = new Map<string, string[]>();
+  /** állomás → a vágányai / kocsiállásai */
+  readonly stationChildren = new Map<string, string[]>();
 
   private patternCache = new Map<string, string>();
   private alongCache = new Map<string, StopAlong[] | null>();
   private tripCountCache = new Map<string, number>();
 
-  constructor(files: Record<string, string>, hash: string) {
+  constructor(files: Record<string, string>, hash: string, info?: FeedInfo) {
     this.hash = hash;
     const fi = parseCsv(files["feed_info.txt"] ?? "")[0];
-    this.info = {
+    this.info = info ?? {
       version: fi?.feed_version || hash.slice(0, 12),
       startDate: fi?.feed_start_date || null,
       endDate: fi?.feed_end_date || null,
@@ -95,29 +127,41 @@ export class Feed {
       const lat = Number.parseFloat(s.stop_lat);
       const lon = Number.parseFloat(s.stop_lon);
       if (!s.stop_id || !Number.isFinite(lat) || !Number.isFinite(lon)) continue;
-      this.stops.set(s.stop_id, { id: s.stop_id, code: s.stop_code || "", name: s.stop_name || s.stop_id, lat, lon });
+      const stop: Stop = { id: s.stop_id, code: s.stop_code || "", name: s.stop_name || s.stop_id, lat, lon };
+      if (s.parent_station) stop.parent = s.parent_station;
+      if (s.platform_code) stop.platform = s.platform_code;
+      if (s.location_type === "1") stop.station = true;
+      this.stops.set(s.stop_id, stop);
     }
     for (const r of parseCsv(files["routes.txt"] ?? "")) {
       if (!r.route_id) continue;
-      this.routes.set(r.route_id, {
+      const short = r.route_short_name || r.route_id;
+      const route: Route = {
         id: r.route_id,
-        short: r.route_short_name || r.route_id,
+        short,
         long: r.route_long_name || "",
         type: r.route_type || "3",
         color: (r.route_color || "888888").toUpperCase(),
         text: (r.route_text_color || "FFFFFF").toUpperCase(),
-      });
+        key: r.route_id.includes(":") ? r.route_id : short,
+      };
+      if (r.agency_id) route.agency = r.agency_id;
+      if (r.agency_name) route.agencyName = r.agency_name;
+      this.routes.set(r.route_id, route);
     }
     for (const t of parseCsv(files["trips.txt"] ?? "")) {
       if (!t.trip_id) continue;
-      this.trips.set(t.trip_id, {
+      const trip: Trip = {
         id: t.trip_id,
         routeId: t.route_id,
         serviceId: t.service_id,
         headsign: (t.trip_headsign || "").trim(),
         dir: t.direction_id || "0",
         shapeId: t.shape_id || "",
-      });
+      };
+      // Az MVK a trip_short_name-be a vonalváltozat kódját írja (pl. „8RT”): csak a regionális menetnél kell.
+      if (t.trip_short_name && t.trip_id.includes(":")) trip.shortName = t.trip_short_name;
+      this.trips.set(t.trip_id, trip);
     }
     for (const st of parseCsv(files["stop_times.txt"] ?? "")) {
       const dep = hmsToSec(st.departure_time || st.arrival_time);
@@ -187,6 +231,12 @@ export class Feed {
   }
 
   private buildIndexes() {
+    for (const st of this.stops.values()) {
+      if (!st.parent) continue;
+      const list = this.stationChildren.get(st.parent);
+      if (list) list.push(st.id);
+      else this.stationChildren.set(st.parent, [st.id]);
+    }
     const bestByDir = new Map<string, { shapeId: string; len: number }>();
     for (const t of this.trips.values()) {
       const stopsOfTrip = this.tripStops.get(t.id);
@@ -300,6 +350,59 @@ export class Feed {
 
   isTram(routeId: string): boolean {
     return TRAM_TYPES.has(this.routes.get(routeId)?.type ?? "");
+  }
+
+  /** Egy megálló, vagy ha állomás, a vágányai (a megállótábla ezekből gyűjt). */
+  stopsOf(id: string): string[] {
+    const kids = this.stationChildren.get(id);
+    if (!kids?.length) return [id];
+    return this.stops.has(id) && !this.stops.get(id)!.station ? [id, ...kids] : kids;
+  }
+
+  /**
+   * Több feed egy közös nézetben (az MVK + a regionális Volán/vasút egy
+   * szolgáltatási napra). Az azonosítók nem ütköznek (a regionálisak előtagosak);
+   * a közös MVK-megállóknál (a Volán is megáll a Tiszai pu.-nál) az ELSŐ feed
+   * megállója marad, a menetrendjük összefésülődik. A részek objektumait nem
+   * másolja és nem módosítja: a kompozit csak új indexeket épít rájuk.
+   */
+  static compose(parts: Feed[]): Feed {
+    if (parts.length === 1) return parts[0];
+    const h = createHash("sha256");
+    for (const p of parts) h.update(p.hash);
+    const first = parts[0];
+    const out = new Feed({}, h.digest("hex"), {
+      version: parts.map((p) => p.version).join("+"),
+      startDate: first.info.startDate,
+      endDate: first.info.endDate,
+      publisher: parts.map((p) => p.info.publisher).filter(Boolean).join(" + "),
+    });
+    const mergeInto = <K, V>(dst: Map<K, V>, src: Map<K, V>) => {
+      for (const [k, v] of src) if (!dst.has(k)) dst.set(k, v);
+    };
+    for (const p of parts) {
+      mergeInto(out.stops, p.stops);
+      mergeInto(out.routes, p.routes);
+      mergeInto(out.trips, p.trips);
+      mergeInto(out.tripStops, p.tripStops);
+      mergeInto(out.shapes, p.shapes);
+      mergeInto(out.routeStops, p.routeStops);
+      mergeInto(out.routeShapeIds, p.routeShapeIds);
+      mergeInto(out.tripsByShapeStart, p.tripsByShapeStart);
+      for (const [stop, list] of p.stopSched) {
+        const cur = out.stopSched.get(stop);
+        out.stopSched.set(stop, cur ? [...cur, ...list].sort((a, b) => a.dep - b.dep) : list);
+      }
+      for (const [ymd, set] of p.servicesByDate) {
+        const cur = out.servicesByDate.get(ymd);
+        out.servicesByDate.set(ymd, cur ? new Set([...cur, ...set]) : set);
+      }
+      for (const [st, kids] of p.stationChildren) {
+        const cur = out.stationChildren.get(st);
+        out.stationChildren.set(st, cur ? [...new Set([...cur, ...kids])] : kids);
+      }
+    }
+    return out;
   }
 
   validate(previous?: Feed | null): FeedValidation {

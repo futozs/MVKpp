@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/tooltip";
 import { getSession } from "@/lib/account";
 import { HEADER_PREFS, useToggle, WATCH_FEATURES, type PrefItem } from "@/lib/watchPrefs";
+import { MODE_ITEMS, useEnabledModes, type ModeItem } from "@/lib/modes";
 import { cn } from "@/lib/utils";
 import { useGeo } from "@/context/GeoContext";
 import { HeaderPopover } from "./HeaderPopover";
@@ -99,6 +100,48 @@ function LocationRow() {
   );
 }
 
+/**
+ * Közlekedési módok: mi látszik a térképen, a figyelőben, a menetrendben, a
+ * tervezőben és a statisztikában. Egy mód mindig bekapcsolva marad.
+ */
+function ModesGroup() {
+  const enabled = useEnabledModes();
+  return (
+    <section className="p-1.5">
+      <h3 className="px-2.5 pb-0.5 pt-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground">Közlekedési módok</h3>
+      {MODE_ITEMS.map((item) => (
+        <ModeRow key={item.key} item={item} isLast={enabled.length === 1 && enabled[0] === item.id} />
+      ))}
+    </section>
+  );
+}
+
+function ModeRow({ item, isLast }: { item: ModeItem; isLast: boolean }) {
+  const [on, setOn] = useToggle(item.key);
+  const switchId = useId();
+  const descriptionId = useId();
+  return (
+    <div className="flex items-start gap-3 rounded-md px-2.5 py-2">
+      <div className="min-w-0 flex-1">
+        <label htmlFor={switchId} className="block cursor-pointer text-[13px] font-semibold text-foreground">
+          {item.label}
+        </label>
+        <p id={descriptionId} className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+          {isLast ? "Legalább egy mód bekapcsolva marad." : item.hint}
+        </p>
+      </div>
+      <Switch
+        id={switchId}
+        checked={on !== false}
+        disabled={isLast}
+        onCheckedChange={setOn}
+        aria-describedby={descriptionId}
+        className="relative mt-0.5 after:absolute after:-inset-3 after:content-[''] focus-visible:ring-offset-popover"
+      />
+    </div>
+  );
+}
+
 function Group({ title, items }: { title: string; items: readonly PrefItem<string>[] }) {
   return (
     <section className="p-1.5">
@@ -159,6 +202,8 @@ export function SettingsMenu({ onOpenAccount, accountItemClassName, isTouch }: S
 
           {/* Hosszú lista: a panel görgethető, a fejléc és a fiók-sor a helyén marad. */}
           <div className="max-h-[min(62vh,520px)] overflow-y-auto overscroll-contain">
+            <ModesGroup />
+            <div className="border-t border-border" />
             <Group title="Megállófigyelő" items={WATCH_FEATURES} />
             <div className="border-t border-border" />
             <Group title="Fejléc" items={HEADER_PREFS} />

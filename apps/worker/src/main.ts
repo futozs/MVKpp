@@ -24,6 +24,7 @@ import { Hub } from "./hub.ts";
 import { registerAdmin } from "./http/admin.ts";
 import { registerCompat } from "./http/compat.ts";
 import { HttpError, readBody, Router, sendJson, type Req } from "./http/router.ts";
+import { registerTransit } from "./http/transit.ts";
 import { registerV3 } from "./http/v3.ts";
 import { detectIncidentsForDay } from "./incidents.ts";
 import { captureConsole, errMsg, log } from "./log.ts";
@@ -38,6 +39,8 @@ import { Parking } from "./parking.ts";
 import { NewsSource } from "./news.ts";
 import { VehiclePredictor } from "./predict.ts";
 import { PushEngine } from "./push.ts";
+import { RegionalFeeds } from "./regional/feeds.ts";
+import { RegionalRealtime } from "./regional/realtime.ts";
 import { loadToken, startRenewLoop, tokenStatus } from "./token.ts";
 
 async function main() {
@@ -56,11 +59,15 @@ async function main() {
   log.info("token", st.present ? `betöltve, ${Math.round((st.expiresInSec ?? 0) / 60)} percig érvényes` : "NINCS token — várom a macOS agentet (/agent/token)");
   startRenewLoop();
 
-  const feeds = new FeedManager();
+  // A regionális (Volán + vasút) menetrend előbb: a mai nap már összefésülve töltődik be.
+  const regionalFeeds = new RegionalFeeds();
+  await regionalFeeds.init().catch((e) => log.warn("regional", "indítás sikertelen", errMsg(e)));
+  const feeds = new FeedManager(regionalFeeds);
   await feeds.init();
   await feeds.warmToday();
 
-  const engine = new Engine(feeds);
+  const regionalRt = new RegionalRealtime(feeds);
+  const engine = new Engine(feeds, regionalRt);
   // a motor indulása előtt: a mai nap visszajátszott fixeiből is épül (menet-előzmény, forgalom)
   const motion = new MotionPredictor(engine);
   await motion.load();
@@ -84,9 +91,10 @@ async function main() {
   const server = createServer();
   const hub = new Hub(server, engine, predictor, parking, forecaster, insights, motion);
   const news = new NewsSource(feeds);
-  const ctx = { engine, feeds, predictor, parking, forecaster, traffic, insights, motion, news, startedAt: Date.now(), hubStats: () => hub.status() };
+  const ctx = { engine, feeds, predictor, parking, forecaster, traffic, insights, motion, news, regionalFeeds, regionalRt, startedAt: Date.now(), hubStats: () => hub.status() };
   registerCompat(router, ctx);
   registerV3(router, ctx);
+  registerTransit(router, ctx);
   registerAdmin(router, { ...ctx, liveBreakdown: () => hub.liveBreakdown() });
 
   server.on("request", async (raw, res) => {
@@ -135,6 +143,7 @@ async function main() {
     }
   });
 
+  regionalRt.start();
   await engine.start();
   const push = new PushEngine(engine, boss, insights);
   await push.start();
@@ -189,9 +198,12 @@ async function main() {
   await boss.createQueue("nightly");
   await boss.createQueue("minutely");
   await boss.createQueue("gtfs-refresh");
+  await boss.createQueue("regional-build");
   await boss.schedule("nightly", "40 3 * * *", {}, { tz: "Europe/Budapest" });
   await boss.schedule("minutely", "* * * * *", {});
   await boss.schedule("gtfs-refresh", "*/30 * * * *", {});
+  // A regionális menetrend: hajnalban a következő napok újraépítése, délután a hiányzók pótlása.
+  await boss.schedule("regional-build", "20 3,15 * * *", {}, { tz: "Europe/Budapest" });
   await boss.work("nightly", async () => {
     const yesterday = shiftIso(serviceClock().iso, -1);
     await detectIncidentsForDay(feeds, yesterday);
@@ -227,6 +239,11 @@ async function main() {
   await boss.work("gtfs-refresh", async () => {
     log.info("gtfs", await feeds.refresh());
   });
+  await boss.work("regional-build", async () => {
+    // ~5–10 perc (a MÁV+ korlátja miatt sorban): nem várjuk meg, hogy a pg-boss ne vegye lejártnak.
+    // Mindkét futás frissít: a délutáni a MÁV napközbeni változásait (új vonat, terelés) hozza be.
+    void regionalFeeds.ensureAhead(true).catch((e) => log.warn("regional", "építés sikertelen", errMsg(e)));
+  });
 
   server.listen(config.port, config.host, () => log.info("worker", `fut: http://${config.host}:${config.port} (ws: /ws)`));
   log.info("worker", `gyorsítótár: ${cacheStatus().backend === "redis" ? "memória + Redis (REDIS_URL)" : "csak memória (nincs REDIS_URL)"}`);
@@ -234,6 +251,7 @@ async function main() {
   const shutdown = async (sig: string) => {
     log.info("worker", `leállás (${sig})`);
     server.close();
+    regionalRt.stop();
     await engine.stop().catch(() => {});
     await boss.stop({ graceful: true, timeout: 5000 }).catch(() => {});
     stopping = true;

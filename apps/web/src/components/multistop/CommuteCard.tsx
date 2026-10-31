@@ -11,6 +11,7 @@ import { addAlert, noPushNote, removeAlert, useAlerts } from "@/lib/alerts";
 import { serverNow, useFallbackPoll, useServerClockVersion, useTopic } from "@/lib/realtime";
 import { useRides } from "@/lib/rides";
 import { useWatchFeatures } from "@/lib/watchPrefs";
+import { modesParam, useEnabledModes } from "@/lib/modes";
 import { serviceNow } from "@/lib/serviceDay";
 import { cn } from "@/lib/utils";
 
@@ -61,11 +62,12 @@ export function CommuteCard({ className }: { className?: string }) {
   const commutes = useMemo(() => detectCommutes(rides, now), [rides, now]);
   const c = useMemo(() => upcomingCommute(commutes, now, serviceNow(now * 1000).iso), [commutes, now]);
 
+  const modesKey = modesParam(useEnabledModes());
   const [data, setData] = useState<StopArrivalsResponse | null>(null);
   const load = async () => {
     if (!c) return;
     try {
-      setData(await api.getArrivals(c.fromStopId, 12));
+      setData(await api.getArrivals(c.fromStopId, 12, modesKey));
     } catch {
       /* a következő kör újra próbálja */
     }
@@ -74,8 +76,8 @@ export function CommuteCard({ className }: { className?: string }) {
     setData(null);
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [c?.fromStopId]);
-  useTopic(c ? `stop:${c.fromStopId}` : null, (m) => setData(m.data as StopArrivalsResponse));
+  }, [c?.fromStopId, modesKey]);
+  useTopic(c ? `stop:${c.fromStopId}@${modesKey}` : null, (m) => setData(m.data as StopArrivalsResponse));
   useFallbackPoll(load, POLL_MS, Boolean(c));
 
   const stopPos = data?.stop.lat != null && data.stop.lon != null ? { lat: data.stop.lat, lon: data.stop.lon } : null;

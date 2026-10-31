@@ -54,15 +54,40 @@ const TRIP_ID_RE = /^[\w:.-]{1,80}$/;
 const MAX_WATCHES_PER_SUB = 60;
 const KINDS = new Set(["arrival", "leave", "traffic", "transfer"]);
 
-type WatchParams = { date?: string; walkS?: number; days?: string | number[]; fromTrip?: string; alightStopId?: string; fromRoute?: string; toRoute?: string; boardStopName?: string };
+type WatchParams = {
+  date?: string;
+  walkS?: number;
+  days?: string | number[];
+  fromTrip?: string;
+  alightStopId?: string;
+  fromRoute?: string;
+  toRoute?: string;
+  boardStopName?: string;
+  /** a figyelés módjai („tram,bus,coach,rail” részhalmaza); hiányában MVK-megállónál csak MVK */
+  modes?: string;
+};
+
+/** „rail,tram” → rendezett, ismert módok vesszővel; ismeretlen / üres → nincs megadva */
+function cleanModes(raw: unknown): string | undefined {
+  if (typeof raw !== "string" || !raw.trim()) return undefined;
+  const known = ["tram", "bus", "coach", "rail"];
+  const list = [...new Set(raw.split(",").map((x) => x.trim().toLowerCase()))].filter((x) => known.includes(x));
+  return list.length ? known.filter((x) => list.includes(x)).join(",") : undefined;
+}
 
 /** A fajtához tartozó paraméterek ellenőrzése (csak az ismert mezők, korlátozva). */
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function cleanParams(kind: string, p: WatchParams | undefined): WatchParams | null {
   // egyszeri menet-figyelés: csak erre a szolgáltatási napra (a menetazonosítók naponta ismétlődnek)
-  if (kind === "arrival") return typeof p?.date === "string" && DATE_RE.test(p.date) ? { date: p.date } : null;
-  const out: WatchParams = {};
+  const modes = cleanModes(p?.modes);
+  if (kind === "arrival") {
+    const out: WatchParams = {};
+    if (typeof p?.date === "string" && DATE_RE.test(p.date)) out.date = p.date;
+    if (modes) out.modes = modes;
+    return Object.keys(out).length ? out : null;
+  }
+  const out: WatchParams = modes ? { modes } : {};
   if (p?.walkS != null) {
     const w = Number(p.walkS);
     if (!Number.isFinite(w) || w < 0 || w > 3600) throw new ApiError(400, "Érvénytelen sétaidő");

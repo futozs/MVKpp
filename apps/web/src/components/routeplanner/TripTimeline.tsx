@@ -7,9 +7,11 @@ import type {
   JourneyWalkLeg,
 } from "@/services/api";
 import { RouteTile } from "@/components/transit/RouteTile";
+import { PlatformBadge } from "@/components/transit/RegionalBits";
 import { cn } from "@/lib/utils";
 import {
   MODE_NOUN,
+  legTileText,
   ON_TIME_SEC,
   TONE_TEXT,
   hm,
@@ -137,11 +139,12 @@ function RideBody({ leg, mode }: { leg: JourneyTransitLeg; mode: JourneyMode }) 
   return (
     <div className="space-y-1.5">
       <div className="flex min-w-0 items-center gap-2">
-        <RouteTile short={leg.routeShortName} color={leg.routeColor} text={leg.routeTextColor} size="sm" />
+        <RouteTile short={legTileText(leg)} color={leg.routeColor} text={leg.routeTextColor} size="sm" />
         <p className="min-w-0 truncate text-xs">
-          <span className="font-semibold">{MODE_NOUN[leg.mode]}</span>
+          <span className="font-semibold">{leg.trainName ?? MODE_NOUN[leg.mode]}</span>
           {leg.headsign ? <span className="text-muted-foreground"> · {leg.headsign}</span> : null}
         </p>
+        <PlatformBadge platform={leg.fromPlatform} mode={leg.mode === "RAIL" ? "rail" : "coach"} />
       </div>
       {leg.intermediateStopNames.length ? (
         <details className="group text-[11px] text-muted-foreground">

@@ -48,11 +48,14 @@ export interface TripLive {
   delayS: number | null;
   forecast: Map<number, ForecastStop>;
   vehicle: { id: string; lat: number; lon: number; speed: number | null } | null;
+  /** a menet rövid neve (vasút: „5169 személyvonat”, Volán: „4001/748”) */
+  tripShort: string | null;
 }
 
 export type TripDetail = {
   stops: TripStop[];
   loopEnd?: boolean;
+  tripShort?: string;
   run: TripRun | null;
   liveDelaySec: number | null;
   forecast: { stops: ForecastStop[] } | null;
@@ -61,7 +64,7 @@ export type TripDetail = {
 type TripMsg = { vehicle: TripLive["vehicle"]; run: TripRun | null; measuredDelaySec: number | null; forecast: { stops: ForecastStop[] } | null };
 
 /** Egy menet élőben: megállók, tény-idők, helyzet, késés és előrejelzés (WebSocket). */
-type LiveState = Omit<TripLive, "stops" | "loopEnd" | "events">;
+type LiveState = Omit<TripLive, "stops" | "loopEnd" | "events" | "tripShort">;
 
 export const tripDetailUrl = (tripId: string, date?: string) =>
   `${API_BASE}/engine/trip?trip=${encodeURIComponent(tripId)}${date ? `&date=${encodeURIComponent(date)}` : ""}`;
@@ -73,7 +76,7 @@ export const tripDetailUrl = (tripId: string, date?: string) =>
 export function useTripLive(tripId: string, date?: string): TripLive | null {
   // Az állapot a menethez kötött: menetváltáskor (körbeutazás) az előző
   // menet adata egy pillanatra sem keveredhet az újéval.
-  const [meta, setMeta] = useState<{ tripId: string; stops: TripStop[]; loopEnd: boolean; events: RideStopEvent[] } | null>(null);
+  const [meta, setMeta] = useState<{ tripId: string; stops: TripStop[]; loopEnd: boolean; events: RideStopEvent[]; tripShort: string | null } | null>(null);
   const [live, setLive] = useState<LiveState | null>(null);
   const current = useRef(tripId);
   current.current = tripId;
@@ -102,7 +105,7 @@ export function useTripLive(tripId: string, date?: string): TripLive | null {
       .then((d) => {
         // Egy lassan visszaérő, előző menetre szóló válasz ne írja felül az újat.
         if (!d || current.current !== tripId) return;
-        setMeta({ tripId, stops: d.stops, loopEnd: Boolean(d.loopEnd), events: d.events ?? [] });
+        setMeta({ tripId, stops: d.stops, loopEnd: Boolean(d.loopEnd), events: d.events ?? [], tripShort: d.tripShort ?? null });
         apply(d);
       })
       .catch(() => {});
@@ -122,7 +125,7 @@ export function useTripLive(tripId: string, date?: string): TripLive | null {
   }, [passed]);
 
   if (meta?.tripId !== tripId || live?.tripId !== tripId) return null;
-  return { ...live, stops: meta.stops, loopEnd: meta.loopEnd, events: meta.events };
+  return { ...live, stops: meta.stops, loopEnd: meta.loopEnd, events: meta.events, tripShort: meta.tripShort };
 }
 
 /** légvonalbeli távolság (m) */

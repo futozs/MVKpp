@@ -5,6 +5,7 @@
 import type { LatLon, ProjectedShape } from "./geo.ts";
 import { fastDistM } from "./geo.ts";
 import type { Feed } from "./gtfs/feed.ts";
+import { isMvkId } from "./transit/modes.ts";
 
 /** a kirajzolt szakaszon ennyinél közelebbi pontokat elhagyjuk (m) */
 const SIMPLIFY_M = 12;
@@ -34,6 +35,8 @@ export function segmentPaths(feed: Feed): Map<string, SegmentPath> {
   const routesOf = new Map<string, Set<string>>();
   const doneShapes = new Set<string>();
   for (const t of feed.trips.values()) {
+    // a városi hőtérkép az MVK-é (a kompozit feedben a Volán és a vasút is benne van)
+    if (!isMvkId(t.id)) continue;
     const route = feed.routes.get(t.routeId)?.short ?? t.routeId;
     const seq = feed.tripStops.get(t.id);
     if (!seq || seq.length < 2) continue;

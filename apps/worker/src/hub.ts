@@ -13,7 +13,19 @@
  */
 import type { IncomingMessage, Server } from "node:http";
 import { WebSocketServer, type WebSocket } from "ws";
-import { nowUnix, progressOnTrip, serviceClock, type DecodedVehicle, type RunOut, type VehicleMotion } from "@mvk/core";
+import {
+  isMvkId,
+  MVK_MODES,
+  nowUnix,
+  parseModes,
+  progressOnTrip,
+  serviceClock,
+  type DecodedVehicle,
+  type RunOut,
+  type TransitMode,
+  type VehicleMotion,
+} from "@mvk/core";
+import { vehicleMode } from "./http/compat.ts";
 import { sql } from "@mvk/db";
 import { sha256Hex } from "@mvk/db/crypto";
 import type { Engine } from "./engine.ts";
@@ -36,6 +48,18 @@ const TRAJ_STOPS = 5;
 const TRAJ_HORIZON_S = 240;
 /** álló busznál (megálló, lámpa) a pálya ennyi várakozással indul — a következő jel úgyis jön */
 const TRAJ_STOPPED_HOLD_S = 12;
+/** a becsült sebesség plafonja módonként (m/s): városi busz/villamos, helyközi busz, vonat */
+const SPEED_CAP: Record<TransitMode, number> = { tram: 22, bus: 22, coach: 30, rail: 45 };
+/** `vehicles@tram,bus,coach,rail`, `stop:<id>@…` — a régi téma (mód nélkül) csak MVK */
+const MODES_RE = "(?:@(?:tram|bus|coach|rail)(?:,(?:tram|bus|coach|rail))*)?";
+const TOPIC_RE = new RegExp(`^(vehicles${MODES_RE}|sync|parking|stop:[\\w:.-]+${MODES_RE}|trip:[\\w:.-]+|runs:\\d{8})$`);
+
+/** „stop:1:005511387@rail,tram” → { id, modes } */
+function splitTopic(rest: string): { id: string; modes: Set<TransitMode>; rich: boolean } {
+  const at = rest.lastIndexOf("@");
+  if (at < 0) return { id: rest, modes: new Set(MVK_MODES), rich: false };
+  return { id: rest.slice(0, at), modes: parseModes(rest.slice(at + 1)), rich: true };
+}
 
 export class Hub {
   private wss: WebSocketServer;
@@ -102,7 +126,7 @@ export class Hub {
     if (msg.t === "sub") {
       for (const t of topics) {
         if (c.topics.size >= MAX_TOPICS) break;
-        if (!/^(vehicles|sync|parking|stop:[\w:.-]+|trip:[\w:.-]+|runs:\d{8})$/.test(t)) continue;
+        if (!TOPIC_RE.test(t)) continue;
         c.topics.add(t);
         await this.initial(c, t);
       }
@@ -111,9 +135,12 @@ export class Hub {
 
   /** Feliratkozáskor azonnal a teljes állapot. */
   private async initial(c: Client, topic: string) {
-    if (topic === "vehicles") return this.send(c, { t: "vehicles", full: this.engine.snapshot.decoded.map((v) => this.withMotion(v)), at: this.engine.snapshot.fetchedAt });
+    if (topic === "vehicles" || topic.startsWith("vehicles@")) {
+      const keep = this.vehicleFilter(topic);
+      return this.send(c, { t: "vehicles", topic, full: this.engine.snapshot.decoded.filter(keep).map((v) => this.withMotion(v)), at: this.engine.snapshot.fetchedAt });
+    }
     if (topic === "parking") return this.send(c, { t: "parking", id: "", data: this.parking.snapshot() });
-    if (topic.startsWith("stop:")) return this.send(c, { t: "stop", id: topic.slice(5), data: this.stopData(topic.slice(5)) });
+    if (topic.startsWith("stop:")) return this.send(c, { t: "stop", topic, id: splitTopic(topic.slice(5)).id, data: this.stopData(topic.slice(5)) });
     if (topic.startsWith("trip:")) return this.send(c, { t: "trip", id: topic.slice(5), data: this.tripData(topic.slice(5)) });
     if (topic.startsWith("runs:")) {
       const ymd = topic.slice(5);
@@ -125,8 +152,18 @@ export class Hub {
     }
   }
 
-  private stopData(stopId: string) {
-    return this.insights.arrivals(stopId, STOP_LIMIT);
+  /** `stop:<id>` vagy `stop:<id>@modes` téma adata (a régi téma csak MVK) */
+  private stopData(rest: string) {
+    const { id, modes, rich } = splitTopic(rest);
+    return this.insights.arrivals(id, rich ? STOP_LIMIT * 2 : STOP_LIMIT, nowUnix(), modes, rich);
+  }
+
+  /** Melyik jármű megy egy `vehicles` témára (mód nélkül: csak az MVK-é, mint eddig). */
+  private vehicleFilter(topic: string): (v: DecodedVehicle) => boolean {
+    if (topic === "vehicles") return (v) => isMvkId(v.id);
+    const { modes } = splitTopic(topic);
+    const feed = this.engine.feeds.cachedDay(this.engine.today)?.feed;
+    return (v) => modes.has(vehicleMode(v, feed));
   }
 
   private tripData(tripId: string) {
@@ -166,12 +203,15 @@ export class Hub {
     const gpsSpeed = veh.speed;
     const run = this.engine.todayRuns.get(m.tripId);
     const serviceDate = run?.serviceDate ?? this.engine.today;
-    const segV = this.forecaster.segmentSpeed(m, serviceDate);
-    const k = this.motion.trajectory(veh.id, m, serviceDate, nowUnix()) ?? this.trajectoryOf(veh.id, m, serviceDate, segV);
+    const mvk = isMvkId(veh.id);
+    const cap = SPEED_CAP[vehicleMode(veh, this.engine.feeds.cachedDay(serviceDate)?.feed)];
+    const segV = mvk ? this.forecaster.segmentSpeed(m, serviceDate) : null;
+    // A tanított mozgás-modell az MVK-ra tanult: a Volánnál és a vonatnál a menetrendi tempó viszi.
+    const k = (mvk ? this.motion.trajectory(veh.id, m, serviceDate, nowUnix()) : null) ?? this.trajectoryOf(veh.id, m, serviceDate, segV, cap);
     // Álló busznál (megálló, lámpa) a régi kliens a jel helyén tartja; a pálya (k) ilyenkor egy rövid várakozással indul.
     if (m.stopped) return { s: m.shapeId, a: m.alongM, t: m.ts, e: m.toAlongM, v: 0, k };
-    const v = segV ?? gpsSpeed ?? 6;
-    return { s: m.shapeId, a: m.alongM, t: m.ts, e: m.toAlongM, v: Math.round(Math.min(22, Math.max(1.5, v)) * 10) / 10, k };
+    const v = segV ?? (m.schedSegS && m.schedSegS > 0 ? (m.toAlongM - m.fromAlongM) / m.schedSegS : null) ?? gpsSpeed ?? 6;
+    return { s: m.shapeId, a: m.alongM, t: m.ts, e: m.toAlongM, v: Math.round(Math.min(cap, Math.max(1.5, v)) * 10) / 10, k };
   }
 
   /**
@@ -179,7 +219,7 @@ export class Hub {
    * szakaszonként a szokásos menetsebesség a busz tempójával, megállónként az átlagos álldogálás.
    * Visszamérve 60–70 m átlagos hibával megy (az álló buszt 12 mp után elindítja) — a modell ~25 m.
    */
-  private trajectoryOf(vehicleId: string, m: VehicleMotion, serviceDate: string, segV: number | null): [number, number][] | null {
+  private trajectoryOf(vehicleId: string, m: VehicleMotion, serviceDate: string, segV: number | null, cap = 22): [number, number][] | null {
     const stops = this.engine.feeds.cachedDay(serviceDate)?.feed.tripStopsAlong(m.tripId);
     if (!stops?.length) return null;
     const pace = this.paceOf(vehicleId, m, segV);
@@ -195,12 +235,14 @@ export class Hub {
     for (let i = n; i < stops.length && i < n + TRAJ_STOPS && t < TRAJ_HORIZON_S; i++) {
       const a = stops[i - 1];
       const b = stops[i];
-      const base = a ? this.forecaster.speedBetween(a, b, serviceDate) : segV;
-      const v = Math.min(22, Math.max(2, (base ?? 8) * pace));
+      // a regionális menetnél nincs szakaszprofil: a menetrend szerinti tempó
+      const sched = a && b.arr > a.dep ? (b.alongM - a.alongM) / (b.arr - a.dep) : null;
+      const base = a ? (isMvkId(vehicleId) ? this.forecaster.speedBetween(a, b, serviceDate) : sched) : segV;
+      const v = Math.min(cap, Math.max(2, (base ?? 8) * pace));
       t += Math.max(0, b.alongM - pos) / v;
       k.push([b.alongM, t]);
       pos = b.alongM;
-      const d = i === stops.length - 1 ? 0 : this.forecaster.expectedDwell(b.stopId, serviceDate, b.dep);
+      const d = i === stops.length - 1 ? 0 : isMvkId(vehicleId) ? this.forecaster.expectedDwell(b.stopId, serviceDate, b.dep) : Math.max(0, b.dep - b.arr);
       if (d >= 1) {
         t += d;
         k.push([pos, t]);
@@ -225,18 +267,19 @@ export class Hub {
 
   /** `offset`: a feed helyi idős időbélyegeinek eltolása (egy körön belül állandó) */
   private withMotion(v: DecodedVehicle, offset = serviceClock().offset) {
-    return { ...v, motion: this.motionOf(v, offset) };
+    // a saját illesztőnk mért késése (a térkép késés-szűrőjéhez; a regionálisnál a hivatalos is ott van)
+    const liveDelaySec = v.tripId ? this.engine.matcher.liveDelay(v.tripId, nowUnix()) : null;
+    return { ...v, motion: this.motionOf(v, offset), liveDelaySec };
   }
 
   private onTick() {
-    // Járművek: csak a változott sorok.
-    const vehSubs = this.subscribers("vehicles");
+    // Járművek: csak a változott sorok, témánként (mód szerint) szűrve.
     const cur = new Map<string, DecodedVehicle>();
     for (const v of this.engine.snapshot.decoded) cur.set(v.id, v);
     const upd: (DecodedVehicle & { motion: unknown })[] = [];
     const offset = serviceClock().offset;
     for (const [id, v] of cur) {
-      const sig = `${v.timestamp}|${v.lat}|${v.lon}|${v.tripId}|${v.bearing}`;
+      const sig = `${v.timestamp}|${v.lat}|${v.lon}|${v.tripId}|${v.bearing}|${v.delaySec ?? ""}`;
       if (this.lastVehicles.get(id) !== sig) {
         upd.push(this.withMotion(v, offset));
         this.lastVehicles.set(id, sig);
@@ -244,9 +287,24 @@ export class Hub {
     }
     const del = [...this.lastVehicles.keys()].filter((id) => !cur.has(id));
     for (const id of del) this.lastVehicles.delete(id);
-    if (vehSubs.length && (upd.length || del.length)) {
-      const msg = JSON.stringify({ t: "vehicles", upd, del, at: this.engine.snapshot.fetchedAt });
-      for (const c of vehSubs) this.sendRaw(c, msg);
+    if (upd.length || del.length) {
+      const byTopic = new Map<string, Client[]>();
+      for (const c of this.clients)
+        for (const t of c.topics)
+          if (t === "vehicles" || t.startsWith("vehicles@")) {
+            const list = byTopic.get(t);
+            if (list) list.push(c);
+            else byTopic.set(t, [c]);
+          }
+      for (const [topic, subs] of byTopic) {
+        const keep = this.vehicleFilter(topic);
+        const u = upd.filter(keep);
+        // a törölt jármű módját már nem tudjuk: a régi téma csak az MVK-azonosítókat kapja
+        const d = topic === "vehicles" ? del.filter((id) => isMvkId(id)) : del;
+        if (!u.length && !d.length) continue;
+        const msg = JSON.stringify({ t: "vehicles", topic, upd: u, del: d, at: this.engine.snapshot.fetchedAt });
+        for (const c of subs) this.sendRaw(c, msg);
+      }
     }
 
     // Megállók és menetek: újraszámolás, küldés csak változáskor.
@@ -257,17 +315,28 @@ export class Hub {
         if (t.startsWith("stop:")) stopTopics.add(t);
         else if (t.startsWith("trip:")) tripTopics.add(t);
       }
-    for (const t of stopTopics) this.refreshStop(t.slice(5));
+    for (const t of stopTopics) {
+      const rest = t.slice(5);
+      this.publishIfChanged(t, { t: "stop", id: splitTopic(rest).id, data: this.stopData(rest) });
+    }
     for (const t of tripTopics) this.publishIfChanged(t, { t: "trip", id: t.slice(5), data: this.tripData(t.slice(5)) });
     const parkingWatched = this.subscribers("parking").length > 0;
     if (parkingWatched) this.publishIfChanged("parking", { t: "parking", id: "", data: this.parking.snapshot() });
     for (const key of this.lastSent.keys()) if (!stopTopics.has(key) && !tripTopics.has(key) && !(key === "parking" && parkingWatched)) this.lastSent.delete(key);
   }
 
+  /** Egy megálló (vagy a stop:<id>@… változata) újraküldése, ha valaki figyeli. */
   private refreshStop(stopId: string) {
-    const topic = `stop:${stopId}`;
-    if (!this.subscribers(topic).length) return;
-    this.publishIfChanged(topic, { t: "stop", id: stopId, data: this.stopData(stopId) });
+    const prefix = `stop:${stopId}`;
+    const topics = new Set<string>();
+    for (const c of this.clients) for (const t of c.topics) if (t === prefix || t.startsWith(`${prefix}@`)) topics.add(t);
+    // állomásnál a vágányok eseménye az állomás témáját is frissíti
+    const parent = this.engine.feeds.cachedDay(this.engine.today)?.feed.stops.get(stopId)?.parent;
+    if (parent) for (const c of this.clients) for (const t of c.topics) if (t === `stop:${parent}` || t.startsWith(`stop:${parent}@`)) topics.add(t);
+    for (const t of topics) {
+      const rest = t.slice(5);
+      this.publishIfChanged(t, { t: "stop", id: splitTopic(rest).id, data: this.stopData(rest) });
+    }
   }
 
   private publishIfChanged(topic: string, payload: { t: string; id: string; data: unknown }) {
@@ -275,7 +344,8 @@ export class Hub {
     const body = JSON.stringify(payload.data, (k, v) => (k === "now" || k === "at" ? undefined : v));
     if (this.lastSent.get(topic) === body) return;
     this.lastSent.set(topic, body);
-    const msg = JSON.stringify(payload);
+    // a téma is megy: a kliens ebből tudja, melyik feliratkozásé (stop:<id>@modes)
+    const msg = JSON.stringify({ ...payload, topic });
     for (const c of this.subscribers(topic)) this.sendRaw(c, msg);
   }
 

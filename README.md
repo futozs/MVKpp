@@ -15,6 +15,7 @@ Next.js webapp + valós idejű worker + macOS token-agent, Postgres/TimescaleDB-
 - **Parkoló**: ki áll most melyik végállomáson, ki van a kocsiszínben (G-járattal beállt, 1 órája néma, vagy ma még nem volt kint) — buszra és villamosra, a következő indulás tippjével, 14 napos kiállási előzménnyel; a kedvenc parkolók elöl állnak és a felhőbe mentődnek.
 - **Fiók** passkey-vel, minden beállítás kétirányú felhős szinkronnal; **push-értesítés** kézbesítési naplóval.
 - A nyers GPS-adat örökre megmarad; ha az MVK nem ad ki menetrendet, automatikus fallback az utolsó jóra.
+- **Volán és vasút Borsod-Abaúj-Zemplénben** a MÁV+ (OTP2) adataiból: térkép, figyelő (állomás vágánnyal, viszonylat, vonatszám), menetrend, tervező, utazásnapló, statisztika, push — módonként kikapcsolható. A MÁV+ az **MVK tartaléka** is: token-hiba (401/403) vagy egyperces kiesés esetén innen jönnek az MVK járművei. Részletek: [docs/MAVPLUSZ_OTP2.md](docs/MAVPLUSZ_OTP2.md).
 
 Az architektúra és a v2-hibák részletei: [docs/v3.md](docs/v3.md).
 
@@ -357,6 +358,7 @@ bun run build       # Prisma-kliens + Next production build
 │   └── vpn-route.sh     a Mac VPN-útvonala (a /Library/LaunchDaemons/hu.mvk.vpnroute.plist futtatja — ne töröld)
 ├── data/                helyi adatok, git alatt nincs: gtfs-cache/ (GTFS-mentés), legacy/ (v2 MySQL-dump)
 ├── docs/v3.md           architektúra, a v2 hibái és javításuk, kompatibilitás
+├── docs/MAVPLUSZ_OTP2.md  MÁV+ OTP2: feltérképezés, terv és megvalósítás (Volán, vasút, MVK-tartalék)
 ├── .env.dev.example     a fejlesztői beállítások sablonja
 └── package.json         Bun workspace (apps/*, packages/*, tools/*) és a gyökérszintű parancsok
 ```
@@ -382,6 +384,8 @@ bun run build       # Prisma-kliens + Next production build
 | `MVK_API`, `MVK_GTFS_URL` | worker | nem | az MVK címei (fejlesztésben a szimulátor) |
 | `BOOTSTRAP_GTFS` | worker | nem | helyi GTFS-zip az első induláshoz |
 | `DEV_CLOCK_AT` | worker | csak fejlesztés | fejlesztői óra (élesben soha) |
+| `OTP2_ENABLED`, `REGIONAL` | worker | nem | MÁV+ be/ki (`0` = se tartalék, se Volán/vasút); `REGIONAL=0`: csak az MVK-tartalék |
+| `OTP2_POLL_MS`, `OTP2_FALLBACK_POLL_MS`, `OTP2_ALERTS_MS`, `OTP2_BOARDS_MS`, `REGIONAL_DAYS_AHEAD`, `FALLBACK_OUTAGE_MS`, `FALLBACK_RECOVER_POLLS` | worker | nem | MÁV+ időközök és az átállás szabálya — lásd [docs/MAVPLUSZ_OTP2.md](docs/MAVPLUSZ_OTP2.md) M.7 |
 | `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASS`, `MYSQL_DB`, `STEPS` | import | importhoz | a v2 MySQL elérése, futtatandó lépések |
 | `HUB_BIND`, `HUB_PORT` | compose (hub) | a hubhoz | a hub LAN-címe és portja (pl. `192.168.1.11`, `8099`); üresen csak `127.0.0.1` |
 | `HUB_PASSWORD` | hub | a hubhoz | belépési jelszó, min. 12 karakter |
@@ -415,6 +419,7 @@ Külön Next.js app (`apps/hub`), plusz egy konténer ugyanabban a Compose-proje
 | **Naplók** | élő naplók: worker, hub és (Dockerben) minden konténer — szűrés szintre/szövegre, megállítás, letöltés |
 | **Token és agent** | visszaszámláló, előzmények, agentek állapota; **MVK app újraindítása**, token azonnali küldése, agent újraindítása, szerveroldali megújítás, kézi betöltés, a token megtekintése |
 | **MVK API** | lekérések, hibák, végpontonkénti válaszidők, napi feed-egészség, GTFS-verziók + újratöltés, **API-vizsgáló** (bármely MVK-végpont a szerver tokenjével; a GTFS-RT protobuf JSON-ként) |
+| **Adatforrások** | az MVK forrása most (natív vagy MÁV+ tartalék), átváltások, árnyék-mérés (késés, lefedettség), MÁV+-hívások és terhelési korlát, a regionális menetrend építései + újraépítés |
 | **Feladatok** | pg-boss ütemezés és futások, ML-modell és rendszám-előrejelző állapota; minden feladat indítható most |
 | **Használat** | aktív eszközök (napi/heti/havi), új és visszatérő, platform, böngésző, telepített app arány, nézetek, ki van fent most — és **a kedvencek ranglistája** (vonal, megálló, jármű, parkoló, kijelző) |
 | **Felhasználók** | fiókok listája; részletek (kedvencek, passkey-k, munkamenetek, eszközök, utazások, push, beállítások), kiléptetés, passkey/fiók törlése, adatexport (JSON) |

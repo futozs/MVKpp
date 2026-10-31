@@ -13,21 +13,22 @@
  */
 import {
   dayInfo,
-  delayFeatureVector,
   DELAY_FEATURES,
+  delayFeatureVector,
   forecastDelays,
+  type ForecastStop,
   gateCell,
   horizonBucket,
+  isMvkId,
   localMidnightUnix,
   nowUnix,
   precipClass,
   predictGbdt,
   profileAhead,
+  type ProfileFn,
   RECENT_SEGMENTS,
   RecentTraffic,
   RunHistory,
-  type ForecastStop,
-  type ProfileFn,
   type RunOut,
   type SegmentProfile,
   type StopAlong,
@@ -301,14 +302,18 @@ export class DelayForecaster {
   private compute(tripId: string, now: number): TripForecast | null {
     const run = this.engine.todayRuns.get(tripId);
     if (!run || run.status !== "running") return null;
-    const current = this.engine.matcher.liveDelay(tripId, now) ?? run.lastDelayS;
+    // A Volánnál és a vasútnál a MÁV hivatalos késése a kiindulás: a jelük 30–60 mp-cel késik,
+    // a GPS-ből mért késés ezért elmarad tőle (a táblán is a hivatalos látszik).
+    const official = isMvkId(tripId) ? null : (this.engine.snapshot.decoded.find((v) => v.tripId === tripId)?.delaySec ?? null);
+    const current = official ?? this.engine.matcher.liveDelay(tripId, now) ?? run.lastDelayS;
     if (current == null) return null;
     const stops = this.engine.feeds.cachedDay(run.serviceDate)?.feed.tripStopsAlong(tripId);
     if (!stops?.length) return null;
     const profile = this.profileFn(run.serviceDate);
     const fromIdx = Math.max(0, run.lastStopIdx ?? 0);
     const base = forecastDelays(stops, fromIdx, current, profile);
-    if (this.model) {
+    // A tanított modell az MVK-ra tanult: a Volán és a vasút a szakaszprofilok képletével becsül.
+    if (this.model && isMvkId(tripId)) {
       try {
         const out = this.withModel(this.model, run, stops, fromIdx, current, base, profile, now);
         this.stats.model++;

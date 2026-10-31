@@ -17,6 +17,7 @@ import { fastDistM } from "./geo.ts";
 import type { Feed, StopAlong, Trip } from "./gtfs/feed.ts";
 import type { ServiceDay } from "./gtfs/service.ts";
 import { resolveTripNear } from "./gtfs/service.ts";
+import { feedOfId } from "./transit/modes.ts";
 
 export const MATCH = {
   /** ennél messzebb a nyomvonaltól a pont nem számít a menethez */
@@ -36,7 +37,60 @@ export const MATCH = {
   /** ekkora visszaugrás a nyomvonalon GPS-zajnak számít */
   JITTER_BACK_M: 60,
   COMPLETE_SHARE: 0.8,
+  /** a nyomvonal menti előrekeresés sebességkorlátja (m/s) */
+  MAX_SPEED_MPS: 25,
+  /** ennyin belül az első megállótól a menet indulásra kész */
+  START_RADIUS_M: 150,
+  /** csendben elnémult járműnél ennyi hátralévő úton belül becsüljük a beérkezést */
+  FINAL_INFER_M: 450,
+  /** a becsült beérkezés sebessége (m/s): [legkisebb, legnagyobb] */
+  INFER_SPEED: [5, 12] as readonly [number, number],
 } as const;
+
+/**
+ * Az illesztés küszöbei módonként. Az MVK (busz, villamos) pontosan a `MATCH`;
+ * a helyközi busz ritkábban jelez és gyorsabb, a vonat hosszú peronon áll meg,
+ * 160 km/h-val megy, és a pontjai 20–60 mp-enként jönnek.
+ */
+export type MatchProfile = {
+  [K in keyof typeof MATCH]: (typeof MATCH)[K] extends number ? number : readonly [number, number];
+};
+
+export const MATCH_COACH: MatchProfile = {
+  ...MATCH,
+  MAX_OFF_ROUTE_M: 400,
+  ZONE_M: 60,
+  MAX_INTERP_GAP_S: 900,
+  SILENCE_CLOSE_S: 30 * 60,
+  FINAL_STOP_M: 120,
+  FINAL_GRACE_S: 8 * 60,
+  JITTER_BACK_M: 100,
+  MAX_SPEED_MPS: 33,
+  START_RADIUS_M: 200,
+  FINAL_INFER_M: 800,
+  INFER_SPEED: [6, 20],
+};
+
+export const MATCH_RAIL: MatchProfile = {
+  ...MATCH,
+  MAX_OFF_ROUTE_M: 600,
+  ZONE_M: 200,
+  STOPPED_MPS: 0.8,
+  MAX_INTERP_GAP_S: 1200,
+  SILENCE_CLOSE_S: 40 * 60,
+  FINAL_STOP_M: 400,
+  FINAL_GRACE_S: 10 * 60,
+  JITTER_BACK_M: 200,
+  MAX_SPEED_MPS: 50,
+  START_RADIUS_M: 400,
+  FINAL_INFER_M: 2000,
+  INFER_SPEED: [8, 30],
+};
+
+export function matchProfileFor(routeId: string): MatchProfile {
+  const f = feedOfId(routeId);
+  return f === "rail" ? MATCH_RAIL : f === "hkir" ? MATCH_COACH : MATCH;
+}
 
 export type Ping = {
   vehicleId: string;
@@ -102,6 +156,10 @@ export type RunOut = {
   maxSpeed: number;
   status: RunStatus;
   closeReason: CloseReason | null;
+  /** a menet kiírt neve (vasútnál a vonatszám) */
+  tripShort?: string | null;
+  /** honnan jöttek a jelei: "mvk" natív, "otp2" MÁV+ (a worker tölti ki) */
+  rtSource?: string | null;
 };
 
 export type PingOut = Ping & { tripId: string | null; routeId: string | null; serviceDate: string | null; alongM: number | null; offM: number | null };
@@ -122,6 +180,7 @@ export type DayProvider = (ts: number) => { day: ServiceDay; midnightUnix: numbe
 
 type Run = {
   out: RunOut;
+  prof: MatchProfile;
   trip: Trip;
   feed: Feed;
   shape: ProjectedShape;
@@ -220,7 +279,7 @@ export class TripMatcher {
   /** Csend miatti lezárás; az élő worker percenként hívja, a replay a végén. */
   sweep(nowTs: number): void {
     for (const vs of this.vehicles.values()) {
-      if (vs.closing && nowTs - vs.closing.since > MATCH.FINAL_GRACE_S) {
+      if (vs.closing && nowTs - vs.closing.since > vs.closing.run.prof.FINAL_GRACE_S) {
         this.finalize(vs.closing.run, "switched");
         vs.closing = null;
       }
@@ -233,7 +292,7 @@ export class TripMatcher {
         // Befejezett menet után a busz gyakran még a régi azonosítóval áll a végállomáson: a csendet
         // ilyenkor az utolsó jeltől mérjük (`lastTs` friss marad), különben egy fantom futás nyílna újra.
         const seen = vs.current.out.status === "running" ? (vs.current.lastPing?.ts ?? vs.current.out.openedTs) : vs.current.out.lastTs;
-        if (nowTs - seen > MATCH.SILENCE_CLOSE_S) {
+        if (nowTs - seen > vs.current.prof.SILENCE_CLOSE_S) {
           this.finalize(vs.current, "silence");
           vs.current = null;
         }
@@ -278,7 +337,7 @@ export class TripMatcher {
     if (!r || !r.lastPing || !r.started) return null;
     // Még a kiinduló megállóban áll (beállt, kiosztották, de nem indult el):
     // nincs mit becsülni — különben a térképen magától elindulna.
-    if (r.out.actualStart == null && r.progressM <= r.along[0].alongM + MATCH.ZONE_M) return null;
+    if (r.out.actualStart == null && r.progressM <= r.along[0].alongM + r.prof.ZONE_M) return null;
     const a = r.along;
     let next = 0;
     while (next < a.length && a[next].alongM <= r.progressM + 5) next++;
@@ -349,7 +408,7 @@ export class TripMatcher {
       tripId: r.trip.id,
       vehicleId: p.vehicleId,
       routeId: r.trip.routeId,
-      routeShort: route?.short ?? r.trip.routeId,
+      routeShort: route?.key ?? r.trip.routeId,
       dir: Number(r.trip.dir) || 0,
       pattern: feed.patternHash(r.trip.id) ?? "",
       headsign: r.trip.headsign,
@@ -370,9 +429,11 @@ export class TripMatcher {
       maxSpeed: 0,
       status: "running",
       closeReason: null,
+      tripShort: r.trip.shortName ?? null,
     };
     const run: Run = {
       out,
+      prof: matchProfileFor(r.trip.routeId),
       trip: r.trip,
       feed,
       shape: r.shape,
@@ -397,10 +458,11 @@ export class TripMatcher {
     run.out.lastTs = p.ts;
     if (p.speed != null && p.speed > run.out.maxSpeed) run.out.maxSpeed = p.speed;
     if (run.out.status !== "running") return; // már beért, csak a végállomáson áll
-    run.lastStopped = p.speed != null && p.speed <= MATCH.STOPPED_MPS;
+    const P = run.prof;
+    run.lastStopped = p.speed != null && p.speed <= P.STOPPED_MPS;
 
     const proj = this.projectRun(run, p);
-    if (!proj || proj.distM > MATCH.MAX_OFF_ROUTE_M) {
+    if (!proj || proj.distM > P.MAX_OFF_ROUTE_M) {
       run.offRoute++;
       return;
     }
@@ -409,7 +471,7 @@ export class TripMatcher {
     if (!run.started) {
       const first = run.along[0];
       const dFirst = fastDistM(p.lat, p.lon, ...this.stopLatLon(run, 0));
-      if (proj.alongM <= first.alongM + MATCH.ZONE_M || dFirst <= 150) {
+      if (proj.alongM <= first.alongM + P.ZONE_M || dFirst <= P.START_RADIUS_M) {
         run.started = true;
       } else {
         // Menet közbeni becsatlakozás: 3 egymást követő, előre haladó pont kell.
@@ -423,7 +485,7 @@ export class TripMatcher {
         const base = q[n - 2];
         run.lastPing = { ts: base.ts, along: base.along, lat: p.lat, lon: p.lon };
         run.progressM = base.along;
-        while (run.nextIdx < run.along.length - 1 && run.along[run.nextIdx].alongM - MATCH.ZONE_M <= base.along) run.nextIdx++;
+        while (run.nextIdx < run.along.length - 1 && run.along[run.nextIdx].alongM - P.ZONE_M <= base.along) run.nextIdx++;
       }
     }
 
@@ -431,10 +493,10 @@ export class TripMatcher {
     // Monoton haladás: kis visszaugrás zaj, nagy visszaugrás = valószínűleg rossz vetítés.
     let along = proj.alongM;
     if (prev && along < run.progressM) {
-      if (run.progressM - along > MATCH.JITTER_BACK_M) return;
+      if (run.progressM - along > P.JITTER_BACK_M) return;
       along = run.progressM;
     }
-    const stopped = (p.speed ?? 99) <= MATCH.STOPPED_MPS;
+    const stopped = (p.speed ?? 99) <= P.STOPPED_MPS;
 
     if (prev && along > prev.along) run.out.distM += along - prev.along;
 
@@ -445,11 +507,11 @@ export class TripMatcher {
     // Utolsó megálló: amint a zónába ér, a menet kész — nem várunk 10 perc csendre.
     const lastIdx = run.along.length - 1;
     const last = run.along[lastIdx];
-    const enter = last.alongM - MATCH.ZONE_M;
+    const enter = last.alongM - P.ZONE_M;
     const distToLast = fastDistM(p.lat, p.lon, ...this.stopLatLon(run, lastIdx));
-    if (!run.events.has(lastIdx) && run.nextIdx >= lastIdx - 1 && (along >= enter || distToLast <= MATCH.FINAL_STOP_M)) {
+    if (!run.events.has(lastIdx) && run.nextIdx >= lastIdx - 1 && (along >= enter || distToLast <= P.FINAL_STOP_M)) {
       this.closeZoneIfOpen(run, p.ts);
-      const arrTs = prev && prev.along < enter && along >= enter && p.ts - prev.ts <= MATCH.MAX_INTERP_GAP_S ? interpolate(prev, { ts: p.ts, along }, enter) : p.ts;
+      const arrTs = prev && prev.along < enter && along >= enter && p.ts - prev.ts <= P.MAX_INTERP_GAP_S ? interpolate(prev, { ts: p.ts, along }, enter) : p.ts;
       this.recordEvent(run, lastIdx, arrTs, null, "dwell");
       this.complete(run, "final-stop");
     }
@@ -464,8 +526,8 @@ export class TripMatcher {
   private projectRun(run: Run, p: Ping) {
     const lp = run.lastPing;
     if (!lp) return run.shape.project(p.lat, p.lon, 0, 300, 5000);
-    const maxAdvance = Math.max(0, p.ts - lp.ts) * 25 + 250;
-    const fwd = run.shape.projectForward(p.lat, p.lon, Math.max(0, run.progressM - MATCH.JITTER_BACK_M), 40, 0);
+    const maxAdvance = Math.max(0, p.ts - lp.ts) * run.prof.MAX_SPEED_MPS + 250;
+    const fwd = run.shape.projectForward(p.lat, p.lon, Math.max(0, run.progressM - run.prof.JITTER_BACK_M), 40, 0);
     if (fwd && fwd.alongM <= run.progressM + maxAdvance) return fwd;
     return run.shape.project(p.lat, p.lon, run.progressM, 300, maxAdvance);
   }
@@ -479,9 +541,10 @@ export class TripMatcher {
     const lastIdx = run.along.length - 1;
     if (run.events.has(lastIdx) || !run.lastPing || run.nextIdx < lastIdx) return false;
     const remaining = run.along[lastIdx].alongM - run.progressM;
-    if (remaining > 450) return false;
-    const speed = Math.max(5, Math.min(12, run.out.maxSpeed || 8));
-    const arrTs = run.lastPing.ts + Math.round(Math.max(0, remaining - MATCH.ZONE_M) / speed);
+    if (remaining > run.prof.FINAL_INFER_M) return false;
+    const [vMin, vMax] = run.prof.INFER_SPEED;
+    const speed = Math.max(vMin, Math.min(vMax, run.out.maxSpeed || 8));
+    const arrTs = run.lastPing.ts + Math.round(Math.max(0, remaining - run.prof.ZONE_M) / speed);
     this.closeZoneIfOpen(run, arrTs);
     this.recordEvent(run, lastIdx, arrTs, null, "final");
     return run.events.has(lastIdx);
@@ -490,15 +553,16 @@ export class TripMatcher {
   /** Megállók, amelyeken a jármű az előző és a mostani pont között áthaladt / megállt. */
   private passStops(run: Run, prev: { ts: number; along: number } | null, cur: { ts: number; along: number }, stopped: boolean) {
     const a = run.along;
+    const ZONE = run.prof.ZONE_M;
     // A zóna (aktuális megálló) kezelése: amíg benne van, frissítjük; ha kilépett, kiírjuk.
     if (run.zone) {
       const z = a[run.zone.idx];
-      if (cur.along <= z.alongM + MATCH.ZONE_M) {
+      if (cur.along <= z.alongM + ZONE) {
         run.zone.lastTs = cur.ts;
         run.zone.stopped ||= stopped;
         return;
       }
-      const depTs = prev && prev.along < z.alongM + MATCH.ZONE_M ? interpolate(prev, cur, z.alongM + MATCH.ZONE_M) : run.zone.lastTs;
+      const depTs = prev && prev.along < z.alongM + ZONE ? interpolate(prev, cur, z.alongM + ZONE) : run.zone.lastTs;
       this.recordEvent(run, run.zone.idx, run.zone.arrTs, Math.max(run.zone.arrTs, depTs), run.zone.stopped ? "dwell" : "pass");
       run.zone = null;
     }
@@ -507,10 +571,10 @@ export class TripMatcher {
     while (run.nextIdx < a.length - 1) {
       const s = a[run.nextIdx];
       // Az első megállónál a jármű a zónán belül indul (végállomási várakozás).
-      const enter = s.alongM - MATCH.ZONE_M;
+      const enter = s.alongM - ZONE;
       if (cur.along < enter) break;
-      const gapOk = !prev || cur.ts - prev.ts <= MATCH.MAX_INTERP_GAP_S;
-      if (cur.along <= s.alongM + MATCH.ZONE_M) {
+      const gapOk = !prev || cur.ts - prev.ts <= run.prof.MAX_INTERP_GAP_S;
+      if (cur.along <= s.alongM + ZONE) {
         // A zónában van: érkezés most (vagy interpolálva a zóna határára).
         const arrTs = prev && gapOk && prev.along < enter ? interpolate(prev, cur, enter) : cur.ts;
         run.zone = { idx: run.nextIdx, arrTs, lastTs: cur.ts, stopped };
@@ -611,15 +675,15 @@ export class TripMatcher {
     const lastIdx = run.along.length - 1;
     if (!run.events.has(lastIdx)) {
       const d = fastDistM(p.lat, p.lon, ...this.stopLatLon(run, lastIdx));
-      const coveredEnough = run.nextIdx >= Math.floor(lastIdx * MATCH.COMPLETE_SHARE);
-      if (d <= MATCH.FINAL_STOP_M && coveredEnough) {
+      const coveredEnough = run.nextIdx >= Math.floor(lastIdx * run.prof.COMPLETE_SHARE);
+      if (d <= run.prof.FINAL_STOP_M && coveredEnough) {
         this.recordEvent(run, lastIdx, p.ts, null, "final");
         this.complete(run, "final-stop");
         vs.closing = null;
         return;
       }
     }
-    if (p.ts - c.since > MATCH.FINAL_GRACE_S) {
+    if (p.ts - c.since > run.prof.FINAL_GRACE_S) {
       this.finalize(run, "switched");
       vs.closing = null;
     }
@@ -636,7 +700,7 @@ export class TripMatcher {
       return;
     }
     const seen = run.events.size;
-    run.out.status = seen === 0 ? "aborted" : seen >= run.along.length * MATCH.COMPLETE_SHARE ? "complete" : "partial";
+    run.out.status = seen === 0 ? "aborted" : seen >= run.along.length * run.prof.COMPLETE_SHARE ? "complete" : "partial";
     run.out.closeReason = reason;
     this.sink.runClosed?.(run.out);
   }

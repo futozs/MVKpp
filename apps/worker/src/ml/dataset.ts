@@ -122,7 +122,7 @@ class Builder {
 async function pickDays(from: string, to: string, includeLegacy: boolean) {
   const rows = await sql<{ d: string; source: string; n: number }>(
     `SELECT service_date::text AS d, source, count(*)::int AS n FROM trip_run
-      WHERE service_date BETWEEN $1 AND $2 AND status <> 'aborted' GROUP BY 1, 2`,
+      WHERE service_date BETWEEN $1 AND $2 AND status <> 'aborted' AND trip_id NOT LIKE '%:%' GROUP BY 1, 2`,
     [from, to],
   );
   const best = new Map<string, { source: string; n: number }>();
@@ -140,6 +140,8 @@ export async function loadProfiles(fromIso: string, toIsoExclusive: string): Pro
     `SELECT from_stop AS f, to_stop AS t, daytype AS d, (tod_bucket / 4)::int AS h,
             approx_percentile(0.5, rollup(travel_pct)) AS p50, approx_percentile(0.85, rollup(travel_pct)) AS p85
        FROM segment_daily WHERE bucket >= $1::date AND bucket < $2::date
+        -- a késés-modell az MVK-ra tanul (a regionális megállók előtagosak)
+        AND from_stop NOT LIKE '%:%' AND to_stop NOT LIKE '%:%'
       GROUP BY 1, 2, 3, 4 HAVING sum(n) >= 4`,
     [fromIso, toIsoExclusive],
   );
@@ -163,7 +165,7 @@ async function loadDay(day: string, source: string): Promise<Run[]> {
             extract(epoch FROM e.ts)::int AS arr, extract(epoch FROM e.dep_ts)::int AS dep, e.delay_s AS delay,
             e.sched_arr_s AS sa, e.sched_dep_s AS sd
        FROM stop_event e JOIN trip_run t ON t.run_key = e.run_key
-      WHERE e.service_date = $1 AND t.source = $2 AND e.src <> 3
+      WHERE e.service_date = $1 AND t.source = $2 AND e.src <> 3 AND e.trip_id NOT LIKE '%:%'
       ORDER BY e.run_key, e.stop_idx`,
     [day, source],
   );

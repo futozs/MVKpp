@@ -3,8 +3,13 @@ import { Plus, Search, X } from "lucide-react";
 import type { Stop } from "@/types";
 import { Button } from "@/components/ui/button";
 import { normalizeSearchText } from "@/lib/utils";
+import { isRegionalId, pickableStops, regionRank } from "@/lib/modes";
+import { stopKindLabel } from "@/components/transit/RegionalBits";
 
 export const KIOSK_MAX = 3;
+
+/** a sor jobb oldalán: az MVK-megálló kódja, a regionálisé a fajtája (Vasútállomás…) */
+const stopTag = (s: Stop | undefined) => (s ? (isRegionalId(s.id) ? stopKindLabel(s) : s.code) : null);
 
 /** Megállóválasztó a kijelzőhöz: 1–3 megálló, a választás sorrendjében. */
 export function KioskPicker({
@@ -20,11 +25,16 @@ export function KioskPicker({
 }) {
   const [query, setQuery] = useState("");
   const byId = useMemo(() => new Map(stops.map((s) => [s.id, s])), [stops]);
+  const pickable = useMemo(() => pickableStops(stops), [stops]);
   const results = useMemo(() => {
     const q = normalizeSearchText(query.trim());
     if (!q) return [];
-    return stops.filter((s) => normalizeSearchText(s.name).includes(q) || s.code.toLowerCase().includes(q)).slice(0, 40);
-  }, [stops, query]);
+    // az állomások elöl (Tiszai pu., Búza téri autóbusz-állomás)
+    return pickable
+      .filter((s) => normalizeSearchText(s.name).includes(q) || (s.code ?? "").toLowerCase().includes(q))
+      .sort((a, b) => regionRank(a) - regionRank(b) || Number(Boolean(b.station)) - Number(Boolean(a.station)))
+      .slice(0, 40);
+  }, [pickable, query]);
   const full = selected.length >= KIOSK_MAX;
 
   return (
@@ -48,7 +58,7 @@ export function KioskPicker({
               <li key={id} className="flex items-center gap-3 rounded-xl border border-border bg-background/60 px-3 py-2">
                 <span className="font-mono text-xs font-bold text-muted-foreground">{i + 1}.</span>
                 <span className="min-w-0 flex-1 truncate text-sm font-semibold">{s?.name ?? id}</span>
-                <span className="font-mono text-[11px] text-muted-foreground">{s?.code}</span>
+                <span className="font-mono text-[11px] text-muted-foreground">{stopTag(s)}</span>
                 <button
                   type="button"
                   onClick={() => onChange(selected.filter((x) => x !== id))}
@@ -92,7 +102,7 @@ export function KioskPicker({
                 >
                   <Plus className="h-4 w-4 text-primary" />
                   <span className="min-w-0 flex-1 truncate text-sm">{s.name}</span>
-                  <span className="font-mono text-[11px] text-muted-foreground">{s.code}</span>
+                  <span className="font-mono text-[11px] text-muted-foreground">{stopTag(s)}</span>
                 </button>
               </li>
             );

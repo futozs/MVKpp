@@ -5,6 +5,7 @@ import { routeAtPoint, WINDOW_SEC, windowStartOf, type HistoryWindow, type Vehic
 import { compassLabel, motionOf, sampleTrack, type Sample } from "./historySampler";
 import { formatClock } from "./historyTime";
 import { createVehicleIcon, safeHex } from "./vehicleIcon";
+import { displayVehicleId, vehicleModeOf } from "@/lib/modes";
 
 /** Saját pane a visszajátszott járműveknek: így betöltés közben egyben halványítható. */
 const PANE = "mvkHistory";
@@ -292,13 +293,15 @@ export function useHistoryMarkers(
         const iconKey = `${routeShort}|${route?.color}|${route?.text}|${tracked}|${showIds}`;
         if (iconKey !== state.iconKey) {
           state.iconKey = iconKey;
+          const mode = vehicleModeOf({ id }, route?.type);
           state.marker.setIcon(
             createVehicleIcon(
-              routeShort || "?",
+              route?.short ?? routeShort ?? "?",
               route?.color,
               route?.text,
               tracked,
-              showIds || tracked ? id : null,
+              showIds || tracked ? displayVehicleId(id) : null,
+              { mode },
             ),
           );
           state.marker.setZIndexOffset(tracked ? 1000 : 500);

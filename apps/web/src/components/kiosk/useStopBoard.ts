@@ -2,12 +2,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/services/api";
 import { serverNow, useFallbackPoll, useTopic } from "@/lib/realtime";
 import type { StopArrivalsResponse } from "@/types";
+import { modesParam, useEnabledModes } from "@/lib/modes";
 
 const LIMIT = 10;
 const POLL_MS = 10_000;
 
-/** Egy megálló induló járatai: a szerver küldi (WebSocket), kapcsolat nélkül pollozunk. */
+/**
+ * Egy megálló induló járatai: a szerver küldi (WebSocket), kapcsolat nélkül pollozunk.
+ * A bekapcsolt módok szerint (Volán, vonat is, ha be vannak kapcsolva).
+ */
 export function useStopBoard(stopId: string) {
+  const modesKey = modesParam(useEnabledModes());
   const [data, setData] = useState<StopArrivalsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const alive = useRef(true);
@@ -27,13 +32,13 @@ export function useStopBoard(stopId: string) {
 
   const load = useCallback(() => {
     api
-      .getArrivals(stopId, LIMIT)
+      .getArrivals(stopId, LIMIT, modesKey)
       .then(apply)
       .catch((e: Error) => alive.current && setError(e.message));
-  }, [stopId, apply]);
+  }, [stopId, modesKey, apply]);
 
   useEffect(load, [load]);
-  useTopic(`stop:${stopId}`, (m) => apply(m.data as StopArrivalsResponse));
+  useTopic(`stop:${stopId}@${modesKey}`, (m) => apply(m.data as StopArrivalsResponse));
   useFallbackPoll(load, POLL_MS);
 
   return { data, error };
