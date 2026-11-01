@@ -1,9 +1,9 @@
 import { motion, useReducedMotion } from "framer-motion";
-import { Bus, Check, MapPin, X } from "lucide-react";
+import { Bus, Check, CornerDownRight, MapPin, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { RouteTile } from "@/components/transit/RouteTile";
 import type { LiveVehicle } from "@/types";
-import { useRides, type Ride } from "@/lib/rides";
+import { journeyOf, useRides, type Ride } from "@/lib/rides";
 import { displayVehicleId, rideModeOf, VEHICLE_WORDS } from "@/lib/modes";
 
 /** „Éppen erre a buszra szálltál fel?” — a felismerő kérdése a térkép tetején. */
@@ -51,9 +51,20 @@ export const endedOnItsOwn = (r: Ride) => r.endedBy === "terminus" || r.endedBy 
  * zárta le — a végállomáson, vagy mert a telefon eltávolodott a busztól —, addig
  * marad, amíg nem nyugtázod, és itt jelölheted ki, hol szálltál le valójában.
  */
-export function RideSavedNote({ ride: last, onClose, onFix }: { ride: Ride; onClose: () => void; onFix?: () => void }) {
+export function RideSavedNote({
+  ride: last,
+  onClose,
+  onFix,
+  onContinue,
+}: {
+  ride: Ride;
+  onClose: () => void;
+  onFix?: () => void;
+  /** a végállomáson lezárt út: a buszon maradt, és tovább utazott */
+  onContinue?: () => void;
+}) {
   const all = useRides();
-  const legs = last.chainId ? all.filter((r) => r.chainId === last.chainId).sort((a, b) => a.boardedAt - b.boardedAt) : [last];
+  const legs = journeyOf(all, last);
   const first = legs[0] ?? last;
   const sum = (pick: (r: Ride) => number | null) => (legs.some((r) => pick(r) != null) ? legs.reduce((a, r) => a + (pick(r) ?? 0), 0) : null);
   const ride = { ...last, fromStopName: first.fromStopName, stops: sum((r) => r.stops), distanceM: sum((r) => r.distanceM), boardedAt: first.boardedAt };
@@ -92,6 +103,11 @@ export function RideSavedNote({ ride: last, onClose, onFix }: { ride: Ride; onCl
             <MapPin /> Hol szálltam le?
           </Button>
         </div>
+      ) : null}
+      {last.endedBy === "terminus" && onContinue ? (
+        <Button size="sm" variant="ghost" className="mt-1.5 w-full" onClick={onContinue}>
+          <CornerDownRight /> A buszon maradtam, tovább utaztam
+        </Button>
       ) : null}
     </div>
   );

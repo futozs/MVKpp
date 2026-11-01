@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { Cloud, CloudOff, Map as MapIcon, Pencil, Repeat, Trash2 } from "lucide-react";
+import { Cloud, CloudOff, CornerDownRight, Map as MapIcon, Pencil, Plus, Repeat, Trash2 } from "lucide-react";
 import { StatTile, ChartFrame } from "@/components/charts/Charts";
 import { RouteTile } from "@/components/transit/RouteTile";
 import { delayLabel, delayTone } from "@/components/transit/DelayBar";
 import { getSession } from "@/lib/account";
-import { canFixRide, deleteRide, syncRides, useRides, type Ride } from "@/lib/rides";
+import { Button } from "@/components/ui/button";
+import { canFixRide, deleteRide, groupJourneys, syncRides, useRides, type Ride } from "@/lib/rides";
+import { RideAddSheet } from "./RideAddSheet";
 import { RideFixSheet } from "./RideFixSheet";
 import { statsApi } from "@/services/statsApi";
 import { cn } from "@/lib/utils";
@@ -22,6 +24,8 @@ export function RidesPanel() {
   const rides = useRides();
   const [fleetSize, setFleetSize] = useState<number | null>(null);
   const [fixing, setFixing] = useState<Ride[] | null>(null);
+  /** utólagos felvétel: új utazás (`[]`), vagy egy már rögzített út folytatása */
+  const [adding, setAdding] = useState<Ride[] | null>(null);
   const loggedIn = Boolean(getSession());
 
   useEffect(() => {
@@ -50,6 +54,9 @@ export function RidesPanel() {
               : "Csak ezen az eszközön — jelentkezz be, és minden feltöltődik"}
           </p>
         </div>
+        <Button size="sm" variant="outline" onClick={() => setAdding([])}>
+          <Plus /> Utazás hozzáadása
+        </Button>
       </header>
 
       {!rides.length ? (
@@ -57,7 +64,7 @@ export function RidesPanel() {
           <MapIcon className="mx-auto h-6 w-6 text-muted-foreground" />
           <p className="mt-3 text-sm font-semibold">Még nincs rögzített utazásod</p>
           <p className="mx-auto mt-1 max-w-md text-[13px] text-muted-foreground">
-            A térképen kövess egy buszt, és nyomd meg a „Felszálltam” gombot. Ha a helymeghatározás be van kapcsolva, a nyitott térkép magától is felismeri, ha együtt mozogsz egy busszal.
+            A térképen kövess egy buszt, és nyomd meg a „Felszálltam” gombot. Ha a helymeghatározás be van kapcsolva, a nyitott térkép magától is felismeri, ha együtt mozogsz egy busszal. Egy korábbi utat a menetrendből is felvehetsz.
           </p>
         </div>
       ) : (
@@ -104,26 +111,41 @@ export function RidesPanel() {
 
           <ChartFrame title="Utazások" hint="A legutóbbi elöl">
             <ul className="divide-y divide-border/60">
-              {journeys.slice(0, 200).map((legs) =>
-                legs.length > 1 ? (
-                  <LoopRow key={legs[0].id} legs={legs} onFix={canFixRide(legs) ? () => setFixing(legs) : undefined} />
+              {journeys.slice(0, 200).map((legs) => {
+                const onFix = canFixRide(legs) ? () => setFixing(legs) : undefined;
+                // az app a végállomáson zárta le (bezárt app) — ha a buszon maradt, itt folytathatja
+                const onContinue = legs[legs.length - 1].endedBy === "terminus" ? () => setAdding(legs) : undefined;
+                return legs.length > 1 ? (
+                  <LoopRow key={legs[0].id} legs={legs} onFix={onFix} onContinue={onContinue} />
                 ) : (
-                  <RideRow key={legs[0].id} r={legs[0]} onFix={canFixRide(legs) ? () => setFixing(legs) : undefined} />
-                ),
-              )}
+                  <RideRow key={legs[0].id} r={legs[0]} onFix={onFix} onContinue={onContinue} />
+                );
+              })}
             </ul>
           </ChartFrame>
         </>
       )}
       {fixing ? <RideFixSheet legs={fixing} initial="from" onClose={() => setFixing(null)} /> : null}
+      {adding ? <RideAddSheet continueFrom={adding.length ? adding : undefined} onClose={() => setAdding(null)} /> : null}
     </div>
   );
 }
 
-/** A sor végén: javítás (hol szállt fel / le) és törlés. */
-function RowActions({ onFix, onDelete, what }: { onFix?: () => void; onDelete: () => void; what: string }) {
+/** A sor végén: folytatás (a buszon maradt), javítás (hol szállt fel / le) és törlés. */
+function RowActions({ onFix, onContinue, onDelete, what }: { onFix?: () => void; onContinue?: () => void; onDelete: () => void; what: string }) {
   return (
     <span className="flex shrink-0 items-center">
+      {onContinue ? (
+        <button
+          type="button"
+          onClick={onContinue}
+          aria-label={`${what}: a buszon maradtam, tovább utaztam`}
+          title="Tovább utaztam"
+          className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
+          <CornerDownRight className="h-4 w-4" />
+        </button>
+      ) : null}
       {onFix ? (
         <button
           type="button"
@@ -142,7 +164,7 @@ function RowActions({ onFix, onDelete, what }: { onFix?: () => void; onDelete: (
   );
 }
 
-function RideRow({ r, onFix }: { r: Ride; onFix?: () => void }) {
+function RideRow({ r, onFix, onContinue }: { r: Ride; onFix?: () => void; onContinue?: () => void }) {
   const mins = r.alightedAt ? Math.max(1, Math.round((r.alightedAt - r.boardedAt) / 60)) : null;
   return (
     <li className="flex items-center gap-3 py-2.5">
@@ -155,17 +177,18 @@ function RideRow({ r, onFix }: { r: Ride; onFix?: () => void }) {
           <span>
             {DAY.format(new Date(r.boardedAt * 1000))} {HM.format(new Date(r.boardedAt * 1000))}
           </span>
-          <span className="font-mono">{displayVehicleId(r.vehicleId)}</span>
+          {r.vehicleId ? <span className="font-mono">{displayVehicleId(r.vehicleId)}</span> : null}
           {mins != null ? <span>{mins} perc</span> : null}
           {r.stops != null ? <span>{r.stops} megálló</span> : null}
           {r.distanceM != null ? <span>{nf.format(r.distanceM / 1000)} km</span> : null}
           {r.delayAtBoardS != null ? <span className={cn("font-mono", delayTone(r.delayAtBoardS))}>{delayLabel(r.delayAtBoardS)}</span> : null}
-          {r.detected === "auto" ? <span className="rounded bg-muted px-1">felismert</span> : null}
+          {r.detected === "auto" ? <span className="rounded bg-muted px-1">felismert</span> : r.detected === "later" ? <span className="rounded bg-muted px-1">utólag</span> : null}
         </p>
       </div>
       <RowActions
         what="Utazás"
         onFix={onFix}
+        onContinue={onContinue}
         onDelete={() => {
           if (confirm("Törlöd ezt az utazást?")) void deleteRide(r.id);
         }}
@@ -175,7 +198,7 @@ function RideRow({ r, onFix }: { r: Ride; onFix?: () => void }) {
 }
 
 /** Körbeutazás: egy buszon, ülve maradva megtett menetek egy sorban. */
-function LoopRow({ legs, onFix }: { legs: Ride[]; onFix?: () => void }) {
+function LoopRow({ legs, onFix, onContinue }: { legs: Ride[]; onFix?: () => void; onContinue?: () => void }) {
   const first = legs[0];
   const last = legs[legs.length - 1];
   const mins = last.alightedAt ? Math.max(1, Math.round((last.alightedAt - first.boardedAt) / 60)) : null;
@@ -207,42 +230,27 @@ function LoopRow({ legs, onFix }: { legs: Ride[]; onFix?: () => void }) {
           <span>
             {DAY.format(new Date(first.boardedAt * 1000))} {HM.format(new Date(first.boardedAt * 1000))}
           </span>
-          <span className="font-mono" title={vehicleIdTitle(first.vehicleId)}>{displayVehicleId(first.vehicleId)}</span>
+          {first.vehicleId ? (
+            <span className="font-mono" title={vehicleIdTitle(first.vehicleId)}>
+              {displayVehicleId(first.vehicleId)}
+            </span>
+          ) : null}
           {mins != null ? <span>{mins} perc</span> : null}
           <span>{stops} megálló</span>
           {meters ? <span>{nf.format(meters / 1000)} km</span> : null}
+          {legs.every((r) => r.detected === "later") ? <span className="rounded bg-muted px-1">utólag</span> : null}
         </p>
       </div>
       <RowActions
         what="Körbeutazás"
         onFix={onFix}
+        onContinue={onContinue}
         onDelete={() => {
           if (confirm("Törlöd ezt a körbeutazást (minden menetét)?")) for (const r of legs) void deleteRide(r.id);
         }}
       />
     </li>
   );
-}
-
-/** Utazások csoportosítva: a körbeutazás menetei (közös chainId) egy utazásnak számítanak; legújabb elöl. */
-function groupJourneys(rides: Ride[]): Ride[][] {
-  const chains = new Map<string, Ride[]>();
-  const out: Ride[][] = [];
-  for (const r of rides) {
-    if (!r.chainId) {
-      out.push([r]);
-      continue;
-    }
-    const legs = chains.get(r.chainId);
-    if (legs) legs.push(r);
-    else {
-      const fresh = [r];
-      chains.set(r.chainId, fresh);
-      out.push(fresh);
-    }
-  }
-  for (const legs of chains.values()) legs.sort((a, b) => a.boardedAt - b.boardedAt);
-  return out;
 }
 
 function formatDuration(minutes: number): string {
@@ -259,7 +267,8 @@ function summarize(rides: Ride[]) {
   let measured = 0;
   let onTime = 0;
   for (const r of rides) {
-    vehicles.set(r.vehicleId, (vehicles.get(r.vehicleId) ?? 0) + 1);
+    // utólag felvett utazásnál a busz ismeretlen is lehet
+    if (r.vehicleId) vehicles.set(r.vehicleId, (vehicles.get(r.vehicleId) ?? 0) + 1);
     const rt = routes.get(r.route);
     routes.set(r.route, { n: (rt?.n ?? 0) + 1, sample: rt?.sample ?? r });
     meters += r.distanceM ?? 0;

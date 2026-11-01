@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 import type { LiveVehicle } from "@/types";
 import { useGeo } from "@/context/GeoContext";
 import { serverNow, useServerClockVersion } from "@/lib/realtime";
-import { canFixRide, cancelRide, getActiveRide, startRide, syncRides, useActiveRide, useRides, type Ride } from "@/lib/rides";
+import { canFixRide, cancelRide, getActiveRide, journeyOf, startRide, syncRides, useActiveRide, useRides, type Ride } from "@/lib/rides";
 import { serviceNow } from "@/lib/serviceDay";
 import { BoardingPrompt, endedOnItsOwn, RideSavedNote } from "./BoardingPrompt";
+import { RideAddSheet } from "./RideAddSheet";
 import { RideFixSheet } from "./RideFixSheet";
 import { RidePanel } from "./RidePanel";
 import { useBoardingDetector, type BoardingSpot } from "./useBoardingDetector";
@@ -72,6 +73,8 @@ export function RideLayer({
   const all = useRides();
   const [saved, setSaved] = useState<Ride | null>(null);
   const [fixing, setFixing] = useState<{ legs: Ride[]; initial: "from" | "to" } | null>(null);
+  /** a végállomáson lezárt út folytatása utólag (a buszon maradt) */
+  const [continuing, setContinuing] = useState<Ride[] | null>(null);
   const watching = geo.status === "watching";
   const detector = useBoardingDetector(watching && !ride, geo.position, vehicles);
 
@@ -102,7 +105,7 @@ export function RideLayer({
     return () => clearTimeout(t);
   }, [saved]);
 
-  const savedLegs = saved ? (saved.chainId ? all.filter((r) => r.chainId === saved.chainId) : all.filter((r) => r.id === saved.id)) : [];
+  const savedLegs = saved ? journeyOf(all, saved) : [];
 
   return (
     <>
@@ -144,9 +147,14 @@ export function RideLayer({
                 }
               : undefined
           }
+          onContinue={() => {
+            setContinuing(savedLegs);
+            setSaved(null);
+          }}
         />
       ) : null}
       {fixing ? <RideFixSheet legs={fixing.legs} initial={fixing.initial} onClose={() => setFixing(null)} /> : null}
+      {continuing ? <RideAddSheet continueFrom={continuing} onClose={() => setContinuing(null)} /> : null}
     </>
   );
 }

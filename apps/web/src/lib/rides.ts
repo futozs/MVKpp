@@ -32,7 +32,8 @@ export interface Ride {
   distanceM: number | null;
   delayAtBoardS: number | null;
   delayAtAlightS: number | null;
-  detected: "auto" | "manual";
+  /** felismert, a „Felszálltam” gombbal indított, vagy utólag a menetrendből felvett */
+  detected: RideSource;
   /** körbeutazás: az egymás után, ülve maradva megtett menetek közös azonosítója */
   chainId?: string | null;
   /**
@@ -45,6 +46,7 @@ export interface Ride {
 }
 
 export type RideEndedBy = "user" | "dest" | "away" | "terminus";
+export type RideSource = "auto" | "manual" | "later";
 
 /**
  * A busz a végállomáson fordul, és az utas nem szállt le: a menet véget ért,
@@ -250,6 +252,53 @@ export function fixRide(legIds: readonly string[], fixes: Readonly<Record<string
   );
   void syncRides();
   return true;
+}
+
+/**
+ * Utólag felvett utazás (a menetrendből választott menet), körbeutazásnál az
+ * összes menete — vagy egy meglévő út folytatása (a menetek `chainId`-ja annak az útnak a lánca).
+ */
+export function addRides(legs: readonly Ride[]) {
+  if (!legs.length) return;
+  const ids = new Set(legs.map((r) => r.id));
+  setRides(
+    [...legs.map((r): StoredRide => ({ ...r, synced: false })), ...rides.filter((r) => !ids.has(r.id))].sort((a, b) => b.boardedAt - a.boardedAt),
+  );
+  void syncRides();
+}
+
+/**
+ * Egy út menetei sorrendben (körbeutazásnál mind). Egy utólag folytatott, addig
+ * egymenetes utazás nem kap utólag `chainId`-t (egy javított utazás végleges):
+ * a folytatás az ő azonosítóját viszi tovább, így az is a lánc első menete.
+ */
+export function journeyOf(all: readonly Ride[], ride: Ride): Ride[] {
+  const key = ride.chainId ?? (all.some((r) => r.chainId === ride.id) ? ride.id : null);
+  if (!key) return [ride];
+  return all.filter((r) => r.chainId === key || r.id === key).sort((a, b) => a.boardedAt - b.boardedAt);
+}
+
+/** Utazások csoportosítva: a körbeutazás menetei egy utazásnak számítanak; legújabb elöl. */
+export function groupJourneys(all: readonly Ride[]): Ride[][] {
+  const heads = new Set(all.map((r) => r.chainId).filter((x): x is string => Boolean(x)));
+  const chains = new Map<string, Ride[]>();
+  const out: Ride[][] = [];
+  for (const r of all) {
+    const key = r.chainId ?? (heads.has(r.id) ? r.id : null);
+    if (!key) {
+      out.push([r]);
+      continue;
+    }
+    const legs = chains.get(key);
+    if (legs) legs.push(r);
+    else {
+      const fresh = [r];
+      chains.set(key, fresh);
+      out.push(fresh);
+    }
+  }
+  for (const legs of chains.values()) legs.sort((a, b) => a.boardedAt - b.boardedAt);
+  return out;
 }
 
 /** Mégsem szállt fel (téves felismerés): nyom nélkül eltűnik. */

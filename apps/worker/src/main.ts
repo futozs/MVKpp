@@ -24,6 +24,7 @@ import { Hub } from "./hub.ts";
 import { registerAdmin } from "./http/admin.ts";
 import { registerCompat } from "./http/compat.ts";
 import { HttpError, readBody, Router, sendJson, type Req } from "./http/router.ts";
+import { registerRideLog } from "./http/rideLog.ts";
 import { registerTransit } from "./http/transit.ts";
 import { registerV3 } from "./http/v3.ts";
 import { detectIncidentsForDay } from "./incidents.ts";
@@ -95,6 +96,7 @@ async function main() {
   registerCompat(router, ctx);
   registerV3(router, ctx);
   registerTransit(router, ctx);
+  registerRideLog(router, ctx);
   registerAdmin(router, { ...ctx, liveBreakdown: () => hub.liveBreakdown() });
 
   server.on("request", async (raw, res) => {

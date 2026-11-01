@@ -176,3 +176,23 @@ export function alightAt(stops: RideStop[], times: Map<number, RideStopTime>, id
     delayAtAlightS: t ? t.delayS : fallback.delayS,
   };
 }
+
+/**
+ * Becsült idő egy megállónál, ahol a busznak nincs eseménye (utólag felvett
+ * utazás, kihagyott GPS): a menetrend a legközelebbi mért megálló késésével.
+ * Mérés nélkül a menetrend.
+ */
+export function estimatedAt(stops: RideStop[], times: Map<number, RideStopTime>, idx: number): number | null {
+  const s = stops[idx];
+  if (!s) return null;
+  let best: RideStopTime | null = null;
+  let bestGap = Infinity;
+  for (const [i, t] of times) {
+    const gap = Math.abs(i - idx);
+    if (gap < bestGap) {
+      best = t;
+      bestGap = gap;
+    }
+  }
+  return s.schedTs + (best?.delayS ?? 0);
+}

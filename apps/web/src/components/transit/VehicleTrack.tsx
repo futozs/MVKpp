@@ -23,11 +23,29 @@ export function VehicleTrack({
   const speedKmh =
     vehicle?.speed != null ? Math.round(vehicle.speed * 3.6) : null;
   const moving = speedKmh != null && speedKmh > 2;
+  // Az egész sáv (hol tart a busz) a követésre visz, nem csak a kis ikon.
+  const trackable = Boolean(onTrack && vehicle);
 
   return (
     <div
+      role={trackable ? "button" : undefined}
+      tabIndex={trackable ? 0 : undefined}
+      aria-label={trackable ? `${vehicleText} követése a térképen` : undefined}
+      onClick={trackable ? onTrack : undefined}
+      onKeyDown={
+        trackable
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onTrack?.();
+              }
+            }
+          : undefined
+      }
       className={cn(
         "rounded-lg border border-primary/25 bg-primary/[0.07] p-2 shadow-xs sm:p-3",
+        trackable &&
+          "cursor-pointer transition-[background-color,transform] duration-fast hover:bg-primary/[0.12] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.99]",
         className,
       )}
     >
@@ -56,15 +74,10 @@ export function VehicleTrack({
             {progressDesc}
           </span>
         ) : null}
-        {onTrack && vehicle ? (
-          <button
-            type="button"
-            onClick={onTrack}
-            aria-label="Követés a térképen"
-            className="shrink-0 rounded-md bg-primary/15 p-1.5 text-primary transition-colors duration-fast focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-          >
+        {trackable ? (
+          <span aria-hidden className="shrink-0 rounded-md bg-primary/15 p-1.5 text-primary">
             <Navigation className="h-3.5 w-3.5" />
-          </button>
+          </span>
         ) : null}
       </div>
 
@@ -118,14 +131,10 @@ export function VehicleTrack({
           </p>
         ) : null}
 
-        {onTrack && vehicle ? (
-          <button
-            type="button"
-            onClick={onTrack}
-            className="mt-2.5 w-full rounded-md bg-primary/12 py-1.5 text-xs font-semibold text-primary transition-colors duration-fast hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-          >
+        {trackable ? (
+          <span aria-hidden className="mt-2.5 block w-full rounded-md bg-primary/12 py-1.5 text-center text-xs font-semibold text-primary">
             Követés a térképen
-          </button>
+          </span>
         ) : null}
       </div>
     </div>
