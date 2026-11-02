@@ -208,9 +208,11 @@ export const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D(props, r
           setStyleReady((n) => n + 1);
         });
         map.once("load", () => {
-          if (propsRef.current.focus || REDUCED_MOTION) return;
-          // bekapcsoláskor a város „felemelkedik”
-          map.easeTo({ pitch: BROWSE_PITCH, bearing: BROWSE_BEARING, zoom: Math.max(map.getZoom(), BROWSE_MIN_ZOOM), duration: 1800, easing: easeInOutCubic });
+          if (propsRef.current.focus) return;
+          // bekapcsoláskor a város „felemelkedik” (csökkentett mozgásnál animáció nélkül, de ugyanúgy megdől)
+          const view = { pitch: BROWSE_PITCH, bearing: BROWSE_BEARING, zoom: Math.max(map.getZoom(), BROWSE_MIN_ZOOM) };
+          if (REDUCED_MOTION) map.jumpTo(view);
+          else map.easeTo({ ...view, duration: 1800, easing: easeInOutCubic });
         });
 
         wireInteractions(map, follower, propsRef);
