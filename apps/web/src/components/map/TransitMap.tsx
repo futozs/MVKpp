@@ -148,10 +148,10 @@ interface TransitMapProps {
   onToggleMonitorStop: (stopId: string) => void;
   onSelectTileLayer: (layerId: string) => void;
   /**
-   * A követés panelje (FocusDock) asztalon jobb oldalt: „card” lent a kártya, „column”
-   * vonatnál a menetrenddel a teljes magasságban — a jobb oldali gombok mellé húzódnak.
+   * Kint van a követés panelje (FocusDock): asztalon jobb oldalt a teljes magasságban
+   * (menetrend + kártya) — a jobb oldali gombok mellé húzódnak.
    */
-  dock?: "card" | "column" | null;
+  dock?: boolean;
 }
 
 /** a FocusDock asztalon: jobb margó + szélesség + köz (px) */
@@ -294,7 +294,7 @@ export function TransitMap({
   monitoredStopIds,
   onToggleMonitorStop,
   onSelectTileLayer,
-  dock = null,
+  dock = false,
 }: TransitMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -1121,7 +1121,7 @@ export function TransitMap({
         </MapCorner>
 
         {/* Jobb fent: alaptérkép és rétegek, alatta az MVK hírei. */}
-        <MapCorner corner="top-right" className={cn(dock === "column" && DOCK_INSET)}>
+        <MapCorner corner="top-right" className={cn(dock && DOCK_INSET)}>
           <MapLayersControl
             tileLayerId={tileLayerId}
             onSelectTileLayer={onSelectTileLayer}

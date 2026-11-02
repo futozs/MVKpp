@@ -57,7 +57,7 @@ function LiveIncidentsCard({ routes, onOpenDisruptions }: { routes: Route[]; onO
           </h3>
           <p className="mt-0.5 text-[11.5px] text-muted-foreground">
             {live.missing.length
-              ? "Ezek a menetek 15–90 perce esedékesek, egyetlen busz sem kezdte el őket, és késő busz sem tart feléjük, pedig a vonal szomszédos meneteit látjuk. Az „igény esetén” járatokat nem számoljuk."
+              ? "Ezek a menetek 15–90 perce esedékesek, egyetlen busz sem kezdte el őket, és késő busz sem tart feléjük, pedig a vonal szomszédos meneteit látjuk. Nem számoljuk az „igény esetén” járatokat, a garázsból kiálló meneteket (alattuk a fedélzeti egység gyakran még nem küld adatot), és azt sem, amelyiket a busz láthatóan levitt, csak adat nélkül."
               : "Most nincs valószínűleg kimaradó menet."}
           </p>
         </div>

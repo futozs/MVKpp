@@ -285,7 +285,7 @@ export function DisruptionsDialog({
           <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground">
             <span className="font-semibold text-foreground">Törölve</span>: az MVK hivatalos törlési listája.{" "}
             <span className="font-semibold text-foreground">Kimarad</span>: 15–90 perce esedékes, egyetlen busz sem kezdte el, és késő busz sem tart felé.{" "}
-            <span className="font-semibold text-foreground">Nem indult</span>: korábban ma esedékes volt, nincs kihúzva, mégsem láttuk — miközben a vonal szomszédos meneteit igen. Az „igény esetén” járatokat nem számoljuk.
+            <span className="font-semibold text-foreground">Nem indult</span>: korábban ma esedékes volt, nincs kihúzva, mégsem láttuk — miközben a vonal szomszédos meneteit igen. Nem számoljuk az „igény esetén” járatokat, a garázsból kiálló meneteket, és azt sem, amelyiket a busz adat nélkül vitt le (pontosan érkezésre feltűnt a végállomáson, a következő menetén).
           </p>
         </div>
       </DialogContent>

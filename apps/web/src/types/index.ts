@@ -532,7 +532,7 @@ export interface RelationBoardResponse {
   rows: RelationRow[];
 }
 
-/** v3: egy vonat vonatszám szerint, lásd /engine/transit/train */
+/** v3: egy vonat vonatszám szerint (/engine/transit/train), vagy bármely menet azonosító szerint (/engine/transit/trip) */
 export interface TrainStop {
   id: string;
   name: string;

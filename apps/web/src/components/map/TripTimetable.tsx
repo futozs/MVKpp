@@ -8,6 +8,7 @@ import { delayTone } from "@/components/transit/DelayBar";
 import { NoticeList, PlatformBadge } from "@/components/transit/RegionalBits";
 import { hmOf } from "@/components/transit/TripInsights";
 import { describeApiError, type FriendlyError } from "@/lib/apiError";
+import { feedOfId } from "@/lib/modes";
 import { cn } from "@/lib/utils";
 
 const POLL_MS = 15_000;
@@ -19,13 +20,22 @@ const COMPACT_AFTER = 2;
 
 type Loaded = { tripId: string; res: TrainDetailResponse };
 
+/** a vonat állomásokon, a busz, a villamos és a Volán megállókon jár */
+const WORDS = {
+  rail: { unit: "állomás", list: "A vonat állomásai", shell: "A követett vonat menetrendje", platform: "rail" },
+  road: { unit: "megálló", list: "A járat megállói", shell: "A követett járat menetrendje", platform: "coach" },
+} as const;
+type Words = (typeof WORDS)[keyof typeof WORDS];
+
 /**
- * A térképen követett vonat menetrendje: minden állomás menetrendi és várható
- * idővel, vágánnyal, a már elhagyottak halványan, a következő kiemelve, és a MÁV
- * megjegyzései (késés oka). Asztalon a követés-kártya fölött a jobb oldali
- * oszlopban teljes hosszában, telefonon a kártya fölött összecsukva (lenyitható).
+ * A térképen követett jármű menetrendje: minden megálló menetrendi és várható
+ * idővel, vágánnyal / kocsiállással, a már elhagyottak halványan, a következő
+ * kiemelve, fölül sávon, hol tart a menet, és a MÁV megjegyzései (késés oka).
+ * Asztalon a követés-kártya fölött a jobb oldali oszlopban teljes hosszában,
+ * telefonon (csak vonatnál) a kártya fölött összecsukva, lenyithatóan.
  */
-export function TrainTimetable({ tripId, className }: { tripId: string; className?: string }) {
+export function TripTimetable({ tripId, className }: { tripId: string; className?: string }) {
+  const words = feedOfId(tripId) === "rail" ? WORDS.rail : WORDS.road;
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [error, setError] = useState<FriendlyError | null>(null);
   const [expanded, setExpanded] = useState(false);
@@ -35,9 +45,9 @@ export function TrainTimetable({ tripId, className }: { tripId: string; classNam
   useVisiblePoll(
     () => {
       api
-        .getTrainTrip(tripId)
+        .getTripDetail(tripId)
         .then((res) => {
-          // egy lassan visszaérő, előző vonatra szóló válasz ne írja felül az újat
+          // egy lassan visszaérő, előző menetre szóló válasz ne írja felül az újat
           if (current.current !== tripId) return;
           setLoaded({ tripId, res });
           setError(null);
@@ -52,13 +62,14 @@ export function TrainTimetable({ tripId, className }: { tripId: string; classNam
   const stops = data?.found ? (data.stops ?? []) : [];
   const nextIdx = stops.findIndex((s) => !s.passed);
   const arrived = stops.length > 0 && nextIdx < 0;
+  const passedCount = arrived ? stops.length : Math.max(0, nextIdx);
   const notices = data?.notices?.map((n) => n.text);
 
   const listRef = useStopScroll(stops.length, nextIdx, expanded);
 
   if (!data && !error) {
     return (
-      <Shell className={className}>
+      <Shell label={words.shell} className={className}>
         <p className="px-4 py-5 text-center font-mono text-xs text-muted-foreground">A menetrend betöltése…</p>
       </Shell>
     );
@@ -70,11 +81,15 @@ export function TrainTimetable({ tripId, className }: { tripId: string; classNam
   const hiddenCount = stops.length - stops.filter((_, i) => inCompact(i)).length;
 
   return (
-    <Shell className={className}>
+    <Shell label={words.shell} className={className}>
       <header className="flex items-center gap-2 border-b border-border px-4 py-2.5">
         <ListOrdered aria-hidden className="h-4 w-4 shrink-0 text-primary" />
         <h2 className="text-sm font-bold tracking-tight">Menetrend</h2>
-        {stops.length ? <span className="text-[11px] text-muted-foreground">{stops.length} állomás</span> : null}
+        {stops.length ? (
+          <span className="font-mono text-[11px] tabular-nums text-muted-foreground" title={`${passedCount} ${words.unit} elhagyva`}>
+            {passedCount}/{stops.length} {words.unit}
+          </span>
+        ) : null}
         <span className="ml-auto flex items-center gap-2">
           {data?.cancelled ? (
             <span className="rounded-md border border-destructive/50 bg-destructive/12 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-destructive">Törölve</span>
@@ -92,6 +107,8 @@ export function TrainTimetable({ tripId, className }: { tripId: string; classNam
           ) : null}
         </span>
       </header>
+
+      {stops.length > 1 ? <ProgressBar ratio={arrived ? 1 : nextIdx <= 0 ? 0 : (nextIdx - 0.5) / (stops.length - 1)} /> : null}
 
       {error ? (
         <p role="status" className="flex items-center gap-2 border-b border-border bg-late/10 px-4 py-1.5 text-[11px]">
@@ -112,7 +129,7 @@ export function TrainTimetable({ tripId, className }: { tripId: string; classNam
       {stops.length ? (
         <ol
           ref={listRef}
-          aria-label="A vonat állomásai"
+          aria-label={words.list}
           className={cn("relative min-h-0 overflow-y-auto overscroll-contain py-1 md:flex-1", expanded && "max-h-[34dvh] md:max-h-none")}
         >
           {stops.map((s, i) => (
@@ -122,6 +139,7 @@ export function TrainTimetable({ tripId, className }: { tripId: string; classNam
               index={i}
               last={stops.length - 1}
               next={nextIdx}
+              platformMode={words.platform}
               className={cn(!expanded && !inCompact(i) && "hidden md:flex")}
             />
           ))}
@@ -131,10 +149,10 @@ export function TrainTimetable({ tripId, className }: { tripId: string; classNam
   );
 }
 
-function Shell({ className, children }: { className?: string; children: React.ReactNode }) {
+function Shell({ label, className, children }: { label: string; className?: string; children: React.ReactNode }) {
   return (
     <section
-      aria-label="A követett vonat menetrendje"
+      aria-label={label}
       className={cn("flex min-h-0 flex-col overflow-hidden border-t border-border bg-card shadow-xl md:rounded-xl md:border", className)}
     >
       {children}
@@ -143,10 +161,36 @@ function Shell({ className, children }: { className?: string; children: React.Re
 }
 
 /**
- * Egy állomás sora: idő, a menet vonala pöttyel, név, vágány. A vonal az elhagyott
+ * Hol tart a menet az első indulástól a végállomásig — a mostani szakasz felénél, mint a
+ * sorok vonala. `scaleX`-szel nő, hogy az áttűnés ne rendezze újra az oldalt.
+ */
+function ProgressBar({ ratio }: { ratio: number }) {
+  return (
+    <div aria-hidden className="h-1 w-full shrink-0 bg-border/60">
+      <div className="h-full w-full origin-left bg-primary transition-transform duration-500 ease-out" style={{ transform: `scaleX(${Math.min(1, Math.max(0, ratio))})` }} />
+    </div>
+  );
+}
+
+/**
+ * Egy megálló sora: idő, a menet vonala pöttyel, név, vágány. A vonal az elhagyott
  * szakaszokon telt, a mostanin (az utolsó elhagyott és a következő között) félig.
  */
-function StopRow({ stop: s, index: i, last, next, className }: { stop: TrainStop; index: number; last: number; next: number; className?: string }) {
+function StopRow({
+  stop: s,
+  index: i,
+  last,
+  next,
+  platformMode,
+  className,
+}: {
+  stop: TrainStop;
+  index: number;
+  last: number;
+  next: number;
+  platformMode: Words["platform"];
+  className?: string;
+}) {
   const isNext = i === next;
   const passed = s.passed;
   const terminus = i === last;
@@ -154,7 +198,7 @@ function StopRow({ stop: s, index: i, last, next, className }: { stop: TrainStop
   const liveUnix = terminus ? s.arrUnix : s.depUnix;
   const showLive = !passed && s.delaySec != null && Math.abs(s.delaySec) >= LIVE_SHOWN_S;
   const dwell = i > 0 && !terminus && s.schedArr !== s.schedDep;
-  // a bejövő szakasz: elhagyott állomásig telt, a következőig (ott jár most) félig
+  // a bejövő szakasz: elhagyott megállóig telt, a következőig (ott jár most) félig
   const inDone = i > 0 && (passed || isNext);
   const outDone = !terminus && passed;
 
@@ -193,15 +237,15 @@ function StopRow({ stop: s, index: i, last, next, className }: { stop: TrainStop
       </span>
 
       <span className="flex shrink-0 items-center">
-        <PlatformBadge platform={s.platform} changed={s.platformChanged} predicted={s.platformPredicted} mode="rail" compact />
+        <PlatformBadge platform={s.platform} changed={s.platformChanged} predicted={s.platformPredicted} mode={platformMode} compact />
       </span>
     </li>
   );
 }
 
 /**
- * Az állomáslista görgetése: betöltéskor és amikor a vonat elhagy egy állomást,
- * az utolsó elhagyott kerül felülre (a kézi görgetést a következő állomásig nem bántja).
+ * A megállólista görgetése: betöltéskor és amikor a jármű elhagy egy megállót,
+ * az utolsó elhagyott kerül felülre (a kézi görgetést a következő megállóig nem bántja).
  */
 function useStopScroll(count: number, nextIdx: number, expanded: boolean) {
   const ref = useRef<HTMLOListElement>(null);

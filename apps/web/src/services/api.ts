@@ -343,9 +343,9 @@ export const api = {
     return handleResponse<TrainDetailResponse>(await fetch(`${API_BASE}/engine/transit/train?no=${encodeURIComponent(no)}`), "/engine/transit/train");
   },
 
-  /** Egy vasúti menet megállónként (a térképen követett vonat menetrendje). */
-  async getTrainTrip(tripId: string): Promise<TrainDetailResponse> {
-    return handleResponse<TrainDetailResponse>(await fetch(`${API_BASE}/engine/transit/train?trip=${encodeURIComponent(tripId)}`), "/engine/transit/train");
+  /** Bármely mód menete megállónként (a térképen követett jármű menetrendje: busz, villamos, Volán, vonat). */
+  async getTripDetail(tripId: string): Promise<TrainDetailResponse> {
+    return handleResponse<TrainDetailResponse>(await fetch(`${API_BASE}/engine/transit/trip?trip=${encodeURIComponent(tripId)}`), "/engine/transit/trip");
   },
 
   /** Megálló-, állomás- és vonatszám-keresés minden bekapcsolt módban. */

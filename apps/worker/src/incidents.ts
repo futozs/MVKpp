@@ -8,12 +8,13 @@
  * Most:
  *  - cancelled  — az MVK hivatalos törlési listája (100% biztos)
  *  - missed     — menetrend szerinti menet, amit senki nem vitt, MIKÖZBEN a
- *                 vonal szomszédos meneteit láttuk (tehát a követés működött)
+ *                 vonal szomszédos meneteit láttuk (tehát a követés működött);
+ *                 a garázsmenet és az adat nélkül levitt menet nem ide tartozik
  *  - breakdown  — menet közben elnémuló jármű, ami 20+ percig nem bukkan fel,
  *                 és NEM ismert térerő-hiányos helyen (ahol ugyanez a minta
  *                 más napokon is rendszeresen elhallgat)
  */
-import { budapestOffsetSec, isMvkId, isOnDemandTrip, localMidnightUnix, secToHm, type ServiceDay } from "@mvk/core";
+import { budapestOffsetSec, isMvkId, isOnDemandTrip, localMidnightUnix, quietTripIds, scheduledLegs, secToHm, type ServiceDay } from "@mvk/core";
 import { getPool, sql } from "@mvk/db";
 import type { FeedManager } from "./feeds.ts";
 import { log } from "./log.ts";
@@ -94,8 +95,8 @@ async function officialCancellations(day: ServiceDay, iso: string): Promise<Inci
 }
 
 async function missedTrips(day: ServiceDay, iso: string): Promise<IncidentIn[]> {
-  const ran = await sql<{ trip_id: string; route_short: string; sched_start_s: number }>(
-    `SELECT trip_id, route_short, sched_start_s FROM trip_run WHERE service_date = $1 AND status <> 'aborted' AND trip_id NOT LIKE '%:%'`,
+  const ran = await sql<{ trip_id: string; vehicle_id: string; route_short: string; sched_start_s: number }>(
+    `SELECT trip_id, vehicle_id, route_short, sched_start_s FROM trip_run WHERE service_date = $1 AND status <> 'aborted' AND trip_id NOT LIKE '%:%'`,
     [iso],
   );
   const cancelled = new Set((await sql<{ trip_id: string }>(`SELECT trip_id FROM cancelled_trip WHERE service_date = $1 AND trip_id NOT LIKE '%:%'`, [iso])).map((x) => x.trip_id));
@@ -137,7 +138,13 @@ async function missedTrips(day: ServiceDay, iso: string): Promise<IncidentIn[]> 
       evidence: { trackedNeighbours: near, cancelledByMvk: false },
     });
   }
-  return out;
+  // Garázsmenet, vagy a busz adat nélkül levitte (a végállomáson érkezésre feltűnt): nem kimaradás.
+  const quiet = quietTripIds(
+    out.flatMap((x) => (x.tripId ? [x.tripId] : [])),
+    scheduledLegs(day),
+    ran.map((r) => ({ tripId: r.trip_id, vehicleId: r.vehicle_id })),
+  );
+  return out.filter((x) => !x.tripId || !quiet.has(x.tripId));
 }
 
 async function breakdowns(day: ServiceDay, iso: string): Promise<IncidentIn[]> {

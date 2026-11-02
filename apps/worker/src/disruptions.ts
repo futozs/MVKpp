@@ -5,6 +5,9 @@
  *  · unseen    — korábban ma esedékes volt, és nem láttuk elindulni, pedig a
  *                vonal szomszédos meneteit követtük (nincs kihúzva)
  *
+ * A hiányzó adat önmagában nem kimaradás: a garázsmenetet és azt, amelyiket a busz
+ * adat nélkül levitt (`quietTripIds`), egyik csoportba sem soroljuk.
+ *
  * Menetenként a pótló indulás (ugyanaz a vonal és irány, ugyanonnan) és — ha
  * a kliens megadja a közelében lévő megállókat — hogy ott mikor állt volna meg.
  */
@@ -17,6 +20,8 @@ import {
   type MissingCandidate,
   type MissingRun,
   nowUnix,
+  quietTripIds,
+  scheduledLegs,
   secToHm,
   type ServiceDay,
   type StartRisk,
@@ -58,6 +63,18 @@ export type DisruptionTrip = {
 
 /** Az élő „valószínűleg kimaradó” menetek (a fejléc jelvénye és az Üzemzavarok kártya). */
 export function liveMissing(engine: Engine, day: ServiceDay, now: number) {
+  const raw = liveMissingRaw(engine, day, now);
+  const quiet = quietTripIds(raw.map((m) => m.tripId), scheduledLegs(day), seenToday(engine));
+  return raw.filter((m) => !quiet.has(m.tripId));
+}
+
+/** A ma látott (nem félbehagyott) menetek és a buszuk — ebből igazoljuk az adat nélkül levitt meneteket. */
+function seenToday(engine: Engine) {
+  return [...engine.todayRuns.values()].filter((r) => r.status !== "aborted").map((r) => ({ tripId: r.tripId, vehicleId: r.vehicleId }));
+}
+
+/** Kimaradásgyanús menetek, mielőtt a hiányzó adatot kiszűrnénk. */
+function liveMissingRaw(engine: Engine, day: ServiceDay, now: number) {
   if (!engine.poll.lastOkAt || Date.now() - engine.poll.lastOkAt >= 120_000) return [];
   const nowS = now - localMidnightUnix(engine.today);
   const candidates: MissingCandidate[] = [];
@@ -135,7 +152,8 @@ export function disruptions(engine: Engine, predictor: VehiclePredictor, day: Se
 
   const kinds = new Map<string, DisruptionKind>();
   for (const id of engine.cancelled.ids) if (feed.trips.has(id)) kinds.set(id, "cancelled");
-  for (const m of liveMissing(engine, day, now)) if (!kinds.has(m.tripId)) kinds.set(m.tripId, "missing");
+  const live = liveMissingRaw(engine, day, now).filter((m) => !kinds.has(m.tripId));
+  const unseen: string[] = [];
 
   // Korábban ma: nem láttuk elindulni, pedig a vonal szomszédos meneteit igen.
   const ran = new Set<string>();
@@ -164,9 +182,13 @@ export function disruptions(engine: Engine, predictor: VehiclePredictor, day: Se
       const starts = startsByRoute.get(route) ?? [];
       const before = starts.some((s) => s < dep && dep - s <= MISSING.NEIGHBOUR_WINDOW_S);
       const after = starts.some((s) => s > dep && s - dep <= MISSING.NEIGHBOUR_WINDOW_S);
-      if (before && after) kinds.set(t.id, "unseen");
+      if (before && after) unseen.push(t.id);
     }
   }
+  // Együtt szűrjük: egy később igazolt néma menet a korábbi néma menetét is igazolja.
+  const quiet = quietTripIds([...live.map((m) => m.tripId), ...unseen], scheduledLegs(day), seenToday(engine));
+  for (const m of live) if (!quiet.has(m.tripId)) kinds.set(m.tripId, "missing");
+  for (const id of unseen) if (!quiet.has(id)) kinds.set(id, "unseen");
 
   // Pótló indulás: ugyanazon a vonalon, irányban, ugyanabból a megállóból a következő, ami nem esik ki.
   const departures = new Map<string, { tripId: string; dep: number }[]>();

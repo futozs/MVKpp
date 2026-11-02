@@ -24,7 +24,7 @@ import { getActiveRide, useActiveRide } from "@/lib/rides";
 import { NotificationsModal } from "@/components/notifications/NotificationsModal";
 import { AccountModal } from "@/components/account/AccountModal";
 import { useCloudBackup } from "@/hooks/useCloudBackup";
-import { FocusDock, isRailFocus } from "@/components/map/FocusDock";
+import { FocusDock } from "@/components/map/FocusDock";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { GeoProvider } from "@/context/GeoContext";
 import { initialView, saveView } from "@/lib/viewState";
@@ -452,7 +452,7 @@ export function App() {
                   monitoredStopIds={monitoredStopIds}
                   onToggleMonitorStop={handleToggleMonitorStop}
                   onSelectTileLayer={handleSelectTileLayer}
-                  dock={focusTripId && !activeRide ? (isRailFocus(focusTripId) ? "column" : "card") : null}
+                  dock={Boolean(focusTripId) && !activeRide}
                 />
 
                 {}

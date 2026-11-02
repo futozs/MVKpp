@@ -1,16 +1,14 @@
 import type { Stop } from "@/types";
 import { feedOfId } from "@/lib/modes";
 import { cn } from "@/lib/utils";
-import { TrainTimetable } from "./TrainTimetable";
+import { TripTimetable } from "./TripTimetable";
 import { VehicleFocusCard } from "./VehicleFocusCard";
-
-/** Követett vonat: asztalon a jobb oldali oszlop teljes magasságát kapja (a menetrend miatt). */
-export const isRailFocus = (tripId: string | null) => Boolean(tripId) && feedOfId(tripId!) === "rail";
 
 /**
  * A követett jármű panelje a térkép fölött: telefonon alul teljes szélességben, asztalon
- * jobb oldalt. Vonatnál a követés-kártya fölött a menetrend is ott van — asztalon az
- * oszlop teljes magasságáig nőhet, telefonon összecsukva a következő állomásokkal.
+ * jobb oldalt az oszlop teljes magasságában, a követés-kártya fölött a menet menetrendjével
+ * (hol tart, melyik a következő megálló). Telefonon csak vonatnál van menetrend, összecsukva
+ * a következő állomásokkal — a buszé, villamosé, Voláné ott a kártya marad.
  * A `data-map-cover` alapján tartja a térkép a követett járművet a látható rész közepén.
  */
 export function FocusDock({
@@ -26,17 +24,16 @@ export function FocusDock({
   onClose: () => void;
   followPaused: boolean;
 }) {
-  const rail = isRailFocus(tripId);
+  const rail = feedOfId(tripId) === "rail";
   return (
     <div
       data-map-cover=""
       className={cn(
         "pointer-events-none absolute inset-x-0 bottom-0 z-drawer flex flex-col",
-        "md:inset-x-auto md:bottom-4 md:right-4 md:w-[380px] md:gap-3",
-        rail && "md:top-4 md:justify-end",
+        "md:inset-x-auto md:bottom-4 md:right-4 md:top-4 md:w-[380px] md:justify-end md:gap-3",
       )}
     >
-      {rail ? <TrainTimetable key={tripId} tripId={tripId} className="pointer-events-auto" /> : null}
+      <TripTimetable key={tripId} tripId={tripId} className={cn("pointer-events-auto", !rail && "hidden md:flex")} />
       <VehicleFocusCard tripId={tripId} vehicleId={vehicleId} stops={stops} onClose={onClose} followPaused={followPaused} className="pointer-events-auto" />
     </div>
   );

@@ -7,6 +7,7 @@ import {
   feedFromFiles,
   feedOfId,
   findTrains,
+  findServiceTrip,
   findTrip,
   inRegion,
   isMvkId,
@@ -240,6 +241,15 @@ describe("vonat vonatszám és menetazonosító szerint", () => {
   it("Volán-menet és ismeretlen azonosító: nincs találat", () => {
     expect(findTrip(days, "hkir:hkir_3738_366-5")).toEqual([]);
     expect(findTrip(days, "1:nincs-ilyen")).toEqual([]);
+  });
+
+  it("bármely mód menete azonosító szerint (a követett busz menetrendje): a Volán-menet is megvan", () => {
+    const coach = findServiceTrip(days, "hkir:hkir_3738_366-5");
+    expect(coach).toHaveLength(1);
+    expect(coach[0]).toMatchObject({ tripId: "hkir:hkir_3738_366-5", dayIndex: 0 });
+    expect(coach[0].lastArrUnix).toBeGreaterThan(coach[0].firstDepUnix);
+    expect(findServiceTrip(days, "1:35051212")).toEqual(findTrip(days, "1:35051212"));
+    expect(findServiceTrip(days, "1:nincs-ilyen")).toEqual([]);
   });
 });
 

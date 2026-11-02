@@ -5,9 +5,11 @@
  */
 import {
   ALL_MODES,
+  findServiceTrip,
   findTrains,
   findTrip,
   isMvkId,
+  isRailTrip,
   modeOfRoute,
   nowUnix,
   operatorLabel,
@@ -156,6 +158,16 @@ export function registerTransit(r: Router, ctx: Ctx) {
     sendJson(req, res, 200, trainDetail(ctx, { no }), { "cache-control": "no-store" });
   });
 
+  /**
+   * Bármely mód menete megállónként (MVK busz / villamos, Volán, vasút) — a térképen
+   * követett jármű menetrendje, ugyanabban az alakban, mint a vonaté.
+   */
+  r.get("/engine/transit/trip", (req, res) => {
+    const trip = (req.query.get("trip") ?? "").trim();
+    if (!/^[\w:.-]{1,80}$/.test(trip)) throw new HttpError(400, "érvénytelen ?trip= (menetazonosító)");
+    sendJson(req, res, 200, trainDetail(ctx, { trip, anyMode: true }), { "cache-control": "no-store" });
+  });
+
   /** A Volán és a vasút hivatalos zavarai (késésok, kocsiösszeállítás, pótlóbusz, Telebusz). */
   r.get("/engine/transit/alerts", (req, res) => {
     const modes = parseModes(req.query.get("modes"), ALL_MODES);
@@ -236,11 +248,11 @@ function trainSummaries(ctx: Ctx, no: string) {
     });
 }
 
-function trainDetail(ctx: Ctx, by: { no: string } | { trip: string }) {
+function trainDetail(ctx: Ctx, by: { no: string } | { trip: string; anyMode?: boolean }) {
   const { engine, feeds } = ctx;
   const now = nowUnix();
   const days = feeds.arrivalDays(now);
-  const matches = "trip" in by ? findTrip(days, by.trip) : findTrains(days, by.no);
+  const matches = "trip" in by ? (by.anyMode ? findServiceTrip(days, by.trip) : findTrip(days, by.trip)) : findTrains(days, by.no);
   // a most futó, különben a következő, különben a mai utolsó
   const pick = matches.find((m) => m.firstDepUnix <= now && m.lastArrUnix + 600 >= now) ?? matches.find((m) => m.firstDepUnix > now) ?? matches[matches.length - 1] ?? null;
   if (!pick) return { no: "no" in by ? by.no : "", found: false, trips: [] as unknown[] };
@@ -252,6 +264,8 @@ function trainDetail(ctx: Ctx, by: { no: string } | { trip: string }) {
   const veh = isToday ? (engine.snapshot.vehicles.find((v) => v.tripId === t.id) ?? null) : null;
   const decoded = veh ? (engine.snapshot.decoded.find((v) => v.id === veh.id) ?? null) : null;
   const run = isToday ? (engine.todayRuns.get(t.id) ?? null) : null;
+  // a várható vágány csak a vasúté (a MÁV adja ki későn); a buszoké a menetrendi kocsiállás
+  const rail = isRailTrip(t);
   const stops: TrainStop[] = (f.tripStops.get(t.id) ?? []).map((x, i) => {
     const p = isToday ? engine.snapshot.predByStop.get(x.stopId)?.get(t.id) : undefined;
     const s = f.stops.get(x.stopId);
@@ -261,7 +275,7 @@ function trainDetail(ctx: Ctx, by: { no: string } | { trip: string }) {
     const livePlatform = isToday ? ctx.regionalRt.platform(t.id, x.stopId) : null;
     const schedPlatform = s?.platform ?? null;
     // még nincs kiadva: a korábbi napok szerinti várható vágány (a még el nem hagyott állomásokra)
-    const guessed = isToday && !livePlatform && !schedPlatform && !passed ? ctx.regionalRt.predictedPlatform(t.id, x.stopId) : null;
+    const guessed = rail && isToday && !livePlatform && !schedPlatform && !passed ? ctx.regionalRt.predictedPlatform(t.id, x.stopId) : null;
     return {
       id: x.stopId,
       name: s?.name ?? x.stopId,
@@ -295,7 +309,7 @@ function trainDetail(ctx: Ctx, by: { no: string } | { trip: string }) {
     liveDelaySec: run?.status === "running" ? engine.matcher.liveDelay(t.id, now) : null,
     officialDelaySec: decoded?.delaySec ?? null,
     notices: isToday ? ctx.regionalRt.noticeList(t.id) : [],
-    cancelled: isToday && ctx.regionalRt.cancelled.has(t.id),
+    cancelled: isToday && (ctx.regionalRt.cancelled.has(t.id) || engine.cancelled.ids.has(t.id)),
     others: matches.filter((m) => m !== pick).map((m) => ({ tripId: m.tripId, date: days[m.dayIndex].day.iso, departureUnix: m.firstDepUnix })),
   };
 }

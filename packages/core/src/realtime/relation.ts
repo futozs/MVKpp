@@ -9,7 +9,7 @@
  * Bármelyik feedre működik (MVK, Volán, vasút): a megálló lehet állomás is,
  * akkor a vágányai számítanak.
  */
-import type { Feed } from "../gtfs/feed.ts";
+import type { Feed, Trip } from "../gtfs/feed.ts";
 import type { ServiceDay } from "../gtfs/service.ts";
 import { hmOfUnix } from "../time.ts";
 import { modeOfRoute, operatorLabel, type TransitMode } from "../transit/modes.ts";
@@ -213,10 +213,18 @@ export function findTrains(days: DayCtx[], trainNo: string): TrainMatch[] {
  * közlekedik, az indulás szerint. Ugyanaz az azonosító ma és holnap is lehet.
  */
 export function findTrip(days: DayCtx[], tripId: string): TrainMatch[] {
+  return findServiceTrip(days, tripId, isRailTrip);
+}
+
+/**
+ * Bármely mód menete azonosító szerint (MVK, Volán, vasút) — a térképen követett jármű
+ * menetrendje. A `keep` szűri a menetet (a vonatos változat csak a vasútit engedi).
+ */
+export function findServiceTrip(days: DayCtx[], tripId: string, keep: (t: Trip) => boolean = () => true): TrainMatch[] {
   const out: TrainMatch[] = [];
   days.forEach((dc, di) => {
     const t = dc.day.feed.trips.get(tripId);
-    if (!t || !isRailTrip(t) || !dc.day.services.has(t.serviceId)) return;
+    if (!t || !keep(t) || !dc.day.services.has(t.serviceId)) return;
     const st = dc.day.feed.tripStops.get(tripId);
     if (!st?.length) return;
     out.push({ tripId, dayIndex: di, firstDepUnix: dc.midnightUnix + st[0].dep, lastArrUnix: dc.midnightUnix + st[st.length - 1].arr });
