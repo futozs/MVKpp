@@ -213,6 +213,65 @@
   color: hsl(var(--muted-foreground)) !important;
 }
 
+/* 3D térkép (MapLibre): a járműcsempe ugyanaz, a buborék a Leafletével egyezik */
+.mvk-map3d {
+  background: hsl(var(--background));
+  font-family: var(--font-sans);
+}
+.mvk-map3d .mvk-v3d {
+  cursor: pointer;
+}
+.mvk-map3d .mvk-v3d-static {
+  pointer-events: none;
+}
+/* a buborék a csempék fölött (a jelölők z-indexe 1–20) */
+.mvk-map3d .maplibregl-popup {
+  z-index: 30;
+}
+.mvk-map3d .maplibregl-popup.mvk-popup .maplibregl-popup-content,
+.mvk-map3d .maplibregl-popup.mvk-tip .maplibregl-popup-content {
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-xl);
+  padding: 14px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.mvk-map3d .maplibregl-popup.mvk-tip .maplibregl-popup-content {
+  border-radius: calc(var(--radius) - 2px);
+  box-shadow: var(--shadow-lg);
+  padding: 6px 9px;
+  font-size: 12px;
+}
+.mvk-map3d .maplibregl-popup.mvk-popup .maplibregl-popup-close-button {
+  color: hsl(var(--muted-foreground));
+  font-size: 18px;
+  padding: 2px 8px;
+  border-radius: 0 var(--radius) 0 8px;
+}
+.mvk-map3d .maplibregl-popup.mvk-popup .maplibregl-popup-close-button:hover {
+  color: hsl(var(--foreground));
+  background: transparent;
+}
+.mvk-map3d .maplibregl-popup-anchor-bottom .maplibregl-popup-tip,
+.mvk-map3d .maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,
+.mvk-map3d .maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip {
+  border-top-color: hsl(var(--popover));
+}
+.mvk-map3d .maplibregl-popup-anchor-top .maplibregl-popup-tip,
+.mvk-map3d .maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
+.mvk-map3d .maplibregl-popup-anchor-top-right .maplibregl-popup-tip {
+  border-bottom-color: hsl(var(--popover));
+}
+.mvk-map3d .maplibregl-popup-anchor-left .maplibregl-popup-tip {
+  border-right-color: hsl(var(--popover));
+}
+.mvk-map3d .maplibregl-popup-anchor-right .maplibregl-popup-tip {
+  border-left-color: hsl(var(--popover));
+}
+
 .edge-fade-x {
   -webkit-mask-image: linear-gradient(
     to right,

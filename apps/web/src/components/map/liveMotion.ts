@@ -53,7 +53,8 @@ export function shapeFor(id: string): Shape | null {
   return null;
 }
 
-function pointAt(shape: Shape, along: number): [number, number] {
+/** A nyomvonal pontja `along` méternél ([lat, lon]). */
+export function pointAt(shape: Shape, along: number): [number, number] {
   const { pts, cum } = shape;
   if (along <= 0) return pts[0];
   const last = cum.length - 1;

@@ -1,4 +1,6 @@
 import React, {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -8,6 +10,7 @@ import React, {
 import L from "leaflet";
 import {
   ArrowLeft,
+  Box,
   Crosshair,
   History,
   LocateFixed,
@@ -17,18 +20,20 @@ import {
   X,
 } from "lucide-react";
 import type { FilterState, LiveMotion, LiveVehicle, Route, Stop, TripPathResponse } from "@/types";
-import { api } from "@/services/api";
 import { useGeo } from "@/context/GeoContext";
 import { distanceKm, nearest } from "@/lib/geo";
 import { initialMapView, saveMapView } from "@/lib/viewState";
 import { token } from "@/lib/theme";
 import { cn, normalizeSearchText } from "@/lib/utils";
 import { MapTimeline } from "./MapTimeline";
-import { createVehicleIcon, escapeHtml, safeHex, type VehicleIconOptions } from "./vehicleIcon";
+import { createVehicleIcon, escapeHtml, vehicleIconHtml, vehicleIdText, type VehicleIconOptions } from "./vehicleIcon";
 import { estimatePosition, type Shown } from "./liveMotion";
 import { trafficColor } from "./trafficColor";
-import { API_BASE } from "@/lib/apiBase";
-import { boardVehicle } from "@/components/ride/RideLayer";
+import { trafficPopupHtml, useLiveTraffic } from "./liveTraffic";
+import { useRouteShapes } from "./useRouteShapes";
+import { vehiclePopupHtml, wireVehiclePopup } from "./vehiclePopup";
+import { coveredBottom, coveredRight } from "./mapCover";
+import { api } from "@/services/api";
 import { serverNow } from "@/lib/realtime";
 import { getActiveRide } from "@/lib/rides";
 import type { GeoPosition } from "@/hooks/useGeolocation";
@@ -38,38 +43,19 @@ import { MapLayersControl } from "./controls/MapLayersControl";
 import { MapSearch } from "./controls/MapSearch";
 import { NewsButton } from "@/components/news/NewsButton";
 import { FilterPanel } from "./filter/FilterPanel";
-import { activeFilterCount, filterSummary, matchesModeFilters, MAX_WATCHED, vehicleDelay } from "./filter/filterState";
-import { displayVehicleId, isRegionalId, vehicleModeOf } from "@/lib/modes";
+import { activeFilterCount, filterSummary, matchesModeFilters, MAX_WATCHED } from "./filter/filterState";
+import { isRegionalId, vehicleModeOf } from "@/lib/modes";
+import type { Focus3D, Map3DHandle, Map3DView } from "./map3d/Map3D";
 
-/** a forgalom-réteg frissítése (ms) */
-const TRAFFIC_POLL_MS = 30_000;
-
-type TrafficSegment = { from: string; to: string; routes: string[]; path: [number, number][]; ratio: number; excessS: number; n: number; stuck: number; level: number; lastTs: number };
-
-/** A dugó-szakasz buborékja: mennyire lassú, és miből tudjuk. */
-function trafficPopupHtml(seg: TrafficSegment): string {
-  const mins = Math.floor(seg.excessS / 60);
-  const secs = String(seg.excessS % 60).padStart(2, "0");
-  const ago = Math.max(0, Math.round((serverNow() - seg.lastTs) / 60));
-  const evidence = [seg.n ? `${seg.n} átért busz` : "", seg.stuck ? `${seg.stuck} most bent ragadt` : ""].filter(Boolean).join(", ");
-  const level = seg.level >= 0.75 ? "Beállt" : seg.level >= 0.4 ? "Torlódik" : "Lassul";
-  return `
-    <div style="min-width:200px">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-        <span style="width:10px;height:10px;border-radius:999px;background:${trafficColor(seg.level)}"></span>
-        <strong style="font-size:13px">${level} a forgalom</strong>
-      </div>
-      <div style="font-size:12.5px;font-weight:600">${escapeHtml(seg.from)} → ${escapeHtml(seg.to)}</div>
-      <div style="margin-top:4px;font-size:12px;color:hsl(var(--muted-foreground))">
-        <b style="color:hsl(var(--foreground));font-family:var(--font-mono)">${String(seg.ratio).replace(".", ",")}×</b> lassabb a szokásosnál
-        (<span style="font-family:var(--font-mono)">+${mins}:${secs}</span>)
-      </div>
-      <div style="margin-top:4px;font-size:11px;color:hsl(var(--muted-foreground))">${escapeHtml(evidence)} · ${ago ? `${ago} perce` : "most"} · ${escapeHtml(seg.routes.slice(0, 6).join(", "))}</div>
-    </div>`;
-}
+/** A 3D térkép (MapLibre) csak bekapcsoláskor töltődik le — a 2D nézet ebből semmit nem visz. */
+const Map3D = lazy(() => import("./map3d/Map3D").then((m) => ({ default: m.Map3D })));
 
 /** a szűrőpanel nyitott állapota asztalon (eszközönként) */
 const PANEL_KEY = "mvk_map_panel";
+/** a 3D nézet bekapcsolva (eszközönként) */
+const MAP_3D_KEY = "mvk_map_3d";
+/** ha a 3D nem indult el, ennyi ideig látszik a magyarázat (ms) */
+const MAP_3D_ERROR_MS = 6000;
 
 /** A csempék forrásmegjelölése (a licenc kéri; kicsiben, a térkép alján). */
 const TILE_CREDIT: Record<string, { text: string; href: string }> = {
@@ -79,8 +65,17 @@ const TILE_CREDIT: Record<string, { text: string; href: string }> = {
   satellite: { text: "© Esri, Maxar, Earthstar Geographics", href: "https://www.esri.com/" },
   topo: { text: "© OpenTopoMap (CC-BY-SA), OpenStreetMap", href: "https://opentopomap.org" },
 };
+/** 3D-ben: OpenFreeMap vektorcsempék (OpenMapTiles séma, OSM-adat), terep: Mapzen / AWS Open Data */
+const CREDIT_3D = { text: "© OpenFreeMap, OpenMapTiles, OpenStreetMap · terep: Mapzen", href: "https://openfreemap.org" };
+const CREDIT_3D_SATELLITE = { text: "© Esri, Maxar · OpenFreeMap, OpenStreetMap · terep: Mapzen", href: "https://openfreemap.org" };
 
 const MAX_MAP_ZOOM = 19;
+/** nincs kiválasztott vonal (állandó, hogy a nyomvonal-hook ne fusson újra) */
+const NO_ROUTES: string[] = [];
+const NO_VEHICLES: LiveVehicle[] = [];
+const NO_STOPS: Stop[] = [];
+/** Miskolc belváros, ha még nincs mentett nézet */
+const DEFAULT_VIEW: Map3DView = { lat: 48.104, lon: 20.79, zoom: 13 };
 
 const layerConf = (id: string) =>
   TILE_LAYERS.find((l) => l.id === id) || TILE_LAYERS[0];
@@ -180,37 +175,6 @@ const FOCUS_RECENTER_MS = 450;
 /** ennél nagyobb eltérésnél a térkép odacsúszik a buszhoz, nem ugrik (px) */
 const FOCUS_GLIDE_PX = 40;
 
-/**
- * A térkép alját teljes szélességben takaró panel (követett jármű, utazás —
- * `data-map-cover`) magassága: telefonon ezek alatt nem látszana a busz útja.
- */
-function coveredBottom(container: HTMLElement): number {
-  const box = container.getBoundingClientRect();
-  let covered = 0;
-  for (const el of document.querySelectorAll<HTMLElement>("[data-map-cover]")) {
-    const r = el.getBoundingClientRect();
-    if (r.width < box.width * 0.6 || r.top >= box.bottom || r.bottom < box.bottom - 4) continue;
-    covered = Math.max(covered, box.bottom - r.top);
-  }
-  // (a lenyitott vonat-menetrend telefonon a térkép nagyobb részét is takarhatja)
-  return Math.min(covered, box.height * 0.8);
-}
-
-/**
- * Asztalon a jobb szélen a térkép magasságának nagy részét takaró oszlop (a követett
- * vonat menetrendje a kártyával) szélessége: a vonat a mellette maradó rész közepén legyen.
- */
-function coveredRight(container: HTMLElement): number {
-  const box = container.getBoundingClientRect();
-  let covered = 0;
-  for (const el of document.querySelectorAll<HTMLElement>("[data-map-cover]")) {
-    const r = el.getBoundingClientRect();
-    if (r.width >= box.width * 0.6 || r.height < box.height * 0.6 || r.right < box.right - 24) continue;
-    covered = Math.max(covered, box.right - r.left);
-  }
-  return Math.min(covered, box.width * 0.5);
-}
-
 /** Mennyit kell a térképnek elmozdulnia, hogy a busz a látható rész közepén legyen (px). */
 function offsetToFollow(map: L.Map, pos: L.LatLng): L.Point {
   const size = map.getSize();
@@ -225,55 +189,6 @@ function zoomAroundCenter(map: L.Map, on: boolean) {
   map.options.touchZoom = mode;
   map.options.scrollWheelZoom = mode;
   map.options.doubleClickZoom = mode;
-}
-
-/** A jármű buborékja (megnyitáskor készül, így mindig a friss adatot mutatja). */
-function vehiclePopupHtml(raw: LiveVehicle, actions = true): string {
-  // A feed szövegei HTML-be kerülnek: escape-elve (egy „<” vagy „&” a célállomásban ne törje szét).
-  const v = {
-    ...raw,
-    routeShort: escapeHtml(raw.routeShort ?? ""),
-    headsign: escapeHtml(raw.headsign ?? ""),
-    id: escapeHtml(raw.id),
-    tripId: raw.tripId ? escapeHtml(raw.tripId) : raw.tripId,
-    routeColor: safeHex(raw.routeColor, "1FB574"),
-    routeText: safeHex(raw.routeText, "FFFFFF"),
-  };
-  const speed = v.speed != null ? `${Math.round(v.speed * 3.6)} km/h` : "—";
-  const rail = raw.mode === "rail";
-  // vonatnál a vonatszám (és a név), máshol a rendszám — a Volán-azonosító előtag nélkül
-  const idTitle = rail ? "Vonat" : "Rendszám";
-  const idText = rail ? escapeHtml(`${raw.trainNo ?? ""}${raw.trainName ? ` ${raw.trainName}` : ""}`.trim() || "—") : escapeHtml(displayVehicleId(raw.id, raw.plate));
-  const delay = vehicleDelay(raw);
-  const delayText =
-    delay == null ? null : Math.abs(delay) < 60 ? "pontos" : `${delay > 0 ? "+" : "−"}${Math.round(Math.abs(delay) / 60)} perc${raw.delaySec != null && raw.mode !== "bus" && raw.mode !== "tram" ? " (MÁV)" : ""}`;
-  return `
-        <div style="min-width:210px">
-          <div style="display:flex;align-items:center;gap:9px;margin-bottom:10px">
-            <span style="display:inline-flex;align-items:center;justify-content:center;min-width:40px;height:26px;padding:0 8px;border-radius:${rail ? "999px" : "8px"};font-weight:800;font-size:14px;background:#${v.routeColor || "1FB574"};color:#${v.routeText || "FFFFFF"}">${v.routeShort}</span>
-            <strong style="font-size:13px">${v.headsign || "Járat"}</strong>
-          </div>
-          <div style="border-radius:10px;background:hsl(var(--primary)/0.09);border:1px solid hsl(var(--primary)/0.25);padding:9px 11px;margin-bottom:8px">
-            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:hsl(var(--muted-foreground))">${idTitle}</div>
-            <div style="font-family:var(--font-mono);font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;color:hsl(var(--foreground))">${idText}</div>
-          </div>
-          <div style="font-family:var(--font-mono);font-size:12px;color:hsl(var(--muted-foreground));display:grid;gap:3px">
-            <div>Sebesség <strong style="color:hsl(var(--foreground))">${speed}</strong></div>
-            ${delayText ? `<div>Késés <strong style="color:hsl(var(--foreground))">${delayText}</strong></div>` : ""}
-            ${raw.estimated ? `<div>Helyzet <strong style="color:hsl(var(--foreground))">menetrendből becsült</strong></div>` : ""}
-          </div>
-          ${
-            v.tripId && actions
-              ? `<div style="margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:6px">
-                   <a href="#" data-trip="${v.tripId}" data-veh="${v.id}"
-                      style="display:block;text-align:center;padding:8px 6px;border-radius:8px;border:1px solid hsl(var(--border));background:hsl(var(--secondary));color:hsl(var(--foreground));font-size:12px;font-weight:700;text-decoration:none">Követés</a>
-                   <a href="#" data-board="${v.tripId}" data-veh="${v.id}"
-                      style="display:block;text-align:center;padding:8px 6px;border-radius:8px;background:hsl(var(--primary));color:hsl(var(--primary-foreground));font-size:12px;font-weight:700;text-decoration:none">Felszálltam</a>
-                 </div>`
-              : ""
-          }
-        </div>
-      `;
 }
 
 export function TransitMap({
@@ -310,7 +225,6 @@ export function TransitMap({
   const followRef = useRef<FollowState>({ paused: false, centered: false, zooming: false, holdUntil: 0 });
   const [focusPath, setFocusPath] = useState<TripPathResponse | null>(null);
   const [followPaused, setFollowPaused] = useState(false);
-  const geoCacheRef = useRef<Record<string, [number, number][][]>>({});
   const lastFocusKeyRef = useRef<string>("");
   /**
    * A Volán-megállók (a megyében ~3500) csak közelről és csak a látott részen kerülnek
@@ -348,9 +262,77 @@ export function TransitMap({
   const [searchOpen, setSearchOpen] = useState(false);
   const [timelineInset, setTimelineInset] = useState(0);
 
+  // 3D nézet (eszközönként megjegyezve). Közben a Leaflet-térkép láthatatlanul a helyén marad.
+  const [is3d, setIs3dState] = useState(() => {
+    try {
+      return localStorage.getItem(MAP_3D_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const is3dRef = useRef(is3d);
+  is3dRef.current = is3d;
+  const map3dRef = useRef<Map3DHandle | null>(null);
+  /** a 3D térkép kezdő nézete (bekapcsoláskor a 2D-é) */
+  const [initial3dView, setInitial3dView] = useState<Map3DView | null>(null);
+
+  const setIs3d = (on: boolean) => {
+    setIs3dState(on);
+    try {
+      localStorage.setItem(MAP_3D_KEY, on ? "1" : "0");
+    } catch {
+      /* privát mód */
+    }
+  };
+
+  /** 2D ↔ 3D: a nézet (középpont, nagyítás) átjön, a követés újra középre áll. */
+  const switch3d = async (on: boolean) => {
+    const leaflet = mapRef.current;
+    if (on) {
+      const c = leaflet?.getCenter();
+      setInitial3dView(c ? { lat: c.lat, lon: c.lng, zoom: leaflet!.getZoom() } : null);
+    } else {
+      await map3dRef.current?.flatten();
+      const v = map3dRef.current?.view();
+      if (v && leaflet) leaflet.setView([v.lat, v.lon], Math.round(v.zoom), { animate: false });
+    }
+    followRef.current = { ...followRef.current, paused: false, centered: false };
+    setFollowPaused(false);
+    setIs3d(on);
+  };
+
+  /** A 3D nem indult el (nincs WebGL, nem jött le az alaptérkép): marad a 2D, és pár másodpercig megmondjuk, miért. */
+  const [map3dError, setMap3dError] = useState(false);
+  const on3dFail = useCallback(() => {
+    setIs3d(false);
+    setMap3dError(true);
+  }, []);
+  useEffect(() => {
+    if (!map3dError) return;
+    const t = setTimeout(() => setMap3dError(false), MAP_3D_ERROR_MS);
+    return () => clearTimeout(t);
+  }, [map3dError]);
+
+  const on3dView = useCallback((v: Map3DView) => saveMapView({ lat: v.lat, lon: v.lon, zoom: v.zoom }), []);
+
+  /** A kamera mozdulatai abba a térképbe mennek, amelyik épp látszik (a nagyítás a 2D skáláján). */
+  const camera = {
+    zoom: () => (is3dRef.current ? (map3dRef.current?.view()?.zoom ?? mapRef.current?.getZoom() ?? 13) : (mapRef.current?.getZoom() ?? 13)),
+    flyTo: (lat: number, lon: number, zoom: number, duration = 0.7) => {
+      if (is3dRef.current) map3dRef.current?.flyTo(lat, lon, zoom);
+      else mapRef.current?.flyTo([lat, lon], zoom, { duration });
+    },
+    fitBounds: (points: [number, number][], maxZoom: number, padding = 60) => {
+      if (is3dRef.current) map3dRef.current?.fitBounds(points, maxZoom);
+      else mapRef.current?.fitBounds(points, { padding: [padding, padding], maxZoom });
+    },
+  };
+
   const openHistory = () => {
     if (focusTripId) onExitFocus();
     setPanelOpen(false);
+    // az idővonal a 2D térképen játszik
+    if (is3dRef.current) void switch3d(false);
     setHistoryOn(true);
   };
 
@@ -520,17 +502,17 @@ export function TransitMap({
         hit.item.lat != null &&
         hit.item.lon != null
       ) {
-        map.fitBounds(
-          [
-            [lat, lon],
-            [hit.item.lat, hit.item.lon],
-          ],
-          { padding: [80, 80], maxZoom: CLOSE_ZOOM, animate },
-        );
+        const both: [number, number][] = [
+          [lat, lon],
+          [hit.item.lat, hit.item.lon],
+        ];
+        if (is3dRef.current) camera.fitBounds(both, CLOSE_ZOOM);
+        else map.fitBounds(both, { padding: [80, 80], maxZoom: CLOSE_ZOOM, animate });
         return;
       }
 
-      if (animate) map.flyTo([lat, lon], ME_ZOOM, { duration: 0.6 });
+      if (is3dRef.current) camera.flyTo(lat, lon, ME_ZOOM);
+      else if (animate) map.flyTo([lat, lon], ME_ZOOM, { duration: 0.6 });
       else map.setView([lat, lon], ME_ZOOM);
     },
     [geo.position, stops],
@@ -571,89 +553,42 @@ export function TransitMap({
     autoZoomRef.current = "done";
   }, [geo.position, geo.isStale, stops, focusTripId, focusOnMe]);
 
+  // A kiválasztott vonalak nyomvonala (a letöltés közben kikapcsolt vonal nem marad kint).
+  const routeShapes = useRouteShapes(filters.shape ? filters.routes : NO_ROUTES);
+  const routeLines = useMemo(
+    () => [...routeShapes].map(([id, lines]) => ({ color: `#${routes[id]?.color || "1FB574"}`, lines })),
+    [routeShapes, routes],
+  );
+
   useEffect(() => {
-    if (!mapRef.current || !routeLayerRef.current) return;
     const layer = routeLayerRef.current;
+    if (!mapRef.current || !layer) return;
     layer.clearLayers();
-    if (!filters.shape || filters.routes.length === 0) return;
-
-    // Ha a nyomvonal letöltése közben a szűrés változott, a régi kör ne rajzoljon
-    // (különben egy közben kikapcsolt vonal nyomvonala ottmaradna).
-    let alive = true;
-    const render = async () => {
-      const missing = filters.routes.filter((id) => !geoCacheRef.current[id]);
-      if (missing.length > 0) {
-        try {
-          const res = await api.getRouteGeo(missing);
-          res.routes.forEach((r) => {
-            geoCacheRef.current[r.id] = r.shapes;
-          });
-        } catch {}
+    const halo = token("--background");
+    for (const { color, lines } of routeLines) {
+      for (const line of lines) {
+        L.polyline(line, { color: halo, weight: 6, opacity: 0.55, interactive: false }).addTo(layer);
+        L.polyline(line, { color, weight: 3, opacity: 0.95, interactive: false }).addTo(layer);
       }
-      if (!alive) return;
-
-      const halo = token("--background");
-      filters.routes.forEach((id) => {
-        const shapes = geoCacheRef.current[id];
-        if (!shapes) return;
-        const color = `#${routes[id]?.color || "1FB574"}`;
-        shapes.forEach((line) => {
-          L.polyline(line, {
-            color: halo,
-            weight: 6,
-            opacity: 0.55,
-            interactive: false,
-          }).addTo(layer);
-          L.polyline(line, {
-            color,
-            weight: 3,
-            opacity: 0.95,
-            interactive: false,
-          }).addTo(layer);
-        });
-      });
-    };
-
-    render();
-    return () => {
-      alive = false;
-    };
-  }, [filters.routes, filters.shape, routes]);
+    }
+  }, [routeLines]);
 
   // Élő forgalom: a most torlódott szakaszok citromsárgától sötétvörösig (félpercenként frissül).
+  const traffic = useLiveTraffic(filters.traffic && !historyOn);
   useEffect(() => {
     const layer = trafficLayerRef.current;
     if (!layer) return;
     layer.clearLayers();
-    if (!filters.traffic || historyOn) return;
-    let alive = true;
-    const draw = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/engine/traffic/live`, { cache: "no-store" });
-        if (!res.ok || !alive) return;
-        const data = (await res.json()) as { segments: TrafficSegment[] };
-        if (!alive) return;
-        layer.clearLayers();
-        const halo = token("--background");
-        for (const seg of data.segments) {
-          const color = trafficColor(seg.level);
-          const weight = 5 + Math.round(seg.level * 3);
-          L.polyline(seg.path, { color: halo, weight: weight + 4, opacity: 0.55, interactive: false, lineCap: "round" }).addTo(layer);
-          L.polyline(seg.path, { color, weight, opacity: 0.95, lineCap: "round", lineJoin: "round" })
-            .bindPopup(() => trafficPopupHtml(seg))
-            .addTo(layer);
-        }
-      } catch {
-        /* a következő kör újrapróbálja */
-      }
-    };
-    void draw();
-    const t = setInterval(draw, TRAFFIC_POLL_MS);
-    return () => {
-      alive = false;
-      clearInterval(t);
-    };
-  }, [filters.traffic, historyOn]);
+    const halo = token("--background");
+    for (const seg of traffic) {
+      const color = trafficColor(seg.level);
+      const weight = 5 + Math.round(seg.level * 3);
+      L.polyline(seg.path, { color: halo, weight: weight + 4, opacity: 0.55, interactive: false, lineCap: "round" }).addTo(layer);
+      L.polyline(seg.path, { color, weight, opacity: 0.95, lineCap: "round", lineJoin: "round" })
+        .bindPopup(() => trafficPopupHtml(seg))
+        .addTo(layer);
+    }
+  }, [traffic]);
 
   useEffect(() => {
     if (!mapRef.current || !stopLayerRef.current) return;
@@ -722,11 +657,7 @@ export function TransitMap({
     if (!mapRef.current || !selectedStopId) return;
     const stop = stops.find((s) => s.id === selectedStopId);
     if (!stop) return;
-    mapRef.current.flyTo(
-      [stop.lat, stop.lon],
-      Math.max(mapRef.current.getZoom(), CLOSE_ZOOM),
-      { duration: 0.7 },
-    );
+    camera.flyTo(stop.lat, stop.lon, Math.max(camera.zoom(), CLOSE_ZOOM));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedStopId]);
 
@@ -735,7 +666,8 @@ export function TransitMap({
     const layer = busLayerRef.current;
     const live = liveMarkersRef.current;
     // Követés közben (utazáskor is) a többi busz halványan látszik — kikapcsolható a Térkép rétegeinél.
-    if (historyOn || (focusTripId && !filters.others)) {
+    // 3D-ben a járműveket a 3D térkép rajzolja.
+    if (historyOn || is3d || (focusTripId && !filters.others)) {
       layer.clearLayers();
       live.clear();
       return;
@@ -766,7 +698,7 @@ export function TransitMap({
           v.routeColor || "1FB574",
           v.routeText || "FFFFFF",
           tracked,
-          showId ? (mode === "rail" ? (v.trainNo ?? v.trainName ?? null) : displayVehicleId(v.id, v.plate)) : null,
+          showId ? vehicleIdText(v, mode) : null,
           { mode, estimated: v.estimated },
         );
 
@@ -792,25 +724,8 @@ export function TransitMap({
       const created: LiveMarker = { marker, iconKey, v, shown: undefined };
       // Utazás közben a többi busz csak nézelődésre való: se követésre váltás, se felszállás róla.
       marker.bindPopup(() => vehiclePopupHtml(created.v, !getActiveRide()));
-      marker.on("popupopen", (e) => {
-        const el = e.popup.getElement();
-        const follow = el?.querySelector("a[data-trip]");
-        follow?.addEventListener("click", (ev) => {
-          ev.preventDefault();
-          const tId = follow.getAttribute("data-trip");
-          const vId = follow.getAttribute("data-veh");
-          if (tId) onFocusTrip(tId, vId || undefined);
-        });
-        // Felszállás egyből a buborékból: az utazás indul, a térkép a buszt követi.
-        const board = el?.querySelector("a[data-board]");
-        board?.addEventListener("click", (ev) => {
-          ev.preventDefault();
-          const cur = created.v;
-          if (!cur.tripId) return;
-          boardVehicle({ tripId: cur.tripId, vehicleId: cur.id, route: cur.routeShort, color: cur.routeColor, text: cur.routeText, headsign: cur.headsign }, "manual");
-          marker.closePopup();
-        });
-      });
+      // Követés vagy felszállás egyből a buborékból: az utazás indul, a térkép a buszt követi.
+      marker.on("popupopen", (e) => wireVehiclePopup(e.popup.getElement(), () => created.v, onFocusTrip, () => marker.closePopup()));
       marker.addTo(layer);
       live.set(v.id, created);
     });
@@ -820,37 +735,29 @@ export function TransitMap({
       layer.removeLayer(entry.marker);
       live.delete(id);
     }
+  }, [vehicles, filters, focusTripId, focusVehicleId, historyOn, is3d, routes, onFocusTrip]);
 
-    // Követés közben a térkép a buszé: a figyelt rendszámokra nem ugrunk el.
-    if (!focusTripId && (filters.watch.length > 0 || activeQ)) {
-      const key = `${filters.watch.join(",")}|${activeQ}`;
-      if (
-        visible.length > 0 &&
-        (filters.follow || key !== lastFocusKeyRef.current)
-      ) {
-        const points = visible
-          .filter((v) => v.lat != null && v.lon != null)
-          .map((v) => [v.lat!, v.lon!] as [number, number]);
-
-        if (points.length === 1 && mapRef.current) {
-          mapRef.current.flyTo(
-            points[0],
-            Math.max(mapRef.current.getZoom(), 15),
-            { duration: 0.6 },
-          );
-        } else if (points.length > 1 && mapRef.current) {
-          mapRef.current.fitBounds(points, { padding: [60, 60], maxZoom: 16 });
-        }
-      }
-      lastFocusKeyRef.current = key;
+  // A figyelt rendszámokra (keresésre) a térkép odaugrik — követés közben nem: a térkép a buszé.
+  useEffect(() => {
+    if (historyOn || !mapRef.current) return;
+    const activeQ = filters.vq.trim().toLowerCase();
+    if (focusTripId || (filters.watch.length === 0 && !activeQ)) return;
+    const key = `${filters.watch.join(",")}|${activeQ}`;
+    const visible = getVisibleVehicles();
+    if (visible.length > 0 && (filters.follow || key !== lastFocusKeyRef.current)) {
+      const points = visible.filter((v) => v.lat != null && v.lon != null).map((v) => [v.lat!, v.lon!] as [number, number]);
+      if (points.length === 1) camera.flyTo(points[0][0], points[0][1], Math.max(camera.zoom(), 15), 0.6);
+      else if (points.length > 1) camera.fitBounds(points, 16);
     }
-  }, [vehicles, filters, focusTripId, focusVehicleId, historyOn, routes, onFocusTrip]);
+    lastFocusKeyRef.current = key;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vehicles, filters, focusTripId, historyOn]);
 
   // Élő becslés: negyed másodpercenként a nyomvonalon továbbvisszük a buszokat
   // (a szakasz szokásos sebességével, legfeljebb a következő megállóig) —
   // követéskor a követett buszt is, és a térkép vele együtt halad.
   useEffect(() => {
-    if (historyOn) return;
+    if (historyOn || is3d) return;
     const follow = (pos: L.LatLng) => {
       const map = mapRef.current;
       const st = followRef.current;
@@ -906,7 +813,7 @@ export function TransitMap({
     tick();
     const t = setInterval(tick, MOTION_TICK_MS);
     return () => clearInterval(t);
-  }, [historyOn]);
+  }, [historyOn, is3d]);
 
   // Menetkövetés: a nyomvonal egyszer rajzolódik ki; a buszt az élő adatfolyam
   // frissíti (lent), és a fenti becslés mozgatja folyamatosan.
@@ -957,7 +864,7 @@ export function TransitMap({
     const id = live?.id ?? last?.id ?? focusVehicleId;
     const iconOpts: VehicleIconOptions = live ? { mode: vehicleModeOf(live, routes[live.routeId]?.type), estimated: live.estimated } : {};
     // a követett vonat címkéje a vonatszám (a csempén csak a kategória)
-    const shownId = id ? (iconOpts.mode === "rail" ? (live?.trainNo ?? live?.trainName ?? null) : displayVehicleId(id, live?.plate)) : null;
+    const shownId = id ? vehicleIdText({ id, plate: live?.plate, trainNo: live?.trainNo, trainName: live?.trainName }, iconOpts.mode) : null;
     const iconKey = `${route}|${color}|${text}|${id}|${iconOpts.mode ?? ""}|${shownId ?? ""}`;
     const motion = live?.motion ?? null;
 
@@ -1020,6 +927,10 @@ export function TransitMap({
     const st = followRef.current;
     st.paused = false;
     setFollowPaused(false);
+    if (is3dRef.current) {
+      map3dRef.current?.resumeFollow();
+      return;
+    }
     const f = focusMarkerRef.current;
     if (!f || !mapRef.current) return;
     st.holdUntil = performance.now() + FOCUS_RECENTER_MS;
@@ -1046,24 +957,86 @@ export function TransitMap({
       onFocusTrip(v.tripId, v.id);
       return;
     }
-    if (v.lat != null && v.lon != null && mapRef.current) {
-      mapRef.current.flyTo([v.lat, v.lon], 16, { duration: 0.5 });
-    }
+    if (v.lat != null && v.lon != null) camera.flyTo(v.lat, v.lon, 16, 0.5);
   };
 
   const activeFilters = activeFilterCount(filters);
   const summary = activeFilters ? filterSummary(filters, routes, vehicleResults.length) : "";
-  const credit = TILE_CREDIT[tileLayerId] ?? TILE_CREDIT.osm;
+  const credit = is3d ? (tileLayerId === "satellite" ? CREDIT_3D_SATELLITE : CREDIT_3D) : (TILE_CREDIT[tileLayerId] ?? TILE_CREDIT.osm);
 
   const pickStop = (stop: Stop) => {
-    mapRef.current?.flyTo([stop.lat, stop.lon], Math.max(mapRef.current.getZoom(), CLOSE_ZOOM), { duration: 0.7 });
+    camera.flyTo(stop.lat, stop.lon, Math.max(camera.zoom(), CLOSE_ZOOM));
     onSelectStop(stop.id);
   };
+
+  // A 3D térkép adatai: ugyanaz, amit a 2D rajzol (a látható járművek, a követett menet, a megállók).
+  const isFocused = (v: LiveVehicle) => Boolean(focusTripId) && (focusVehicleId ? v.id === focusVehicleId : v.tripId === focusTripId);
+  const others3d = useMemo(
+    () => (!is3d || historyOn || (focusTripId && !filters.others) ? NO_VEHICLES : vehicleResults.filter((v) => !isFocused(v))),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [is3d, historyOn, vehicleResults, focusTripId, focusVehicleId, filters.others],
+  );
+  const focusLive = focusTripId ? (vehicles.find((v) => isFocused(v) && v.lat != null && v.lon != null) ?? null) : null;
+  const focus3d = useMemo<Focus3D | null>(() => {
+    if (!is3d || !focusTripId) return null;
+    const last = focusPath?.vehicle ?? null;
+    const mode = focusLive ? vehicleModeOf(focusLive, routes[focusLive.routeId]?.type) : undefined;
+    const id = focusLive?.id ?? last?.id ?? focusVehicleId;
+    const shownId = id ? vehicleIdText({ id, plate: focusLive?.plate, trainNo: focusLive?.trainNo, trainName: focusLive?.trainName }, mode) : null;
+    const color = focusLive?.routeColor || focusPath?.color || "1FB574";
+    return {
+      key: `${focusTripId}|${focusVehicleId ?? ""}`,
+      shape: focusPath?.shape?.length ? focusPath.shape : null,
+      color,
+      html: vehicleIconHtml(focusLive?.routeShort || focusPath?.route || "?", color, focusLive?.routeText || focusPath?.text || "FFFFFF", true, shownId, { mode, estimated: focusLive?.estimated }),
+      vehicle: focusLive ?? (last && last.lat != null && last.lon != null ? { id: last.id, lat: last.lat, lon: last.lon, motion: null } : null),
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [is3d, focusTripId, focusVehicleId, focusPath, focusLive, routes]);
+  const stops3d = useMemo(() => {
+    if (!is3d || !filters.stops || focusTripId) return NO_STOPS;
+    if (!filters.onlyWatched) return stops;
+    const watched = new Set(monitoredStopIds);
+    return stops.filter((s) => watched.has(s.id));
+  }, [is3d, filters.stops, filters.onlyWatched, focusTripId, stops, monitoredStopIds]);
+  const ridePosition = geo.isActive && !geo.isStale ? geo.position : null;
 
   return (
     <div className="relative flex h-full w-full min-w-0 flex-1 overflow-hidden">
       <div className="relative h-full w-full min-w-0 flex-1 bg-background">
-        <div ref={mapContainerRef} className="z-map h-full w-full" />
+        {/* 3D-ben a Leaflet-térkép láthatatlanul a helyén marad (a visszaváltás azonnali). A burkolón
+            vált: a Leaflet saját osztályait (leaflet-container…) a React nem írhatja felül. */}
+        <div className={cn("h-full w-full", is3d && "invisible")} aria-hidden={is3d || undefined}>
+          <div ref={mapContainerRef} className="z-map h-full w-full" />
+        </div>
+        {is3d ? (
+          <Suspense fallback={null}>
+            <Map3D
+              ref={map3dRef}
+              tileLayerId={tileLayerId}
+              initialView={initial3dView ?? initialMapView() ?? DEFAULT_VIEW}
+              vehicles={others3d}
+              routes={routes}
+              watch={filters.watch}
+              vq={filters.vq}
+              labels={filters.labels}
+              dim={Boolean(focusTripId)}
+              focus={focus3d}
+              stops={stops3d}
+              watchedStopIds={monitoredStopIds}
+              selectedStopId={selectedStopId}
+              routeLines={routeLines}
+              traffic={traffic}
+              position={geo.position}
+              ridePosition={ridePosition}
+              onSelectStop={onSelectStop}
+              onFocusTrip={onFocusTrip}
+              onFollowPausedChange={setFollowPaused}
+              onViewChange={on3dView}
+              onFail={on3dFail}
+            />
+          </Suspense>
+        ) : null}
 
         <FilterPanel
           open={isPanelOpen}
@@ -1129,6 +1102,14 @@ export function TransitMap({
             setFilters={setFilters}
             watchedStops={monitoredStopIds.length}
           />
+          <MapControl
+            icon={Box}
+            label="3D"
+            showLabel="always"
+            active={is3d}
+            title={is3d ? "Vissza a 2D térképre" : "3D város: épületek, domborzat, követés a busz mögül"}
+            onClick={() => void switch3d(!is3d)}
+          />
           <NewsButton onShowRoute={(id) => setFilters((prev) => ({ ...prev, routes: [id] }))} />
         </MapCorner>
 
@@ -1144,7 +1125,7 @@ export function TransitMap({
               watched={filters.watch}
               onToggleMonitorStop={onToggleMonitorStop}
               onPickStop={pickStop}
-              onPickPlace={(lat, lon) => mapRef.current?.flyTo([lat, lon], 16, { duration: 0.7 })}
+              onPickPlace={(lat, lon) => camera.flyTo(lat, lon, 16)}
               onPickVehicle={flyToVehicle}
               onToggleWatch={(id) =>
                 setFilters((prev) => ({
@@ -1163,10 +1144,15 @@ export function TransitMap({
               {geo.error}
             </p>
           ) : null}
+          {map3dError ? (
+            <p role="status" className="pointer-events-auto max-w-[220px] rounded-xl border border-border/80 bg-card/90 px-3 py-2 text-[11.5px] text-muted-foreground shadow-md backdrop-blur-md">
+              A 3D térkép most nem tölthető be (a böngésző nem támogatja, vagy nem érhető el az alaptérkép) — maradt a 2D.
+            </p>
+          ) : null}
           {historyOn ? null : <MapControl icon={History} label="Idővonal" showLabel="wide" title="Visszanézhető, merre jártak a járművek" onClick={openHistory} />}
           <MapControlGroup label="Nagyítás" className="hidden md:flex">
-            <MapGroupButton icon={Plus} label="Nagyítás" onClick={() => mapRef.current?.zoomIn()} />
-            <MapGroupButton icon={Minus} label="Kicsinyítés" onClick={() => mapRef.current?.zoomOut()} />
+            <MapGroupButton icon={Plus} label="Nagyítás" onClick={() => (is3d ? map3dRef.current?.zoomBy(1) : mapRef.current?.zoomIn())} />
+            <MapGroupButton icon={Minus} label="Kicsinyítés" onClick={() => (is3d ? map3dRef.current?.zoomBy(-1) : mapRef.current?.zoomOut())} />
           </MapControlGroup>
           <MapControl
             icon={LocateFixed}
