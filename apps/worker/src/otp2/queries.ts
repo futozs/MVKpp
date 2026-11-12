@@ -37,11 +37,14 @@ export function patternDetails(codes: string[]): string {
   return `{ ${codes.map((c, i) => `p${i}: pattern(id: ${JSON.stringify(c)}) { ${PATTERN_FIELDS} }`).join(" ")} }`;
 }
 
-/** Egy OTP-szolgáltatási nap menetei mintánként (a megálló-azonosítók a minta sorrendjében). */
+/**
+ * Egy OTP-szolgáltatási nap menetei mintánként. A megállók azonosítója is jön: a
+ * mintakód sorszám, egy menetrend-frissítés után más megállósort jelenthet.
+ */
 export function patternTrips(codes: string[], ymd: string): string {
   const d = JSON.stringify(ymd);
   return `{ ${codes
-    .map((c, i) => `p${i}: pattern(id: ${JSON.stringify(c)}) { code tripsForDate(serviceDate: ${d}) { gtfsId tripShortName tripHeadsign directionId stoptimes { scheduledArrival scheduledDeparture pickupType dropoffType } } }`)
+    .map((c, i) => `p${i}: pattern(id: ${JSON.stringify(c)}) { code tripsForDate(serviceDate: ${d}) { gtfsId tripShortName tripHeadsign directionId stoptimes { scheduledArrival scheduledDeparture pickupType dropoffType stop { gtfsId } } } }`)
     .join(" ")} }`;
 }
 

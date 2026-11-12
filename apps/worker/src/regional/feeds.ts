@@ -22,6 +22,7 @@ import {
   type OtpTrip,
   REGION_BBOX,
   regionalGtfsForDay,
+  stalePatterns,
   serviceClock,
   shiftIso,
 } from "@mvk/core";
@@ -203,6 +204,13 @@ export class RegionalFeeds {
       const nextYmd = isoToYmd(shiftIso(iso, 1));
       const same = await this.otpDay(ymd, [...patterns.keys()]);
       const next = await this.otpDay(nextYmd, [...patterns.keys()]);
+      // A mintakód sorszám: egy menetrend-frissítés után a tárolt minta már más megállósort
+      // írhat le (így tűntek el a 3765 expresszjáratai). Amire a nap menetei nem illenek, újra letöltjük.
+      const stale = stalePatterns(patterns, [same, next]);
+      if (stale.length) {
+        log.info("regional", `${iso}: ${stale.length} elavult minta újratöltése (${stale.slice(0, 5).join(", ")}${stale.length > 5 ? ", …" : ""})`);
+        await this.fetchPatterns(stale, patterns);
+      }
       const n = (await sql<{ n: number }>(`SELECT count(*)::int AS n FROM gtfs_feed WHERE source = 'regional' AND service_date = $1`, [iso]))[0]?.n ?? 0;
       const version = `R${ymd}-${n + 1}`;
       const gtfs = regionalGtfsForDay(iso, patterns, same, next, version);
@@ -278,29 +286,34 @@ export class RegionalFeeds {
     const missing = codes.filter((c) => !rows.some((r) => r.code === c && r.fresh));
     if (missing.length) {
       log.info("regional", `minták letöltése: ${missing.length} (${codes.length} közül)`);
-      await pool(chunks(missing, DETAIL_BATCH), PARALLEL, async (batch) => {
-        type Raw = Omit<OtpPattern, "points"> & { patternGeometry?: { points: string } | null };
-        const data = await otp2.query<Record<string, Raw | null>>("patternDetails", patternDetails(batch), {}, { timeoutMs: 60_000, priority: "low" });
-        const fresh: OtpPattern[] = [];
-        for (const raw of Object.values(data)) {
-          if (!raw) continue;
-          const { patternGeometry, ...rest } = raw;
-          const p: OtpPattern = { ...rest, points: patternGeometry?.points ?? null };
-          out.set(p.code, p);
-          fresh.push(p);
-        }
-        if (fresh.length) {
-          await getPool().query(
-            `INSERT INTO otp_pattern (code, data, fetched_at) SELECT c, d, now() FROM unnest($1::text[], $2::jsonb[]) AS x(c, d)
-             ON CONFLICT (code) DO UPDATE SET data = EXCLUDED.data, fetched_at = now()`,
-            [fresh.map((p) => p.code), fresh.map((p) => JSON.stringify(p))],
-          );
-        }
-      });
+      await this.fetchPatterns(missing, out);
     }
     // A régióból kikerült minták nem kellenek (a kódlista a mai felderítés).
     for (const c of [...out.keys()]) if (!codes.includes(c)) out.delete(c);
     return out;
+  }
+
+  /** A minták adata az OTP2-ből (a `into` térképbe és az adatbázisba). */
+  private async fetchPatterns(codes: string[], into: Map<string, OtpPattern>): Promise<void> {
+    await pool(chunks(codes, DETAIL_BATCH), PARALLEL, async (batch) => {
+      type Raw = Omit<OtpPattern, "points"> & { patternGeometry?: { points: string } | null };
+      const data = await otp2.query<Record<string, Raw | null>>("patternDetails", patternDetails(batch), {}, { timeoutMs: 60_000, priority: "low" });
+      const fresh: OtpPattern[] = [];
+      for (const raw of Object.values(data)) {
+        if (!raw) continue;
+        const { patternGeometry, ...rest } = raw;
+        const p: OtpPattern = { ...rest, points: patternGeometry?.points ?? null };
+        into.set(p.code, p);
+        fresh.push(p);
+      }
+      if (fresh.length) {
+        await getPool().query(
+          `INSERT INTO otp_pattern (code, data, fetched_at) SELECT c, d, now() FROM unnest($1::text[], $2::jsonb[]) AS x(c, d)
+           ON CONFLICT (code) DO UPDATE SET data = EXCLUDED.data, fetched_at = now()`,
+          [fresh.map((p) => p.code), fresh.map((p) => JSON.stringify(p))],
+        );
+      }
+    });
   }
 
   /** Egy OTP-szolgáltatási nap menetei mintánként (memóriában, a szomszédos napok építése újrahasználja). */

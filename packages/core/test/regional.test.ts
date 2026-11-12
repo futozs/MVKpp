@@ -21,6 +21,8 @@ import {
   railCategory,
   regionalGtfsForDay,
   resolveServiceDay,
+  stalePatterns,
+  tripFitsPattern,
   rtFromOtp,
   stationKeyOf,
   trainParts,
@@ -335,5 +337,49 @@ describe("illesztési profilok", () => {
     expect(runs[0].status).toBe("complete");
     expect(runs[0].routeShort).toBe("1:E1");
     expect(runs[0].stopsSeen).toBe(2);
+  });
+});
+
+describe("elavult tárolt minta (az OTP mintakódja sorszám)", () => {
+  const stop = (id: string) => ({ gtfsId: id, name: id, lat: 48.1, lon: 20.8 });
+  // a tárolt :1:01 még a 4 megállós rendes menet — a frissítés óta ez a kód a 2 megállós expressz
+  const cached = { stops: [stop("hkir:A"), stop("hkir:B"), stop("hkir:C"), stop("hkir:D")] };
+  const st = (ids: string[]) => ids.map((id, i) => ({ scheduledArrival: 3600 * 6 + i * 60, scheduledDeparture: 3600 * 6 + i * 60, stop: { gtfsId: id } }));
+  const express = { gtfsId: "hkir:hkir_3765_638-7", stoptimes: st(["hkir:A", "hkir:D"]) };
+
+  it("más megállószámú menet nem illik a mintára", () => {
+    expect(tripFitsPattern(cached, express)).toBe(false);
+  });
+
+  it("azonos megállószámnál a megállók sorrendje dönt (különben rossz megállókra kerülne a menet)", () => {
+    expect(tripFitsPattern(cached, { stoptimes: st(["hkir:A", "hkir:X", "hkir:C", "hkir:D"]) })).toBe(false);
+    expect(tripFitsPattern(cached, { stoptimes: st(["hkir:A", "hkir:B", "hkir:C", "hkir:D"]) })).toBe(true);
+  });
+
+  it("megálló-azonosító nélküli (régi) menetnél csak a darabszám számít", () => {
+    expect(tripFitsPattern(cached, { stoptimes: st(["", "", "", ""]).map(({ stop: _s, ...x }) => x) })).toBe(true);
+  });
+
+  it("megtalálja az újratöltendő mintákat", () => {
+    const pats = new Map([["hkir:V-3765:1:01", cached]]);
+    expect(stalePatterns(pats, [{ ymd: "20261112", byPattern: { "hkir:V-3765:1:01": [express] } }, null])).toEqual(["hkir:V-3765:1:01"]);
+  });
+
+  it("a friss mintával az expresszjárat bekerül a menetrendbe", () => {
+    const fresh = new Map([
+      [
+        "hkir:V-3765:1:01",
+        {
+          code: "hkir:V-3765:1:01",
+          headsign: "Miskolc",
+          route: { gtfsId: "hkir:hkir_V-R-200-3765", shortName: "3765", longName: "Miskolc – Kazincbarcika", mode: "COACH", type: 200, agency: { gtfsId: "hkir:hkir_V", name: "MÁV" } },
+          stops: [stop("hkir:A"), stop("hkir:D")],
+          points: null,
+        },
+      ],
+    ]);
+    const day = { ymd: "20261112", byPattern: { "hkir:V-3765:1:01": [express] } };
+    expect(regionalGtfsForDay("2026-11-12", fresh, day, null).counts).toMatchObject({ trips: 1, skipped: 0 });
+    expect(regionalGtfsForDay("2026-11-12", new Map([["hkir:V-3765:1:01", { ...fresh.get("hkir:V-3765:1:01")!, stops: cached.stops }]]), day, null).counts).toMatchObject({ trips: 0, skipped: 1 });
   });
 });

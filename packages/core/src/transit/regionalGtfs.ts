@@ -46,7 +46,14 @@ export type OtpPattern = {
   /** Google-féle kódolt polyline */
   points?: string | null;
 };
-export type OtpStoptime = { scheduledArrival: number; scheduledDeparture: number; pickupType?: string | null; dropoffType?: string | null };
+export type OtpStoptime = {
+  scheduledArrival: number;
+  scheduledDeparture: number;
+  pickupType?: string | null;
+  dropoffType?: string | null;
+  /** a megálló (ezzel ellenőrizzük, hogy a tárolt minta még ugyanaz-e) */
+  stop?: { gtfsId: string } | null;
+};
 export type OtpTrip = {
   gtfsId: string;
   tripShortName?: string | null;
@@ -66,6 +73,31 @@ const MVK_STOP_PREFIX = "mvkzrt:";
 export const normStopId = (id: string) => (id.startsWith(MVK_STOP_PREFIX) ? id.slice(MVK_STOP_PREFIX.length) : id);
 
 const PICKUP: Record<string, string> = { SCHEDULED: "0", NONE: "1", CALL_AGENCY: "2", COORDINATE_WITH_DRIVER: "3" };
+
+/**
+ * Illik-e a menet a (tárolt) mintára: ugyanannyi megálló, és — ha a menet megállói
+ * ismertek — ugyanazok, ugyanabban a sorrendben. Az OTP mintakódjai sorszámok
+ * (`…:1:01`, `…:1:02`): egy menetrend-frissítés után ugyanaz a kód egy másik
+ * megállósort jelenthet (pl. egy expresszjáratét), ezért a tárolt mintát ellenőrizni kell.
+ */
+export function tripFitsPattern(p: Pick<OtpPattern, "stops">, t: Pick<OtpTrip, "stoptimes">): boolean {
+  const st = t.stoptimes ?? [];
+  if (st.length !== p.stops.length) return false;
+  return st.every((x, i) => !x.stop?.gtfsId || x.stop.gtfsId === p.stops[i].gtfsId);
+}
+
+/** A tárolt minták, amelyekre a nap menetei már nem illenek: ezeket újra le kell tölteni. */
+export function stalePatterns(patterns: ReadonlyMap<string, Pick<OtpPattern, "stops">>, days: readonly (OtpDayTrips | null)[]): string[] {
+  const out = new Set<string>();
+  for (const day of days) {
+    if (!day) continue;
+    for (const [code, trips] of Object.entries(day.byPattern)) {
+      const p = patterns.get(code);
+      if (p && trips?.some((t) => !tripFitsPattern(p, t))) out.add(code);
+    }
+  }
+  return [...out].sort();
+}
 
 /** HTML-jelölés és entitások nélkül (a vasúti `shortName` a MÁV piktogram-betűtípusának jele). */
 export function plainText(s: string | null | undefined): string {
@@ -202,7 +234,7 @@ export function regionalGtfsForDay(
       if (!p || !trips?.length) continue;
       for (const t of trips) {
         const st = t.stoptimes ?? [];
-        if (st.length < 2 || st.length !== p.stops.length) {
+        if (st.length < 2 || !tripFitsPattern(p, t)) {
           skipped++;
           continue;
         }
