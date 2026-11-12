@@ -2,12 +2,13 @@ import { useEffect, useState } from "react";
 import type { LiveVehicle } from "@/types";
 import { useGeo } from "@/context/GeoContext";
 import { serverNow, useServerClockVersion } from "@/lib/realtime";
-import { canFixRide, cancelRide, getActiveRide, journeyOf, startRide, syncRides, useActiveRide, useRides, type Ride } from "@/lib/rides";
+import { canFixRide, cancelRide, extendRideLive, getActiveRide, journeyOf, startRide, syncRides, useActiveRide, useRides, type Ride } from "@/lib/rides";
 import { serviceNow } from "@/lib/serviceDay";
 import { BoardingPrompt, endedOnItsOwn, RideSavedNote } from "./BoardingPrompt";
 import { RideAddSheet } from "./RideAddSheet";
 import { RideFixSheet } from "./RideFixSheet";
 import { RidePanel } from "./RidePanel";
+import { fetchContinuation } from "./RideTurn";
 import { useBoardingDetector, type BoardingSpot } from "./useBoardingDetector";
 
 const SAVED_NOTE_MS = 8000;
@@ -71,7 +72,11 @@ export function RideLayer({
   const geo = useGeo();
   const ride = useActiveRide();
   const all = useRides();
-  const [saved, setSaved] = useState<Ride | null>(null);
+  /** a most lezárt utazás; `atLoop`: fordulóhurkos végállomáson ért véget (onnan körbe lehet még utazni) */
+  const [savedState, setSavedState] = useState<{ ride: Ride; atLoop: boolean } | null>(null);
+  const saved = savedState?.ride ?? null;
+  const setSaved = (r: Ride | null) => setSavedState(r ? { ride: r, atLoop: false } : null);
+  const [looping, setLooping] = useState(false);
   const [fixing, setFixing] = useState<{ legs: Ride[]; initial: "from" | "to" } | null>(null);
   /** a végállomáson lezárt út folytatása utólag (a buszon maradt) */
   const [continuing, setContinuing] = useState<Ride[] | null>(null);
@@ -98,12 +103,15 @@ export function RideLayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ride?.tripId, ride?.vehicleId]);
 
-  // Az app magától zárta le (végállomás, eltávolodott a busztól): a jegyzet addig marad, amíg nem nyugtázza.
+  // Az app magától zárta le, vagy fordulóhurkon ért véget (onnan még körbeutazhat):
+  // a jegyzet a „Körbeutazok” gombbal addig marad, amíg nem nyugtázza.
+  const keepNote = Boolean(savedState?.atLoop);
   useEffect(() => {
-    if (!saved || endedOnItsOwn(saved)) return;
+    if (!saved || endedOnItsOwn(saved) || keepNote) return;
     const t = setTimeout(() => setSaved(null), SAVED_NOTE_MS);
     return () => clearTimeout(t);
-  }, [saved]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saved, keepNote]);
 
   const savedLegs = saved ? journeyOf(all, saved) : [];
 
@@ -116,8 +124,8 @@ export function RideLayer({
           ride={ride}
           position={watching ? geo.position : null}
           following={followingTripId === ride.tripId}
-          onFinished={(r) => {
-            setSaved(r);
+          onFinished={(r, info) => {
+            setSavedState({ ride: r, atLoop: info.atLoopTerminus });
             onStopFollow();
           }}
           onCancel={onStopFollow}
@@ -151,6 +159,35 @@ export function RideLayer({
             setContinuing(savedLegs);
             setSaved(null);
           }}
+          looping={looping}
+          onLoop={
+            savedState?.atLoop || saved.endedBy === "terminus"
+              ? async () => {
+                  // Körbeutazok: a busz következő menetével élőben folytatjuk; ha az nem
+                  // derül ki (pl. már régen volt), utólag, a menetrendből vehető fel.
+                  setLooping(true);
+                  const legs = savedLegs;
+                  const last = legs[legs.length - 1];
+                  const next = last.vehicleId ? (await fetchContinuation(last.tripId, last.vehicleId))?.next : null;
+                  setLooping(false);
+                  setSaved(null);
+                  if (next && next.kind && !next.cancelled) {
+                    const r = extendRideLive(legs, {
+                      tripId: next.tripId,
+                      route: next.route,
+                      headsign: next.headsign,
+                      color: next.color,
+                      text: next.text,
+                      boardedAt: next.departedAt ?? next.depTs,
+                      fromStopId: next.firstStopId,
+                      fromStopName: next.firstStopName,
+                      delayAtBoardS: next.startDelayS,
+                    });
+                    if (r) onFollow(r.tripId, r.vehicleId);
+                  } else setContinuing(legs);
+                }
+              : undefined
+          }
         />
       ) : null}
       {fixing ? <RideFixSheet legs={fixing.legs} initial={fixing.initial} onClose={() => setFixing(null)} /> : null}

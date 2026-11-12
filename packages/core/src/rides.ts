@@ -178,6 +178,24 @@ export function alightAt(stops: RideStop[], times: Map<number, RideStopTime>, id
 }
 
 /**
+ * A busz késése egy megállónál, ahol nincs saját eseménye (utólag felvett
+ * utazás, kihagyott GPS): a legközelebbi mért megállóé. Mérés nélkül null.
+ */
+export function nearestDelayS(times: Map<number, RideStopTime>, idx: number): number | null {
+  let best: RideStopTime | null = null;
+  let bestGap = Infinity;
+  for (const [i, t] of times) {
+    const gap = Math.abs(i - idx);
+    // egyenlő távolságnál a későbbi (a busz addig gyűjtött késése) számít
+    if (gap < bestGap || (gap === bestGap && best && i > idx)) {
+      best = t;
+      bestGap = gap;
+    }
+  }
+  return best ? best.delayS : null;
+}
+
+/**
  * Becsült idő egy megállónál, ahol a busznak nincs eseménye (utólag felvett
  * utazás, kihagyott GPS): a menetrend a legközelebbi mért megálló késésével.
  * Mérés nélkül a menetrend.
@@ -185,14 +203,5 @@ export function alightAt(stops: RideStop[], times: Map<number, RideStopTime>, id
 export function estimatedAt(stops: RideStop[], times: Map<number, RideStopTime>, idx: number): number | null {
   const s = stops[idx];
   if (!s) return null;
-  let best: RideStopTime | null = null;
-  let bestGap = Infinity;
-  for (const [i, t] of times) {
-    const gap = Math.abs(i - idx);
-    if (gap < bestGap) {
-      best = t;
-      bestGap = gap;
-    }
-  }
-  return s.schedTs + (best?.delayS ?? 0);
+  return s.schedTs + (nearestDelayS(times, idx) ?? 0);
 }

@@ -30,6 +30,7 @@ export * from "./catchBus.ts";
 export * from "./transferChance.ts";
 export * from "./commute.ts";
 export * from "./pastRides.ts";
+export * from "./rideStats.ts";
 export * from "./startRisk.ts";
 export * from "./news.ts";
 export * from "./transit/modes.ts";

@@ -182,8 +182,18 @@ export function registerV3(r: Router, ctx: Ctx) {
     const own = run?.vehicleId === vehicleId ? run : undefined;
 
     const candidates: { tripId: string; source: "live" | "plan" }[] = [];
+    // A busz ténylegesen futott menetei közül a végállomásra érkezés utáni első: órákkal
+    // később megnyitott appnál is ez a folytatás (a busz élő menete addigra egy későbbi lehet).
+    let ownNext: { tripId: string; startS: number } | null = null;
+    for (const [tid, r] of engine.todayRuns) {
+      if (r.vehicleId !== vehicleId || tid === tripId) continue;
+      const startS = feed.tripStops.get(tid)?.[0]?.dep;
+      if (startS == null || startS < end.arr - 300) continue;
+      if (!ownNext || startS < ownNext.startS) ownNext = { tripId: tid, startS };
+    }
+    if (ownNext) candidates.push({ tripId: ownNext.tripId, source: "live" });
     const live = engine.snapshot.vehicles.find((v) => v.id === vehicleId);
-    if (live?.tripId && live.tripId !== tripId) candidates.push({ tripId: live.tripId, source: "live" });
+    if (live?.tripId && live.tripId !== tripId && live.tripId !== ownNext?.tripId) candidates.push({ tripId: live.tripId, source: "live" });
     for (const sl of predictor.planSnapshot()?.byVehicle.get(vehicleId) ?? []) {
       if (sl.tripId !== tripId && sl.startS >= end.arr - 300) {
         candidates.push({ tripId: sl.tripId, source: "plan" });

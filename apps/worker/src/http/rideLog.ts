@@ -3,7 +3,7 @@
  * egy naptári nap vonalai és menetei a menetrendből, és hogy melyik buszon
  * futottak (ha a rendszer látta), valamint a végállomásról továbbinduló menetek.
  */
-import { calendarRoutes, calendarTrips, isPlausibleIso, nextLegChoices, serviceClock, shiftIso, type PastTrip } from "@mvk/core";
+import { calendarRoutes, calendarTrips, isPlausibleIso, loopTermini, nextLegChoices, serviceClock, shiftIso, type PastTrip } from "@mvk/core";
 import { sql } from "@mvk/db";
 import { HttpError, sendJson, type Router } from "./router.ts";
 import type { Ctx } from "./compat.ts";
@@ -58,6 +58,18 @@ export function registerRideLog(r: Router, ctx: Ctx) {
     if (!day && !prev) throw new HttpError(404, "erre a napra nincs menetrend");
     return { day, prev };
   };
+
+  /**
+   * A vonalak, amelyeken körbe lehet utazni (fordulóhurkos végállomás), és a
+   * hurkok megállói — az Utazásaim ezek útjainál kínálja a körbeutazás hozzáadását.
+   */
+  r.get("/engine/ridelog/loops", (req, res) => {
+    const day = feeds.cachedDay(engine.today);
+    if (!day) throw new HttpError(503, "még nincs betöltve a mai menetrend");
+    const termini = [...loopTermini(day.feed).values()];
+    const routes = [...new Set(termini.flatMap((t) => t.routes))].sort((a, b) => a.localeCompare(b, "hu", { numeric: true }));
+    sendJson(req, res, 200, { routes, termini }, { "cache-control": "public, max-age=3600" });
+  });
 
   /** ?date=YYYY-MM-DD (naptári nap): az MVK vonalai, amelyeken aznap indult menet. */
   r.get("/engine/ridelog/routes", async (req, res) => {

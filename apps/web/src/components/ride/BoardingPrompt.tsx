@@ -1,5 +1,5 @@
 import { motion, useReducedMotion } from "framer-motion";
-import { Bus, Check, CornerDownRight, MapPin, X } from "lucide-react";
+import { Bus, Check, CornerDownRight, Loader2, MapPin, Repeat, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { RouteTile } from "@/components/transit/RouteTile";
 import type { LiveVehicle } from "@/types";
@@ -43,25 +43,31 @@ export function BoardingPrompt({ vehicle, onYes, onNo }: { vehicle: LiveVehicle;
 
 const fmtKm = (m: number | null) => (m == null ? null : `${(m / 1000).toLocaleString("hu-HU", { maximumFractionDigits: 1 })} km`);
 
-/** Az app zárta le (nem a „Leszálltam”): ilyenkor megkérdezzük, jó-e így. */
+/** Az app zárta le (nem az utas jelölte ki, hol száll le): ilyenkor megkérdezzük, jó-e így. */
 export const endedOnItsOwn = (r: Ride) => r.endedBy === "terminus" || r.endedBy === "away";
 
 /**
- * Utazás után: rövid összegzés (körbeutazásnál az egész útról). Ha az app maga
- * zárta le — a végállomáson, vagy mert a telefon eltávolodott a busztól —, addig
- * marad, amíg nem nyugtázod, és itt jelölheted ki, hol szálltál le valójában.
+ * Utazás után: rövid összegzés (körbeutazásnál az egész útról). Fordulóhurkos
+ * végállomáson innen indítható a körbeutazás (a busz következő menetével). Ha az
+ * app maga zárta le, addig marad, amíg nem nyugtázod, és itt jelölheted ki, hol
+ * szálltál le valójában.
  */
 export function RideSavedNote({
   ride: last,
   onClose,
   onFix,
   onContinue,
+  onLoop,
+  looping,
 }: {
   ride: Ride;
   onClose: () => void;
   onFix?: () => void;
-  /** a végállomáson lezárt út: a buszon maradt, és tovább utazott */
+  /** a végállomáson lezárt út: a buszon maradt, és tovább utazott (utólag, a menetrendből) */
   onContinue?: () => void;
+  /** fordulóhurkos végállomáson ért véget: „Körbeutazok” — élőben folytatja a busz következő menetével */
+  onLoop?: () => void;
+  looping?: boolean;
 }) {
   const all = useRides();
   const legs = journeyOf(all, last);
@@ -104,7 +110,11 @@ export function RideSavedNote({
           </Button>
         </div>
       ) : null}
-      {last.endedBy === "terminus" && onContinue ? (
+      {onLoop ? (
+        <Button size="sm" variant={ask ? "ghost" : "outline"} className="mt-2.5 w-full border-primary/50" onClick={onLoop} disabled={looping}>
+          {looping ? <Loader2 className="animate-spin" /> : <Repeat className="text-primary" />} Körbeutazok — a buszon maradtam
+        </Button>
+      ) : last.endedBy === "terminus" && onContinue ? (
         <Button size="sm" variant="ghost" className="mt-1.5 w-full" onClick={onContinue}>
           <CornerDownRight /> A buszon maradtam, tovább utaztam
         </Button>

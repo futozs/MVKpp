@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
 import { ArrowLeft, Repeat } from "lucide-react";
-import { alightAt, boardAt, estimatedAt, pathLengthM, stopTimes, type RideStopEvent, type RideStopTime } from "@mvk/core/rides";
+import { alightAt, boardAt, estimatedAt, nearestDelayS, pathLengthM, rideStopIdx, stopTimes, type RideStopEvent, type RideStopTime } from "@mvk/core/rides";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { RouteTile } from "@/components/transit/RouteTile";
-import { addRides, useRides, type Ride } from "@/lib/rides";
+import { addRides, patchRides, useRides, type Ride } from "@/lib/rides";
 import { displayVehicleId } from "@/lib/modes";
 import { serverNow } from "@/lib/realtime";
 import { cn } from "@/lib/utils";
@@ -28,16 +28,22 @@ type LegDraft = {
   done?: LegFields;
 };
 type Step = "pick" | "trips" | "leg" | "next";
-type Detail = { stops: TripStop[]; times: Map<number, RideStopTime> };
+type Detail = { stops: TripStop[]; times: Map<number, RideStopTime>; loopEnd: boolean };
+type DetailRes = TripDetail & { events?: RideStopEvent[] };
+
+const toDetail = (d: DetailRes): Detail | null => (d.stops?.length ? { stops: d.stops, times: stopTimes(d.events ?? []), loopEnd: Boolean(d.loopEnd) } : null);
 
 /** egy még el nem indult menettel nem lehetett utazni (a szerver órájához pár perc ráhagyás) */
 const FUTURE_SLACK_S = 120;
 const FAVORITES = 5;
 
-/** A menet mezői a választott fel- és leszállásból; ahol a busznak nincs eseménye, ott becsült idővel. */
+/**
+ * A menet mezői a választott fel- és leszállásból; ahol a busznak nincs eseménye, ott
+ * becsült idővel és a legközelebbi mért megálló késésével (így a késés utólag is megvan).
+ */
 function legFields(leg: LegDraft, d: Detail, last: boolean): LegFields | null {
   if (leg.from == null || leg.to == null || leg.to <= leg.from) return null;
-  const est = (idx: number) => ({ at: estimatedAt(d.stops, d.times, idx), delayS: null });
+  const est = (idx: number) => ({ at: estimatedAt(d.stops, d.times, idx), delayS: nearestDelayS(d.times, idx) });
   const board = boardAt(d.stops, d.times, leg.from, est(leg.from));
   const alight = alightAt(d.stops, d.times, leg.to, est(leg.to));
   if (!board || !alight) return null;
@@ -57,14 +63,26 @@ function legFields(leg: LegDraft, d: Detail, last: boolean): LegFields | null {
     detected: "later",
     endedBy: last ? "user" : null,
     editedAt: null,
+    loopEnd: d.loopEnd,
   };
+}
+
+/** Egy menet, ami nem a végállomáson ért véget, de a buszon maradt: a végállomásig kiegészítve. */
+function terminusFix(r: Ride, d: Detail): Partial<Ride> | null {
+  const last = d.stops.length - 1;
+  if (last < 1 || d.stops[last].id === r.toStopId) return null;
+  const from = rideStopIdx(d.stops, r.fromStopId, null).from ?? 0;
+  const alight = alightAt(d.stops, d.times, last, { at: estimatedAt(d.stops, d.times, last), delayS: nearestDelayS(d.times, last) });
+  if (!alight) return null;
+  return { ...alight, stops: last - from, distanceM: pathLengthM(d.stops, from, last), endedBy: null, loopEnd: d.loopEnd };
 }
 
 /**
  * Utólag felvett utazás: a menetrendből választott menet (nap → vonal →
  * indulás → fel- és leszállás). Körbeutazásnál a végállomáson „Rajta
  * maradtam”, és jön a következő menet. `continueFrom`: egy már rögzített út
- * folytatása (az app a végállomáson lezárta, de az utas a buszon maradt).
+ * körbeutazásként meghosszabbítva (a buszon maradt a végállomáson) — ha az utolsó
+ * menete nem a végállomáson ért véget (rosszul zárult le), az is odáig hosszabbodik.
  */
 export function RideAddSheet({ continueFrom, onClose }: { continueFrom?: Ride[]; onClose: () => void }) {
   const base = continueFrom?.length ? continueFrom[continueFrom.length - 1] : null;
@@ -77,11 +95,13 @@ export function RideAddSheet({ continueFrom, onClose }: { continueFrom?: Ride[];
   const [mode, setMode] = useState<"from" | "to">("from");
 
   const current = step === "leg" ? (legs[legs.length - 1] ?? null) : null;
-  const detailRes = useFetched<TripDetail & { events?: RideStopEvent[] }>(current ? tripDetailUrl(current.trip.tripId, current.trip.serviceDate) : null);
-  const detail = useMemo<Detail | null>(
-    () => (detailRes.state === "ok" && detailRes.data.stops?.length ? { stops: detailRes.data.stops, times: stopTimes(detailRes.data.events ?? []) } : null),
-    [detailRes],
-  );
+  const detailRes = useFetched<DetailRes>(current ? tripDetailUrl(current.trip.tripId, current.trip.serviceDate) : null);
+  const detail = useMemo<Detail | null>(() => (detailRes.state === "ok" ? toDetail(detailRes.data) : null), [detailRes]);
+  // A meghosszabbított út utolsó menete: ha nem a végállomáson ért véget, odáig kiegészül.
+  const baseRes = useFetched<DetailRes>(base ? tripDetailUrl(base.tripId, base.serviceDate) : null);
+  const baseDetail = useMemo<Detail | null>(() => (baseRes.state === "ok" ? toDetail(baseRes.data) : null), [baseRes]);
+  const baseFix = useMemo(() => (base && baseDetail ? terminusFix(base, baseDetail) : null), [base, baseDetail]);
+  const baseTerminus = baseDetail?.stops[baseDetail.stops.length - 1]?.name ?? base?.toStopName ?? "";
   const favorites = useMemo(() => {
     const n = new Map<string, number>();
     for (const r of rides) n.set(r.route, (n.get(r.route) ?? 0) + 1);
@@ -94,7 +114,7 @@ export function RideAddSheet({ continueFrom, onClose }: { continueFrom?: Ride[];
   const nextOf = prev
     ? { date: prev.trip.serviceDate, trip: prev.trip.tripId, terminus: prev.trip.destinationName }
     : base
-      ? { date: base.serviceDate, trip: base.tripId, terminus: base.toStopName ?? "" }
+      ? { date: base.serviceDate, trip: base.tripId, terminus: baseTerminus }
       : null;
 
   const patchCurrent = (p: Partial<LegDraft>) => setLegs((ls) => ls.map((l, i) => (i === ls.length - 1 ? { ...l, ...p } : l)));
@@ -134,6 +154,7 @@ export function RideAddSheet({ continueFrom, onClose }: { continueFrom?: Ride[];
     const ids = fields.map(() => crypto.randomUUID());
     // egy út menetei közös lánc-azonosítóval (az első meneté); folytatásnál a meglévő úté
     const chainId = base ? (base.chainId ?? base.id) : fields.length > 1 ? ids[0] : null;
+    if (base && baseFix) patchRides({ [base.id]: baseFix });
     addRides(fields.map((f, i) => ({ ...(f as LegFields), id: ids[i], chainId })));
     onClose();
   };
@@ -145,7 +166,9 @@ export function RideAddSheet({ continueFrom, onClose }: { continueFrom?: Ride[];
     step === "pick" || step === "trips"
       ? "Utazás hozzáadása"
       : step === "next"
-        ? "Hogyan ment tovább a busz?"
+        ? base && !legs.length
+          ? "Körbeutazás hozzáadása"
+          : "Hogyan ment tovább a busz?"
         : current?.fixedFrom
           ? "Hol szálltál le?"
           : "Hol szálltál fel és le?";
@@ -155,7 +178,9 @@ export function RideAddSheet({ continueFrom, onClose }: { continueFrom?: Ride[];
       : step === "trips"
         ? `${days.find((d) => d.iso === day)?.label ?? day} · melyik indulással mentél?`
         : step === "next"
-          ? `A végállomáson (${nextOf?.terminus ?? "?"}) a buszon maradtál — melyik menettel ment tovább?`
+          ? `A végállomáson (${nextOf?.terminus || "?"}) a buszon maradtál — melyik menettel ment tovább?${
+              baseFix && !legs.length ? ` Az előző menet (${base?.toStopName ?? "?"} helyett) a végállomásig hosszabbodik.` : ""
+            }`
           : current
             ? `${current.trip.headsign} · ${hmOf(current.trip.depTs)}${legNo > 1 ? ` · ${legNo}. menet` : ""}`
             : "";

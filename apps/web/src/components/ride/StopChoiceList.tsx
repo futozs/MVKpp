@@ -20,6 +20,8 @@ export function StopChoiceList({
   timeOf,
   selected,
   marks,
+  focusIdx,
+  focusLabel,
   onPick,
   className,
 }: {
@@ -31,13 +33,18 @@ export function StopChoiceList({
   selected: number | null;
   /** megjegyzés egy-egy megálló mellett (pl. „javasolt”, „felszállás”) */
   marks?: ReadonlyMap<number, string>;
+  /** kiválasztás nélkül ez a megálló legyen szem előtt (pl. ahol a busz most jár) — nem javaslat */
+  focusIdx?: number | null;
+  /** halvány felirat a `focusIdx` megálló mellett */
+  focusLabel?: string;
   onPick: (idx: number) => void;
   className?: string;
 }) {
   const ref = useRef<HTMLOListElement>(null);
-  // a kiválasztott (javasolt) megálló legyen szem előtt
+  // a kiválasztott megálló (ennek híján a `focusIdx`) legyen szem előtt
   useEffect(() => {
-    ref.current?.querySelector('[aria-pressed="true"]')?.scrollIntoView({ block: "center" });
+    const el = ref.current?.querySelector('[aria-pressed="true"]') ?? ref.current?.querySelector('[data-focus="1"]');
+    el?.scrollIntoView({ block: "center" });
   }, []);
 
   return (
@@ -47,8 +54,9 @@ export function StopChoiceList({
         const at = t ? (timeOf === "dep" ? (t.dep ?? t.arr) : t.arr) : null;
         const on = selected === s.idx;
         const mark = marks?.get(s.idx);
+        const focus = focusIdx === s.idx;
         return (
-          <li key={s.idx}>
+          <li key={s.idx} data-focus={focus ? "1" : undefined}>
             <button
               type="button"
               aria-pressed={on}
@@ -61,6 +69,7 @@ export function StopChoiceList({
               <span className={cn("font-mono text-xs tabular-nums", at == null && "text-muted-foreground")}>{at != null ? hm(at) : s.schedTime}</span>
               <span className={cn("truncate text-[13px]", on ? "font-semibold" : "font-medium")}>{s.name}</span>
               <span className="flex items-center gap-1 text-[10.5px] font-semibold text-primary">
+                {focus && focusLabel ? <span className="font-medium text-muted-foreground">{focusLabel}</span> : null}
                 {mark}
                 {on ? <Check className="h-3.5 w-3.5" aria-hidden /> : null}
               </span>

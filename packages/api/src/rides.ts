@@ -23,6 +23,8 @@ function isRide(x: unknown, now: number): x is RideIn {
   if (typeof r.boardedAt !== "number" || !Number.isFinite(r.boardedAt)) return false;
   // 2020 utáni, és legfeljebb egy nappal a jövőben (eltérő kliens-óra).
   if (r.boardedAt < 1_577_836_800 || r.boardedAt > now + 86_400) return false;
+  // utólagos kiegészítés ideje (körbeutazásként meghosszabbítás, késés pótlása)
+  if (r.patchedAt != null && (typeof r.patchedAt !== "number" || !Number.isFinite(r.patchedAt))) return false;
   return JSON.stringify(r).length <= MAX_RIDE_BYTES;
 }
 
@@ -42,11 +44,14 @@ const routes: Route[] = [
     const ok = b.rides.filter((r): r is RideIn => isRide(r, now));
     for (const r of ok) {
       // Egy utólag javított utazás végleges: sem egy másik eszköz régebbi
-      // példánya, sem egy második javítás nem írja felül.
+      // példánya, sem egy második javítás nem írja felül. Kivétel az újabb
+      // kiegészítés (`patchedAt`): körbeutazásként meghosszabbítás, a késés pótlása.
       await getPool().query(
         `INSERT INTO ride (user_id, ride_id, boarded_at, data) VALUES ($1, $2, to_timestamp($3), $4)
          ON CONFLICT (user_id, ride_id) DO UPDATE SET data = EXCLUDED.data, boarded_at = EXCLUDED.boarded_at, updated_at = now()
-         WHERE ride.data->'editedAt' IS NULL OR jsonb_typeof(ride.data->'editedAt') = 'null'`,
+         WHERE ride.data->'editedAt' IS NULL OR jsonb_typeof(ride.data->'editedAt') = 'null'
+            OR (jsonb_typeof(EXCLUDED.data->'patchedAt') = 'number'
+                AND (EXCLUDED.data->>'patchedAt')::numeric > COALESCE(CASE WHEN jsonb_typeof(ride.data->'patchedAt') = 'number' THEN (ride.data->>'patchedAt')::numeric END, 0))`,
         [u.id, r.id, r.boardedAt, JSON.stringify(r)],
       );
     }

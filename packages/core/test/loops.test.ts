@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { endsAtLoop, feedFromZip, loopTermini, terminusKind, turnDecision, TURN } from "../src/index.ts";
+import { endsAtLoop, feedFromZip, loopTermini, terminusKind, plannedTurnDecision, TURN } from "../src/index.ts";
 
 const ZIP = join(import.meta.dirname, "../../../data/gtfs-cache/latest.zip");
 const feed = existsSync(ZIP) ? feedFromZip(new Uint8Array(readFileSync(ZIP))) : null;
@@ -44,54 +44,33 @@ describe.skipIf(!feed)("körbeutazás (valós GTFS)", () => {
   });
 });
 
-describe("körbeutazás döntés a végállomáson", () => {
+describe("előre bejelentett körbeutazás a végállomáson", () => {
   const T0 = 1_800_000_000;
-  const turn = { arrivedAt: T0, stay: null };
-  const loopNext = (departed: boolean) => ({ loop: true, next: { kind: "loop" as const, cancelled: false, departed } });
+  const next = (departed: boolean, kind: "loop" | "nearby" | null = "loop", cancelled = false) => ({ loop: true, next: { kind, cancelled, departed } });
 
-  it("amíg nem tudjuk, hogyan folytatja, várunk", () => {
-    expect(turnDecision(turn, null, T0 + 30, null)).toBe("wait");
+  it("amíg nincs adat a folytatásról, vár", () => {
+    expect(plannedTurnDecision(T0, null, T0 + 30)).toBe("wait");
+    expect(plannedTurnDecision(T0, null, T0 + 5 * 3600)).toBe("wait");
   });
 
-  it("fordulóhurkon a busz indulásakor magától folytatja", () => {
-    expect(turnDecision(turn, loopNext(false), T0 + 120, null)).toBe("wait");
-    expect(turnDecision(turn, loopNext(true), T0 + 240, null)).toBe("continue");
+  it("a busz indulásakor folytatja — a telefon helyétől függetlenül", () => {
+    expect(plannedTurnDecision(T0, next(false), T0 + 120)).toBe("wait");
+    expect(plannedTurnDecision(T0, next(true), T0 + 240)).toBe("continue");
+    expect(plannedTurnDecision(T0, next(true, "nearby"), T0 + 600)).toBe("continue");
   });
 
-  it("fordulóhurkon sem folytatjuk, ha a telefon az induláskor már nincs a buszon", () => {
-    expect(turnDecision(turn, loopNext(true), T0 + 240, false)).toBe("alight");
-    // ha azt mondta, marad, a GPS-nek nem hiszünk
-    expect(turnDecision({ ...turn, stay: true }, loopNext(true), T0 + 240, false)).toBe("continue");
+  it("órákkal később megnyitott app: az elindult folytatással megy tovább, nem zárja le", () => {
+    expect(plannedTurnDecision(T0, next(true), T0 + 3 * 3600)).toBe("continue");
   });
 
-  it("ha azt mondta, leszállt, nem folytatjuk", () => {
-    expect(turnDecision({ ...turn, stay: false }, loopNext(true), T0 + 240, true)).toBe("alight");
+  it("törölt vagy máshonnan induló menet, illetve hiányzó folytatás: türelmi idő után a végállomáson ért véget", () => {
+    expect(plannedTurnDecision(T0, next(false, "loop", true), T0 + 60)).toBe("wait");
+    expect(plannedTurnDecision(T0, next(false, "loop", true), T0 + TURN.FIND_S + 1)).toBe("alight");
+    expect(plannedTurnDecision(T0, { loop: true, next: null }, T0 + TURN.FIND_S + 1)).toBe("alight");
+    expect(plannedTurnDecision(T0, next(true, null), T0 + TURN.FIND_S + 1)).toBe("alight");
   });
 
-  it("fordulóhurkon még várunk a kiosztásra, de nem örökké", () => {
-    const none = { loop: true, next: null };
-    expect(turnDecision(turn, none, T0 + 5 * 60, null)).toBe("wait");
-    expect(turnDecision(turn, none, T0 + TURN.FIND_S + 1, null)).toBe("alight");
-  });
-
-  it("nem fordulóhurok, és nincs folytatás: a végállomáson leszállt", () => {
-    expect(turnDecision(turn, { loop: false, next: null }, T0 + 10, null)).toBe("alight");
-    expect(turnDecision(turn, { loop: false, next: { kind: null, cancelled: false, departed: false } }, T0 + 10, null)).toBe("alight");
-  });
-
-  it("szomszédos kocsiállásnál csak akkor folytatja, ha marad vagy a busszal van", () => {
-    const nearby = { loop: false, next: { kind: "nearby" as const, cancelled: false, departed: true } };
-    expect(turnDecision(turn, nearby, T0 + 600, false)).toBe("alight");
-    expect(turnDecision(turn, nearby, T0 + 600, null)).toBe("alight");
-    expect(turnDecision(turn, nearby, T0 + 600, true)).toBe("continue");
-    expect(turnDecision({ ...turn, stay: true }, nearby, T0 + 600, null)).toBe("continue");
-  });
-
-  it("a törölt következő menettel nem utazik tovább", () => {
-    expect(turnDecision(turn, { loop: true, next: { kind: "loop", cancelled: true, departed: false } }, T0 + 60, null)).toBe("alight");
-  });
-
-  it("ha a busz nagyon sokáig nem indul el, a végállomáson leszállt", () => {
-    expect(turnDecision(turn, loopNext(false), T0 + TURN.DEPART_S + 1, null)).toBe("alight");
+  it("ha a következő menet nagyon sokáig nem indul el, a végállomáson ért véget", () => {
+    expect(plannedTurnDecision(T0, next(false), T0 + TURN.DEPART_S + 1)).toBe("alight");
   });
 });

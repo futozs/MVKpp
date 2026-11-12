@@ -80,18 +80,11 @@ export function endsAtLoop(feed: Feed, tripId: string): boolean {
 }
 
 export const TURN = {
-  /** fordulóhurkon ennyit várunk a következő menet megjelenésére (mp) */
+  /** ha a busz következő menete ennyi idő alatt sem derül ki, a végállomáson ért véget az út (mp) */
   FIND_S: 20 * 60,
-  /** ha a következő menet ennyi idő alatt sem indul el, a végállomáson leszállt (mp) */
+  /** ha a következő menet ennyi idő alatt sem indul el, a végállomáson ért véget az út (mp) */
   DEPART_S: 45 * 60,
 } as const;
-
-export type TurnInput = {
-  /** beérkezés a végállomásra (unix) */
-  arrivedAt: number;
-  /** az utas válasza: maradok (true) / leszálltam (false) / nem válaszolt (null) */
-  stay: boolean | null;
-};
 
 export type TurnContinuation = {
   /** a végállomás fordulóhurok */
@@ -102,24 +95,20 @@ export type TurnContinuation = {
 export type TurnDecision = "wait" | "alight" | "continue";
 
 /**
- * Körbeutazás a végállomáson: várunk, leszállt, vagy a busszal folytatja.
- *  · fordulóhurok (ugyanonnan indul) → indulásakor magától folytatjuk
- *  · szomszédos kocsiállás → csak ha azt mondta, marad, vagy a telefon a busszal van
- *  · máshonnan indul / nincs következő menet / törölték → itt leszállt
- * `withBus`: az indulás pillanatában a telefon a busz mellett van-e (null: nincs helyadat).
+ * Előre bejelentett körbeutazás a végállomáson: az utas megmondta, hogy a buszon
+ * marad — itt már nem a telefon helye dönt (zsebben, lezárva is körbemegy vele).
+ *  · a busz következő menete ugyaninnen / a szomszédos kocsiállásból elindult → folytatjuk
+ *  · még nem indult → várunk (legfeljebb DEPART_S-ig)
+ *  · nincs (még) következő menet, máshonnan indul, vagy törölték → várunk FIND_S-ig, utána itt ért véget
+ *  · amíg a folytatásról nincs adat, várunk (a hívó dönt, meddig)
  */
-export function turnDecision(turn: TurnInput, cont: TurnContinuation | null, now: number, withBus: boolean | null): TurnDecision {
-  if (turn.stay === false) return "alight";
+export function plannedTurnDecision(arrivedAt: number, cont: TurnContinuation | null, now: number): TurnDecision {
+  // Még nincs válasz a szervertől (órákkal később megnyitott app, rossz hálózat): ebből nem zárunk le.
   if (!cont) return "wait";
   const next = cont.next;
-  if (!next || next.kind == null || next.cancelled) {
-    // Fordulóhurkon a következő menet kiosztása még várathat magára.
-    const waiting = cont.loop && !next && now - turn.arrivedAt <= TURN.FIND_S;
-    return waiting ? "wait" : "alight";
+  if (next && next.kind != null && !next.cancelled) {
+    if (next.departed) return "continue";
+    return now - arrivedAt > TURN.DEPART_S ? "alight" : "wait";
   }
-  if (!next.departed) return now - turn.arrivedAt > TURN.DEPART_S ? "alight" : "wait";
-  if (next.kind === "nearby" && !turn.stay && !withBus) return "alight";
-  // fordulóhurkon is: ha a telefon az induláskor bizonyosan nincs a buszon, a végállomáson leszállt
-  if (next.kind === "loop" && !turn.stay && withBus === false) return "alight";
-  return "continue";
+  return now - arrivedAt > TURN.FIND_S ? "alight" : "wait";
 }

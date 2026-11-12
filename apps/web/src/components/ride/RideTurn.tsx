@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { Check, LogOut, Repeat } from "lucide-react";
+import { LogOut, Repeat } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { RouteTile } from "@/components/transit/RouteTile";
 import { API_BASE } from "@/lib/apiBase";
 import { serverNow } from "@/lib/realtime";
-import type { RideTurn } from "@/lib/rides";
+import type { LoopPlan, RideTurn } from "@/lib/rides";
 
 export interface ContinuationNext {
   tripId: string;
@@ -36,6 +36,15 @@ export interface Continuation {
 
 const POLL_MS = 10_000;
 
+export const continuationUrl = (tripId: string, vehicleId: string) =>
+  `${API_BASE}/engine/continuation?trip=${encodeURIComponent(tripId)}&vehicle=${encodeURIComponent(vehicleId)}`;
+
+/** Egyszeri lekérés: hogyan folytatja a busz a menet végállomásáról (null: nem elérhető). */
+export async function fetchContinuation(tripId: string, vehicleId: string): Promise<Continuation | null> {
+  const r = await fetch(continuationUrl(tripId, vehicleId), { cache: "no-store" }).catch(() => null);
+  return r?.ok ? ((await r.json().catch(() => null)) as Continuation | null) : null;
+}
+
 /**
  * A végállomáson: hogyan folytatja a busz (melyik menettel, mikor, honnan).
  * Fordulás közben 10 mp-enként frissül, hogy az indulást azonnal lássuk.
@@ -47,12 +56,9 @@ export function useContinuation(tripId: string, vehicleId: string, enabled: bool
     if (!enabled) return;
     let alive = true;
     const load = () =>
-      fetch(`${API_BASE}/engine/continuation?trip=${encodeURIComponent(tripId)}&vehicle=${encodeURIComponent(vehicleId)}`, { cache: "no-store" })
-        .then((r) => (r.ok ? (r.json() as Promise<Continuation>) : null))
-        .then((c) => alive && c && setData({ key, c }))
-        .catch(() => {
-          /* a következő kör újrapróbálja */
-        });
+      fetchContinuation(tripId, vehicleId).then((c) => {
+        if (alive && c) setData({ key, c });
+      });
     void load();
     const t = setInterval(load, POLL_MS);
     return () => {
@@ -77,29 +83,17 @@ function useNow(ms: number): number {
 
 function inLabel(sec: number): string {
   if (sec <= 30) return "most indul";
-  const m = Math.round(sec / 60);
-  return `${m} perc múlva`;
+  return `${Math.round(sec / 60)} perc múlva`;
 }
 
 /**
- * Körbeutazás a végállomáson: a busz megfordul, és — ha az utas nem szállt le —
- * a következő menettel folytatjuk. Fordulóhuroknál magától; szomszédos
- * kocsiállásnál megkérdezzük, maradsz-e.
+ * Körbeutazás a végállomáson: az utas előre megmondta, hogy a buszon marad.
+ * Amint a busz a következő menetével elindul, ezzel az utazással folytatjuk —
+ * akkor is, ha a telefon közben a zsebben van, lezárva.
  */
-export function TurnCard({
-  turn,
-  cont,
-  onStay,
-  onAlight,
-}: {
-  turn: RideTurn;
-  cont: Continuation | null;
-  onStay: () => void;
-  onAlight: () => void;
-}) {
+export function TurnCard({ turn, plan, cont, onAlight }: { turn: RideTurn; plan: LoopPlan; cont: Continuation | null; onAlight: () => void }) {
   const now = useNow(15_000);
   const next = cont?.next ?? null;
-  const asks = next?.kind === "nearby" && turn.stay == null;
   const late = next ? Math.max(0, now - next.depTs) : 0;
 
   return (
@@ -108,7 +102,7 @@ export function TurnCard({
         <Repeat className="h-3.5 w-3.5" aria-hidden /> Körbeutazás · {turn.terminusName}
       </p>
       <p className="mt-0.5 text-xs text-muted-foreground">
-        Beért {hm(turn.arrivedAt)}-kor. {next ? "A busz innen fordul, és tovább megy:" : "A busz itt fordul — keresem, mikor és merre indul tovább…"}
+        Beért {hm(turn.arrivedAt)}-kor. {next ? "Maradj ülve — a busz innen így megy tovább:" : "Keresem, mikor és merre indul tovább a busz…"}
       </p>
       {next ? (
         <div className="mt-2 flex items-center gap-2.5">
@@ -120,23 +114,23 @@ export function TurnCard({
               {" · "}
               {next.departed ? "elindult" : late > 60 ? `${Math.round(late / 60)} perce esedékes` : inLabel(next.depTs - now)}
               {next.kind === "nearby" ? ` · a szomszédos kocsiállásból (${next.firstStopName})` : null}
-              {next.source === "plan" ? " · forda-terv szerint" : null}
+              {next.cancelled ? " · törölték" : null}
             </p>
           </div>
         </div>
       ) : null}
-      {asks ? (
-        <div className="mt-2.5 flex gap-2">
-          <Button size="sm" className="flex-1" onClick={onStay}>
-            <Check /> Maradok a buszon
-          </Button>
-          <Button size="sm" variant="outline" onClick={onAlight}>
-            <LogOut /> Leszálltam
-          </Button>
-        </div>
-      ) : next?.kind === "loop" || turn.stay ? (
-        <p className="mt-2 text-[11.5px] text-muted-foreground">Maradj ülve — ha a busz elindul, automatikusan folytatom ezt az utazást.</p>
-      ) : null}
+      <p className="mt-2 text-[11.5px] text-muted-foreground">
+        {plan.stopName ? (
+          <>
+            Leszállás: <span className="font-semibold text-foreground">{plan.stopName}</span> — ha odaértél, magától lezárom.
+          </>
+        ) : (
+          "Ha a busz elindul, kiválaszthatod, hol szállsz le."
+        )}
+      </p>
+      <Button size="sm" variant="outline" className="mt-2 w-full" onClick={onAlight}>
+        <LogOut /> Mégis itt szálltam le
+      </Button>
     </div>
   );
 }

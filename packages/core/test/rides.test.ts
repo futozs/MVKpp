@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alightAt, boardAt, currentStopIdx, estimatedAt, guessAlightIdx, guessBoardIdx, pathLengthM, rideStopIdx, stopTimes, type RideStop } from "../src/rides.ts";
+import { alightAt, boardAt, currentStopIdx, estimatedAt, nearestDelayS, guessAlightIdx, guessBoardIdx, pathLengthM, rideStopIdx, stopTimes, type RideStop } from "../src/rides.ts";
 
 // Egy egyenes utca: a megállók ~445 m-enként északra (0,004 fok szélesség).
 const LAT0 = 48.1;
@@ -136,5 +136,22 @@ describe("utólag felvett utazás: becsült idő mérés nélküli megállónál
   it("mérés nélkül a menetrend; ismeretlen megállónál semmi", () => {
     expect(estimatedAt(schedOnly, new Map(), 2)).toBe(1_000_240);
     expect(estimatedAt(schedOnly, new Map(), 99)).toBeNull();
+  });
+});
+
+describe("utólag felvett utazás: késés mérés nélküli megállónál", () => {
+  const times = stopTimes([
+    { stop_idx: 1, arr: 1_000_120, dep: 1_000_130, delay_s: 60 },
+    { stop_idx: 3, arr: 1_000_600, dep: null, delay_s: 240 },
+  ]);
+
+  it("a legközelebbi mért megálló késése; egyenlő távolságnál a későbbié", () => {
+    expect(nearestDelayS(times, 0)).toBe(60);
+    expect(nearestDelayS(times, 2)).toBe(240);
+    expect(nearestDelayS(times, 4)).toBe(240);
+  });
+
+  it("mérés nélkül nincs késés", () => {
+    expect(nearestDelayS(new Map(), 2)).toBeNull();
   });
 });

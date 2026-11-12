@@ -1,6 +1,6 @@
 /**
- * Utazási napló: a „Felszálltam” gombbal vagy automatikus felismeréssel
- * rögzített utazások.
+ * Utazási napló: a „Felszálltam” gombbal vagy a felismerő kérdésére indított,
+ * illetve utólag a menetrendből felvett utazások.
  *
  * Bejelentkezés nélkül a telefonon gyűlnek (localStorage, eszközhöz kötve);
  * bejelentkezve minden feltöltődik a /v3/rides végpontra, és a többi eszközön
@@ -43,14 +43,18 @@ export interface Ride {
   endedBy?: RideEndedBy | null;
   /** utólagos javítás ideje (unix) — utána a fel- és leszállás helye végleges */
   editedAt?: number | null;
+  /** utólagos kiegészítés ideje (körbeutazásként meghosszabbítás, a késés pótlása) — a szerver ezt egy javított utazásnál is elfogadja */
+  patchedAt?: number | null;
+  /** a menet fordulóhurkos végállomáson ér véget (ülve maradva körbe lehet utazni) */
+  loopEnd?: boolean | null;
 }
 
 export type RideEndedBy = "user" | "dest" | "away" | "terminus";
 export type RideSource = "auto" | "manual" | "later";
 
 /**
- * A busz a végállomáson fordul, és az utas nem szállt le: a menet véget ért,
- * a következővel (körbeutazás) folytatjuk, amint a busz elindul.
+ * Körbeutazás a végállomáson: a menet véget ért, és — mert az utas előre
+ * megmondta, hogy marad — a busz következő menetével folytatjuk, amint elindul.
  */
 export interface RideTurn {
   /** mikor ért be a végállomásra (unix) */
@@ -58,8 +62,15 @@ export interface RideTurn {
   /** a végállomás indexe a befejezett menet megállói között */
   atIdx: number;
   terminusName: string;
-  /** „Maradok a buszon” (true) / „Leszálltam” (false); null = nem válaszolt */
-  stay: boolean | null;
+}
+
+/** Előre megadott körbeutazás: a végállomáson a buszon marad, és a következő menet egy megállójánál száll le. */
+export interface LoopPlan {
+  /** null: a leszállást a következő menet indulása után adja meg */
+  stopId: string | null;
+  stopName: string | null;
+  /** a következő menet, amelyből a megállót választotta (tájékoztató — a busz valódi folytatása dönt) */
+  tripId: string | null;
 }
 
 export interface ActiveRide {
@@ -72,10 +83,10 @@ export interface ActiveRide {
   color: string;
   text: string;
   boardedAt: number;
-  /** felismert felszállás: ahol a telefon a busz mellett állt — ebből lesz a felszállás megállója */
+  /** régi mező: a felismerés helye (már nem javaslunk belőle felszállást) */
   boardNear?: { lat: number; lon: number } | null;
   fromIdx: number | null;
-  /** az utas megerősítette (vagy maga választotta) a felszállás megállóját */
+  /** az utas maga választotta ki a felszállás megállóját */
   fromConfirmed?: boolean;
   /**
    * amikor a telefon utoljára a busszal volt: a busz által addig elhagyott megálló és
@@ -87,6 +98,11 @@ export interface ActiveRide {
   delayAtBoardS: number | null;
   /** ahol le akar szállni (a menet megállóinak indexe) */
   destIdx: number | null;
+  /** körbeutazás következő menete: a leszállás megállója, amíg a menet megállói be nem töltenek */
+  destStopId?: string | null;
+  destStopName?: string | null;
+  /** előre megadott körbeutazás (a végállomáson a buszon marad) */
+  loopPlan?: LoopPlan | null;
   detected: "auto" | "manual";
   /** körbeutazás: az első menet azonosítója — a láncolt menetek ezzel kapcsolódnak */
   chainId?: string | null;
@@ -171,15 +187,29 @@ export function startRide(r: Omit<ActiveRide, "id" | "destIdx">): ActiveRide {
   return ride;
 }
 
-type RideEnd = Pick<Ride, "alightedAt" | "toStopId" | "toStopName" | "stops" | "distanceM" | "delayAtAlightS"> & { endedBy?: RideEndedBy | null };
+type RideEnd = Pick<Ride, "alightedAt" | "toStopId" | "toStopName" | "stops" | "distanceM" | "delayAtAlightS"> &
+  Partial<Pick<Ride, "boardedAt" | "delayAtBoardS" | "loopEnd">> & { endedBy?: RideEndedBy | null };
 
 function closedRide(a: ActiveRide, end: RideEnd, chainId: string | null): StoredRide {
-  const { destIdx: _dest, fromIdx: _from, leg: _leg, turn: _turn, boardNear: _near, fromConfirmed: _conf, withBus: _with, ...rest } = a;
+  const {
+    destIdx: _dest,
+    destStopId: _destStop,
+    destStopName: _destName,
+    loopPlan: _plan,
+    fromIdx: _from,
+    leg: _leg,
+    turn: _turn,
+    boardNear: _near,
+    fromConfirmed: _conf,
+    withBus: _with,
+    ...rest
+  } = a;
   return { ...rest, ...end, chainId, synced: false };
 }
 
-export function setDestination(idx: number | null) {
-  if (active) setActive({ ...active, destIdx: idx });
+/** A leszállás helye ezen a meneten (egy előre megadott körbeutazás helyett). */
+export function setDestination(idx: number) {
+  if (active) setActive({ ...active, destIdx: idx, destStopId: null, destStopName: null, loopPlan: null });
 }
 
 /** A felszállás helye és a késés akkor derül ki, amikor a menet adatai megérkeznek. */
@@ -199,29 +229,37 @@ export function finishRide(end: RideEnd): Ride | null {
 
 export type NextLeg = Pick<ActiveRide, "tripId" | "route" | "headsign" | "color" | "text" | "boardedAt" | "fromStopId" | "fromStopName" | "delayAtBoardS">;
 
-/**
- * Körbeutazás: a befejezett menet a naplóba kerül, és ugyanazon a buszon a
- * következő menet indul — a kettőt a közös `chainId` köti össze.
- */
-export function continueRide(end: RideEnd, next: NextLeg): ActiveRide | null {
-  if (!active) return null;
-  const chainId = active.chainId ?? active.id;
-  const done = closedRide(active, end, chainId);
-  const ride: ActiveRide = {
+/** A körbeutazás következő menete (a végállomáson ülve maradt: a felszállás helye biztos). */
+function nextLegRide(next: NextLeg, base: { serviceDate: string; vehicleId: string; detected: ActiveRide["detected"]; chainId: string; leg: number }, dest: LoopPlan | null): ActiveRide {
+  return {
     ...next,
     id: crypto.randomUUID(),
-    serviceDate: active.serviceDate,
-    vehicleId: active.vehicleId,
+    serviceDate: base.serviceDate,
+    vehicleId: base.vehicleId,
     fromIdx: 0,
-    // a végállomáson ülve maradt: a felszállás helye biztos
     fromConfirmed: true,
     withBus: null,
     destIdx: null,
-    detected: active.detected,
-    chainId,
-    leg: (active.leg ?? 1) + 1,
+    destStopId: dest?.stopId ?? null,
+    destStopName: dest?.stopName ?? null,
+    loopPlan: null,
+    detected: base.detected,
+    chainId: base.chainId,
+    leg: base.leg,
     turn: null,
   };
+}
+
+/**
+ * Körbeutazás: a befejezett menet a naplóba kerül, és ugyanazon a buszon a
+ * következő menet indul — a kettőt a közös `chainId` köti össze. A következő
+ * menetben ott száll le, amit előre megadott (`dest`).
+ */
+export function continueRide(end: RideEnd, next: NextLeg, dest: LoopPlan | null): ActiveRide | null {
+  if (!active) return null;
+  const chainId = active.chainId ?? active.id;
+  const done = closedRide(active, end, chainId);
+  const ride = nextLegRide(next, { serviceDate: active.serviceDate, vehicleId: active.vehicleId, detected: active.detected, chainId, leg: (active.leg ?? 1) + 1 }, dest);
   rides = [done, ...rides.filter((x) => x.id !== done.id)].slice(0, MAX_LOCAL);
   write(RIDES_KEY, rides);
   setActive(ride);
@@ -232,6 +270,30 @@ export function continueRide(end: RideEnd, next: NextLeg): ActiveRide | null {
 export type RideFix = Partial<
   Pick<Ride, "fromStopId" | "fromStopName" | "toStopId" | "toStopName" | "boardedAt" | "alightedAt" | "stops" | "distanceM" | "delayAtBoardS" | "delayAtAlightS">
 >;
+
+/**
+ * Körbeutazok — egy már lezárt út (a végállomáson ért véget) élőben folytatódik a
+ * busz következő menetével. A lezárt menet nem változik; az új menet az ő láncához kapcsolódik.
+ */
+export function extendRideLive(legs: readonly Ride[], next: NextLeg): ActiveRide | null {
+  if (active || !legs.length) return null;
+  const last = legs[legs.length - 1];
+  const chainId = last.chainId ?? last.id;
+  const ride = nextLegRide(next, { serviceDate: last.serviceDate, vehicleId: last.vehicleId, detected: last.detected === "auto" ? "auto" : "manual", chainId, leg: legs.length + 1 }, null);
+  setActive(ride);
+  return ride;
+}
+
+/**
+ * Utólagos kiegészítés (körbeutazásként meghosszabbítás, a késés pótlása): nem
+ * „javítás”, így egy már javított utazáson is elmegy — a `patchedAt` jelzi a szervernek.
+ */
+export function patchRides(patches: Readonly<Record<string, Partial<Omit<Ride, "id">>>>) {
+  const patchedAt = Math.round(Date.now() / 1000);
+  if (!rides.some((r) => patches[r.id])) return;
+  setRides(rides.map((r) => (patches[r.id] ? { ...r, ...patches[r.id], patchedAt, synced: false } : r)).sort((a, b) => b.boardedAt - a.boardedAt));
+  void syncRides();
+}
 
 /** Javítható-e még az utazás (körbeutazásnál bármelyik menete). */
 export const canFixRide = (legs: readonly Ride[]) => legs.length > 0 && legs.every((r) => !r.editedAt);

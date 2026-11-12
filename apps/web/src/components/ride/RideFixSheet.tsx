@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { alightAt, boardAt, pathLengthM, rideStopIdx, stopTimes, type RideStopEvent, type RideStopTime } from "@mvk/core/rides";
+import { alightAt, boardAt, nearestDelayS, pathLengthM, rideStopIdx, stopTimes, type RideStopEvent, type RideStopTime } from "@mvk/core/rides";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { RouteTile } from "@/components/transit/RouteTile";
@@ -72,8 +72,15 @@ export function RideFixSheet({ legs, initial, onClose }: { legs: Ride[]; initial
 
   const save = () => {
     if (!legA || !legB || fromIdx == null || toIdx == null) return;
-    const board = boardAt(legA.stops, legA.times, fromIdx, { at: fromIdx === legA.from ? first.boardedAt : null, delayS: first.delayAtBoardS });
-    const alight = alightAt(legB.stops, legB.times, toIdx, { at: toIdx === legB.to ? last.alightedAt : null, delayS: last.delayAtAlightS });
+    // Esemény nélküli megállónál a legközelebbi mért megálló késése (így a késés a javítás után is megvan).
+    const board = boardAt(legA.stops, legA.times, fromIdx, {
+      at: fromIdx === legA.from ? first.boardedAt : null,
+      delayS: fromIdx === legA.from ? (first.delayAtBoardS ?? nearestDelayS(legA.times, fromIdx)) : (nearestDelayS(legA.times, fromIdx) ?? first.delayAtBoardS),
+    });
+    const alight = alightAt(legB.stops, legB.times, toIdx, {
+      at: toIdx === legB.to ? last.alightedAt : null,
+      delayS: toIdx === legB.to ? (last.delayAtAlightS ?? nearestDelayS(legB.times, toIdx)) : (nearestDelayS(legB.times, toIdx) ?? last.delayAtAlightS),
+    });
     if (!board || !alight) return;
     const fixes: Record<string, RideFix> = {};
     if (single) {

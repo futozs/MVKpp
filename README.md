@@ -179,7 +179,7 @@ Utazásnapló, amely nagyrészt magától vezeti magát.
 
 - Egy követett buszra a **Felszálltam** gombbal.
 - Vagy automatikusan: ha a térkép nyitva van és a helymeghatározás be van kapcsolva, az app felismeri, hogy együtt mozogsz egy busszal, és megkérdezi: *„Éppen erre a buszra szálltál fel?”*
-- A felszállás helyét a telefon és a busz GPS-éből találja ki, és rákérdez: *„Itt szálltál fel?”*. Utazás közben bármikor átírható.
+- Felszálláskor mindig te mondod meg: **hol szálltál fel**, **hol szállsz le**, és fordulóhurkos végállomásnál, hogy **körbeutazol-e**. Az app nem találgat (a megállólistában csak az látszik, hol jár most a busz). Utazás közben bármikor átírható.
 
 ### Utazás közben
 
@@ -187,24 +187,35 @@ Utazásnapló, amely nagyrészt magától vezeti magát.
 - Minden további megállóra élő késés, várható és legkésőbbi érkezés.
 - A busz jelzője a **telefonod GPS-ét** követi, így pontosabb, mint a busz saját jelzése.
 - Látod, ha dugó van előtted, és mennyit hoz.
-- **Leszálltam**: ha már messze vagy a busztól, felajánlja a megállót, ahol a GPS szerint leszálltál. Korábbi megálló is kijelölhető.
+- A kijelölt leszállóhelynél az utazás **magától lezárul** — akkor is, ha a telefon a zsebedben van, és csak később nyitod meg.
+- **Leszálltam** / **Korábban**: ha előbb szálltál le, a már elhagyott megállók közül választhatsz. Ha a telefon percek óta messze van a busztól, az app csak megkérdezi, leszálltál-e — magától nem zárja le.
 
 ### Ha bezárod az appot
 
-A webapp a háttérben nem tud követni, ezért amikor újra megnyitod, a menet adataiból zárja le az utat: a választott megállónál, vagy ha a busz már régen beért, a végállomáson. Ilyenkor rákérdez, hol szálltál le valójában.
+A webapp a háttérben nem tud követni, ezért amikor újra megnyitod, a menet adataiból zárja le az utat a választott megállónál (körbeutazásnál a következő menet megadott megállójánál), a busz tényleges idejével és késésével.
 
 ### Körbeutazás
 
-Hurok-végállomásokon a busz megfordul és ugyanaz a jármű viszi tovább a következő menetet. Az app ezt felismeri, a végállomáson megmutatja, hogyan folytatja a busz (melyik menettel, mikor, honnan indul), és ha a buszon maradsz, az utazás egy láncként folytatódik. Ahol a busz hosszabban áll, megkérdezi: *„Maradok a buszon?”*
+Hurok-végállomásokon a busz megfordul és ugyanaz a jármű viszi tovább a következő menetet. A körbeutazást **előre jelzed** (*„Körbeutazok”*), és megadod, hol szállsz le a következő menetből: a végállomáson az app megmutatja, mikor indul tovább a busz, és indulásakor magától folytatja az utazást — a telefon helyétől függetlenül, zsebre tett, lezárt telefonnal is.
+
+- Ha az utazás a végállomáson ért véget, ott egy **Körbeutazok** gomb élőben folytatja a busz következő menetével.
+- Az Utazásaim listájában bármelyik fordulóhurkos vonalon tett út utólag is **meghosszabbítható körbeutazásként** — ha rosszul zárult le (nem a végállomáson), az is odáig egészül ki.
 
 ### Utólag felvett és javított utak
 
-- **Utazás hozzáadása** a menetrendből, ha az app nem látta: nap → vonal → indulás → fel- és leszállás. Ha a rendszer nem látta a buszt, a rendszám beírható. A végállomásról tovább utazás is felvehető.
+- **Utazás hozzáadása** a menetrendből, ha az app nem látta: nap → vonal → indulás → fel- és leszállás. Ha a rendszer nem látta a buszt, a rendszám beírható. A végállomásról tovább utazás is felvehető. A késést utólag is kiszámolja a busz mért idejeiből (ahol a fel- vagy leszállás megállójában nem volt mérés, a legközelebbi mért megállóéból); a régebbi utaknál a hiányzó késést magától pótolja.
 - **Javítás**: egy lezárt utazásnál utólag kijavítható, hol szálltál fel és le. A választáskor a megállók mellett a busz tényleges ideje látszik, hogy könnyebb legyen felidézni.
 
 ### Összesítés
 
-A Figyelő **Utaim** fülén: utazások, megtett km, utazási idő, pontosság (±1 percen belül érkezett-e a busz), begyűjtött rendszámok és vonalak, körbeutazások egy sorban. Az utazások a telefonon gyűlnek, bejelentkezve a felhőbe is mentődnek.
+A Figyelő **Utaim** fülén:
+
+- **Késés miatt a buszon, pluszban**: életed során mennyivel ültél tovább a buszon a menetrendnél (az utak végén mennyivel nagyobb volt a késés, mint felszálláskor), és mennyit vártál a megállóban a késő buszra.
+- Utazások, megtett km, utazási idő, pontosság (±1 percen belül jött-e a busz), begyűjtött rendszámok és **megállók**.
+- Hol szállsz fel és le a legtöbbször, leggyakoribb útjaid, mikor utazol (óra és nap szerint), kedvenc vonalaid átlagos késéssel, rekordjaid.
+- Minden utazásnál látszik a késés (és ha az út közben nőtt, mennyivel); körbeutazások egy sorban.
+
+Az utazások a telefonon gyűlnek, bejelentkezve a felhőbe is mentődnek.
 
 ---
 
