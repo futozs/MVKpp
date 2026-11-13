@@ -25,17 +25,19 @@ export function FleetSummary({ counts, facts }: { counts: KindCounts; facts: { l
           </div>
         ))}
       </dl>
-      <div className="mt-4 flex h-2.5 w-full gap-[3px] overflow-hidden" role="img" aria-label={SEGMENTS.map((s) => `${counts[s.key]} ${s.label}`).join(", ")}>
-        {SEGMENTS.map((s) =>
-          counts[s.key] ? (
-            <span
-              key={s.key}
-              className={cn("h-full rounded-full transition-[flex-grow] duration-normal", s.color)}
-              style={{ flexGrow: counts[s.key] / total }}
-            />
-          ) : null,
-        )}
-      </div>
+      {counts.total > 0 ? (
+        <div className="mt-4 flex h-2.5 w-full gap-[3px] overflow-hidden" role="img" aria-label={SEGMENTS.map((s) => `${counts[s.key]} ${s.label}`).join(", ")}>
+          {SEGMENTS.map((s) =>
+            counts[s.key] ? (
+              <span
+                key={s.key}
+                className={cn("h-full rounded-full transition-[flex-grow] duration-normal", s.color)}
+                style={{ flexGrow: counts[s.key] / total }}
+              />
+            ) : null,
+          )}
+        </div>
+      ) : null}
       {facts.length ? (
         <ul className="mt-4 grid gap-2 border-t border-border/70 pt-3 sm:grid-cols-3">
           {facts.map((f) => (

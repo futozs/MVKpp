@@ -59,7 +59,7 @@ export function ParkingView({ routes, onFocusVehicle }: { routes: Route[]; onFoc
   if (!data || !view) {
     return (
       <Shell>
-        <Header live={live} at={null} kind={kind} setKind={setKind} query={query} setQuery={setQuery} regional={canRegional ? { on: regionalOn, set: setRegional } : null} />
+        <Header live={live} at={null} mode={mode} setMode={setMode} kind={kind} setKind={setKind} query={query} setQuery={setQuery} regional={canRegional ? { on: regionalOn, set: setRegional } : null} />
         <div className="rounded-2xl border border-dashed border-border px-6 py-16 text-center text-sm text-muted-foreground">
           {error ?? "A parkoló betöltése…"}
         </div>
@@ -73,30 +73,8 @@ export function ParkingView({ routes, onFocusVehicle }: { routes: Route[]; onFoc
 
   return (
     <Shell>
-      <Header live={live} at={data.at} kind={kind} setKind={setKind} query={query} setQuery={setQuery} regional={canRegional ? { on: regionalOn, set: setRegional } : null} />
+      <Header live={live} at={data.at} mode={mode} setMode={setMode} kind={kind} setKind={setKind} query={query} setQuery={setQuery} regional={canRegional ? { on: regionalOn, set: setRegional } : null} />
       <FleetSummary counts={counts} facts={facts(view, data, now)} />
-      <div role="tablist" aria-label="Nézet" className="inline-flex gap-1 rounded-lg border border-border bg-muted/60 p-1">
-        {(
-          [
-            ["lots", "Parkoló"],
-            ["blocks", "Forda-tábla"],
-          ] as const
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={mode === id}
-            onClick={() => setMode(id)}
-            className={cn(
-              "rounded-md px-3.5 py-1.5 text-xs font-semibold transition-all duration-fast focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-              mode === id ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-accent hover:text-foreground",
-            )}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
       {mode === "blocks" ? (
         <BlockChart lookup={lookup} kind={kind} query={query} onSelect={setSelected} />
       ) : empty ? (
@@ -181,9 +159,23 @@ function Shell({ children }: { children: ReactNode }) {
   );
 }
 
+type ParkingMode = "lots" | "blocks";
+
+const MODE_OPTIONS: { id: ParkingMode; label: string }[] = [
+  { id: "lots", label: "Állóhelyek" },
+  { id: "blocks", label: "Forda-tábla" },
+];
+
+const SEGMENT =
+  "rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors duration-fast focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring sm:px-3";
+const segmentState = (on: boolean) =>
+  on ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-accent hover:text-foreground";
+
 function Header({
   live,
   at,
+  mode,
+  setMode,
   kind,
   setKind,
   query,
@@ -192,6 +184,8 @@ function Header({
 }: {
   live: boolean;
   at: number | null;
+  mode: ParkingMode;
+  setMode: (m: ParkingMode) => void;
   kind: KindFilter;
   setKind: (k: KindFilter) => void;
   query: string;
@@ -200,29 +194,30 @@ function Header({
   regional: { on: boolean; set: (on: boolean) => void } | null;
 }) {
   return (
-    <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
-      <div className="min-w-0">
-        <h1 className="text-[22px] font-extrabold leading-tight tracking-tight sm:text-[26px]">Parkoló</h1>
-        <p className="mt-1 flex items-center gap-2 text-[12.5px] text-muted-foreground">
-          <span className={cn("h-1.5 w-1.5 rounded-full", live ? "bg-live motion-safe:animate-live-pulse" : "bg-muted-foreground/50")} />
-          {live ? "élő" : "frissítés 15 mp-enként"}
-          {at ? <span className="font-mono tabular-nums">· {clockOf(at)}</span> : null}
-          <span className="hidden sm:inline">· ki áll melyik végállomáson, és ki pihen a kocsiszínben</span>
-        </p>
+    <header className="space-y-3">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="text-[22px] font-extrabold leading-tight tracking-tight sm:text-[26px]">Parkoló</h1>
+          <p className="mt-1 flex items-center gap-2 text-[12.5px] text-muted-foreground">
+            <span className={cn("h-1.5 w-1.5 rounded-full", live ? "bg-live motion-safe:animate-live-pulse" : "bg-muted-foreground/50")} />
+            {live ? "élő" : "frissítés 15 mp-enként"}
+            {at ? <span className="tabular-nums">· {clockOf(at)}</span> : null}
+            <span className="hidden sm:inline">· ki áll melyik végállomáson, és ki pihen a kocsiszínben</span>
+          </p>
+        </div>
+        <div role="tablist" aria-label="Nézet" className="flex shrink-0 gap-1 rounded-lg border border-border bg-muted/60 p-1">
+          {MODE_OPTIONS.map((o) => (
+            <button key={o.id} type="button" role="tab" aria-selected={mode === o.id} onClick={() => setMode(o.id)} className={cn(SEGMENT, segmentState(mode === o.id))}>
+              {o.label}
+            </button>
+          ))}
+        </div>
       </div>
-      <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-        <div role="group" aria-label="Járműtípus" className="grid grid-cols-3 gap-1 rounded-lg border border-border bg-muted/60 p-1">
+
+      <div className="flex flex-wrap items-center gap-2">
+        <div role="group" aria-label="Járműtípus" className="flex flex-1 gap-1 rounded-lg border border-border bg-muted/60 p-1 sm:flex-none">
           {KIND_OPTIONS.map((o) => (
-            <button
-              key={o.id}
-              type="button"
-              aria-pressed={kind === o.id}
-              onClick={() => setKind(o.id)}
-              className={cn(
-                "rounded-md px-3 py-1.5 text-xs font-semibold transition-all duration-fast focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-                kind === o.id ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-accent hover:text-foreground",
-              )}
-            >
+            <button key={o.id} type="button" aria-pressed={kind === o.id} onClick={() => setKind(o.id)} className={cn(SEGMENT, "flex-1", segmentState(kind === o.id))}>
               {o.label}
             </button>
           ))}
@@ -234,7 +229,7 @@ function Header({
             onClick={() => regional.set(!regional.on)}
             title="A Volán-buszok és a vonatok a megyei autóbusz-állomásokon és pályaudvarokon (a kocsiszín az MVK-é)"
             className={cn(
-              "inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-xs font-semibold transition-colors duration-fast focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+              "inline-flex h-[38px] shrink-0 items-center gap-2 rounded-lg border px-3 text-xs font-semibold transition-colors duration-fast focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
               regional.on ? "border-primary/50 bg-primary/10 text-foreground" : "border-border bg-muted/60 text-muted-foreground hover:text-foreground",
             )}
           >
@@ -244,7 +239,7 @@ function Header({
             Volán és vonat
           </button>
         ) : null}
-        <label className="relative w-full sm:w-56">
+        <label className="relative w-full sm:ml-auto sm:w-60">
           <span className="sr-only">Keresés rendszámra vagy vonalra</span>
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <input
@@ -252,7 +247,7 @@ function Header({
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Rendszám vagy vonal"
             inputMode="search"
-            className="h-9 w-full rounded-lg border border-input bg-background pl-8 pr-3 font-mono text-[13px] placeholder:font-sans placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="h-[38px] w-full rounded-lg border border-input bg-background pl-8 pr-3 font-mono text-[13px] placeholder:font-sans placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
         </label>
       </div>
@@ -264,7 +259,7 @@ function SectionTitle({ id, count, children }: { id: string; count: number; chil
   return (
     <h2 id={id} className="flex items-baseline gap-2 px-0.5 text-[13px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
       {children}
-      <span className="font-mono text-foreground">{count}</span>
+      <span className="tabular-nums text-foreground">{count}</span>
     </h2>
   );
 }
