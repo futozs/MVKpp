@@ -94,7 +94,7 @@ export function App() {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [tileLayerId, setTileLayerId] = useState<string>(
-    () => localStorage.getItem("mvk_map_tile") || "osm",
+    () => localStorage.getItem("mvk_map_tile") || "light",
   );
   const [isNotificationsOpen, setNotificationsOpen] = useState(false);
   const [isAccountOpen, setAccountOpen] = useState(false);
