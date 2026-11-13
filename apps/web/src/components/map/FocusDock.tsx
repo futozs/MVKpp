@@ -1,4 +1,4 @@
-import type { Stop } from "@/types";
+import type { Route, Stop } from "@/types";
 import { feedOfId } from "@/lib/modes";
 import { cn } from "@/lib/utils";
 import { TripTimetable } from "./TripTimetable";
@@ -15,12 +15,14 @@ export function FocusDock({
   tripId,
   vehicleId,
   stops,
+  routes,
   onClose,
   followPaused,
 }: {
   tripId: string;
   vehicleId: string | null;
   stops: Stop[];
+  routes: Record<string, Route>;
   onClose: () => void;
   followPaused: boolean;
 }) {
@@ -34,7 +36,7 @@ export function FocusDock({
       )}
     >
       <TripTimetable key={tripId} tripId={tripId} className={cn("pointer-events-auto", !rail && "hidden md:flex")} />
-      <VehicleFocusCard tripId={tripId} vehicleId={vehicleId} stops={stops} onClose={onClose} followPaused={followPaused} className="pointer-events-auto" />
+      <VehicleFocusCard tripId={tripId} vehicleId={vehicleId} stops={stops} routes={routes} onClose={onClose} followPaused={followPaused} className="pointer-events-auto" />
     </div>
   );
 }

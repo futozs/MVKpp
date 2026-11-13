@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Gauge, Navigation, TicketCheck, X } from "lucide-react";
-import type { Stop } from "@/types";
+import type { Route, Stop } from "@/types";
 import { useTripPath } from "@/hooks/useTripPath";
 import { Button } from "@/components/ui/button";
 import { RouteTile } from "@/components/transit/RouteTile";
@@ -9,12 +9,13 @@ import { LiveDot } from "@/components/transit/LiveDot";
 import { ApproachStrip } from "@/components/transit/ApproachStrip";
 import { cn } from "@/lib/utils";
 import { boardVehicle } from "@/components/ride/RideLayer";
-import { displayVehicleId, rideModeOf, VEHICLE_WORDS, vehicleIdTitle } from "@/lib/modes";
+import { displayVehicleId, rideModeOf, VEHICLE_WORDS, vehicleIdTitle, vehicleModeOf } from "@/lib/modes";
 
 type VehicleFocusCardProps = {
   tripId: string;
   vehicleId: string | null;
   stops: Stop[];
+  routes: Record<string, Route>;
   onClose: () => void;
   /** a felhasználó elhúzta a térképet: most nem követi a buszt */
   followPaused?: boolean;
@@ -25,6 +26,7 @@ export function VehicleFocusCard({
   tripId,
   vehicleId,
   stops,
+  routes,
   onClose,
   followPaused = false,
   className,
@@ -43,7 +45,9 @@ export function VehicleFocusCard({
     vehicle?.speed != null ? Math.round(vehicle.speed * 3.6) : null;
   const moving = speedKmh != null && speedKmh > 2;
   const shownId = vehicle?.id ?? vehicleId;
-  const tripMode = shownId ? rideModeOf(shownId, data?.trip ?? tripId) : null;
+  const feedMode = shownId ? rideModeOf(shownId, data?.trip ?? tripId) : null;
+  // az MVK-s menetből a villamost csak a vonal típusa mondja meg
+  const tripMode = feedMode === "bus" && shownId && data ? vehicleModeOf({ id: shownId }, routes[data.route]?.type) : feedMode;
   // vonatnál a csempén a vonatszám („Sz 6612”), a címben a neve; a pirulán a jármű (pályaszám, rendszám)
   const trainNo = tripMode === "rail" ? (vehicle?.trainNo ?? null) : null;
   const idLabel = shownId ? displayVehicleId(shownId, vehicle?.plate) : null;

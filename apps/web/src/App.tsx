@@ -456,6 +456,7 @@ export function App() {
                     tripId={focusTripId}
                     vehicleId={focusVehicleId}
                     stops={stops}
+                    routes={routes}
                     onClose={handleExitFocus}
                     followPaused={followPaused}
                   />
