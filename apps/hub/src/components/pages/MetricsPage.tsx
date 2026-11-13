@@ -37,12 +37,12 @@ function ProbeCards({ m, hours }: { m: Metrics; hours: number }) {
             }
             hint={last ? `utoljára ${clock(last.at)} · ${last.ok ? ms(last.ms) : (last.error ?? `HTTP ${last.status}`)}` : "még nincs mérés"}
           >
-            <div className="mb-2 flex gap-5 text-xs">
-              <span>
+            <div className="mb-2 flex flex-wrap gap-x-5 gap-y-1 text-xs">
+              <span className="whitespace-nowrap">
                 <span className="text-muted-foreground">elérhető (24 ó) </span>
                 <span className={cn("font-mono font-semibold", (up?.okPct ?? 100) < 99 ? "text-nosignal" : "text-foreground")}>{up ? pct(up.okPct) : "–"}</span>
               </span>
-              <span>
+              <span className="whitespace-nowrap">
                 <span className="text-muted-foreground">p50 / p95 </span>
                 <span className="font-mono font-semibold">
                   {ms(up?.p50)} / {ms(up?.p95)}
