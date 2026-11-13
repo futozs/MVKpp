@@ -10,7 +10,7 @@ export interface ParkingState {
   error: string | null;
   /**
    * A szerver órája most (unix mp). A pillanatkép `at`-jából és a megérkezése
-   * óta eltelt időből — így az eltelt idők akkor is helyesek, ha a böngésző
+   * óta eltelt időből  így az eltelt idők akkor is helyesek, ha a böngésző
    * órája elcsúszott (vagy a szerver egy visszajátszott napon fut).
    */
   now: number;

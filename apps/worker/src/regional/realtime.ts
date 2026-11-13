@@ -102,7 +102,7 @@ function nearEdge(lat: number, lon: number): boolean {
 
 export class RegionalRealtime {
   private feeds: FeedManager;
-  /** a regionális (Volán, vasút) járművek — csak a menetrendünkben ismert menetekkel */
+  /** a regionális (Volán, vasút) járművek  csak a menetrendünkben ismert menetekkel */
   regional: RtVehicle[] = [];
   /** az MVK járművei az OTP2-ből (tartalék, árnyék-összevetés) */
   mvk: RtVehicle[] = [];
@@ -187,7 +187,7 @@ export class RegionalRealtime {
   }
 
   /**
-   * Egy állomás / megálló táblája érdekel valakit (WebSocket, push, kérés) — a táblák között frissül.
+   * Egy állomás / megálló táblája érdekel valakit (WebSocket, push, kérés)  a táblák között frissül.
    * Csak a menetrendben létező megálló számít (egy kitalált azonosító ne menjen ki a MÁV+-hoz),
    * és legfeljebb HOT_MAX: ilyenkor a legrégebben kért esik ki.
    */
@@ -450,7 +450,7 @@ export class RegionalRealtime {
     return Date.now() - this.at < STALE_MS ? this.regional : [];
   }
 
-  /** Az MVK járművei az OTP2-ből (frissek) — tartalékhoz és összevetéshez. */
+  /** Az MVK járművei az OTP2-ből (frissek)  tartalékhoz és összevetéshez. */
   mvkVehicles(): RtVehicle[] {
     return Date.now() - this.mvkAt < STALE_MS ? this.mvk : [];
   }
@@ -495,7 +495,7 @@ export class RegionalRealtime {
     return map;
   }
 
-  /** A korábbi napok kiadott vágányai (az elmúlt 6 hét, a mai nap nélkül) — induláskor és napváltáskor. */
+  /** A korábbi napok kiadott vágányai (az elmúlt 6 hét, a mai nap nélkül)  induláskor és napváltáskor. */
   async loadPlatformHistory(): Promise<void> {
     const rows = await sql<{ t: string; s: string; p: string; n: number }>(
       `SELECT trip_id AS t, regexp_replace(stop_id, '_[^_:]+$', '') AS s, platform AS p, count(DISTINCT service_date)::int AS n

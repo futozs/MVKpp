@@ -11,8 +11,8 @@ const SAMPLE_MS = 10_000;
 /** ennyi közös, mozgó minta és ennyi idő kell a kérdéshez */
 const HITS = 3;
 const MIN_SPAN_MS = 40_000;
-/** a telefon és a jármű távolsága (m), a GPS pontatlanságával megnövelve — módonként (lásd RIDE_PROXIMITY) */
-/** a minták között legalább ennyit mozdult a telefon (m) — álló buszra nem kérdezünk */
+/** a telefon és a jármű távolsága (m), a GPS pontatlanságával megnövelve  módonként (lásd RIDE_PROXIMITY) */
+/** a minták között legalább ennyit mozdult a telefon (m)  álló buszra nem kérdezünk */
 const MOVED_M = 30;
 /** „Nem” után ennyi ideig nem kérdezünk újra ugyanarra a buszra */
 const SNOOZE_MS = 30 * 60_000;
@@ -77,7 +77,7 @@ export function useBoardingDetector(enabled: boolean, position: GeoPosition | nu
 
   return {
     candidate,
-    /** „Nem” — erre a buszra egy ideig nem kérdezünk újra */
+    /** „Nem”  erre a buszra egy ideig nem kérdezünk újra */
     dismiss: () => {
       if (candidate) snoozed.current.set(candidate.id, Date.now() + SNOOZE_MS);
       setCandidate(null);

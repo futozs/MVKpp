@@ -3,7 +3,7 @@
   "version": "3.0.0",
   "private": true,
   "type": "module",
-  "description": "MVK valós idejű buszkövető — Next.js web, realtime worker, macOS token-agent.",
+  "description": "MVK valós idejű buszkövető  Next.js web, realtime worker, macOS token-agent.",
   "workspaces": [
     "apps/*",
     "packages/*",

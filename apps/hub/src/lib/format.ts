@@ -37,7 +37,7 @@ const toMs = (t: string | number | Date | null | undefined): number | null => {
   return Number.isFinite(v) ? v : null;
 };
 
-/** „most”, „3 perce”, „2 órája”, „5 napja” — jövőre: „3 perc múlva” */
+/** „most”, „3 perce”, „2 órája”, „5 napja”  jövőre: „3 perc múlva” */
 export function ago(t: string | number | Date | null | undefined, now = Date.now()): string {
   const v = toMs(t);
   if (v == null) return "–";

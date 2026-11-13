@@ -136,7 +136,7 @@ export function ServicesPage() {
     <>
       <PageHeader
         title="Szolgáltatások"
-        lead="A Docker Compose-projekt minden konténere élő erőforrás-használattal. Újraindítás, leállítás, indítás innen — minden lépés a műveleti naplóba kerül."
+        lead="A Docker Compose-projekt minden konténere élő erőforrás-használattal. Újraindítás, leállítás, indítás innen  minden lépés a műveleti naplóba kerül."
         actions={
           <Button size="sm" icon={<Power className="h-3.5 w-3.5" />} onClick={() => setSoftRestart(true)} busy={busy === "soft"}>
             Worker gyors újraindítása
@@ -145,7 +145,7 @@ export function ServicesPage() {
       />
 
       {!data.dockerAvailable ? (
-        <ErrorNote className="mb-5" error="A hub nem látja a Docker socketet (/var/run/docker.sock) — a konténerek kezelése nem érhető el. Fejlesztéskor ez normális; élesben a compose felcsatolja." />
+        <ErrorNote className="mb-5" error="A hub nem látja a Docker socketet (/var/run/docker.sock)  a konténerek kezelése nem érhető el. Fejlesztéskor ez normális; élesben a compose felcsatolja." />
       ) : null}
 
       {containers ? (

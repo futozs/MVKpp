@@ -24,7 +24,7 @@ export interface LiveIncidents {
   missing: LiveMissing[];
 }
 
-/** Az élő zavarok részletei (percenként frissítve) — az Üzemzavarok panel tetejére. */
+/** Az élő zavarok részletei (percenként frissítve)  az Üzemzavarok panel tetejére. */
 export function useLiveIncidentDetails(): LiveIncidents | null {
   const [data, setData] = useState<LiveIncidents | null>(null);
   useEffect(() => {

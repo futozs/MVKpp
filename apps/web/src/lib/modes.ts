@@ -6,7 +6,7 @@
  * Alapból mind be van kapcsolva; az első indításkor egy kártya kérdezi meg, kell-e.
  *
  * Az azonosítók: az MVK-é előtag nélküli (SP388), a regionálisaké a MÁV+ előtagjával
- * jön (`hkir:` Volán, `1:` vasút) — a megálló / jármű / menet forrása ebből olvasható.
+ * jön (`hkir:` Volán, `1:` vasút)  a megálló / jármű / menet forrása ebből olvasható.
  */
 import { useMemo } from "react";
 import { inRegion } from "@mvk/core/transit/region";
@@ -21,7 +21,7 @@ export type ModeItem = { id: TransitMode; key: string; label: string; short: str
 
 export const MODE_ITEMS: readonly ModeItem[] = [
   { id: "tram", key: "mvk_pref_mode_tram", label: "Villamos (MVK)", short: "Villamos", hint: "Az MVK villamosai a térképen, a figyelőben, a menetrendben és a statisztikában." },
-  { id: "bus", key: "mvk_pref_mode_bus", label: "Városi busz (MVK)", short: "Busz", hint: "Az MVK buszai — a városi járatok." },
+  { id: "bus", key: "mvk_pref_mode_bus", label: "Városi busz (MVK)", short: "Busz", hint: "Az MVK buszai  a városi járatok." },
   { id: "coach", key: "mvk_pref_mode_coach", label: "Helyközi busz (Volán)", short: "Volán", hint: "A MÁV-Volán buszai Borsod-Abaúj-Zemplénben, a Búza téri autóbusz-állomással és a kocsiállásokkal." },
   { id: "rail", key: "mvk_pref_mode_rail", label: "Vonat (MÁV)", short: "Vonat", hint: "A megyét érintő vonatok az egész útjukon: vágány, késés és oka, hol jár most." },
 ];
@@ -71,7 +71,7 @@ export function useEnabledModes(): TransitMode[] {
 export type StopMerge = "all" | "mvk" | "coach" | "off";
 export const STOP_MERGE_KEY = "mvk_pref_stop_merge";
 export const STOP_MERGE_ITEMS: readonly { id: StopMerge; label: string; hint: string }[] = [
-  { id: "all", label: "Összevonva", hint: "Egy megálló, és minden járat, ami ott megáll — MVK és Volán együtt." },
+  { id: "all", label: "Összevonva", hint: "Egy megálló, és minden járat, ami ott megáll  MVK és Volán együtt." },
   { id: "mvk", label: "Csak MVK", hint: "A közös megállókban csak az MVK járatai látszanak." },
   { id: "coach", label: "Csak Volán", hint: "A közös megállókban csak a Volán-buszok látszanak." },
   { id: "off", label: "Külön", hint: "Az MVK- és a Volán-megálló külön, ahogy a menetrendben szerepel." },
@@ -97,7 +97,7 @@ export function useStopMerge(): StopMerge {
 export const isMergedTwin = (s: { twinOf?: string }, merge: StopMerge) => Boolean(s.twinOf) && merge !== "off";
 
 /**
- * A megállótáblák kulcsa: a módok és az összevonás (`tram,bus,coach,rail~all`) — ez megy a
+ * A megállótáblák kulcsa: a módok és az összevonás (`tram,bus,coach,rail~all`)  ez megy a
  * `?modes=&merge=` paraméterekbe és a `stop:<id>@<kulcs>` WebSocket-témába.
  */
 export const boardKey = (modes: readonly TransitMode[], merge: StopMerge) => `${modesParam(modes)}~${merge}`;
@@ -127,13 +127,13 @@ export const isRegionalId = (id: string) => id.includes(":");
 
 /**
  * Keresési sorrend: a megyén belüli megállók elöl. A megyét érintő járatok teljes útjukkal
- * jönnek, ezért Debrecen vagy Békéscsaba autóbusz-állomása is a listában van — de hátul.
+ * jönnek, ezért Debrecen vagy Békéscsaba autóbusz-állomása is a listában van  de hátul.
  */
 export const regionRank = (s: { id: string; lat: number; lon: number }) => (!isRegionalId(s.id) || inRegion(s.lat, s.lon) ? 0 : 1);
 
 /**
  * A választható megállók: az állomás peronjai (vágányok, kocsiállások) nem külön
- * tételek — az állomást kell felvenni, az mutatja mindet.
+ * tételek  az állomást kell felvenni, az mutatja mindet.
  */
 export function pickableStops<T extends { id: string; parent?: string | null }>(stops: T[]): T[] {
   const ids = new Set(stops.map((s) => s.id));
@@ -179,7 +179,7 @@ const FOREIGN_CLASS: Record<string, string> = { "182": "Taurus", "193": "Vectron
 
 /**
  * Vasúti jármű a UIC-számából: a teljes, tagolt szám (`92 55 0418 322-7`), a megszokott
- * rövid alak — sorozat és pályaszám (`418 322`) — és a típus köznapi neve (`M41`), ha ismert.
+ * rövid alak  sorozat és pályaszám (`418 322`)  és a típus köznapi neve (`M41`), ha ismert.
  */
 export function railVehicle(id: string): { full: string; short: string; model: string | null } | null {
   const uic = /^1:(\d{2})(\d{2})(\d{4})(\d{3})(\d)$/.exec(id);
@@ -222,7 +222,7 @@ export function vehicleNoun(mode: TransitMode | undefined): string {
 
 /**
  * A telefon és a jármű „együtt” távolságai módonként (m). A busz pontja a jármű, a vonaté
- * egy 100–200 m-es szerelvény egyik vége, és a jele 10–40 mp-cel késik — ott tágabb.
+ * egy 100–200 m-es szerelvény egyik vége, és a jele 10–40 mp-cel késik  ott tágabb.
  * near/far: felszállás-felismerés; withBus/away: utazás közben; atStop: a megállóban áll.
  */
 export const RIDE_PROXIMITY: Record<TransitMode, { near: number; far: number; withBus: number; away: number; atStop: number }> = {

@@ -4,7 +4,7 @@
  * Az MVK azonosítói (megálló, vonal, menet, jármű) előtag nélküliek, ahogy az
  * MVK GTFS-ben vannak. Minden más forrás az OTP2 `feed:` előtagjával jön
  * (`hkir:` Volán, `1:` vasút). Egy azonosító tehát akkor MVK-s, ha nincs
- * benne kettőspont — erre épül a v2-végpontok MVK-szűrése is (az iOS app
+ * benne kettőspont  erre épül a v2-végpontok MVK-szűrése is (az iOS app
  * soha nem kap mást, mint eddig).
  */
 
@@ -84,7 +84,7 @@ export function operatorLabel(agencyName: string | null | undefined): string | n
  * Az állomás kulcsa egy regionális megállóhoz: a vágány / kocsiállás utótagja nélkül
  * (`1:005511387_3` → `1:005511387`, `hkir:hkir_213938_11` → `hkir:hkir_213938`).
  * A MÁV+ valós idejű adata a vágány-megállót adja, a menetrend az állomásszintűt
- * (`_0`) — ezen a kulcson párosítjuk őket. Az MVK-megállónál maga az azonosító.
+ * (`_0`)  ezen a kulcson párosítjuk őket. Az MVK-megállónál maga az azonosító.
  */
 export function stationKeyOf(stopId: string): string {
   return isMvkId(stopId) ? stopId : stopId.replace(/_[^_:]+$/, "");

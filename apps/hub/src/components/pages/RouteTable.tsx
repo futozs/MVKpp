@@ -1,5 +1,5 @@
 "use client";
-/** Útvonalankénti válaszidő-táblázat (worker, web, MVK API) — rendezhető, percenkénti mini-görbével. */
+/** Útvonalankénti válaszidő-táblázat (worker, web, MVK API)  rendezhető, percenkénti mini-görbével. */
 import { useState } from "react";
 import { ms, num, num1 } from "@/lib/format";
 import type { MetricStat } from "@/lib/types";
@@ -73,7 +73,7 @@ export function RouteTable({ rows, windowMin, empty = "Ebben az ablakban nem vol
   );
 }
 
-/** A percenkénti sor kiegészítése: a csendes percek üresek (nem nullák — az átlagidő ott nem létezik). */
+/** A percenkénti sor kiegészítése: a csendes percek üresek (nem nullák  az átlagidő ott nem létezik). */
 function fillMinutes(series: [number, number, number][], windowMin: number): (number | null)[] {
   const end = Math.floor(Date.now() / 60_000) * 60_000;
   const byT = new Map(series.map(([t, , avg]) => [t, avg]));

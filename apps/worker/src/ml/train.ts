@@ -59,7 +59,7 @@ export type DelayModelBundle = {
     rows: { train: number; valid: number; test: number };
     days: { train: string[]; valid: string[]; test: string[] };
     buckets: Record<string, BucketReport>;
-    /** horizont × napszak (pl. „16+|reggeli csúcs”) — a medián kapuja cellánként */
+    /** horizont × napszak (pl. „16+|reggeli csúcs”)  a medián kapuja cellánként */
     cells: Record<string, CellReport>;
     overall: { maeBaseline: number; maeModel: number; improvement: number };
     seconds: number;

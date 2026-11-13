@@ -25,7 +25,7 @@ packages/db/src/generated/
 logs/
 *.log
 
-# Titkok — csak a *.example sablonok mennek a repóba
+# Titkok  csak a *.example sablonok mennek a repóba
 .env
 .env.*
 !.env.dev.example

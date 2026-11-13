@@ -19,7 +19,7 @@ const HM_FMT = new Intl.DateTimeFormat("hu-HU", { timeZone: TZ, hour: "2-digit",
 const HMS_FMT = new Intl.DateTimeFormat("hu-HU", { timeZone: TZ, hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" });
 const DATE_FMT = new Intl.DateTimeFormat("sv-SE", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" });
 
-/** A backend UTC-ben küldi az időket — budapesti idő szerint írjuk ki. */
+/** A backend UTC-ben küldi az időket  budapesti idő szerint írjuk ki. */
 export function hm(input: string | number): string {
   const d = typeof input === "number" ? new Date(input * 1000) : new Date(input);
   return HM_FMT.format(d);
@@ -74,7 +74,7 @@ function daySuffix(day: number): string {
   return [3, 6, 8].includes(day % 10) ? "ai" : "ei";
 }
 
-/** „a 2026. október 28-ai” — névelővel együtt, mondatba illesztéshez. */
+/** „a 2026. október 28-ai”  névelővel együtt, mondatba illesztéshez. */
 export function dateAdjective(isoDate: string): string {
   const d = new Date(`${isoDate}T12:00:00`);
   const month = d.toLocaleDateString("hu-HU", { month: "long" });

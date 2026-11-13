@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * „Figyeld az átszállást”: ha útközben elszáll az esély (az első busz késik,
- * a csatlakozás korábban megy), push-értesítés jön — a következő lehetőséggel.
+ * a csatlakozás korábban megy), push-értesítés jön  a következő lehetőséggel.
  * Csak a mai, közeli utakra (a szerver a mai előrejelzésből számol).
  */
 export function TransferWatchButton({ check, className }: { check: JourneyTransferCheck; className?: string }) {
@@ -53,7 +53,7 @@ export function TransferWatchButton({ check, className }: { check: JourneyTransf
         onClick={() => void toggle()}
         disabled={busy}
         aria-pressed={on}
-        title={on ? "Szólok, ha veszélybe kerül az átszállás — koppints a kikapcsoláshoz" : "Szólj, ha veszélybe kerül ez az átszállás"}
+        title={on ? "Szólok, ha veszélybe kerül az átszállás  koppints a kikapcsoláshoz" : "Szólj, ha veszélybe kerül ez az átszállás"}
         className={cn(
           "inline-flex w-fit items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-semibold transition-colors",
           "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",

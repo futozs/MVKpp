@@ -44,7 +44,7 @@ const verdictOf = (t: PredictionTrip): Exclude<Verdict, "all"> => {
 function GuessChip({ g }: { g: PredictionGuess }) {
   return (
     <span
-      title={`${g.h} perccel indulás előtt: ${g.v} (${Math.round(g.c * 100)}% bizonyosság) — ${g.ok ? "talált" : "tévedett"}`}
+      title={`${g.h} perccel indulás előtt: ${g.v} (${Math.round(g.c * 100)}% bizonyosság)  ${g.ok ? "talált" : "tévedett"}`}
       className={cn(
         "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] leading-none",
         g.ok ? "border-ontime/35 bg-ontime/10" : "border-late/35 bg-late/10",
@@ -187,7 +187,7 @@ export function PredictionTripList({
                     text={t.text_color}
                   />
                   <span className="min-w-0 truncate text-[12.5px] font-medium">
-                    {t.headsign ?? "—"}
+                    {t.headsign ?? ""}
                   </span>
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5 sm:justify-end">

@@ -63,7 +63,7 @@ export interface RideStats<R extends StatRide> {
   onTimePct: number | null;
   /** a buszon a késések miatt plusz eltöltött idő összesen (mp) */
   extraOnboardS: number;
-  /** a késő buszra a megállóban várva (mp) — a menetrendhez képest */
+  /** a késő buszra a megállóban várva (mp)  a menetrendhez képest */
   lateWaitS: number;
   /** ennyi útnál ismert a fel- és leszálláskori késés is */
   delayMeasured: number;
@@ -87,7 +87,7 @@ const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 function bump(m: Map<string, StopCount>, id: string | null, name: string | null) {
   if (!id && !name) return;
-  // ugyanaz a hely más azonosítóval (a menetrend változásai) — a név köti össze
+  // ugyanaz a hely más azonosítóval (a menetrend változásai)  a név köti össze
   const key = name ?? id!;
   const cur = m.get(key);
   m.set(key, { id: cur?.id ?? id ?? key, name: name ?? id!, n: (cur?.n ?? 0) + 1 });

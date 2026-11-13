@@ -49,7 +49,7 @@ export function recentDays(): { iso: string; label: string }[] {
   const today = serviceClock(Math.floor(serverNow())).calendarIso;
   return Array.from({ length: DAYS_BACK }, (_, i) => {
     const iso = shiftIso(today, -i);
-    // „H 26.” — a hét napja és a nap (a hónap a két hétből úgyis kiderül)
+    // „H 26.”  a hét napja és a nap (a hónap a két hétből úgyis kiderül)
     const label = `${WEEKDAY.format(new Date(`${iso}T12:00:00Z`))} ${Number(iso.slice(8))}.`;
     return { iso, label: i === 0 ? "Ma" : i === 1 ? "Tegnap" : label };
   });

@@ -8,7 +8,7 @@ import { VehicleFocusCard } from "./VehicleFocusCard";
  * A követett jármű panelje a térkép fölött: telefonon alul teljes szélességben, asztalon
  * jobb oldalt az oszlop teljes magasságában, a követés-kártya fölött a menet menetrendjével
  * (hol tart, melyik a következő megálló). Telefonon csak vonatnál van menetrend, összecsukva
- * a következő állomásokkal — a buszé, villamosé, Voláné ott a kártya marad.
+ * a következő állomásokkal  a buszé, villamosé, Voláné ott a kártya marad.
  * A `data-map-cover` alapján tartja a térkép a követett járművet a látható rész közepén.
  */
 export function FocusDock({

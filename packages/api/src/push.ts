@@ -1,5 +1,5 @@
 /**
- * /push/* (v2-kompatibilis) és /v3/push/* — feliratkozás, figyelések,
+ * /push/* (v2-kompatibilis) és /v3/push/*  feliratkozás, figyelések,
  * kézbesítési napló. A tényleges küldést a worker végzi (sorral,
  * újrapróbálással); a web csak tárol és Postgres NOTIFY-jal szól.
  */

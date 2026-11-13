@@ -62,7 +62,7 @@ describe("éjfél utáni menetek", () => {
       { day: wed, midnightUnix: midWed },
       { day: tue, midnightUnix: midTue },
     ];
-    // szerda 00:45 (naptár) = a keddi szolgáltatási nap éjszakája — a sorrendben a szerda az első
+    // szerda 00:45 (naptár) = a keddi szolgáltatási nap éjszakája  a sorrendben a szerda az első
     expect(resolveTripNear(days, NIGHT, midWed + 45 * 60)?.dc.day.iso).toBe("2026-10-28");
     // szerda 03:00 után még futó késő menet is a keddi napé
     expect(resolveTripNear(days, NIGHT, midWed + 3 * H + 30)?.dc.day.iso).toBe("2026-10-28");

@@ -143,7 +143,7 @@ export function registerTransit(r: Router, ctx: Ctx) {
 
   /**
    * Egy vonat megállónként: vonatszám szerint (`?no=`) a ma (vagy ha már elment, holnap)
-   * közlekedő példány, menetazonosító szerint (`?trip=`) pontosan az a menet — a térképen
+   * közlekedő példány, menetazonosító szerint (`?trip=`) pontosan az a menet  a térképen
    * követett vonat menetrendje.
    */
   r.get("/engine/transit/train", (req, res) => {
@@ -159,7 +159,7 @@ export function registerTransit(r: Router, ctx: Ctx) {
   });
 
   /**
-   * Bármely mód menete megállónként (MVK busz / villamos, Volán, vasút) — a térképen
+   * Bármely mód menete megállónként (MVK busz / villamos, Volán, vasút)  a térképen
    * követett jármű menetrendje, ugyanabban az alakban, mint a vonaté.
    */
   r.get("/engine/transit/trip", (req, res) => {

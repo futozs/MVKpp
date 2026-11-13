@@ -2,7 +2,7 @@
  * MVK GTFS-RT (protobuf) → RealtimeSnapshot.
  *
  * Az MVK furcsasága: a feed `timestamp`/`time` mezői helyi időt hordoznak
- * unix-ként (Budapest falióra), ezért az eltolást le kell vonni — a régi
+ * unix-ként (Budapest falióra), ezért az eltolást le kell vonni  a régi
  * gateway és a collector is így csinálta, és az adatok ezt igazolják.
  */
 import GtfsRealtimeBindings from "gtfs-realtime-bindings";
@@ -28,7 +28,7 @@ export type DecodeInput = {
   updates: Uint8Array | null;
   /** a feed helyi idejének eltolása (budapestOffsetSec) */
   offset: number;
-  /** a ma érvényes szolgáltatási nap(ok) — a menet-feloldáshoz */
+  /** a ma érvényes szolgáltatási nap(ok)  a menet-feloldáshoz */
   days: ServiceDay[];
   /** a szolgáltatási nap referencia-éjfele, a csak késést tartalmazó frissítésekhez */
   midnightUnix: number;
@@ -129,7 +129,7 @@ export function buildSnapshot(input: DecodeInput): RealtimeSnapshot {
       bearing: v.bearing,
       speed: v.speed,
       tripId: hit?.trip.id ?? v.rtTripId,
-      // A v2-mező helyi időt hordoz unixként (mint az MVK feedje) — a fogyasztók levonják az eltolást.
+      // A v2-mező helyi időt hordoz unixként (mint az MVK feedje)  a fogyasztók levonják az eltolást.
       timestamp: v.ts + input.offset,
       mode,
       routeKey: r?.key ?? routeId,
@@ -234,7 +234,7 @@ function resolveRouteId(feed: ServiceDay["feed"] | undefined, raw: string, fromT
   if (raw && feed.routes.has(raw)) return raw;
   if (fromTrip && feed.routes.has(fromTrip)) return fromTrip;
   if (raw) {
-    for (const part of raw.split(/[-–—/]/)) {
+    for (const part of raw.split(/[-–/]/)) {
       const p = part.trim();
       if (p && feed.routes.has(p)) return p;
     }

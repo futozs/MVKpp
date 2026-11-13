@@ -1,7 +1,7 @@
 /**
  * Hőtérképek a Statisztikához (lezárt napokból, gyorsítótárazva):
- *  · vonal — megálló × óra: mennyit késik a busz, és hol szedi össze a késést
- *  · város — megállóközönként, óránként: mennyi időt veszít a menetrendhez képest
+ *  · vonal  megálló × óra: mennyit késik a busz, és hol szedi össze a késést
+ *  · város  megállóközönként, óránként: mennyi időt veszít a menetrendhez képest
  */
 import { mainPattern, routeDirections, segmentPaths, type ServiceDay } from "@mvk/core";
 import { cached } from "@mvk/cache";

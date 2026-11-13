@@ -3,11 +3,11 @@ import { useEffect } from "react";
 export function useAppHeight() {
   useEffect(() => {
     const apply = () => {
-      // Nagyításkor a visualViewport.height 1/scale arányban zsugorodik — a
+      // Nagyításkor a visualViewport.height 1/scale arányban zsugorodik  a
       // skálával visszaszorozva a magasság marad, a billentyűzet viszont
       // (scale = 1 mellett) továbbra is csökkenti. Kicsinyített nézetben (iPad
       // Safari oldalnagyítás / asztali mód: scale < 1) a látható terület épp
-      // vv.height — ott szorozni nem szabad, különben az app csak ~75%-ot tölt ki.
+      // vv.height  ott szorozni nem szabad, különben az app csak ~75%-ot tölt ki.
       const vv = window.visualViewport;
       const h = vv ? Math.round(vv.height * Math.max(1, vv.scale)) : window.innerHeight;
       // iOS-en a billentyűzet nyitásakor az oldal fel is gördül (offsetTop):

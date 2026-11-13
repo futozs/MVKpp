@@ -61,7 +61,7 @@ export function registerRideLog(r: Router, ctx: Ctx) {
 
   /**
    * A vonalak, amelyeken körbe lehet utazni (fordulóhurkos végállomás), és a
-   * hurkok megállói — az Utazásaim ezek útjainál kínálja a körbeutazás hozzáadását.
+   * hurkok megállói  az Utazásaim ezek útjainál kínálja a körbeutazás hozzáadását.
    */
   r.get("/engine/ridelog/loops", (req, res) => {
     const day = feeds.cachedDay(engine.today);
@@ -89,7 +89,7 @@ export function registerRideLog(r: Router, ctx: Ctx) {
   });
 
   /**
-   * ?date=<szolgáltatási nap>&trip=…&vehicle=…: körbeutazás utólag — a menet
+   * ?date=<szolgáltatási nap>&trip=…&vehicle=…: körbeutazás utólag  a menet
    * végállomásáról továbbinduló menetek; ha a busz ismert, az ő menete elöl.
    */
   r.get("/engine/ridelog/next", async (req, res) => {

@@ -137,7 +137,7 @@ export function RideStatsView({ s, fleetSize }: { s: RideStats<Ride>; fleetSize:
         <StatTile label="Begyűjtött megálló" value={s.stopsCollected.length} sub="ahol fel- vagy leszálltál" tone="live" />
         <StatTile
           label="Pontos busz"
-          value={s.onTimePct != null ? `${s.onTimePct}%` : "—"}
+          value={s.onTimePct != null ? `${s.onTimePct}%` : ""}
           sub="felszálláskor ±1 percen belül"
           tone={s.onTimePct != null && s.onTimePct >= 70 ? "ontime" : "late"}
         />
@@ -185,7 +185,7 @@ export function RideStatsView({ s, fleetSize }: { s: RideStats<Ride>; fleetSize:
                   <span className="block h-full rounded-full bg-primary/70" style={{ width: `${(100 * r.n) / (s.routes[0]?.n || 1)}%` }} />
                 </span>
                 <span className="text-right font-mono text-xs tabular-nums">{r.n}×</span>
-                <span className={cn("text-right font-mono text-[11px] tabular-nums", delayTone(r.avgDelayS))}>{r.avgDelayS != null ? delayLabel(r.avgDelayS) : "—"}</span>
+                <span className={cn("text-right font-mono text-[11px] tabular-nums", delayTone(r.avgDelayS))}>{r.avgDelayS != null ? delayLabel(r.avgDelayS) : ""}</span>
               </li>
             ))}
           </ul>

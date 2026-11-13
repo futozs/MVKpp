@@ -94,7 +94,7 @@
   border-radius: 3px;
 }
 
-/* Vonat: lekerekített, csak a kategóriával (Sz, IC, IR) — a vonatszám a címkében */
+/* Vonat: lekerekített, csak a kategóriával (Sz, IC, IR)  a vonatszám a címkében */
 .mvk-vehicle.rail .tile {
   padding: 0 7px;
   border-radius: 999px;

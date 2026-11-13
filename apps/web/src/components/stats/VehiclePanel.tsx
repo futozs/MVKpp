@@ -108,7 +108,7 @@ function TrackTrace({ track }: { track: TrackPoint[] }) {
           className="fill-ontime stroke-card"
           strokeWidth={2}
         >
-          <title>{`Nap első pontja — ${fmtClock(track[0][0])}`}</title>
+          <title>{`Nap első pontja  ${fmtClock(track[0][0])}`}</title>
         </circle>
         <circle
           cx={px(track[track.length - 1][2])}
@@ -117,7 +117,7 @@ function TrackTrace({ track }: { track: TrackPoint[] }) {
           className="fill-late stroke-card"
           strokeWidth={2}
         >
-          <title>{`Nap utolsó pontja — ${fmtClock(track[track.length - 1][0])}`}</title>
+          <title>{`Nap utolsó pontja  ${fmtClock(track[track.length - 1][0])}`}</title>
         </circle>
       </svg>
       <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
@@ -225,7 +225,7 @@ export function VehiclePanel({
   }, [routes]);
   const [vehicleId, setVehicleId] = useState<string | null>(null);
   // A választott nap járművenként: új járműnél a legutóbbi olyan nap, amikor
-  // ténylegesen közlekedett (a szerver dönti el) — sosem egy üres nap.
+  // ténylegesen közlekedett (a szerver dönti el)  sosem egy üres nap.
   const [dateSel, setDateSel] = useState<{ vehicle: string | null; date: string | null }>({ vehicle: null, date: null });
   const date = dateSel.vehicle === vehicleId ? dateSel.date : null;
   const setDate = (d: string) => setDateSel({ vehicle: vehicleId, date: d });
@@ -248,7 +248,7 @@ export function VehiclePanel({
     Boolean(vehicleId),
   );
   const shownDate = detailQ.data?.vehicleId === vehicleId ? detailQ.data.date : null;
-  /** A jármű adatos napjai, újabb elöl — a léptető csak ezek között mozog. */
+  /** A jármű adatos napjai, újabb elöl  a léptető csak ezek között mozog. */
   const days = detailQ.data?.vehicleId === vehicleId ? (detailQ.data.days ?? []) : [];
   const prevDay = shownDate ? days.find((d) => d < shownDate) : undefined;
   const nextDay = shownDate ? [...days].reverse().find((d) => d > shownDate) : undefined;
@@ -332,7 +332,7 @@ export function VehiclePanel({
                   onChange={(e) => setDate(e.target.value)}
                   disabled={!days.length}
                 >
-                  {!days.length ? <option value="">{shownDate ?? "—"}</option> : null}
+                  {!days.length ? <option value="">{shownDate ?? ""}</option> : null}
                   {days.map((d) => (
                     <option key={d} value={d}>
                       {d} · {new Date(`${d}T12:00:00Z`).toLocaleDateString("hu-HU", { weekday: "short" })}
@@ -374,7 +374,7 @@ export function VehiclePanel({
                     <StatTile
                       label="Menet"
                       value={s?.runs ?? d.runs.length}
-                      sub={`${s?.routes_n ?? "—"} vonalon`}
+                      sub={`${s?.routes_n ?? ""} vonalon`}
                     />
                     <StatTile label="Megtett út" value={fmtKm(s?.dist_m)} />
                     <StatTile
@@ -413,7 +413,7 @@ export function VehiclePanel({
                         value={
                           s.max_speed_dms != null
                             ? `${Math.round((s.max_speed_dms / 10) * 3.6)} km/h`
-                            : "—"
+                            : ""
                         }
                       />
                       <StatTile
@@ -540,7 +540,7 @@ export function VehiclePanel({
                 centerLabel={`${latestRoutes[0].share_pct}%`}
                 centerSub={`${latestRoutes.reduce((a, r) => a + r.runs, 0)} menet ebben a hónapban, ${latestRoutes[0].days_active} aktív nap`}
                 slices={latestRoutes.map((r) => ({
-                  label: `${routeLabel(r.route_short)} — ${r.runs} menet`,
+                  label: `${routeLabel(r.route_short)}  ${r.runs} menet`,
                   value: r.runs,
                   color: r.color,
                 }))}

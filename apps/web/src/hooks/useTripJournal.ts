@@ -10,7 +10,7 @@ const EMPTY = new Map<string, TripJournalEntry>();
 /**
  * A nap menetnaplója (melyik jármű vitte, mikor indult/ért be, mennyit késett).
  *
- * A mai napra a szerver WebSocketen azonnal küld minden változást — az
+ * A mai napra a szerver WebSocketen azonnal küld minden változást  az
  * „indult” időpont abban a pillanatban megjelenik, ahogy a busz elhagyja a
  * végállomást (a v2-ben ez a menet lezárásáig, akár egy óráig is váratott).
  * Múltbeli napra egyszeri lekérés.
@@ -41,7 +41,7 @@ export function useTripJournal(ymd: string | null, pollMs = FALLBACK_POLL_MS): M
       if (!mounted.current || wanted.current !== asked || res.date !== asked) return;
       setTrips(new Map(Object.entries(res.trips)));
       setLoadedFor(asked);
-      // A szerver "live" forrással jelzi, hogy ez a mai nap — erre él a WebSocket-téma.
+      // A szerver "live" forrással jelzi, hogy ez a mai nap  erre él a WebSocket-téma.
       if ((res as { source?: string }).source === "live") setLiveDay(asked);
     } catch {
       // Ha még semmi nincs betöltve erre a napra, pár másodperc múlva újra (különben üres maradna).

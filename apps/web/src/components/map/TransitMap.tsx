@@ -47,7 +47,7 @@ import { activeFilterCount, filterSummary, matchesModeFilters, MAX_WATCHED } fro
 import { isRegionalId, vehicleModeOf } from "@/lib/modes";
 import type { Focus3D, Map3DHandle, Map3DView } from "./map3d/Map3D";
 
-/** A 3D térkép (MapLibre) csak bekapcsoláskor töltődik le — a 2D nézet ebből semmit nem visz. */
+/** A 3D térkép (MapLibre) csak bekapcsoláskor töltődik le  a 2D nézet ebből semmit nem visz. */
 const Map3D = lazy(() => import("./map3d/Map3D").then((m) => ({ default: m.Map3D })));
 
 /** a szűrőpanel nyitott állapota asztalon (eszközönként) */
@@ -104,7 +104,7 @@ const NEAR_STOP_KM = 0.4;
 const CLOSE_ZOOM = 17;
 const ME_ZOOM = 16;
 
-/** Érintőképernyőn az ujj nem pixelpontos — a találati sugár ezt pótolja. */
+/** Érintőképernyőn az ujj nem pixelpontos  a találati sugár ezt pótolja. */
 const IS_TOUCH =
   typeof window !== "undefined" &&
   (window.matchMedia?.("(pointer: coarse)").matches ?? false);
@@ -112,7 +112,7 @@ const IS_TOUCH =
 /** Canvas-találati ráhagyás képpontban: ennyivel a pötty mellé is lehet nyúlni. */
 const HIT_TOLERANCE = IS_TOUCH ? 15 : 6;
 
-/** A megállópöttyök rajzolt mérete — érintésre nagyobb, hogy látszódjon is. */
+/** A megállópöttyök rajzolt mérete  érintésre nagyobb, hogy látszódjon is. */
 const STOP_R = IS_TOUCH ? 5 : 3.5;
 /** városnyi távolságból kisebb pötty: a buszok a lényeg, a megállók csak háttér */
 const STOP_R_FAR = IS_TOUCH ? 3 : 2.5;
@@ -146,7 +146,7 @@ interface TransitMapProps {
   onSelectTileLayer: (layerId: string) => void;
   /**
    * Kint van a követés panelje (FocusDock): asztalon jobb oldalt a teljes magasságban
-   * (menetrend + kártya) — a jobb oldali gombok mellé húzódnak.
+   * (menetrend + kártya)  a jobb oldali gombok mellé húzódnak.
    */
   dock?: boolean;
 }
@@ -185,7 +185,7 @@ function offsetToFollow(map: L.Map, pos: L.LatLng): L.Point {
   return map.latLngToContainerPoint(pos).subtract(target);
 }
 
-/** Követéskor a nagyítás (csípés, görgő, dupla koppintás) a képközépen marad — ott a busz. */
+/** Követéskor a nagyítás (csípés, görgő, dupla koppintás) a képközépen marad  ott a busz. */
 function zoomAroundCenter(map: L.Map, on: boolean) {
   const mode = on ? "center" : true;
   map.options.touchZoom = mode;
@@ -338,7 +338,7 @@ export function TransitMap({
     setHistoryOn(true);
   };
 
-  // Ha máshonnan menetkövetés indul, az élő nézet kell — kilépünk.
+  // Ha máshonnan menetkövetés indul, az élő nézet kell  kilépünk.
   useEffect(() => {
     if (focusTripId) setHistoryOn(false);
   }, [focusTripId]);
@@ -352,7 +352,7 @@ export function TransitMap({
       zoomControl: false,
       attributionControl: false,
       // A közös canvas-renderer találati ráhagyása minden körre és vonalra
-      // érvényes — ettől lesz eltalálható a megállópötty telefonon.
+      // érvényes  ettől lesz eltalálható a megállópötty telefonon.
       renderer: L.canvas({ tolerance: HIT_TOLERANCE, padding: 0.4 }),
       maxZoom: MAX_MAP_ZOOM,
       center: saved ? [saved.lat, saved.lon] : [48.104, 20.79],
@@ -629,7 +629,7 @@ export function TransitMap({
       });
 
       // Érintőképernyőn a tooltip csak egy fölösleges lebegő doboz, amit a
-      // koppintás azonnal ki is vált — ott a részletlap a válasz.
+      // koppintás azonnal ki is vált  ott a részletlap a válasz.
       if (!IS_TOUCH) {
         // a név a feedből jön: escape-elve
         const kind = rail ? "Vasútállomás" : s.station ? "Autóbusz-állomás" : s.feed === "coach" ? "Volán-megálló" : s.id;
@@ -653,7 +653,7 @@ export function TransitMap({
   ]);
 
   // Amikor a kijelölt megálló máshonnan (megállófigyelő "cél a térképen"
-  // gombja, keresés) érkezik, a térkép ugorjon is oda — eddig csak a pötty
+  // gombja, keresés) érkezik, a térkép ugorjon is oda  eddig csak a pötty
   // stílusa változott, a nézet nem mozdult.
   useEffect(() => {
     if (!mapRef.current || !selectedStopId) return;
@@ -667,7 +667,7 @@ export function TransitMap({
     if (!mapRef.current || !busLayerRef.current) return;
     const layer = busLayerRef.current;
     const live = liveMarkersRef.current;
-    // Követés közben (utazáskor is) a többi busz halványan látszik — kikapcsolható a Térkép rétegeinél.
+    // Követés közben (utazáskor is) a többi busz halványan látszik  kikapcsolható a Térkép rétegeinél.
     // 3D-ben a járműveket a 3D térkép rajzolja.
     if (historyOn || is3d || (focusTripId && !filters.others)) {
       layer.clearLayers();
@@ -739,7 +739,7 @@ export function TransitMap({
     }
   }, [vehicles, filters, focusTripId, focusVehicleId, historyOn, is3d, routes, onFocusTrip]);
 
-  // A figyelt rendszámokra (keresésre) a térkép odaugrik — követés közben nem: a térkép a buszé.
+  // A figyelt rendszámokra (keresésre) a térkép odaugrik  követés közben nem: a térkép a buszé.
   useEffect(() => {
     if (historyOn || !mapRef.current) return;
     const activeQ = filters.vq.trim().toLowerCase();
@@ -756,7 +756,7 @@ export function TransitMap({
   }, [vehicles, filters, focusTripId, historyOn]);
 
   // Élő becslés: negyed másodpercenként a nyomvonalon továbbvisszük a buszokat
-  // (a szakasz szokásos sebességével, legfeljebb a következő megállóig) —
+  // (a szakasz szokásos sebességével, legfeljebb a következő megállóig) 
   // követéskor a követett buszt is, és a térkép vele együtt halad.
   useEffect(() => {
     if (historyOn || is3d) return;
@@ -954,7 +954,7 @@ export function TransitMap({
 
   const flyToVehicle = (v: LiveVehicle) => {
     // Volán / vonat: követés. A jele 30–60 mp-cel késhet, és a látott részen kívül nem
-    // becsüljük a helyét — a követés becsli és középen tartja (mint a figyelőből indítva).
+    // becsüljük a helyét  a követés becsli és középen tartja (mint a figyelőből indítva).
     if (isRegionalId(v.id) && v.tripId) {
       onFocusTrip(v.tripId, v.id);
       return;
@@ -1115,7 +1115,7 @@ export function TransitMap({
           <NewsButton onShowRoute={(id) => setFilters((prev) => ({ ...prev, routes: [id] }))} />
         </MapCorner>
 
-        {/* Bal lent: keresés (megálló, kód, rendszám) — hüvelykujjal elérhető. */}
+        {/* Bal lent: keresés (megálló, kód, rendszám)  hüvelykujjal elérhető. */}
         {historyOn ? null : (
           <MapCorner corner="bottom-left" className={cn(isPanelOpen && "hidden md:flex md:left-[384px]", searchOpen && "z-drawer")}>
             <MapSearch
@@ -1148,7 +1148,7 @@ export function TransitMap({
           ) : null}
           {map3dError ? (
             <p role="status" className="pointer-events-auto max-w-[220px] rounded-xl border border-border/80 bg-card/90 px-3 py-2 text-[11.5px] text-muted-foreground shadow-md backdrop-blur-md">
-              A 3D térkép most nem tölthető be (a böngésző nem támogatja, vagy nem érhető el az alaptérkép) — maradt a 2D.
+              A 3D térkép most nem tölthető be (a böngésző nem támogatja, vagy nem érhető el az alaptérkép)  maradt a 2D.
             </p>
           ) : null}
           {historyOn ? null : <MapControl icon={History} label="Idővonal" showLabel="wide" title="Visszanézhető, merre jártak a járművek" onClick={openHistory} />}

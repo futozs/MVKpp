@@ -52,7 +52,7 @@ const T1 = "S_1_080000_X";
 const T2 = "S_2_081000_X";
 
 describe("illesztő", () => {
-  it("indulás a végállomásról, áthaladás, beérkezés — a menet azonnal lezárul", () => {
+  it("indulás a végállomásról, áthaladás, beérkezés  a menet azonnal lezárul", () => {
     const { events, closed } = run([
       { t: "07:56:00", m: 5, speed: 0, trip: T1 },
       { t: "07:59:30", m: 5, speed: 0, trip: T1 },

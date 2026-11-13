@@ -69,7 +69,7 @@ export function BackupsPage() {
     <>
       <PageHeader
         title="Mentések"
-        lead={`Teljes adatbázis-mentés (pg_dump, az adatbázis saját konténerében — a TimescaleDB-verzió mindig egyezik). Napi automatikus mentés ${data.schedule.hour >= 0 ? `${data.schedule.hour}:00 körül, az utolsó ${data.schedule.keep} marad` : "kikapcsolva"}. A fájlok a gépen: data/backups.`}
+        lead={`Teljes adatbázis-mentés (pg_dump, az adatbázis saját konténerében  a TimescaleDB-verzió mindig egyezik). Napi automatikus mentés ${data.schedule.hour >= 0 ? `${data.schedule.hour}:00 körül, az utolsó ${data.schedule.keep} marad` : "kikapcsolva"}. A fájlok a gépen: data/backups.`}
         actions={
           <>
             <input ref={fileInput} type="file" accept=".dump" className="hidden" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
@@ -142,7 +142,7 @@ export function BackupsPage() {
             ))}
           </ul>
         ) : (
-          <Empty>Még nincs mentés. Készíts egyet most — a napi automatikus is ide kerül.</Empty>
+          <Empty>Még nincs mentés. Készíts egyet most  a napi automatikus is ide kerül.</Empty>
         )}
       </Panel>
 

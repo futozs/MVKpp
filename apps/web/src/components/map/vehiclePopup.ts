@@ -18,9 +18,9 @@ export function vehiclePopupHtml(raw: LiveVehicle, actions = true): string {
   };
   const speed = v.speed != null ? `${Math.round(v.speed * 3.6)} km/h` : null;
   const rail = raw.mode === "rail";
-  // vonatnál a vonatszám (és a név), máshol a rendszám — a Volán-azonosító előtag nélkül
+  // vonatnál a vonatszám (és a név), máshol a rendszám  a Volán-azonosító előtag nélkül
   const idTitle = rail ? "Vonat" : "Rendszám";
-  const idText = rail ? escapeHtml(`${raw.trainNo ?? ""}${raw.trainName ? ` ${raw.trainName}` : ""}`.trim() || "—") : escapeHtml(displayVehicleId(raw.id, raw.plate));
+  const idText = rail ? escapeHtml(`${raw.trainNo ?? ""}${raw.trainName ? ` ${raw.trainName}` : ""}`.trim() || "") : escapeHtml(displayVehicleId(raw.id, raw.plate));
   const delay = vehicleDelay(raw);
   const mav = raw.delaySec != null && raw.mode !== "bus" && raw.mode !== "tram" ? " (MÁV)" : "";
   const delayMin = delay == null ? 0 : Math.round(Math.abs(delay) / 60);

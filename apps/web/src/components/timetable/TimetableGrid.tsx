@@ -134,7 +134,7 @@ export function TimetableGrid({
                 // Az élő GPS-jelzés napfüggetlenül a tripId alapján érkezik, ezért
                 // csak a mai napon jelentheti azt, hogy EZ a menet fut éppen.
                 const isLive = day === "today" && vehicle !== null;
-                // Kiosztva, de még a kiinduló megállóban áll — nem „elindult”.
+                // Kiosztva, de még a kiinduló megállóban áll  nem „elindult”.
                 const isWaiting = isLive && isWaitingAtStart(journal.get(trip.tripId));
                 const isNext = trip.tripId === nextTripId;
                 const isSelected = trip.tripId === selectedTripId;
@@ -185,7 +185,7 @@ export function TimetableGrid({
                     {String(minute).padStart(2, "0")}
 
                     {isCancelled ? (
-                      <span className="sr-only"> — törölve</span>
+                      <span className="sr-only">  törölve</span>
                     ) : null}
 
                     {/* útvonal-változat: betűjel (magyarázat a menetrend alján és a tooltipben) */}
@@ -246,7 +246,7 @@ function buildTitle({
   variantLabel?: string | null;
 }): string {
   if (isCancelled) {
-    return `${trip.destinationName} — TÖRÖLVE, ez a menet nem indul el`;
+    return `${trip.destinationName}  TÖRÖLVE, ez a menet nem indul el`;
   }
   const state = tripRunState({
     cancelled: false,
@@ -263,7 +263,7 @@ function buildTitle({
       ? (journal.get(trip.tripId)?.vehicleId ?? null)
       : null);
   return [
-    `${trip.destinationName} — érkezés ${trip.arrival}`,
+    `${trip.destinationName}  érkezés ${trip.arrival}`,
     variantLabel && trip.variant ? `${trip.variant}: ${variantLabel}` : "",
     !variantLabel && trip.headsignDiffers
       ? `eltér a szokásos iránytól (${directionHeadsign} helyett ${trip.headsign} felé)`

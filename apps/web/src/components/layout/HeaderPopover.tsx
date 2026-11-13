@@ -31,7 +31,7 @@ interface HeaderPopoverProps {
   renderTrigger: (trigger: PopoverTriggerProps, isOpen: boolean) => ReactNode;
   /** A panel tartalma; a `close` visszaadja a fókuszt a triggernek. */
   children: (close: () => void) => ReactNode;
-  /** Pozíció és méret — a legközelebbi `relative` őshöz képest. */
+  /** Pozíció és méret  a legközelebbi `relative` őshöz képest. */
   panelClassName: string;
   /**
    * Igaz: a panel nem a triggerhez, hanem egy távolabbi `relative` őshöz

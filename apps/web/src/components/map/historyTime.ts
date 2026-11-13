@@ -111,7 +111,7 @@ export function serviceDayRange(day: string): ServiceDayRange {
   };
 }
 
-/** Melyik forgalmi napba esik a pillanat (03:00 előtt még az előző nap) — a szerverrel azonos szabállyal. */
+/** Melyik forgalmi napba esik a pillanat (03:00 előtt még az előző nap)  a szerverrel azonos szabállyal. */
 export function serviceDayOf(unix: number): string {
   return serviceClock(unix).iso;
 }
@@ -141,11 +141,11 @@ const dayLabelShortFmt = new Intl.DateTimeFormat("hu-HU", {
   weekday: "short",
 });
 
-/** "okt. 20., kedd" (rövid: "okt. 20., K") — délben, hogy a DST ne csússzon bele. */
+/** "okt. 20., kedd" (rövid: "okt. 20., K")  délben, hogy a DST ne csússzon bele. */
 export const formatDayLabel = (day: string, short = false): string =>
   (short ? dayLabelShortFmt : dayLabelFmt).format(zonedUnix(day, 12) * 1000);
 
-/** A pillanat naptári napja — éjfél után már a következő nap neve. */
+/** A pillanat naptári napja  éjfél után már a következő nap neve. */
 export const formatDateOf = (unix: number): string =>
   dayLabelFmt.format(unix * 1000);
 

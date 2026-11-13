@@ -53,7 +53,7 @@ const PANELS: {
   { id: "heat", label: "Hőtérkép", short: "Hőtérkép", icon: Flame },
 ];
 
-/** a Volán és a vasút saját panele — csak ha legalább az egyik be van kapcsolva */
+/** a Volán és a vasút saját panele  csak ha legalább az egyik be van kapcsolva */
 const REGIONAL_PANEL = { id: "regional" as PanelId, label: "Vasút és Volán", short: "Vasút", icon: TrainFront };
 
 export function StatsView({

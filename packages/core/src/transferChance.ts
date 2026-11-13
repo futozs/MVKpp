@@ -65,7 +65,7 @@ export function spreadCdf(s: TimeSpread, x: number): number {
   return (s.lo + s.hi * (2 * normCdf((x - s.mode) / s.hi) - 1)) / w;
 }
 
-/** Egy kvantilis helye (pl. 0,5 → medián) — ellenőrzéshez és a kiírásokhoz. */
+/** Egy kvantilis helye (pl. 0,5 → medián)  ellenőrzéshez és a kiírásokhoz. */
 export function spreadQuantile(s: TimeSpread, p: number): number {
   const w = s.lo + s.hi;
   const atMode = s.lo / w;

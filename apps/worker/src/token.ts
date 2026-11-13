@@ -100,7 +100,7 @@ export async function markRejected(): Promise<void> {
   if (!current || current.exp <= nowSec()) return;
   if (tokenRejectedRecently()) return;
   rejectedAt = nowSec();
-  log.warn("token", "az MVK elutasította az érvényesnek tűnő tokent — az agentnek újra kell olvasnia az appból");
+  log.warn("token", "az MVK elutasította az érvényesnek tűnő tokent  az agentnek újra kell olvasnia az appból");
 }
 
 /** Szerveroldali megújítás (az MVK app is ezt hívja). Sikertelen App Attest nélkül is megpróbáljuk. */

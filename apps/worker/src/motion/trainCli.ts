@@ -15,5 +15,5 @@ const r = await runMotionTraining({
   log: (m) => console.log(`[${Math.round((Date.now() - t0) / 1000)} mp] ${m}`),
 });
 console.log(r.text);
-if (r.saved) console.log(`mentve: #${r.saved.id}, ${r.saved.accepted ? "ELFOGADVA" : "nem él — a régi modell marad"}`);
+if (r.saved) console.log(`mentve: #${r.saved.id}, ${r.saved.accepted ? "ELFOGADVA" : "nem él  a régi modell marad"}`);
 await closeDb();

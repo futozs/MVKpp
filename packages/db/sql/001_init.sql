@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════════════
--- MVK v3 — adatbázis
+-- MVK v3  adatbázis
 --
 --  · Minden idő timestamptz (UTC tárolás, Budapest megjelenítés).
 --  · A nyers GPS (veh_ping) ÖRÖKRE megmarad: Timescale hypertable, 3 nap után
@@ -101,7 +101,7 @@ CREATE TABLE calendar_day (
   note         text
 );
 
--- ── Nyers GPS — végtelen megőrzés ───────────────────────────────────────
+-- ── Nyers GPS  végtelen megőrzés ───────────────────────────────────────
 
 CREATE TABLE veh_ping (
   ts           timestamptz      NOT NULL,

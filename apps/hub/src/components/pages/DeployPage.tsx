@@ -144,7 +144,7 @@ export function DeployPage() {
               {g.head ? <p className="mt-3 text-[12.5px]">{g.head.subject}</p> : null}
               {g.dirty?.length ? (
                 <details className="mt-3 text-xs">
-                  <summary className="cursor-pointer text-nosignal">helyi módosítások (a git pull ezeket nem írja felül — ütközésnél leáll)</summary>
+                  <summary className="cursor-pointer text-nosignal">helyi módosítások (a git pull ezeket nem írja felül  ütközésnél leáll)</summary>
                   <pre className="mt-2 max-h-40 overflow-auto rounded-lg bg-background/60 p-2 font-mono text-[11px] text-muted-foreground">{g.dirty.join("\n")}</pre>
                 </details>
               ) : null}

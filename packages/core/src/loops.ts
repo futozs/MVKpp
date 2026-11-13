@@ -3,7 +3,7 @@
  * (fordulóhurok), így aki ülve marad, a következő menettel továbbutazik.
  *
  * A menetrendből derül ki, hol lehetséges: ahol egy vonal érkező menetének
- * utolsó megállója egy induló menetének első megállója (ugyanaz a megálló —
+ * utolsó megállója egy induló menetének első megállója (ugyanaz a megálló 
  * pl. 14 Hejőpark, 34 Bodótető, 35 Centrum). Ahol az érkező és az induló
  * kocsiállás különböző (Búza tér, Tiszai pu., Repülőtér), ott a busz
  * átáll, és ott le kell szállni.
@@ -20,8 +20,8 @@ export const NEARBY_TERMINUS_M = 120;
 
 /**
  * Hogyan folytatja a busz a végállomásról:
- *  · loop   — ugyanabból a megállóból indul tovább (ülve maradhatsz)
- *  · nearby — az azonos nevű, szomszédos kocsiállásból indul (átáll)
+ *  · loop    ugyanabból a megállóból indul tovább (ülve maradhatsz)
+ *  · nearby  az azonos nevű, szomszédos kocsiállásból indul (átáll)
  */
 export type TerminusKind = "loop" | "nearby";
 
@@ -52,7 +52,7 @@ export function loopTermini(feed: Feed): Map<string, LoopTerminus> {
     const route = feed.routes.get(t.routeId)?.short ?? t.routeId;
     const first = st[0].stopId;
     const last = st[st.length - 1].stopId;
-    // Körjárat (43, 44): a menet maga ér vissza a kiindulásba — az nem forduló.
+    // Körjárat (43, 44): a menet maga ér vissza a kiindulásba  az nem forduló.
     if (first === last) continue;
     (ends.get(route) ?? ends.set(route, new Set()).get(route)!).add(last);
     (starts.get(route) ?? starts.set(route, new Set()).get(route)!).add(first);
@@ -96,7 +96,7 @@ export type TurnDecision = "wait" | "alight" | "continue";
 
 /**
  * Előre bejelentett körbeutazás a végállomáson: az utas megmondta, hogy a buszon
- * marad — itt már nem a telefon helye dönt (zsebben, lezárva is körbemegy vele).
+ * marad  itt már nem a telefon helye dönt (zsebben, lezárva is körbemegy vele).
  *  · a busz következő menete ugyaninnen / a szomszédos kocsiállásból elindult → folytatjuk
  *  · még nem indult → várunk (legfeljebb DEPART_S-ig)
  *  · nincs (még) következő menet, máshonnan indul, vagy törölték → várunk FIND_S-ig, utána itt ért véget

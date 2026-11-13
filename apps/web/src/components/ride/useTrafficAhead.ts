@@ -15,7 +15,7 @@ export interface TrafficAhead {
 
 /**
  * Utazás közben: hol áll be a forgalom a busz előtt (a `fromIdx` megállótól a
- * `toIdx`-ig) — ugyanaz az élő réteg, ami a térképen a dugókat rajzolja.
+ * `toIdx`-ig)  ugyanaz az élő réteg, ami a térképen a dugókat rajzolja.
  */
 export function useTrafficAhead(stops: TripStop[] | null, fromIdx: number, toIdx: number, enabled: boolean): TrafficAhead[] {
   const [segments, setSegments] = useState<LiveSegment[]>([]);

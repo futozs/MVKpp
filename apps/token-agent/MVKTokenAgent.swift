@@ -1,4 +1,4 @@
-// MVK token-agent — macOS.
+// MVK token-agent  macOS.
 //
 // 2-es protokoll: a rendszer-hubból parancsot is fogad (az /agent/status
 // válaszában): az MVK app újraindítása, a token azonnali küldése, vagy az agent
@@ -12,7 +12,7 @@
 //
 // Semmit nem tör fel: a saját app saját tokenjét használja, amit az app maga
 // ment el. A konténer olvasásához ennek a binárisnak „Teljes lemezhozzáférés”
-// kell (Rendszerbeállítások → Adatvédelem és biztonság) — csak neki, nem a
+// kell (Rendszerbeállítások → Adatvédelem és biztonság)  csak neki, nem a
 // teljes shellnek.
 //
 // Fordítás:   swiftc -O MVKTokenAgent.swift -o mvk-token-agent
@@ -251,7 +251,7 @@ func recoverInterruptedCommands(_ cfg: Config) {
     guard list.contains(where: { $0.ok == nil }) else { return }
     savePending(list.map { p in
         guard p.ok == nil else { return p }
-        log("a #\(p.id) \(p.kind) parancs közben leállt az agent — lezárom")
+        log("a #\(p.id) \(p.kind) parancs közben leállt az agent  lezárom")
         guard p.kind == "restart-app" else {
             return p.closed(ok: false, note: "megszakadt: az agent leállt a végrehajtás közben")
         }
@@ -260,7 +260,7 @@ func recoverInterruptedCommands(_ cfg: Config) {
         let apps = NSRunningApplication.runningApplications(withBundleIdentifier: cfg.bundleId)
         if apps.isEmpty {
             return openApp(cfg)
-                ? p.closed(ok: true, note: "az agent leállt a parancs közben, az app bezárva maradt — újraindulás után elindítva")
+                ? p.closed(ok: true, note: "az agent leállt a parancs közben, az app bezárva maradt  újraindulás után elindítva")
                 : p.closed(ok: false, note: "az agent leállt a parancs közben, az app bezárva maradt, és nem indítható")
         }
         guard let launched = apps.compactMap(\.launchDate).max() else {
@@ -268,7 +268,7 @@ func recoverInterruptedCommands(_ cfg: Config) {
         }
         return launched >= p.startedAt
             ? p.closed(ok: true, note: "az agent leállt a parancs közben, de az app újraindult")
-            : p.closed(ok: false, note: "megszakadt, mielőtt az app újraindult volna (a régi példány fut) — kérd újra")
+            : p.closed(ok: false, note: "megszakadt, mielőtt az app újraindult volna (a régi példány fut)  kérd újra")
     })
 }
 
@@ -341,7 +341,7 @@ func cycle(_ cfg: Config) {
         serverPollSeconds = retry
         let why = code == 0
             ? "a szerver nem érhető el (még nem indult el, vagy rossz a serverUrl)"
-            : "a szerver elutasította (HTTP \(code)) — ellenőrizd a serverUrl-t és az agentSecret-et"
+            : "a szerver elutasította (HTTP \(code))  ellenőrizd a serverUrl-t és az agentSecret-et"
         log("/agent/status: \(why); újrapróbálás \(Int(retry)) mp múlva")
     }
     let serverLeft = (status["expiresInSec"] as? NSNumber)?.doubleValue ?? -1
@@ -354,7 +354,7 @@ func cycle(_ cfg: Config) {
     }
 
     if local == nil && !plistReadable(cfg) {
-        log("a plist nem olvasható — adj Teljes lemezhozzáférést ennek a binárisnak: \(CommandLine.arguments[0])")
+        log("a plist nem olvasható  adj Teljes lemezhozzáférést ennek a binárisnak: \(CommandLine.arguments[0])")
     }
     let localLeft = (local?.exp ?? 0) - now
 
@@ -370,7 +370,7 @@ func cycle(_ cfg: Config) {
     }
 
     guard let tok = local else {
-        log("nincs token a plistben — nyisd meg egyszer kézzel az MVK appot")
+        log("nincs token a plistben  nyisd meg egyszer kézzel az MVK appot")
         return
     }
     let left = tok.exp - Date().timeIntervalSince1970
@@ -410,7 +410,7 @@ case "once":
     recoverInterruptedCommands(cfg)
     cycle(cfg)
 default:
-    log("MVK token-agent fut — szerver: \(cfg.serverUrl), ellenőrzés \(Int(cfg.checkEveryMinutes)) percenként")
+    log("MVK token-agent fut  szerver: \(cfg.serverUrl), ellenőrzés \(Int(cfg.checkEveryMinutes)) percenként")
     recoverInterruptedCommands(cfg)
     while true {
         cycle(cfg)

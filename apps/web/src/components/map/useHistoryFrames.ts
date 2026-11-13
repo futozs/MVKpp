@@ -24,7 +24,7 @@ interface CacheEntry {
 }
 
 export interface HistoryFramesState {
-  /** Minden beérkezett ablaknál nő — a megjelenítés ebből tudja, hogy újrarajzoljon. */
+  /** Minden beérkezett ablaknál nő  a megjelenítés ebből tudja, hogy újrarajzoljon. */
   version: number;
   pending: number[];
   error: string | null;

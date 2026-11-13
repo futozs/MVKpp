@@ -28,7 +28,7 @@ export type DecodedVehicle = {
   timestamp: number | null;
   /** v3: az MVK által küldött eredeti trip_id (ha a feloldás miatt eltér) */
   rtTripId?: string;
-  /** v3: közlekedési mód (tram, bus, coach, rail) — a v2-ben csak MVK (tram/bus) jön */
+  /** v3: közlekedési mód (tram, bus, coach, rail)  a v2-ben csak MVK (tram/bus) jön */
   mode?: TransitMode;
   /** v3: a vonal kulcsa (MVK-nál a rövid név, máshol a vonal-azonosító) */
   routeKey?: string;
@@ -56,7 +56,7 @@ export type RealtimeSnapshot = {
   header: { version: string; timestamp: number };
   decoded: DecodedVehicle[];
   vehicles: LiveVeh[];
-  /** stopId → (tripId → előrejelzés) — az első egyezés nyer, mint a régi kódban */
+  /** stopId → (tripId → előrejelzés)  az első egyezés nyer, mint a régi kódban */
   predByStop: Map<string, Map<string, StopPrediction>>;
   updatesHeaderTs: number;
   updatesCount: number;
@@ -85,7 +85,7 @@ export type ArrivalItem = {
   measuredDelaySec?: number | null;
   /**
    * v3: előre jelzett rendszám, ha még nincs élő jármű a menethez. `method: "loop"`:
-   * nem tipp — a fordulóhurkon ugyanaz a busz fordul vissza, ami most odafelé jár.
+   * nem tipp  a fordulóhurkon ugyanaz a busz fordul vissza, ami most odafelé jár.
    */
   predictedVehicle?: { id: string; confidence: number; method?: string } | null;
   /** v3: az MVK törölte a menetet */

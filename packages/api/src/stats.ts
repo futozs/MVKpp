@@ -1,5 +1,5 @@
 /**
- * /stats/* — a v2-vel válaszformátumra kompatibilis statisztikai API, az
+ * /stats/*  a v2-vel válaszformátumra kompatibilis statisztikai API, az
  * új (javított) adatokra építve. Minden szám mögött valódi esemény van:
  * a késés a megálló-eseményekből, a percentilisek a Timescale-aggregátumból.
  */
@@ -52,7 +52,7 @@ const routes: Route[] = [
   }),
 
   /**
-   * Egy jármű napja. ÚJ: `days` — azok a napok, amelyeken a jármű ténylegesen
+   * Egy jármű napja. ÚJ: `days`  azok a napok, amelyeken a jármű ténylegesen
    * közlekedett, így a dátumléptető üres napot nem kínál fel.
    */
   route("GET", "/stats/vehicle/:id", async (_req, p, url) => {

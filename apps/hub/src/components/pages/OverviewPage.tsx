@@ -90,7 +90,7 @@ function Services({ o, now }: { o: Overview; now: number }) {
   if (isErr(o.containers)) {
     return (
       <div className="space-y-3">
-        <p className="text-xs text-muted-foreground">Docker nélkül fut a hub — csak a worker és a web folyamat látszik.</p>
+        <p className="text-xs text-muted-foreground">Docker nélkül fut a hub  csak a worker és a web folyamat látszik.</p>
         <KeyValue rows={[["worker", w ? `fut · ${duration(w.process.uptimeSec)}` : "nem elérhető"], ["web", isErr(o.web) ? "nem elérhető" : `fut · ${duration(o.web.process.uptimeSec)}`]]} />
       </div>
     );

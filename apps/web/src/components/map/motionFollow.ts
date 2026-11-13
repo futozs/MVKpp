@@ -4,7 +4,7 @@
  * SOSEM tolat:
  *  - ha lemaradt, rövid gyorsítással utoléri,
  *  - ha előrébb jár (a busz valójában még áll a megállóban, a lámpánál),
- *    lelassít, megáll, és kivárja, amíg a busz odaér — utána vele megy tovább.
+ *    lelassít, megáll, és kivárja, amíg a busz odaér  utána vele megy tovább.
  * A modell úgy tanul, hogy ahol a busz megállhat, ott inkább kivárjon, mint
  * elszaladjon (core `motion/cost`), így a kivárás ritka és rövid. Csak durva
  * eltérésnél ugrik (új menet, `snapM`-nél nagyobb hiba); hosszú szünet után
@@ -22,10 +22,10 @@ export const MAX_PATH_S = 90;
 export type FollowParams = {
   /** a lemaradás ennyi idő alatt tűnik el (mp) */
   catchS: number;
-  /** ha előrébb jár: ennyi idő alatt fogy el az előnye — addig lassabban megy a pályánál, vagy áll (mp) */
+  /** ha előrébb jár: ennyi idő alatt fogy el az előnye  addig lassabban megy a pályánál, vagy áll (mp) */
   holdS: number;
   maxSpeed: number;
-  /** ekkora eltérésnél nem követ, hanem odaugrik (m) — csak hibás illesztésnél fordul elő */
+  /** ekkora eltérésnél nem követ, hanem odaugrik (m)  csak hibás illesztésnél fordul elő */
   snapM: number;
   /** ennél hosszabb rajzolási szünet után nem siklik (mp) */
   maxStepS: number;
@@ -56,7 +56,7 @@ export function followPath(m: MotionPath, now: number, shown: Shown | undefined,
   const step = shown.at != null ? now - shown.at : Infinity;
   // az óra visszaugrott (szerveróra-igazítás): marad, ahol volt
   if (step <= 0) return { ...shown, at: now };
-  // hosszú szünet után nem siklik — előre a buszhoz ugrik, vissza nem
+  // hosszú szünet után nem siklik  előre a buszhoz ugrik, vissza nem
   if (step > p.maxStepS) return { shape: m.s, along: Math.max(shown.along, target), u: vPath, at: now };
   const gap = target - shown.along; // > 0: a jelölő lemaradt
   if (gap >= 0) {
@@ -65,7 +65,7 @@ export function followPath(m: MotionPath, now: number, shown: Shown | undefined,
     return { shape: m.s, along: Math.min(target, shown.along + u * step), u, at: now };
   }
   // Előrébb jár: a pálya tempójánál annyival lassabban halad (vagy áll), hogy az előny `holdS` alatt elfogyjon.
-  // Az előnyt az előző rajzoláskori pályához mérjük — a mostanihoz mérve egy lépésnyit mindig elöl maradna.
+  // Az előnyt az előző rajzoláskori pályához mérjük  a mostanihoz mérve egy lépésnyit mindig elöl maradna.
   const lead = shown.along - pathAt(m, now - step);
   const u = Math.max(0, vPath - Math.max(0, lead) / p.holdS);
   return { shape: m.s, along: shown.along + u * step, u, at: now };

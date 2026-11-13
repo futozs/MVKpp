@@ -93,7 +93,7 @@ function useDisruptions(open: boolean, near: string[]) {
     const load = () =>
       fetch(`${API_BASE}/engine/disruptions${nearKey ? `?near=${encodeURIComponent(nearKey)}` : ""}`, { cache: "no-store" })
         .then(async (r) => {
-          if (!r.ok) throw new Error(r.status === 503 ? "A mai menetrend még töltődik — próbáld újra pár másodperc múlva." : `Hiba (${r.status})`);
+          if (!r.ok) throw new Error(r.status === 503 ? "A mai menetrend még töltődik  próbáld újra pár másodperc múlva." : `Hiba (${r.status})`);
           return (await r.json()) as Disruptions;
         })
         .then((d) => {
@@ -113,7 +113,7 @@ function useDisruptions(open: boolean, near: string[]) {
 }
 
 /**
- * Mai zavarok: a nap minden kieső menete egy helyen — hivatalos törlések, most
+ * Mai zavarok: a nap minden kieső menete egy helyen  hivatalos törlések, most
  * kimaradók és a korábban el nem indultak, pótló indulással. Ha tudjuk, hol
  * állsz, az ott megálló menetek kerülnek előre.
  */
@@ -166,7 +166,7 @@ export function DisruptionsDialog({
           </DialogTitle>
           <DialogDescription className="mt-1 text-[12px]">
             {data ? `${total} kieső menet ma, ${data.counts.routes} vonalon. Koppints egy menetre, és megnyitom a menetrendben.` : "Betöltés…"}
-            {data?.stale ? " Az MVK törlési listája most nem frissül — a legutóbbi ismert állapot látszik." : null}
+            {data?.stale ? " Az MVK törlési listája most nem frissül  a legutóbbi ismert állapot látszik." : null}
           </DialogDescription>
 
           {data ? (
@@ -245,7 +245,7 @@ export function DisruptionsDialog({
                   ))}
                 </ul>
               ) : (
-                <p className="mt-1 text-[12px] text-muted-foreground">Ma egyetlen itt megálló menet sem esett ki — ha nem jön a busz, az késés, nem kimaradás.</p>
+                <p className="mt-1 text-[12px] text-muted-foreground">Ma egyetlen itt megálló menet sem esett ki  ha nem jön a busz, az késés, nem kimaradás.</p>
               )
             ) : (
               <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[12px] text-muted-foreground">
@@ -285,7 +285,7 @@ export function DisruptionsDialog({
           <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground">
             <span className="font-semibold text-foreground">Törölve</span>: az MVK hivatalos törlési listája.{" "}
             <span className="font-semibold text-foreground">Kimarad</span>: 15–90 perce esedékes, egyetlen busz sem kezdte el, és késő busz sem tart felé.{" "}
-            <span className="font-semibold text-foreground">Nem indult</span>: korábban ma esedékes volt, nincs kihúzva, mégsem láttuk — miközben a vonal szomszédos meneteit igen. Nem számoljuk az „igény esetén” járatokat, a garázsból kiálló meneteket, és azt sem, amelyiket a busz adat nélkül vitt le (pontosan érkezésre feltűnt a végállomáson, a következő menetén).
+            <span className="font-semibold text-foreground">Nem indult</span>: korábban ma esedékes volt, nincs kihúzva, mégsem láttuk  miközben a vonal szomszédos meneteit igen. Nem számoljuk az „igény esetén” járatokat, a garázsból kiálló meneteket, és azt sem, amelyiket a busz adat nélkül vitt le (pontosan érkezésre feltűnt a végállomáson, a következő menetén).
           </p>
         </div>
       </DialogContent>

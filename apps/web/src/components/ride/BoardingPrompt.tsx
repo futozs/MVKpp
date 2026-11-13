@@ -6,7 +6,7 @@ import type { LiveVehicle } from "@/types";
 import { journeyOf, useRides, type Ride } from "@/lib/rides";
 import { displayVehicleId, rideModeOf, VEHICLE_WORDS } from "@/lib/modes";
 
-/** „Éppen erre a buszra szálltál fel?” — a felismerő kérdése a térkép tetején. */
+/** „Éppen erre a buszra szálltál fel?”  a felismerő kérdése a térkép tetején. */
 export function BoardingPrompt({ vehicle, onYes, onNo }: { vehicle: LiveVehicle; onYes: () => void; onNo: () => void }) {
   const reduce = useReducedMotion();
   const w = VEHICLE_WORDS[vehicle.mode ?? rideModeOf(vehicle.id, vehicle.tripId)];
@@ -65,7 +65,7 @@ export function RideSavedNote({
   onFix?: () => void;
   /** a végállomáson lezárt út: a buszon maradt, és tovább utazott (utólag, a menetrendből) */
   onContinue?: () => void;
-  /** fordulóhurkos végállomáson ért véget: „Körbeutazok” — élőben folytatja a busz következő menetével */
+  /** fordulóhurkos végállomáson ért véget: „Körbeutazok”  élőben folytatja a busz következő menetével */
   onLoop?: () => void;
   looping?: boolean;
 }) {
@@ -79,7 +79,7 @@ export function RideSavedNote({
   const title = ask
     ? last.endedBy === "terminus"
       ? "Lezártam az utazásod a végállomáson"
-      : "Úgy láttam, leszálltál — lezártam"
+      : "Úgy láttam, leszálltál  lezártam"
     : legs.length > 1
       ? `Körbeutazás elmentve · ${legs.length} menet`
       : "Utazás elmentve";
@@ -112,7 +112,7 @@ export function RideSavedNote({
       ) : null}
       {onLoop ? (
         <Button size="sm" variant={ask ? "ghost" : "outline"} className="mt-2.5 w-full border-primary/50" onClick={onLoop} disabled={looping}>
-          {looping ? <Loader2 className="animate-spin" /> : <Repeat className="text-primary" />} Körbeutazok — a buszon maradtam
+          {looping ? <Loader2 className="animate-spin" /> : <Repeat className="text-primary" />} Körbeutazok  a buszon maradtam
         </Button>
       ) : last.endedBy === "terminus" && onContinue ? (
         <Button size="sm" variant="ghost" className="mt-1.5 w-full" onClick={onContinue}>

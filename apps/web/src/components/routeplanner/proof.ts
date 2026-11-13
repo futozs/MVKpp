@@ -22,7 +22,7 @@ import {
 import { displayVehicleId } from "@/lib/modes";
 
 /**
- * Múltbeli utazás összegzése — mit mutat a mérés a menetrendhez képest.
+ * Múltbeli utazás összegzése  mit mutat a mérés a menetrendhez képest.
  * A kártya fejléce és a másolható igazolás is ebből dolgozik, hogy a kettő
  * soha ne mondjon mást.
  */
@@ -122,7 +122,7 @@ export function buildProofText(
 ): string {
   const o = pastOutcome(trip);
   const out: string[] = [
-    "Utazás a mért adatok alapján — Miskolc, MVK",
+    "Utazás a mért adatok alapján  Miskolc, MVK",
     `Dátum: ${longDate(localIsoDate(trip.start))}`,
     `Útvonal: ${plan.from.name} → ${plan.to.name}`,
     `Menetrend szerint: ${hm(trip.start)} → ${hm(trip.end)}`,
@@ -138,7 +138,7 @@ export function buildProofText(
       if (check) {
         const measured = transferMeasured(trip, ride);
         out.push(
-          `   Átszállás itt: ${check.at} — ${
+          `   Átszállás itt: ${check.at}  ${
             !measured
               ? `menetrend szerint ${marginText(check.marginSec)} tartalék (nincs mérés)`
               : check.marginSec < 0
@@ -155,7 +155,7 @@ export function buildProofText(
   out.push("");
   if (o.actualArrival != null && o.arrivalDelayS != null) {
     out.push(
-      `Érkezés: menetrend szerint ${hm(trip.end)}, valójában ${hms(o.actualArrival)}${o.arrivalEstimated ? " (becsült)" : ""} — ${arrivalVerdict(o.arrivalDelayS)}.`,
+      `Érkezés: menetrend szerint ${hm(trip.end)}, valójában ${hms(o.actualArrival)}${o.arrivalEstimated ? " (becsült)" : ""}  ${arrivalVerdict(o.arrivalDelayS)}.`,
     );
   } else {
     out.push(`Érkezés: menetrend szerint ${hm(trip.end)}; az érkezésről nincs mérés.`);
@@ -170,7 +170,7 @@ export function buildProofText(
   }
   out.push(
     "",
-    `Forrás: MVK++ (${appUrl}) — az MVK járműveinek mért helyadataiból; menetrend: ${plan.schedule.feedVersion}.`,
+    `Forrás: MVK++ (${appUrl})  az MVK járműveinek mért helyadataiból; menetrend: ${plan.schedule.feedVersion}.`,
   );
   return out.join("\n");
 }

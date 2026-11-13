@@ -7,7 +7,7 @@ export const depotKey = (id: FleetKind) => `d:${id}`;
 
 /**
  * Kedvencek elöl (a felvétel sorrendjében), a többi marad a szerver sorrendjében
- * (legtöbb jármű elöl). A kedvenc végállomás akkor is látszik, ha épp üres —
+ * (legtöbb jármű elöl). A kedvenc végállomás akkor is látszik, ha épp üres 
  * kivéve keresés közben.
  */
 export function withFavorites(s: ParkingSnapshot, favorites: string[], query: string): ParkingSnapshot {

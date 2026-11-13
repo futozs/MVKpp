@@ -8,7 +8,7 @@ const trips = [
   { id: "S_SH1_235500_X", route: "36", stops: [["A", "23:55"], ["C", "00:05"]] },
   { id: "S_SH1_004200_X", route: "36", stops: [["A", "00:42"], ["C", "00:52"]] },
   { id: "S_SH1_060000_X", route: "36", stops: [["A", "06:00"], ["C", "06:10"]] },
-  // 14: a C fordulóhurok — ugyanonnan indul tovább; a D a C szomszédos kocsiállása
+  // 14: a C fordulóhurok  ugyanonnan indul tovább; a D a C szomszédos kocsiállása
   { id: "S_SH2_070000_X", route: "14", stops: [["A", "07:00"], ["C", "07:20"]] },
   { id: "S_SH3_072500_X", route: "14", stops: [["C", "07:25"], ["A", "07:45"]] },
   { id: "S_SH3_073000_X", route: "14", stops: [["D", "07:30"], ["A", "07:50"]] },

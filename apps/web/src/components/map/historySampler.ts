@@ -6,7 +6,7 @@ import type { VehicleTrack } from "./historyData";
  * elég pontos.
  */
 
-/** Ennél nagyobb hézagon át nem interpolálunk — a jármű addig nem látszik. */
+/** Ennél nagyobb hézagon át nem interpolálunk  a jármű addig nem látszik. */
 export const MAX_GAP_SEC = 180;
 /** Nagy hézag szélén ennyi ideig még a valós jel helyén tartjuk. */
 const HOLD_AFTER_FIX_SEC = 45;
@@ -36,7 +36,7 @@ export interface Sample {
 export function seek(ts: Float64Array, t: number, hint: number): number {
   const n = ts.length;
   // Lejátszás közben a kurzor alig mozdul, így szinte mindig a régi index
-  // vagy a rákövetkező a jó — ez képkockánként O(1).
+  // vagy a rákövetkező a jó  ez képkockánként O(1).
   if (hint >= 0 && hint < n && ts[hint] <= t) {
     if (hint === n - 1 || ts[hint + 1] > t) return hint;
     if (hint + 2 >= n || ts[hint + 2] > t) return hint + 1;
@@ -130,7 +130,7 @@ export interface Motion {
   speedKmh: number | null;
 }
 
-/** Irány és sebesség a buborékhoz — csak a nyitott jármű, nem képkockánként mindenki. */
+/** Irány és sebesség a buborékhoz  csak a nyitott jármű, nem képkockánként mindenki. */
 export function motionOf(sample: Sample): Motion {
   const { a, b } = sample;
   let bearing: number | null = null;

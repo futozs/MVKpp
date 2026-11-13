@@ -1,7 +1,7 @@
 /**
  * Hosszú műveletek (telepítés, mentés, visszaállítás) futtatója: soronkénti
  * kimenet a memóriában, élő követés (SSE), és egyszerre csak egy „kizárólagos”
- * feladat — két telepítés vagy egy mentés + visszaállítás nem futhat egymásra.
+ * feladat  két telepítés vagy egy mentés + visszaállítás nem futhat egymásra.
  */
 import { spawn, type SpawnOptions } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -16,7 +16,7 @@ const MAX_LINES = 8000;
 
 /**
  * A gyerekfolyamatok (git, docker CLI) csak a működésükhöz szükséges környezetet
- * kapják — a hub titkai (HUB_PASSWORD, ADMIN_KEY, DATABASE_URL…) nem öröklődnek.
+ * kapják  a hub titkai (HUB_PASSWORD, ADMIN_KEY, DATABASE_URL…) nem öröklődnek.
  */
 export function childEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
   const keep = ["PATH", "HOME", "LANG", "LC_ALL", "TZ", "DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_CONFIG", "DOCKER_CERT_PATH", "DOCKER_TLS_VERIFY", "TMPDIR"];
@@ -132,10 +132,10 @@ export function run(task: Task, cmd: string, args: string[], opts: SpawnOptions 
     if (opts.input && child.stdin) {
       opts.input.pipe(child.stdin);
       child.stdin.on("error", () => {
-        /* a folyamat korábban kilépett — a kilépési kód mondja meg, mi történt */
+        /* a folyamat korábban kilépett  a kilépési kód mondja meg, mi történt */
       });
     }
     child.on("error", (e) => reject(new Error(`${cmd}: ${e.message}`)));
-    child.on("close", (code) => (code === 0 ? resolve(out) : reject(new Error(`${cmd} ${args[0] ?? ""} — kilépési kód: ${code}`))));
+    child.on("close", (code) => (code === 0 ? resolve(out) : reject(new Error(`${cmd} ${args[0] ?? ""}  kilépési kód: ${code}`))));
   });
 }

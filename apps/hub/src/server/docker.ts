@@ -1,5 +1,5 @@
 /**
- * Docker Engine API a unix socketen át (/var/run/docker.sock) — konténerek
+ * Docker Engine API a unix socketen át (/var/run/docker.sock)  konténerek
  * listája, erőforrás-használat, újraindítás, naplók. Ha a socket nincs
  * felcsatolva (fejlesztés), `dockerAvailable()` hamis, és a hub ezt mutatja.
  */
@@ -178,7 +178,7 @@ export async function dockerInfo(): Promise<DockerInfo> {
 type RawDf = { Volumes?: { Name: string; Labels: Record<string, string> | null; UsageData?: { Size: number } }[]; Images?: { Size: number }[]; BuildCache?: { Size: number }[] };
 let dfCache: { at: number; data: unknown } | null = null;
 
-/** A projekt köteteinek mérete (pl. az adatbázis kötete) — drága hívás, 10 percig gyorsítótárazva. */
+/** A projekt köteteinek mérete (pl. az adatbázis kötete)  drága hívás, 10 percig gyorsítótárazva. */
 export async function volumeUsage(): Promise<{ volumes: { name: string; sizeMb: number }[]; imagesMb: number; buildCacheMb: number }> {
   if (dfCache && Date.now() - dfCache.at < 10 * 60_000) return dfCache.data as Awaited<ReturnType<typeof volumeUsage>>;
   const df = await dockerJson<RawDf>("GET", "/system/df");

@@ -68,7 +68,7 @@ cat <<EOF
   napló:     $LOG
   leállítás: launchctl bootout gui/$(id -u)/hu.mvk.token-agent
 
-FONTOS — egyszeri lépés:
+FONTOS  egyszeri lépés:
   Rendszerbeállítások → Adatvédelem és biztonság → Teljes lemezhozzáférés → [+]
   és add hozzá ezt a fájlt (Cmd+Shift+G, majd másold be az útvonalat):
     $BIN

@@ -2,12 +2,12 @@
  * WebSocket-hub: a szerver küldi az adatot, a kliens nem kérdez.
  *
  * Témák (a kliens iratkozik fel):
- *   vehicles        — minden jármű; induláskor teljes lista, utána csak a változás
- *   stop:<stopId>   — a megálló érkezési táblája; csak ha tényleg változott
- *   trip:<tripId>   — egy menet élő állapota (hol tart, késés)
- *   runs:<YYYYMMDD> — a mai menetrend-napló (indult / beért), menetenként azonnal
- *   parking         — a parkoló: ki áll melyik végállomáson, ki van a kocsiszínben
- *   sync            — a bejelentkezett felhasználó más eszközön mentett beállításai
+ *   vehicles         minden jármű; induláskor teljes lista, utána csak a változás
+ *   stop:<stopId>    a megálló érkezési táblája; csak ha tényleg változott
+ *   trip:<tripId>    egy menet élő állapota (hol tart, késés)
+ *   runs:<YYYYMMDD>  a mai menetrend-napló (indult / beért), menetenként azonnal
+ *   parking          a parkoló: ki áll melyik végállomáson, ki van a kocsiszínben
+ *   sync             a bejelentkezett felhasználó más eszközön mentett beállításai
  *
  * Üzenetformátum: JSON, permessage-deflate tömörítéssel.
  */
@@ -49,11 +49,11 @@ const MOTION_STALE_S = 45;
 /** a régi (modell nélküli) térképi pálya: ennyi megállón át, legfeljebb ennyi másodpercre előre */
 const TRAJ_STOPS = 5;
 const TRAJ_HORIZON_S = 240;
-/** álló busznál (megálló, lámpa) a pálya ennyi várakozással indul — a következő jel úgyis jön */
+/** álló busznál (megálló, lámpa) a pálya ennyi várakozással indul  a következő jel úgyis jön */
 const TRAJ_STOPPED_HOLD_S = 12;
 /** a becsült sebesség plafonja módonként (m/s): városi busz/villamos, helyközi busz, vonat */
 const SPEED_CAP: Record<TransitMode, number> = { tram: 22, bus: 22, coach: 30, rail: 45 };
-/** `vehicles@tram,bus,coach,rail`, `stop:<id>@…` — a régi téma (mód nélkül) csak MVK */
+/** `vehicles@tram,bus,coach,rail`, `stop:<id>@…`  a régi téma (mód nélkül) csak MVK */
 const MODES_RE = "(?:@(?:tram|bus|coach|rail)(?:,(?:tram|bus|coach|rail))*)?";
 /** a megállótábla témája a közös megállók összevonásával: `stop:<id>@<módok>~all` (lásd `mergedBoard`) */
 const MERGE_RE = "(?:~(?:all|mvk|coach|off))?";
@@ -208,7 +208,7 @@ export class Hub {
     const m = this.engine.matcher.motion(veh.id);
     if (!m) return null;
     // Az illesztő régóta nem tudta a jeleit a nyomvonalra tenni (terelés, rossz vetítés):
-    // a becslés a következő megállónál tartaná a buszt — inkább a valós helye látszik.
+    // a becslés a következő megállónál tartaná a buszt  inkább a valós helye látszik.
     if (veh.timestamp && veh.timestamp - offset - m.ts > MOTION_STALE_S) return null;
     const gpsSpeed = veh.speed;
     const run = this.engine.todayRuns.get(m.tripId);
@@ -227,7 +227,7 @@ export class Hub {
   /**
    * Régi pálya (csak amíg nincs tanított mozgás-modell, pl. az első telepítés utáni ~15 percben):
    * szakaszonként a szokásos menetsebesség a busz tempójával, megállónként az átlagos álldogálás.
-   * Visszamérve 60–70 m átlagos hibával megy (az álló buszt 12 mp után elindítja) — a modell ~25 m.
+   * Visszamérve 60–70 m átlagos hibával megy (az álló buszt 12 mp után elindítja)  a modell ~25 m.
    */
   private trajectoryOf(vehicleId: string, m: VehicleMotion, serviceDate: string, segV: number | null, cap = 22): [number, number][] | null {
     const stops = this.engine.feeds.cachedDay(serviceDate)?.feed.tripStopsAlong(m.tripId);
@@ -353,7 +353,7 @@ export class Hub {
   }
 
   private publishIfChanged(topic: string, payload: { t: string; id: string; data: unknown }) {
-    // A `now` / `at` időbélyeg minden körben változik — az összehasonlításból kihagyjuk.
+    // A `now` / `at` időbélyeg minden körben változik  az összehasonlításból kihagyjuk.
     const body = JSON.stringify(payload.data, (k, v) => (k === "now" || k === "at" ? undefined : v));
     if (this.lastSent.get(topic) === body) return;
     this.lastSent.set(topic, body);
@@ -398,7 +398,7 @@ export class Hub {
   private sendRaw(c: Client, msg: string) {
     if (c.ws.readyState !== c.ws.OPEN) return;
     // Lassú kliens (nagy puffer): a kihagyott különbség-üzenet örökre elveszne (szellem-buszok),
-    // ezért bontjuk — újracsatlakozáskor a teljes állapotot kapja.
+    // ezért bontjuk  újracsatlakozáskor a teljes állapotot kapja.
     if (c.ws.bufferedAmount > 1_000_000) {
       c.ws.terminate();
       return;

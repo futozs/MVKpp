@@ -78,7 +78,7 @@ export class Engine extends EventEmitter<EngineEvents> {
   readonly regional: RegionalRealtime | null;
   /** az MVK-adat forrása (MVK API, vagy tartalékban a MÁV+) */
   readonly sources = new SourceManager();
-  /** járművenként a rendszám (Volán, és az MVK-é a tartalékból) — a vehicle táblába */
+  /** járművenként a rendszám (Volán, és az MVK-é a tartalékból)  a vehicle táblába */
   private labels = new Map<string, string>();
   /** menetenként a jelek forrása (mvk / otp2) */
   private runSource = new Map<string, string>();
@@ -86,7 +86,7 @@ export class Engine extends EventEmitter<EngineEvents> {
   private otp2Base = { ok: 0, fail: 0 };
   /** az árnyék-összevetés (natív MVK ↔ OTP2) mai mintái */
   private shadow = { lags: [] as number[], seen: 0, covered: 0, total: 0 };
-  /** a mai nap menetei (tripId → legfrissebb run) — a menetrend-napló élő része */
+  /** a mai nap menetei (tripId → legfrissebb run)  a menetrend-napló élő része */
   readonly todayRuns = new Map<string, RunOut>();
   private todayIso = serviceClock().iso;
   /** járművenként az utolsó feldolgozott jel ideje (unix) */
@@ -96,12 +96,12 @@ export class Engine extends EventEmitter<EngineEvents> {
   poll = { ok: 0, fail: 0, lastOkAt: 0, lastError: null as string | null, lastMs: 0, pingsKept: 0, vehiclesMax: 0 };
   private busy = false;
   private replaying = false;
-  /** a legutóbbi SIKERES pozíció- / előrejelzés-lekérés ideje (ms) — ennyi ideig tartjuk meg a régit */
+  /** a legutóbbi SIKERES pozíció- / előrejelzés-lekérés ideje (ms)  ennyi ideig tartjuk meg a régit */
   private positionsOkAt = 0;
   private updatesOkAt = 0;
   /** az MVK saját előrejelzése utoljára (a tartalékra váltáskor 60 mp-ig ezek maradnak) */
   private nativeUpdatesAt = 0;
-  /** a mai napon az MVK-kiesésekkel elveszett idő (mp) — a csend miatti lezárás ennyivel később jár */
+  /** a mai napon az MVK-kiesésekkel elveszett idő (mp)  a csend miatti lezárás ennyivel később jár */
   private feedGapS = 0;
   /** éjfél után érkezett MVK-törléslista a következő szolgáltatási napra (napváltáskor lesz élő) */
   private nextCancelled: { iso: string; state: Engine["cancelled"] } | null = null;
@@ -311,7 +311,7 @@ export class Engine extends EventEmitter<EngineEvents> {
       } else {
         if (!snap) snap = buildSnapshot({ ...base, positions: null, updates: null, rtError: errs.length ? errs.join("; ") : polledMvk ? null : "még nincs adat", extra: regional, extraPreds });
         // Ha a pozíció nem jött le, a korábbit tartjuk meg legfeljebb 60 mp-ig (a megállófigyelő ne ürüljön ki
-        // egy hibás pollra) — a `fetchedAt` minden körben frissül, ezért a legutóbbi sikeres lekéréshez mérünk.
+        // egy hibás pollra)  a `fetchedAt` minden körben frissül, ezért a legutóbbi sikeres lekéréshez mérünk.
         if (positions) {
           // Az MVK-kiesés ideje nem a buszok csendje: a csend miatti lezárás ennyivel később jár
           // (különben egy 20 perces kiesés után minden futó menetet lezárnánk, majd újranyitnánk).
@@ -468,7 +468,7 @@ export class Engine extends EventEmitter<EngineEvents> {
       if (res.status !== 200) throw new Error(`list-cancelled-trips HTTP ${res.status}`);
       const raw = parseCancelledIds(JSON.parse(res.buf.toString("utf8").trim() || "[]"));
       // Az MVK listája naptári napra szól (éjfélkor vált), a szolgáltatási nap 03:00-kor:
-      // éjfél után már a holnapi lista jön — azt félretesszük a napváltásig, nem a mainak mutatjuk.
+      // éjfél után már a holnapi lista jön  azt félretesszük a napváltásig, nem a mainak mutatjuk.
       const clock = serviceClock(nowUnix());
       const listIso = clock.calendarIso;
       const early = listIso !== this.todayIso;

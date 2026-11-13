@@ -96,7 +96,7 @@ export async function cancelQuery(pid: number, terminate: boolean): Promise<bool
   return Boolean(r?.ok);
 }
 
-/** Naponta mennyit nőtt a nyers GPS-tábla (darabonként) — a növekedés trendje. */
+/** Naponta mennyit nőtt a nyers GPS-tábla (darabonként)  a növekedés trendje. */
 export async function dailyGrowth(days = 45) {
   return sql<{ day: string; bytes: number }>(
     `SELECT (c.range_start AT TIME ZONE 'Europe/Budapest')::date::text AS day, sum(s.total_bytes)::bigint AS bytes

@@ -70,7 +70,7 @@ function StepHead({ title, hint, onBack }: { title: string; hint: string; onBack
 
 /**
  * Felszálláskor mindig az utas mondja meg: hol szállt fel, hol fog leszállni,
- * és — fordulóhurkos végállomásnál — körbeutazik-e. Nincs találgatás: a
+ * és  fordulóhurkos végállomásnál  körbeutazik-e. Nincs találgatás: a
  * kiválasztott leszállóhelynél (vagy a körbeutazás megadott megállójánál) az
  * app magától lezárja az utazást, akkor is, ha a telefon a zsebben van.
  */
@@ -93,7 +93,7 @@ export function RideSetup({
   /** ahol a busz most tart */
   cur: number;
   onStep: (s: SetupStep) => void;
-  /** a beállítás kész (ha volt mit visszavonni, ez zárja be) — null: nem zárható be, amíg hiányzik valami */
+  /** a beállítás kész (ha volt mit visszavonni, ez zárja be)  null: nem zárható be, amíg hiányzik valami */
   onDone: (() => void) | null;
   onFrom: (idx: number) => void;
   onDest: (idx: number) => void;
@@ -132,7 +132,7 @@ export function RideSetup({
       <div className="flex min-h-0 flex-1 flex-col border-t border-border/70">
         <StepHead
           title="Hol szállsz le?"
-          hint="Ha a busz odaért, magától lezárom az utazást — akkor is, ha közben nem nyitod meg az appot."
+          hint="Ha a busz odaért, magától lezárom az utazást  akkor is, ha közben nem nyitod meg az appot."
           onBack={onDone ?? (() => onStep("from"))}
         />
         <button
@@ -157,7 +157,7 @@ export function RideSetup({
           <div className="border-t border-border/70 px-4 py-3">
             <Button variant="outline" className="w-full justify-start border-primary/50" onClick={() => onStep("loop")}>
               <Repeat className="text-primary" />
-              <span className="min-w-0 truncate">Körbeutazok — {terminus}-nál a buszon maradok</span>
+              <span className="min-w-0 truncate">Körbeutazok  {terminus}-nál a buszon maradok</span>
             </Button>
           </div>
         ) : null}
@@ -181,7 +181,7 @@ function LoopStep({ ride, terminus, onBack, onLoop }: { ride: ActiveRide; termin
     <div className="flex min-h-0 flex-1 flex-col border-t border-border/70">
       <StepHead
         title="Körbeutazás: hol szállsz le?"
-        hint={`${terminus}-nál a buszon maradsz. Válaszd ki, hol szállsz le a következő menetéből — odáig magától viszem tovább az utazást.`}
+        hint={`${terminus}-nál a buszon maradsz. Válaszd ki, hol szállsz le a következő menetéből  odáig magától viszem tovább az utazást.`}
         onBack={onBack}
       />
       {nextTrip ? (

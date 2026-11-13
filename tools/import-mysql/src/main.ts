@@ -85,7 +85,7 @@ if (only.has("static")) {
       [iso(d.service_date), d.feed_version, d.n_trips, d.payload],
     );
   }
-  log(`menetrend-archívum: ${days.length} nap (ebből ${days.filter((d) => !d.n_trips).length} üres — ezekre fallback lesz)`);
+  log(`menetrend-archívum: ${days.length} nap (ebből ${days.filter((d) => !d.n_trips).length} üres  ezekre fallback lesz)`);
 
   // Fiókok, passkey-k, munkamenetek, mentések
   const accounts = await q(`SELECT account_id, email, created_at FROM account`);
@@ -124,7 +124,7 @@ if (only.has("static")) {
        ON CONFLICT (user_id) DO UPDATE SET payload = EXCLUDED.payload, bytes = EXCLUDED.bytes, updated_at = EXCLUDED.updated_at`,
       [uid, payload, b.bytes, b.updated_at],
     );
-    // A mentés egy localStorage-pillanatkép ({kulcs: szöveg}) — kulcsonként a szinkron-táblába.
+    // A mentés egy localStorage-pillanatkép ({kulcs: szöveg})  kulcsonként a szinkron-táblába.
     try {
       const obj = JSON.parse(payload.toString("utf8")) as Record<string, unknown>;
       for (const [k, v] of Object.entries(obj)) {
@@ -136,7 +136,7 @@ if (only.has("static")) {
         );
       }
     } catch {
-      log(`figyelem: a(z) ${b.account_id}. fiók mentése nem JSON — csak nyersen vettük át`);
+      log(`figyelem: a(z) ${b.account_id}. fiók mentése nem JSON  csak nyersen vettük át`);
     }
   }
   log(`fiókok: ${accounts.length}`);

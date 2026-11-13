@@ -1,14 +1,14 @@
 /**
- * Jelszó nélküli fiók + felhős biztonsági mentés — WebAuthn passkey.
+ * Jelszó nélküli fiók + felhős biztonsági mentés  WebAuthn passkey.
  *
  * Nincs jelszó, nincs saját titkos kulcs: a "belépés" a böngésző/eszköz
  * platform-hitelesítőjén (Touch ID, Windows Hello, telefon lezárása,
  * biztonsági kulcs) keresztül történik. Ez a modul csak a HTTP-hívásokat és
- * a helyi munkamenet-tárolást intézi — a kriptográfiai ceremóniát a
+ * a helyi munkamenet-tárolást intézi  a kriptográfiai ceremóniát a
  * @simplewebauthn/browser könyvtár végzi.
  *
  * A mentés iránya szigorúan egyirányú: ez a modul rendszeresen FELküldi a
- * localStorage app-adatait, de sosem tölt le és ír felül automatikusan —
+ * localStorage app-adatait, de sosem tölt le és ír felül automatikusan 
  * letöltés csak explicit felhasználói kérésre (pullBackup) történik.
  */
 import {
@@ -20,11 +20,11 @@ import { API_BASE } from "@/lib/apiBase";
 
 const SESSION_STORAGE = "mvk_account";
 /**
- * Minden localStorage-kulcs utazik a mentésben, KIVÉVE ezt a listát — a
+ * Minden localStorage-kulcs utazik a mentésben, KIVÉVE ezt a listát  a
  * munkamenet-token eszközhöz kötött, azt sosem visznénk a felhőbe. Korábban
  * ez egy "mvk_" előtag-egyezéshez volt kötve: bármelyik jövőbeli (vagy akár
  * meglévő, de elgépelt/eltérő névterű) kulcs csendben kimaradt volna a
- * mentésből — pl. így maradtak le a statisztika fülön mentett kedvencek is.
+ * mentésből  pl. így maradtak le a statisztika fülön mentett kedvencek is.
  */
 const EXCLUDE_FROM_BACKUP = new Set([SESSION_STORAGE]);
 
@@ -66,12 +66,12 @@ export type AccountResult<T> =
 /**
  * Néhány mobil böngésző (leginkább az iOS-en, kezdőképernyőre telepített,
  * "standalone" módban futó PWA) az app hidegindítása utáni első hálózati
- * kérésnél időnként üres vagy sérült választ ad vissza 2xx státusszal is —
+ * kérésnél időnként üres vagy sérült választ ad vissza 2xx státusszal is 
  * ez korábban egy nyers "null is not an object" JS-hibaként bukott fel a
  * felületen, mert a hívó kód feltétel nélkül `data.options`-ként próbálta
  * használni az (ilyenkor null-ra eső) választ. Emiatt itt explicit módon
  * hibaként kezeljük az érvénytelen JSON-t, és egyszer, csendben újrapróbáljuk
- * — ez a fajta hiba jellemzően tranziens.
+ *  ez a fajta hiba jellemzően tranziens.
  */
 async function postJson<T>(
   path: string,
@@ -101,7 +101,7 @@ async function postJson<T>(
     }
     if (data == null) {
       if (allowRetry) return postJson(path, body, session, false);
-      return { ok: false, reason: "A szerver érvénytelen választ adott — próbáld újra." };
+      return { ok: false, reason: "A szerver érvénytelen választ adott  próbáld újra." };
     }
     return { ok: true, data: data as T };
   } catch (e) {
@@ -182,7 +182,7 @@ export async function addPasskeyToCurrentAccount(): Promise<AccountResult<true>>
   return postJson<true>("/account/passkey/add-verify", { response }, session);
 }
 
-/** Kijelentkezés — a szerveren is érvényteleníti a munkamenetet. */
+/** Kijelentkezés  a szerveren is érvényteleníti a munkamenetet. */
 export async function logout(): Promise<void> {
   const session = readSession();
   writeSession(null);
@@ -227,7 +227,7 @@ export async function getBackupStatus(): Promise<AccountResult<BackupStatus>> {
   }
 }
 
-/** A teljes localStorage pillanatképe (a kizártak nélkül) — ez utazik a felhőbe. */
+/** A teljes localStorage pillanatképe (a kizártak nélkül)  ez utazik a felhőbe. */
 function snapshotLocalData(): Record<string, string> {
   const out: Record<string, string> = {};
   for (let i = 0; i < localStorage.length; i++) {
@@ -239,7 +239,7 @@ function snapshotLocalData(): Record<string, string> {
   return out;
 }
 
-/** Rendszeres/automatikus felküldés — soha nem tölt le, csak ment. */
+/** Rendszeres/automatikus felküldés  soha nem tölt le, csak ment. */
 export async function pushBackup(): Promise<AccountResult<{ bytes: number }>> {
   const session = readSession();
   if (!session) return { ok: false, reason: "Nincs beállított fiók ezen az eszközön." };
@@ -258,7 +258,7 @@ export async function pushBackup(): Promise<AccountResult<{ bytes: number }>> {
 }
 
 /**
- * Visszaállítás a felhőből — SZÁNDÉKOSAN csak akkor hívódik, ha a felhasználó
+ * Visszaállítás a felhőből  SZÁNDÉKOSAN csak akkor hívódik, ha a felhasználó
  * kifejezetten kéri (gomb + megerősítés), soha nem automatikusan induláskor.
  * Felülírja a jelenlegi eszköz app-adatait a felhőben tárolt utolsó mentéssel.
  */

@@ -1,7 +1,7 @@
 /**
  * Válaszidő-mérés kulcsonként (útvonal, MVK-végpont): percenkénti vödrök, az
  * utolsó egy óra memóriában. A rendszer-hub ebből mutat p50/p95/p99-et,
- * hibaarányt és percenkénti idősort — külön tároló nélkül, folyamatonként.
+ * hibaarányt és percenkénti idősort  külön tároló nélkül, folyamatonként.
  */
 
 /** hisztogram-határok (ms); az utolsó vödör a „lassabb mindennél” */
@@ -26,7 +26,7 @@ export type MetricStat = {
   last: { at: number; status: number; ms: number } | null;
   /** állapotkód-osztályok az ablakban: 2xx / 3xx / 4xx / 5xx / err */
   codes: Record<string, number>;
-  /** percenként: [perc kezdete (ms), kérések, átlag ms] — a hub idősorához */
+  /** percenként: [perc kezdete (ms), kérések, átlag ms]  a hub idősorához */
   series: [number, number, number][];
 };
 

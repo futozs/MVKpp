@@ -126,10 +126,10 @@ export function StopNotifyDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader className="text-left">
-          <DialogTitle>Értesítés — {stopName}</DialogTitle>
+          <DialogTitle>Értesítés  {stopName}</DialogTitle>
           <DialogDescription>
             Szólunk, amikor a busz a beállított időn belülre ér ehhez a
-            megállóhoz — lezárt telefonon is, ha a push-regisztráció sikerül.
+            megállóhoz  lezárt telefonon is, ha a push-regisztráció sikerül.
           </DialogDescription>
         </DialogHeader>
 

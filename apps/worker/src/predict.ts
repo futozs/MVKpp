@@ -4,7 +4,7 @@
  * A GTFS-ben nincs forda (block_id), ezért a múltból tanuljuk:
  *  - chain:    melyik menet után melyik jön UGYANAZZAL a járművel (forda-lánc)
  *  - slot:     azonos naptípuson ki szokta vinni ezt a menetet
- *  - turnaround: forda-terv — minden kint lévő busz láncát órákra előre
+ *  - turnaround: forda-terv  minden kint lévő busz láncát órákra előre
  *    végigvezetjük (tanult folytatás, ennek híján a végállomásról a sorban
  *    következő menet), így a még messze lévő menetekre is van jóslat
  *
@@ -17,7 +17,7 @@
  *
  * Önjutalmazás: amikor a menet ténylegesen elindul, kiértékeljük a korábban
  * kiadott jóslatokat. Amelyik jelzés eltalálta, annak nő a súlya (jutalom),
- * amelyik tévedett, annak csökken — a modell így magától javul.
+ * amelyik tévedett, annak csökken  a modell így magától javul.
  */
 import {
   dayInfo,
@@ -41,7 +41,7 @@ import { errMsg, log } from "./log.ts";
 type Signal = "chain" | "slot" | "turnaround";
 const SIGNALS: Signal[] = ["chain", "slot", "turnaround"];
 const DEFAULT_WEIGHTS: Record<Signal, number> = { chain: 0.75, slot: 0.35, turnaround: 0.6 };
-/** a már futó, illesztett menet „jóslata" — ezt nem számítjuk a pontosságba */
+/** a már futó, illesztett menet „jóslata"  ezt nem számítjuk a pontosságba */
 const MATCHED_CONFIDENCE = 0.97;
 const LEARNING_RATE = 0.04;
 const HORIZONS = [30, 15, 5];
@@ -60,7 +60,7 @@ const TRAM_ROUTE_TYPE = "900";
 /**
  * Fordulóhurkon eddig a menetrendi állásig viszi biztosan ugyanaz a busz a következő
  * menetet (60 nap: ≤ 5 percnél 99,5%; 6–10 percnél egy kisebb mintán csak ~90%, 11–20
- * percnél 85%: ott cserélnek — ott marad a „~” tipp).
+ * percnél 85%: ott cserélnek  ott marad a „~” tipp).
  */
 const LOOP_SURE_TURN_S = 5 * 60;
 const LOOP_CONFIDENCE = 0.99;
@@ -72,7 +72,7 @@ const LOOP_WAIT_S = 15 * 60;
 export type VehicleGuess = {
   id: string;
   confidence: number;
-  /** loop: nem tipp — a fordulóhurkon ugyanaz a busz indul vissza, ami most a beérkező menetet viszi */
+  /** loop: nem tipp  a fordulóhurkon ugyanaz a busz indul vissza, ami most a beérkező menetet viszi */
   method: Signal | "matched" | "loop";
   signals: Partial<Record<Signal, string>>;
   /** a forda-tervben hányadik menet a busz mostanitól számítva */
@@ -85,7 +85,7 @@ export class VehiclePredictor {
   private chain = new Map<string, Map<string, number>>();
   private next = new Map<string, Map<string, number>>();
   private slot = new Map<string, Map<string, number>>();
-  /** járművenként az utoljára vitt vonal (route_id) — ebből tudjuk, busz-e vagy villamos */
+  /** járművenként az utoljára vitt vonal (route_id)  ebből tudjuk, busz-e vagy villamos */
   private lastRouteOf = new Map<string, string>();
   private plan: { at: number; iso: string; plan: RotationPlan } | null = null;
   weights: Record<Signal, number> = { ...DEFAULT_WEIGHTS };
@@ -264,7 +264,7 @@ export class VehiclePredictor {
   }
 
   /**
-   * Fordulóhurok: melyik busz viszi biztosan a menetet — amelyik a beérkező menetét
+   * Fordulóhurok: melyik busz viszi biztosan a menetet  amelyik a beérkező menetét
    * most viszi (vagy az imént fejezte be, és ott vár, vagy az MVK már kiosztotta rá).
    * Ha a beérkező menet még gazdátlan, annak a beérkező menetét nézzük (legfeljebb
    * `hops` fordulóig).

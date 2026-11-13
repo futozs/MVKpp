@@ -12,7 +12,7 @@ export function formatTemp(c: number): string {
   return `${Math.round(c)} °C`;
 }
 
-/** „hőérzet 16 °C · szél 12 km/h” — üres, ha egyik sem ismert. */
+/** „hőérzet 16 °C · szél 12 km/h”  üres, ha egyik sem ismert. */
 export function weatherExtras(w: WeatherResponse): string {
   const parts: string[] = [];
   if (w.feelsLikeC != null) parts.push(`hőérzet ${formatTemp(w.feelsLikeC)}`);

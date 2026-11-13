@@ -53,7 +53,7 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-// Ezek mindig hálózatról jönnek (élő vagy személyes adat) — a service worker
+// Ezek mindig hálózatról jönnek (élő vagy személyes adat)  a service worker
 // nem gyorsítótárazza őket, különben régi járműhelyzetet / statisztikát mutatna.
 const LIVE_PREFIXES = [
   "/live",

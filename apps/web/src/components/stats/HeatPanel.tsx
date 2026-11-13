@@ -32,7 +32,7 @@ const ROUTE_KEY = "mvk_heat_route";
 
 async function getJson<T>(path: string): Promise<T> {
   const r = await fetch(`${API_BASE}${path}`);
-  if (!r.ok) throw new Error(r.status === 404 ? "Erre a vonalra nincs adat." : r.status === 503 ? "A menetrend még töltődik — próbáld újra pár másodperc múlva." : `Hiba (${r.status})`);
+  if (!r.ok) throw new Error(r.status === 404 ? "Erre a vonalra nincs adat." : r.status === 503 ? "A menetrend még töltődik  próbáld újra pár másodperc múlva." : `Hiba (${r.status})`);
   return (await r.json()) as T;
 }
 
@@ -46,8 +46,8 @@ function readRoute(): string | null {
 
 /**
  * Hőtérkép: hol és mikor késnek a buszok.
- *  · Vonal — egy vonal megállói × a nap órái: mennyit késik, és hol szedi fel
- *  · Város — a teljes hálózat megállóközei a térképen, óráról órára lejátszva
+ *  · Vonal  egy vonal megállói × a nap órái: mennyit késik, és hol szedi fel
+ *  · Város  a teljes hálózat megállóközei a térképen, óráról órára lejátszva
  */
 export function HeatPanel({ routes }: { routes: Route[] }) {
   const [view, setView] = useState<(typeof VIEWS)[number]["id"]>("route");
@@ -93,7 +93,7 @@ export function HeatPanel({ routes }: { routes: Route[] }) {
           <div>
             <h2 className="text-lg font-bold tracking-tight sm:text-xl">Hőtérkép</h2>
             <p className="mt-0.5 max-w-2xl text-[12.5px] text-muted-foreground">
-              Hol és mikor késnek a buszok — a lezárt napok mért megálló-időiből, mediánnal (egy-egy kiugró menet nem torzít).
+              Hol és mikor késnek a buszok  a lezárt napok mért megálló-időiből, mediánnal (egy-egy kiugró menet nem torzít).
             </p>
           </div>
           <div role="tablist" aria-label="Nézet" className="flex gap-1 rounded-xl border border-border bg-muted/40 p-1">
@@ -131,7 +131,7 @@ export function HeatPanel({ routes }: { routes: Route[] }) {
             limit={80}
           />
           <ChartFrame
-            title={routeData ? `${routeData.route} — ${routeData.directions.find((d) => d.dir === routeData.dir)?.headsign ?? ""}` : "Vonal-hőtérkép"}
+            title={routeData ? `${routeData.route}  ${routeData.directions.find((d) => d.dir === routeData.dir)?.headsign ?? ""}` : "Vonal-hőtérkép"}
             hint="megállók menetirányban × a nap órái"
             action={
               routeData && routeData.directions.length > 1 ? (

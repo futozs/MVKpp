@@ -56,7 +56,7 @@ export const LEGEND: Record<HeatMetric, number[]> = {
 
 /** ±m:ss, a pontos (±30 mp) „0” */
 export function fmtSec(sec: number | null | undefined): string {
-  if (sec == null) return "—";
+  if (sec == null) return "";
   if (Math.abs(sec) < 30) return "±0";
   const a = Math.abs(Math.round(sec));
   return `${sec > 0 ? "+" : "−"}${Math.floor(a / 60)}:${String(a % 60).padStart(2, "0")}`;

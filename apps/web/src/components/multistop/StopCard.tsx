@@ -35,12 +35,12 @@ const RETRY_MAX_MS = 30_000;
 
 const POLL_MS = 4000;
 
-/** Fordulóhurok: nem tipp — ugyanaz a busz fordul vissza, ami most odafelé jár. */
+/** Fordulóhurok: nem tipp  ugyanaz a busz fordul vissza, ami most odafelé jár. */
 const isLoopVehicle = (p: { method?: string }) => p.method === "loop";
 
 function predictedTitle(p: { confidence: number; method?: string }): string {
-  if (p.method === "matched") return "Már úton van — a GPS-nyomvonal alapján ez a busz viszi";
-  if (isLoopVehicle(p)) return "Ez a busz most a végállomás felé jár, és ugyanonnan fordul vissza — nem tipp";
+  if (p.method === "matched") return "Már úton van  a GPS-nyomvonal alapján ez a busz viszi";
+  if (isLoopVehicle(p)) return "Ez a busz most a végállomás felé jár, és ugyanonnan fordul vissza  nem tipp";
   return `Előrejelzés a korábbi fordák alapján, ${Math.round(p.confidence * 100)}% bizonyossággal`;
 }
 
@@ -125,7 +125,7 @@ export function StopCard({
   );
 
   // A szerver magától küldi, amint a tábla változik (busz beért, elindult,
-  // új késés) — nincs 4 mp-es várakozás. Pollozás csak kapcsolat nélkül.
+  // új késés)  nincs 4 mp-es várakozás. Pollozás csak kapcsolat nélkül.
   useTopic(`stop:${stop.id}@${modesKey}`, (m) => apply(m.data as StopArrivalsResponse));
   useEffect(() => {
     load();
@@ -171,7 +171,7 @@ export function StopCard({
   useEffect(() => {
     if (!next || !leaveSlot || !leaveOn || !nextVerdict) return;
     if (nextVerdict.state !== "go" && nextVerdict.state !== "run") return;
-    notifyLocallyOnce(stop.id, leaveSlot, next.tripId, nextVerdict.state === "run" ? `Siess! ${next.route} ${next.etaMin} perc múlva` : `Indulj most: ${next.route} ${next.etaMin} perc múlva`, `${stop.name} — ${Math.max(1, Math.round(nextVerdict.walkS / 60))} perc séta`);
+    notifyLocallyOnce(stop.id, leaveSlot, next.tripId, nextVerdict.state === "run" ? `Siess! ${next.route} ${next.etaMin} perc múlva` : `Indulj most: ${next.route} ${next.etaMin} perc múlva`, `${stop.name}  ${Math.max(1, Math.round(nextVerdict.walkS / 60))} perc séta`);
   }, [next, leaveSlot, leaveOn, nextVerdict, stop.id, stop.name]);
 
   return (
@@ -258,7 +258,7 @@ export function StopCard({
                   isWatching && "text-primary hover:text-primary",
                 )}
                 onClick={() => setNotifyOpen(true)}
-                aria-label={`Értesítés beállítása — ${stop.name}`}
+                aria-label={`Értesítés beállítása  ${stop.name}`}
               >
                 {isWatching ? <BellRing /> : <Bell />}
               </Button>

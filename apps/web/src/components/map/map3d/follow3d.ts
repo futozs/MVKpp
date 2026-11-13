@@ -1,6 +1,6 @@
 /**
  * Követés 3D-ben: a kamera rárepül a buszra, aztán mögüle, a haladási irányba
- * nézve viszi a várost — a busz a látott rész alsó harmadában, előtte az út.
+ * nézve viszi a várost  a busz a látott rész alsó harmadában, előtte az út.
  * Elhúzásra megáll (mint a 2D-ben, „Busz középre” folytatja); kézi forgatás után
  * pár másodpercig a felhasználó iránya marad, utána visszafordul a busz mögé.
  */
@@ -43,7 +43,7 @@ const CHASE_TOP_SHARE = 0.3;
 const PAD_REFRESH_MS = 500;
 /** a megtett / hátralévő út határát ilyen gyakran frissítjük (ms) */
 const PROGRESS_MS = 1000;
-/** ennél messzebb a vonaltól a busz nem ezen az úton jár (m) — nincs halványítás */
+/** ennél messzebb a vonaltól a busz nem ezen az úton jár (m)  nincs halványítás */
 const OFF_LINE_M = 80;
 
 const NO_PAD: PaddingOptions = { top: 0, bottom: 0, left: 0, right: 0 };

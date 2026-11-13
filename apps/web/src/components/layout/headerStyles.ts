@@ -1,5 +1,5 @@
 /**
- * A fejléc közös fókusz- és felületstílusai — egy helyen, hogy az asztali és a
+ * A fejléc közös fókusz- és felületstílusai  egy helyen, hogy az asztali és a
  * mobil fejléc minden vezérlője ugyanúgy reagáljon billentyűzetre.
  */
 

@@ -24,7 +24,7 @@ const WINDOWS = [
   { id: "eve", label: "Este", sub: "18–23", from: 18, to: 23 },
 ] as const;
 
-const fmtMin = (s: number | null | undefined) => (s == null ? "—" : `${s >= 0 ? "+" : "−"}${(Math.abs(s) / 60).toFixed(1)} p`);
+const fmtMin = (s: number | null | undefined) => (s == null ? "" : `${s >= 0 ? "+" : "−"}${(Math.abs(s) / 60).toFixed(1)} p`);
 
 function avgOver(hours: NetworkHour[], from: number, to: number) {
   const sel = hours.filter((h) => h.hour >= from && h.hour < to && h.avg_delay_s != null);
@@ -38,7 +38,7 @@ function avgOver(hours: NetworkHour[], from: number, to: number) {
 }
 
 /**
- * Hálózat — mikor és hol késnek a járatok.
+ * Hálózat  mikor és hol késnek a járatok.
  * Az adat a megálló-eseményekből jön (minden busz, minden megálló, ahol
  * láttuk), naptípus szerint átlagolva. A v2 itt egy soha le nem futó
  * éjszakai összesítőből olvasott, ezért volt üres a reggeli és az esti csúcs.
@@ -77,7 +77,7 @@ export function NetworkPanel() {
               <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
                 <StatTile label="Reggeli csúcs (6–9)" value={fmtMin(am?.delay)} sub={am ? `${am.otp}% pontos érkezés` : "nincs adat"} tone="late" />
                 <StatTile label="Délutáni csúcs (14–18)" value={fmtMin(pm?.delay)} sub={pm ? `${pm.otp}% pontos érkezés` : "nincs adat"} tone="late" />
-                <StatTile label="Legrosszabb óra" value={worst ? `${worst.hour % 24}:00–${(worst.hour % 24) + 1}:00` : "—"} sub={worst ? `átlag ${fmtMin(worst.avg_delay_s)}` : undefined} />
+                <StatTile label="Legrosszabb óra" value={worst ? `${worst.hour % 24}:00–${(worst.hour % 24) + 1}:00` : ""} sub={worst ? `átlag ${fmtMin(worst.avg_delay_s)}` : undefined} />
                 <StatTile label="Mérések" value={totalN.toLocaleString("hu-HU")} sub={`megálló-érkezés, ${d.days} nap ${dayType.of}`} />
               </div>
 
@@ -93,7 +93,7 @@ export function NetworkPanel() {
                       label: `${h.hour % 24}`,
                       value: h.avg_delay_s == null ? null : Math.round(h.avg_delay_s / 6) / 10,
                       tone: (h.avg_delay_s ?? 0) > 180 ? "late" : (h.avg_delay_s ?? 0) < -30 ? "early" : "ontime",
-                      title: `${h.hour % 24}:00–${(h.hour % 24) + 1}:00 · átlag ${fmtMin(h.avg_delay_s)} · ${h.otp_pct ?? "—"}% pontos · 85%-ban legfeljebb ${fmtMin(h.p85_delay_s)} · ${h.n} mérés`,
+                      title: `${h.hour % 24}:00–${(h.hour % 24) + 1}:00 · átlag ${fmtMin(h.avg_delay_s)} · ${h.otp_pct ?? ""}% pontos · 85%-ban legfeljebb ${fmtMin(h.p85_delay_s)} · ${h.n} mérés`,
                     }))}
                   labelEvery={2}
                 />

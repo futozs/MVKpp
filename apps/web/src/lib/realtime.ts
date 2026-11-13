@@ -3,7 +3,7 @@
  *
  * Egyetlen megosztott kapcsolat az egész appnak; a komponensek témákra
  * iratkoznak fel (`vehicles`, `stop:SP85`, `trip:…`, `runs:20261029`, `sync`).
- * A szerver küldi az adatot, amint változik — nincs pollozás. Ha a kapcsolat
+ * A szerver küldi az adatot, amint változik  nincs pollozás. Ha a kapcsolat
  * megszakad, növekvő várakozással újracsatlakozik és visszaállítja a
  * feliratkozásokat; amíg nincs kapcsolat, a hookok pollozó tartalékra váltanak.
  */
@@ -23,7 +23,7 @@ let serverOffsetS = 0;
 /** nő, valahányszor a szerver órája megérkezik (kapcsolódáskor) */
 let clockVersion = 0;
 
-/** A szerver órája most (unix mp) — a kapcsolódáskor kapott „hello” alapján. */
+/** A szerver órája most (unix mp)  a kapcsolódáskor kapott „hello” alapján. */
 export function serverNow(): number {
   return Date.now() / 1000 + serverOffsetS;
 }
@@ -36,7 +36,7 @@ class RealtimeClient {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private statusListeners = new Set<() => void>();
   private auth: { token: string; deviceId: string } | null = null;
-  /** az utolsó szerverüzenet ideje (ms) — ébredéskor ebből látjuk, él-e még a kapcsolat */
+  /** az utolsó szerverüzenet ideje (ms)  ébredéskor ebből látjuk, él-e még a kapcsolat */
   private lastMsgAt = 0;
   connected = false;
 
@@ -198,7 +198,7 @@ if (typeof window !== "undefined") {
 }
 
 /**
- * Megérkezett-e (újra) a szerver órája: a „mai nap” ehhez igazodhat — az első
+ * Megérkezett-e (újra) a szerver órája: a „mai nap” ehhez igazodhat  az első
  * rendereléskor még csak a készülék órája ismert.
  */
 export function useServerClockVersion(): number {

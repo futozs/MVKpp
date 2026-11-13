@@ -1,6 +1,6 @@
 # Fejlesztői adatbázis (ugyanaz az image, mint élesben) + opcionális helyi Redis.
 #   docker compose -f infra/docker-compose.dev.yml up -d
-#   (.env.dev: REDIS_URL=redis://127.0.0.1:6380 — vagy egy Upstash-kapcsolati szöveg)
+#   (.env.dev: REDIS_URL=redis://127.0.0.1:6380  vagy egy Upstash-kapcsolati szöveg)
 services:
   db:
     image: timescale/timescaledb-ha:pg17.11-ts2.31.0  # rögzítve: a mentés-visszaállítás azonos verziót kér

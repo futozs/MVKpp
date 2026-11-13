@@ -6,7 +6,7 @@
  *  · átért buszok: a legutóbbi néhány áthaladás menetideje a szokásoshoz
  *    (az adott naptípus és óra mediánjához) képest
  *  · bent ragadt busz: aki most halad a szakaszon, és már jóval tovább tart
- *    neki, mint szokott — így a dugó azonnal látszik, nem csak utólag
+ *    neki, mint szokott  így a dugó azonnal látszik, nem csak utólag
  *
  * Egyetlen lassú áthaladás nem elég (egy busz kerekesszékes utast vesz fel,
  * lámpát kap): ahhoz erősebb lassulás kell. A rövid szakaszok arányát a
@@ -85,7 +85,7 @@ export function segmentCongestion(obs: readonly TrafficObs[], stuck: readonly Tr
     const r = s.elapsedS / s.typicalS;
     if (ex < TRAFFIC.STUCK_MIN_EXCESS_S || r < TRAFFIC.MIN_RATIO) continue;
     stuckN++;
-    // A bent ragadt busz alsó becslés (még nem ért át) — ha lassabb, mint amit az átértek mutatnak, az a mostani állapot.
+    // A bent ragadt busz alsó becslés (még nem ért át)  ha lassabb, mint amit az átértek mutatnak, az a mostani állapot.
     if (r > ratio) {
       ratio = r;
       excess = ex;

@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * A térkép egyetlen vezérlő-eleme: mind a négy sarokban ugyanaz a méret
- * (44 px — ujjal is biztosan eltalálható), ugyanaz az üveghatású kártya,
+ * (44 px  ujjal is biztosan eltalálható), ugyanaz az üveghatású kártya,
  * ugyanaz a hover / fókusz / bekapcsolt állapot.
  */
 const BASE = cn(

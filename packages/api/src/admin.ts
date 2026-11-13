@@ -1,5 +1,5 @@
 /**
- * GET /v3/admin/metrics — a webes oldal válaszidői és folyamat-adatai a
+ * GET /v3/admin/metrics  a webes oldal válaszidői és folyamat-adatai a
  * rendszer-hubnak. Saját, csak-olvasó kulccsal (X-Metrics-Key = METRICS_KEY):
  * a nyilvános web konténere így nem kapja meg a worker mesterkulcsát (ADMIN_KEY).
  */

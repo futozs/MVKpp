@@ -326,7 +326,7 @@ describe("illesztési profilok", () => {
     const midnight = localMidnightUnix(ISO);
     const runs: RunOut[] = [];
     const m = new TripMatcher(() => [{ day, midnightUnix: midnight }], { runClosed: (r) => runs.push({ ...r }) });
-    // Tiszai 07:20 → Füzesabony 08:08, ~45 km — 30 mp-enként egy pont a két állomás közti egyenesen.
+    // Tiszai 07:20 → Füzesabony 08:08, ~45 km  30 mp-enként egy pont a két állomás közti egyenesen.
     const t0 = midnight + 26400;
     const steps = 96;
     for (let i = 0; i <= steps; i++) {
@@ -342,7 +342,7 @@ describe("illesztési profilok", () => {
 
 describe("elavult tárolt minta (az OTP mintakódja sorszám)", () => {
   const stop = (id: string) => ({ gtfsId: id, name: id, lat: 48.1, lon: 20.8 });
-  // a tárolt :1:01 még a 4 megállós rendes menet — a frissítés óta ez a kód a 2 megállós expressz
+  // a tárolt :1:01 még a 4 megállós rendes menet  a frissítés óta ez a kód a 2 megállós expressz
   const cached = { stops: [stop("hkir:A"), stop("hkir:B"), stop("hkir:C"), stop("hkir:D")] };
   const st = (ids: string[]) => ids.map((id, i) => ({ scheduledArrival: 3600 * 6 + i * 60, scheduledDeparture: 3600 * 6 + i * 60, stop: { gtfsId: id } }));
   const express = { gtfsId: "hkir:hkir_3765_638-7", stoptimes: st(["hkir:A", "hkir:D"]) };

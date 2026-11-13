@@ -1,6 +1,6 @@
 /**
  * Élő forgalom (dugók) a térképhez: szakaszonként (megállótól megállóig) a
- * buszok mostani menetideje a szokásoshoz képest — a core `segmentCongestion`
+ * buszok mostani menetideje a szokásoshoz képest  a core `segmentCongestion`
  * dönti el, hol áll be az út. Az átért buszok mellett a most bent ragadtakat
  * is nézzük, így a dugó azonnal látszik.
  */
@@ -59,7 +59,7 @@ export class TrafficMonitor {
     return value;
   }
 
-  /** A torlódó szakaszok megállópáronként (`"from|to"`) — a „dugó a busz előtt” jelzéshez. */
+  /** A torlódó szakaszok megállópáronként (`"from|to"`)  a „dugó a busz előtt” jelzéshez. */
   congestedLinks(now = nowUnix()): Map<string, CongestedLink> {
     const out = new Map<string, CongestedLink>();
     for (const s of this.snapshot(now).segments) out.set(`${s.fromId}|${s.toId}`, { excessS: s.excessS, level: s.level });

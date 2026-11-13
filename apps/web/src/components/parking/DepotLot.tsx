@@ -11,7 +11,7 @@ const ORDER: DepotReason[] = ["pull-in", "seen", "timeout", "not-today"];
 const REASON_HINT: Record<DepotReason, string> = {
   "pull-in": "G-járattal (garázsmenettel) ért be a telephelyre",
   seen: "élő GPS-jellel a telephelyen áll",
-  timeout: "a végállomáson 1 óránál tovább néma volt — kikapcsolva ment vissza",
+  timeout: "a végállomáson 1 óránál tovább néma volt  kikapcsolva ment vissza",
   "not-today": "ma még egy menetet sem vitt",
 };
 

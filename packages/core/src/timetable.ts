@@ -1,4 +1,4 @@
-/** Menetrendkönyv: vonal × irány táblázat egy napra — a régi formátumban (az iOS app is ezt olvassa). */
+/** Menetrendkönyv: vonal × irány táblázat egy napra  a régi formátumban (az iOS app is ezt olvassa). */
 import type { ServiceDay } from "./gtfs/service.ts";
 import type { Route, Trip } from "./gtfs/feed.ts";
 import { secToHm } from "./time.ts";
@@ -30,7 +30,7 @@ export type TimetableTable = {
   stops: { id: string; code: string; name: string; lat: number | null; lon: number | null }[];
   trips: TimetableTripRow[];
   note?: string;
-  /** v3: a betűjelek magyarázata — miben más az a menet (melyik megállót érinti / hagyja ki, meddig megy) */
+  /** v3: a betűjelek magyarázata  miben más az a menet (melyik megállót érinti / hagyja ki, meddig megy) */
   variants?: TripVariant[];
 };
 

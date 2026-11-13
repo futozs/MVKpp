@@ -34,7 +34,7 @@ export type PushDiagnostic = { ok: boolean; reason?: string };
 
 /**
  * iPhone/iPad: zárt appnál csak a Főképernyőhöz adott (telepített) webappból jöhet
- * push (iOS 16.4+) — a Safari-lapról soha. Ilyenkor ezt mondjuk meg, nem azt, hogy „nem támogatja”.
+ * push (iOS 16.4+)  a Safari-lapról soha. Ilyenkor ezt mondjuk meg, nem azt, hogy „nem támogatja”.
  */
 function iosNeedsInstall(): boolean {
   if (typeof navigator === "undefined") return false;
@@ -75,10 +75,10 @@ async function ensureSubscription(): Promise<
     const keyBytes = urlBase64ToUint8Array(publicKey);
     log(`VAPID kulcs: ${publicKey.length} karakter → ${keyBytes.length} byte dekódolva`);
     if (keyBytes.length !== 65) {
-      log("a VAPID kulcs mérete hibás (65 byte kellene) — sérült/hiányos kulcs a szerveren");
+      log("a VAPID kulcs mérete hibás (65 byte kellene)  sérült/hiányos kulcs a szerveren");
       return {
         sub: null,
-        reason: `A szerver VAPID kulcsa hibás méretű (${keyBytes.length} byte a várt 65 helyett) — ellenőrizd a VAPID_PUBLIC_KEY-t a szerver .env-jében, nincs-e benne extra szóköz vagy csonka másolás.`,
+        reason: `A szerver VAPID kulcsa hibás méretű (${keyBytes.length} byte a várt 65 helyett)  ellenőrizd a VAPID_PUBLIC_KEY-t a szerver .env-jében, nincs-e benne extra szóköz vagy csonka másolás.`,
       };
     }
 
@@ -123,12 +123,12 @@ export async function registerPushWatch(
     const res = await fetch(`${API_BASE}/push/watch`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      // a figyelés a bekapcsolt módokat nézi (Volán, vonat is) — ahogy a megállótábla
+      // a figyelés a bekapcsolt módokat nézi (Volán, vonat is)  ahogy a megállótábla
       body: JSON.stringify({ subscription: result.sub.toJSON(), ...config, params: { modes: modesParam(), merge: stopMergeNow(), ...config.params } }),
     });
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      log(`figyelés mentése sikertelen: HTTP ${res.status} — ${text}`);
+      log(`figyelés mentése sikertelen: HTTP ${res.status}  ${text}`);
       return { ok: false, reason: `A szerver elutasította a mentést (${res.status}).` };
     }
     log("figyelés mentve a szerveren:", config.stopId);

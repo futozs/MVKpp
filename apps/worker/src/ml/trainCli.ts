@@ -16,5 +16,5 @@ const r = await runDelayTraining({
   log: (m) => console.log(`[${Math.round((Date.now() - t0) / 1000)} mp] ${m}`),
 });
 console.log(r.text);
-if (r.saved) console.log(`mentve: #${r.saved.id}, ${r.saved.accepted ? "ELFOGADVA" : "nem jobb a képletnél — nem használjuk"}`);
+if (r.saved) console.log(`mentve: #${r.saved.id}, ${r.saved.accepted ? "ELFOGADVA" : "nem jobb a képletnél  nem használjuk"}`);
 await closeDb();

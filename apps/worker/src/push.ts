@@ -66,7 +66,7 @@ type WatchParams = {
   date?: string;
   /** leave: séta a megállóig (mp) */
   walkS?: number;
-  /** leave (ismétlődő): melyik napokon — munkanap, hétvége, mind, vagy a hét napjai (ISO 1–7) */
+  /** leave (ismétlődő): melyik napokon  munkanap, hétvége, mind, vagy a hét napjai (ISO 1–7) */
   days?: "workday" | "weekend" | "all" | number[];
   /** transfer: az első menet, az átszálló megálló és a séta */
   fromTrip?: string;
@@ -121,7 +121,7 @@ function isWatchDay(days: WatchParams["days"], date: string): boolean {
 }
 
 const minText = (s: number) => `${Math.max(1, Math.round(s / 60))} perc`;
-/** „21-es busz (1644)”, „1-es villamos”, „5139-es vonat (IC TOKAJ)” — a mód szerint */
+/** „21-es busz (1644)”, „1-es villamos”, „5139-es vonat (IC TOKAJ)”  a mód szerint */
 const busLabel = (a: ArrivalItem) => {
   if (a.mode === "rail") return `${withHungarianSuffix(a.trainNo ?? a.route)} vonat${a.trainName ? ` (${a.trainName})` : ""}`;
   const p = a.predictedVehicle;
@@ -159,7 +159,7 @@ export class PushEngine {
 
   async start(): Promise<void> {
     if (!pushConfigured) {
-      log.warn("push", "VAPID kulcsok nincsenek beállítva — a push kikapcsolva");
+      log.warn("push", "VAPID kulcsok nincsenek beállítva  a push kikapcsolva");
       return;
     }
     await this.boss.createQueue(QUEUE, { retryLimit: 3, retryDelay: 4, retryBackoff: true, expireInSeconds: 60 });
@@ -179,7 +179,7 @@ export class PushEngine {
         .catch((e) => log.warn("push", "kiértékelés hiba", errMsg(e)))
         .finally(() => (this.evaluating = false));
     });
-    log.info("push", `aktív — ${this.watches.length} figyelés`);
+    log.info("push", `aktív  ${this.watches.length} figyelés`);
   }
 
   async reload(): Promise<void> {
@@ -262,7 +262,7 @@ export class PushEngine {
     if (w.trip_id && this.isCancelled(w.trip_id)) {
       await this.enqueue(w, date, w.trip_id, "cancelled", {
         title: "Menet kimaradt",
-        body: `A ${w.stop_name} ${w.is_departure ? "megállóból induló" : "megállóba érkező"} járatot ${cancelledBy(w.trip_id)} törölte — nem fog közlekedni.`,
+        body: `A ${w.stop_name} ${w.is_departure ? "megállóból induló" : "megállóba érkező"} járatot ${cancelledBy(w.trip_id)} törölte  nem fog közlekedni.`,
       });
       return;
     }
@@ -273,14 +273,14 @@ export class PushEngine {
       if (!w.trip_id || !r || r.expectedDelayS < RISK_ALERT_S || a.cancelled) continue;
       await this.enqueue(w, date, a.tripId, "risk", {
         title: r.level === "likely-missed" ? `${busLabel(a)}: valószínűleg kimarad` : `${busLabel(a)}: később indul`,
-        body: `A ${a.time}-s menet busza (${r.vehicleId}) még ${r.prevRoute ? `a ${withHungarianSuffix(r.prevRoute)} vonalon` : "az előző menetén"} jár — várhatóan kb. ${minText(r.expectedDelayS)} késéssel ${w.is_departure ? "indul" : "ér ide"} (${w.stop_name}).`,
+        body: `A ${a.time}-s menet busza (${r.vehicleId}) még ${r.prevRoute ? `a ${withHungarianSuffix(r.prevRoute)} vonalon` : "az előző menetén"} jár  várhatóan kb. ${minText(r.expectedDelayS)} késéssel ${w.is_departure ? "indul" : "ér ide"} (${w.stop_name}).`,
       });
     }
     const due = mine.filter((a) => !a.cancelled && a.etaMin >= 0 && a.etaMin <= w.threshold_min);
     for (const a of due) {
       const delay = delaySuffix(a.measuredDelaySec ?? a.delaySec);
       const verb = w.is_departure ? "indul" : "ér ide";
-      const body = a.etaMin <= 0 ? `most ${verb}${delay} — ${w.stop_name}${platformSuffix(a)}` : `kb. ${a.etaMin} perc múlva ${verb}${delay} — ${w.stop_name}${platformSuffix(a)}`;
+      const body = a.etaMin <= 0 ? `most ${verb}${delay}  ${w.stop_name}${platformSuffix(a)}` : `kb. ${a.etaMin} perc múlva ${verb}${delay}  ${w.stop_name}${platformSuffix(a)}`;
       await this.enqueue(w, date, a.tripId, "arrival", { title: `${busLabel(a)} → ${a.headsign}`, body });
     }
   }
@@ -318,7 +318,7 @@ export class PushEngine {
       }
       await this.enqueue(w, date, a.tripId, "leave", {
         title: v.state === "run" ? `Siess! ${busLabel(a)} ${eta} múlva` : `Indulj most: ${busLabel(a)} ${eta} múlva`,
-        body: `${w.stop_name} — ${minText(walkS)} séta${v.state === "run" ? ", csak futva éred el" : ""}${delaySuffix(a.measuredDelaySec ?? a.delaySec)}.`,
+        body: `${w.stop_name}  ${minText(walkS)} séta${v.state === "run" ? ", csak futva éred el" : ""}${delaySuffix(a.measuredDelaySec ?? a.delaySec)}.`,
       });
     }
   }
@@ -332,12 +332,12 @@ export class PushEngine {
       if (routeFilter && !routeFilter.includes(a.route)) continue;
       await this.enqueue(w, date, a.tripId, "traffic", {
         title: `Dugó: ${busLabel(a)} kb. +${minText(t.excessS)}`,
-        body: `${t.fromName} → ${t.toName} között beállt a forgalom — kb. ${a.etaMin} perc múlva ér a ${w.stop_name} megállóba.`,
+        body: `${t.fromName} → ${t.toName} között beállt a forgalom  kb. ${a.etaMin} perc múlva ér a ${w.stop_name} megállóba.`,
       });
     }
   }
 
-  /** Átszállás: ha az esély elszáll, szólunk — a következő lehetőséggel. */
+  /** Átszállás: ha az esély elszáll, szólunk  a következő lehetőséggel. */
   private async evalTransfer(w: WatchRow, now: number, date: string) {
     const p = w.params ?? {};
     if (!w.trip_id || !p.fromTrip || !p.alightStopId) return;
@@ -357,7 +357,7 @@ export class PushEngine {
     const pct = Math.round(o.chance * 100);
     await this.enqueue(w, date, w.trip_id, "transfer", {
       title: `Veszélyben az átszállás (${pct}% esély)`,
-      body: `A ${p.fromRoute ? withHungarianSuffix(p.fromRoute) + " " : ""}busz várhatóan ${o.marginS < 0 ? `${minText(-o.marginS)} késéssel` : "épp csak"} ér ide a ${p.toRoute ? withHungarianSuffix(p.toRoute) : "csatlakozás"} indulásához — ${w.stop_name}.${next ? ` Ha lekésed: ${next.time}.` : ""}`,
+      body: `A ${p.fromRoute ? withHungarianSuffix(p.fromRoute) + " " : ""}busz várhatóan ${o.marginS < 0 ? `${minText(-o.marginS)} késéssel` : "épp csak"} ér ide a ${p.toRoute ? withHungarianSuffix(p.toRoute) : "csatlakozás"} indulásához  ${w.stop_name}.${next ? ` Ha lekésed: ${next.time}.` : ""}`,
     });
   }
 

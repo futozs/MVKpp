@@ -5,7 +5,7 @@
 # A PROBLÉMA, amit megold:
 #   Ha ezen a gépen egy MÁSIK VPN is fut (utun*), az elviheti az alapértelmezett
 #   útvonalat. Ilyenkor a WireGuard-kliensről (10.5.5.x) érkező kérés még
-#   megérkezik — a router továbbítja a LAN-címre —, de a gép a VÁLASZT a másik
+#   megérkezik  a router továbbítja a LAN-címre , de a gép a VÁLASZT a másik
 #   VPN tunneljébe küldi a router helyett. A kapcsolat így félúton elhal: a
 #   szerveren minden hibátlannak látszik, a böngészőben mégis örökké tölt.
 #
@@ -29,7 +29,7 @@ GATEWAY="${2:-}"
 PLIST="/Library/LaunchDaemons/hu.mvk.vpnroute.plist"
 SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
 
-# Az első paraméter kapcsoló is lehet — ilyenkor a hálózat marad az alapértelmezett.
+# Az első paraméter kapcsoló is lehet  ilyenkor a hálózat marad az alapértelmezett.
 case "${1:-}" in
   --install|--remove|--status) VPN_NET="10.5.5.0/24" ;;
 esac

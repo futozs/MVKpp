@@ -1,7 +1,7 @@
 /**
  * Tanító- és tesztminták a késés-modellhez a lezárt napok megálló-eseményeiből.
  *
- * Egy minta: „a busz az i. megállót d0 késéssel hagyta el — mennyi lesz a
+ * Egy minta: „a busz az i. megállót d0 késéssel hagyta el  mennyi lesz a
  * késése a j. megállóban?” A jellemzőket a core `delayFeatureVector` adja,
  * ugyanúgy, ahogy élesben. Naponként csak a legjobb minőségű forrás számít
  * (élő > újraszámolt > régi import), hogy egy menet ne szerepeljen kétszer.
@@ -31,7 +31,7 @@ export type SampleSet = {
   y: Float32Array;
   /** hány megállóval előre */
   ahead: Uint8Array;
-  /** a képletes előrejelzés késésváltozása és felső becslése (mp) — az összevetéshez */
+  /** a képletes előrejelzés késésváltozása és felső becslése (mp)  az összevetéshez */
   baseline: Float32Array;
   baselineUpper: Float32Array;
   days: string[];
@@ -134,7 +134,7 @@ async function pickDays(from: string, to: string, includeLegacy: boolean) {
   return [...best.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([d, v]) => ({ day: d, ...v }));
 }
 
-/** Szakaszprofilok (naptípus × óra) a megadott napokból — a teszt napjai nincsenek benne. */
+/** Szakaszprofilok (naptípus × óra) a megadott napokból  a teszt napjai nincsenek benne. */
 export async function loadProfiles(fromIso: string, toIsoExclusive: string): Promise<Map<string, SegmentProfile>> {
   const rows = await sql<{ f: string; t: string; d: number; h: number; p50: number; p85: number }>(
     `SELECT from_stop AS f, to_stop AS t, daytype AS d, (tod_bucket / 4)::int AS h,

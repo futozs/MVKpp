@@ -2,7 +2,7 @@
  * MÁV+ OTP2 járműpozíciók → a motor saját alakja.
  *
  * Az OTP2 `lastUpdated` VALÓDI UTC (az MVK GTFS-RT-jével ellentétben, ami helyi
- * időt kódol unixként) — itt tehát nincs eltolás-levonás. Az MVK-s járművek
+ * időt kódol unixként)  itt tehát nincs eltolás-levonás. Az MVK-s járművek
  * (`mvkzrt:` előtag) azonosítóit levágjuk: pontosan egyeznek a natív feedével,
  * így a tartalék forrásról jövő pontok ugyanannak a járműnek a folytatásai.
  */
@@ -34,7 +34,7 @@ export type RtVehicle = {
   ts: number;
   rtTripId: string;
   routeId: string;
-  /** a minta (pattern) kódja — a megyéből kiért járművek külön követéséhez */
+  /** a minta (pattern) kódja  a megyéből kiért járművek külön követéséhez */
   pattern: string | null;
   /** menetrendből becsült helyzet, nem GPS: a térképen látszik, de nem illesztjük és nem mentjük */
   estimated: boolean;

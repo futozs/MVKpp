@@ -1,15 +1,15 @@
 /**
  * A mai nap zavarai egy helyen, utasnak:
- *  · cancelled — az MVK hivatalosan törölte
- *  · missing   — most, 15–90 perce esedékes, egyetlen busz sem vitte (élő észlelés)
- *  · unseen    — korábban ma esedékes volt, és nem láttuk elindulni, pedig a
+ *  · cancelled  az MVK hivatalosan törölte
+ *  · missing    most, 15–90 perce esedékes, egyetlen busz sem vitte (élő észlelés)
+ *  · unseen     korábban ma esedékes volt, és nem láttuk elindulni, pedig a
  *                vonal szomszédos meneteit követtük (nincs kihúzva)
  *
  * A hiányzó adat önmagában nem kimaradás: a garázsmenetet és azt, amelyiket a busz
  * adat nélkül levitt (`quietTripIds`), egyik csoportba sem soroljuk.
  *
- * Menetenként a pótló indulás (ugyanaz a vonal és irány, ugyanonnan) és — ha
- * a kliens megadja a közelében lévő megállókat — hogy ott mikor állt volna meg.
+ * Menetenként a pótló indulás (ugyanaz a vonal és irány, ugyanonnan) és  ha
+ * a kliens megadja a közelében lévő megállókat  hogy ott mikor állt volna meg.
  */
 import {
   findMissingTrips,
@@ -30,7 +30,7 @@ import type { Engine } from "./engine.ts";
 import type { TripInsights } from "./insights.ts";
 import type { VehiclePredictor } from "./predict.ts";
 
-/** ugyanaz a nyomvonal ennyin belüli indulással — az MVK más azonosítóval vitte */
+/** ugyanaz a nyomvonal ennyin belüli indulással  az MVK más azonosítóval vitte */
 const SAME_PATTERN_S = 4 * 60;
 /** a pótló indulást legfeljebb ennyi időn belül keressük */
 const REPLACEMENT_WITHIN_S = 3 * 3600;
@@ -68,7 +68,7 @@ export function liveMissing(engine: Engine, day: ServiceDay, now: number) {
   return raw.filter((m) => !quiet.has(m.tripId));
 }
 
-/** A ma látott (nem félbehagyott) menetek és a buszuk — ebből igazoljuk az adat nélkül levitt meneteket. */
+/** A ma látott (nem félbehagyott) menetek és a buszuk  ebből igazoljuk az adat nélkül levitt meneteket. */
 function seenToday(engine: Engine) {
   return [...engine.todayRuns.values()].filter((r) => r.status !== "aborted").map((r) => ({ tripId: r.tripId, vehicleId: r.vehicleId }));
 }

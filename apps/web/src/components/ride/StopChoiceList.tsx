@@ -10,7 +10,7 @@ const hm = (unix: number) => HM.format(new Date(unix * 1000));
 /**
  * Megállólista a fel- vagy leszállás helyének kiválasztásához. Ahol a busz
  * már járt, a tényleges ideje látszik (felszállásnál az indulása, leszállásnál
- * az érkezése) — erről könnyebb felidézni, hol szálltál fel vagy le.
+ * az érkezése)  erről könnyebb felidézni, hol szálltál fel vagy le.
  */
 export function StopChoiceList({
   stops,
@@ -33,7 +33,7 @@ export function StopChoiceList({
   selected: number | null;
   /** megjegyzés egy-egy megálló mellett (pl. „javasolt”, „felszállás”) */
   marks?: ReadonlyMap<number, string>;
-  /** kiválasztás nélkül ez a megálló legyen szem előtt (pl. ahol a busz most jár) — nem javaslat */
+  /** kiválasztás nélkül ez a megálló legyen szem előtt (pl. ahol a busz most jár)  nem javaslat */
   focusIdx?: number | null;
   /** halvány felirat a `focusIdx` megálló mellett */
   focusLabel?: string;

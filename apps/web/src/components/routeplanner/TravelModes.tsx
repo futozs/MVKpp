@@ -7,10 +7,10 @@ export type PlanTravel = { coach: boolean; rail: boolean };
 /** Üres eredménynél: mit érdemes még bepipálni. */
 export function travelEmptyHint(t: PlanTravel): string | null {
   if (t.coach && t.rail) return null;
-  if (!t.coach && !t.rail) return "Lehet, hogy csak MVK-val nem érhető el — pipáld be a Volánt vagy a vonatot, vagy próbálj másik időpontot.";
+  if (!t.coach && !t.rail) return "Lehet, hogy csak MVK-val nem érhető el  pipáld be a Volánt vagy a vonatot, vagy próbálj másik időpontot.";
   return t.rail
-    ? "Lehet, hogy Volán nélkül nem érhető el — pipáld be a Volánt, vagy próbálj másik időpontot."
-    : "Lehet, hogy vonat nélkül nem érhető el — pipáld be a vonatot, vagy próbálj másik időpontot.";
+    ? "Lehet, hogy Volán nélkül nem érhető el  pipáld be a Volánt, vagy próbálj másik időpontot."
+    : "Lehet, hogy vonat nélkül nem érhető el  pipáld be a vonatot, vagy próbálj másik időpontot.";
 }
 
 function ModeCheck({

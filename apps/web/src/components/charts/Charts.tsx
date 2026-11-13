@@ -4,7 +4,7 @@
  * Szabályok: vékony jelek (oszlop legfeljebb 24 px, felül 4 px-es kerekítés,
  * a tövénél szögletes; vonal 2 px), tömör hajszálrács, kerek tengelyértékek,
  * a szövegek szövegszínben (a jel hordozza a színt), és minden chartnak van
- * saját lebegő súgója — érték elöl, felirat utána. A súgó kiegészít, nem
+ * saját lebegő súgója  érték elöl, felirat utána. A súgó kiegészít, nem
  * kapuőr: a lényeg a tengelyről és a feliratokból is leolvasható.
  */
 import { useEffect, useState, type ReactNode } from "react";

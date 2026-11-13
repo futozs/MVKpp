@@ -169,7 +169,7 @@ describe("a térkép pályája", () => {
     const pass = passTimes(f);
     const at = (t: number) => pass[f.findIndex((x) => x[0] === T0 + t)];
     expect(at(15)).toBeCloseTo(1.5, 5); // 10 m/s-mal 15 m
-    // 45. és 60. mp: áll a 400. méteren; 75. mp: 450 m — a kettő között egyenletesen, így a 415. métert a 64,5. mp-ben éri el
+    // 45. és 60. mp: áll a 400. méteren; 75. mp: 450 m  a kettő között egyenletesen, így a 415. métert a 64,5. mp-ben éri el
     expect(at(45)).toBeCloseTo(19.5, 5);
     // a menet végén már nincs mire várni: legfeljebb a menet végéig
     expect(pass[f.length - 1]).toBe(0);

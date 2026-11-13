@@ -1,7 +1,7 @@
 /**
  * A hub belépési pontja élesben (a Next standalone server.js elé).
  *
- * A hub közvetlenül a belső hálón figyel, nincs előtte reverse proxy — így a
+ * A hub közvetlenül a belső hálón figyel, nincs előtte reverse proxy  így a
  * kliens által küldött X-Forwarded-* fejlécekben nem bízhatunk (a címszűrő és
  * az Origin-ellenőrzés hamisítható lenne). Itt minden kérésnél felülírjuk őket
  * a TCP-kapcsolat valódi adataival, mielőtt a Next látná a kérést.

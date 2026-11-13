@@ -12,8 +12,8 @@ const FAVICON_SVG =
 
 export const metadata: Metadata = {
   // a név marad, az alcím a megyére bővült (a fejléc a felületen változatlan)
-  title: "MVK++ — Miskolc és Borsod közlekedése",
-  description: "Miskolc és Borsod-Abaúj-Zemplén közlekedése élőben: MVK villamos és busz, Volán és vonat — forgalmi térkép, megállófigyelő, menetrend és statisztika.",
+  title: "MVK++  Miskolc és Borsod közlekedése",
+  description: "Miskolc és Borsod-Abaúj-Zemplén közlekedése élőben: MVK villamos és busz, Volán és vonat  forgalmi térkép, megállófigyelő, menetrend és statisztika.",
   manifest: "/manifest.webmanifest",
   icons: {
     icon: [{ url: FAVICON_SVG, type: "image/svg+xml" }],

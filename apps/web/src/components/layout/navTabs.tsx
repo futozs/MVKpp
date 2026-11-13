@@ -12,9 +12,9 @@ import { cn } from "@/lib/utils";
 
 export interface NavTab {
   id: ActiveTab;
-  /** Teljes név — széles kijelzőn és a képernyőolvasónak. */
+  /** Teljes név  széles kijelzőn és a képernyőolvasónak. */
   label: string;
-  /** Rövid név — keskenyebb fejlécben és mobilon. */
+  /** Rövid név  keskenyebb fejlécben és mobilon. */
   short: string;
   icon: LucideIcon;
 }
@@ -64,7 +64,7 @@ interface TabBadgeProps {
 
 /**
  * Számláló a fülön. A szín jelentést hordoz: zöld a saját figyelés,
- * piros az élő üzemzavar — aktív fülön mindkettő a kitöltés színére vált.
+ * piros az élő üzemzavar  aktív fülön mindkettő a kitöltés színére vált.
  */
 export function TabBadge({ kind, value, isActive, placement }: TabBadgeProps) {
   const isIncident = kind === "incident";

@@ -12,7 +12,7 @@ import { gunzipSync, gzipSync } from "node:zlib";
 import { Redis } from "ioredis";
 
 const PREFIX = "mvk:v3:";
-/** Redis mellett a memória csak rövid ideig tart — a közös forrás a Redis. */
+/** Redis mellett a memória csak rövid ideig tart  a közös forrás a Redis. */
 const L1_MAX_TTL_S = 15;
 const L1_MAX_ENTRIES = 2000;
 const COMPRESS_FROM_BYTES = 2048;
@@ -166,7 +166,7 @@ export class TieredCache {
   }
 }
 
-// Egy folyamatban egy példány — a Next fejlesztői újratöltései se nyissanak új kapcsolatot.
+// Egy folyamatban egy példány  a Next fejlesztői újratöltései se nyissanak új kapcsolatot.
 const holder = globalThis as { __mvkCache?: TieredCache };
 
 export function sharedCache(): TieredCache {

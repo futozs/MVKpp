@@ -11,7 +11,7 @@ import { displayVehicleId, isRegionalId } from "@/lib/modes";
 const hex = (v: string | undefined, fb: string) => `#${/^[0-9a-fA-F]{6}$/.test(v ?? "") ? v : fb}`;
 
 /**
- * Egy megálló oszlopa a kijelzőn — a megállófigyelő kártyájának nagy változata:
+ * Egy megálló oszlopa a kijelzőn  a megállófigyelő kártyájának nagy változata:
  * felül kiemelve a következő busz (hol jár, melyik jármű jön), alatta a többi.
  * Minden méret `em`-ben van: a betűméretet a kijelző a képernyőhöz igazítja.
  */
@@ -61,7 +61,7 @@ function RouteTile({ a, big = false }: { a: ArrivalItem; big?: boolean }) {
   );
 }
 
-/** Vágány (vasút) vagy kocsiállás (autóbusz-állomás) — a változás kiemelve, mint a figyelőben. */
+/** Vágány (vasút) vagy kocsiállás (autóbusz-állomás)  a változás kiemelve, mint a figyelőben. */
 function Platform({ a }: { a: ArrivalItem }) {
   if (!a.platform) return null;
   const rail = a.mode === "rail";
@@ -75,7 +75,7 @@ function Platform({ a }: { a: ArrivalItem }) {
             ? "border-late/50 bg-late/12 text-late"
             : "border-border bg-muted text-foreground",
       )}
-      title={`${a.platformPredicted ? "Várhatóan a " : ""}${a.platform}. ${rail ? "vágány" : "kocsiállás"}${a.platformPredicted ? " — még nincs kiadva" : ""}`}
+      title={`${a.platformPredicted ? "Várhatóan a " : ""}${a.platform}. ${rail ? "vágány" : "kocsiállás"}${a.platformPredicted ? "  még nincs kiadva" : ""}`}
     >
       {a.platformPredicted ? "~" : null}
       {a.platform}

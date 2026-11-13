@@ -24,7 +24,7 @@ interface MobileHeaderProps {
 
 const INDICATOR_SPRING = { type: "spring", stiffness: 520, damping: 42, mass: 0.8 } as const;
 
-/** Bal/jobb biztonsági sáv (fekvő iPhone notch) — legalább 8 px. */
+/** Bal/jobb biztonsági sáv (fekvő iPhone notch)  legalább 8 px. */
 const INSET_X =
   "pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))]";
 

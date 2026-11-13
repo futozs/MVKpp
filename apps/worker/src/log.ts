@@ -1,4 +1,4 @@
-/** Egysoros, időbélyeges napló — a konténer stdout-ja a forrás (docker logs). */
+/** Egysoros, időbélyeges napló  a konténer stdout-ja a forrás (docker logs). */
 import { LogRing, parseLogLine, type LogLevel } from "@mvk/core/ops/logRing";
 
 type Level = "info" | "warn" | "error";

@@ -17,7 +17,7 @@ const TooltipContent = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof TooltipPrimitive.Content>
 >(({ className, sideOffset = 8, collisionPadding = 8, ...props }, ref) => (
   <TooltipPrimitive.Portal>
-    {/* Sötét, keretes kis panel a felület színeivel — minden réteg (fiók, térkép) fölött. */}
+    {/* Sötét, keretes kis panel a felület színeivel  minden réteg (fiók, térkép) fölött. */}
     <TooltipPrimitive.Content
       ref={ref}
       sideOffset={sideOffset}

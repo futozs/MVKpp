@@ -46,7 +46,7 @@ describe("forda-tervező", () => {
     expect(plan.byTrip.get("t4")!.confidence).toBeLessThan(plan.byTrip.get("t1")!.confidence);
   });
 
-  it("egy menetet csak egy busz kaphat — a korábban szabaddá váló viszi el", () => {
+  it("egy menetet csak egy busz kaphat  a korábban szabaddá váló viszi el", () => {
     const slots = [slot("t1", "7", B, A, hm(8, 10)), slot("t2", "7", B, A, hm(8, 20))];
     const plan = planRotations(slots, [running("late", "7", B, hm(8, 8)), running("early", "7", B, hm(8, 2))], new Map());
     expect(plan.byTrip.get("t1")?.vehicle).toBe("early");

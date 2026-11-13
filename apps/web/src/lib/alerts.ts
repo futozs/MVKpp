@@ -2,7 +2,7 @@
  * A különleges értesítések ezen az eszközön: „indulj most” (a sétaidővel),
  * dugó a megálló felé tartó busz előtt, veszélybe került átszállás. A szerver
  * push-figyelése a forrás; itt csak azt tartjuk, mit kapcsolt be a felhasználó
- * (és hogy a push sikerült-e — ha nem, nyitott oldalnál helyben szólunk).
+ * (és hogy a push sikerült-e  ha nem, nyitott oldalnál helyben szólunk).
  */
 import { useSyncExternalStore } from "react";
 import { getNotificationSettings, isWithinDnd, notificationPermission, requestNotificationPermission } from "@/lib/notifications";
@@ -61,7 +61,7 @@ export function findAlert(stopId: string, slot: string): AlertWatch | null {
   return listAlerts().find((a) => keyOf(a.stopId, a.slot) === keyOf(stopId, slot)) ?? null;
 }
 
-/** A bekapcsolt értesítések (újrarajzol, ha változnak — másik lapon is). */
+/** A bekapcsolt értesítések (újrarajzol, ha változnak  másik lapon is). */
 export function useAlerts(): AlertWatch[] {
   return useSyncExternalStore(
     (cb) => {
@@ -131,7 +131,7 @@ export function notifyLocallyOnce(stopId: string, slot: string, tripId: string, 
   return true;
 }
 
-/** A lejárt egyszeri (menethez kötött) figyelések kitakarítása — a szerver is törli őket. */
+/** A lejárt egyszeri (menethez kötött) figyelések kitakarítása  a szerver is törli őket. */
 export function pruneAlerts(maxAgeMs = 4 * 3600_000) {
   const now = Date.now();
   const list = listAlerts();

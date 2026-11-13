@@ -1,14 +1,14 @@
 /**
  * A mozgás-modell tanítása és kiértékelése.
  *
- *  1. gradient boosting: hol lesz a busz H mp-cel a fix után (m) — a térkép
+ *  1. gradient boosting: hol lesz a busz H mp-cel a fix után (m)  a térkép
  *     költségével (core `motion/cost`): ahol a busz megállhat, az előreszaladás
  *     (a jelölő megáll és kivár) sokkal drágább a lemaradásnál, egyenesben a
  *     kettő egyforma (medián)
  *  2. a SOSEM LÁTOTT tesztnapokon a térkép szemszögéből mérve (rögzített
  *     késleltetésekkel): modell vs. profil-alapú tartalék vs. az élő modell
  *  3. kapu: csak az él, ami ezen a költségen a tartaléknál bizonyítottan jobb,
- *     és nem rosszabb a mostani modellnél — különben a régi marad (a rendszer
+ *     és nem rosszabb a mostani modellnél  különben a régi marad (a rendszer
  *     nem romolhat el)
  */
 import { displayCosts, isGbdtModel, isPackedProfile, MOTION_FEATURES, predictGbdt, rowCost, trainGbdt, type GbdtModel, type GbdtParams, type PackedProfile, type RowCosts } from "@mvk/core";
@@ -54,7 +54,7 @@ export type MotionModelBundle = {
   trainedAt: string;
   features: string[];
   model: GbdtModel;
-  /** a tanult útprofil (az összes felhasznált napból) — ebből számol élesben */
+  /** a tanult útprofil (az összes felhasznált napból)  ebből számol élesben */
   profile: PackedProfile;
   report: {
     rows: { train: number; valid: number; test: number };

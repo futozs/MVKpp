@@ -3,11 +3,11 @@
  * `motionFollow`-ját), ezért a két irány nem egyforma:
  *  - ha a busz MÖGÖTT mutatjuk, a lemaradás addig látszik, amíg meg nem jön a
  *    következő fix, és a jelölő utol nem éri (`lag` mp);
- *  - ha ELŐTTE, a jelölő megáll, és kivárja, amíg a valódi busz odaér — egy
+ *  - ha ELŐTTE, a jelölő megáll, és kivárja, amíg a valódi busz odaér  egy
  *    megállóban vagy lámpánál álló busznál ez a hátralévő állás, egy haladónál
  *    1–2 mp (`pass` mp).
  * A költség méterenként ennyi másodpercnyi látható hiba. Ebből tanulja meg a
- * modell, hogy ahol a busz megállhat, ott inkább kivárjon, mint elszaladjon —
+ * modell, hogy ahol a busz megállhat, ott inkább kivárjon, mint elszaladjon 
  * egyenesben viszont a medián (a soha-ne-előzz határ: a túllövés sosem olcsóbb
  * a lemaradásnál, különben a jelölő haladás közben is meg-megállna).
  */

@@ -40,7 +40,7 @@ function limitFor(range: ServiceDayRange): number {
   return Math.max(range.start, Math.min(range.end - 1, nowSec() - LIVE_MARGIN_SEC));
 }
 
-/** Alapból ugyanaz a napszak, mint most — "mi volt tegnap ilyenkor". */
+/** Alapból ugyanaz a napszak, mint most  "mi volt tegnap ilyenkor". */
 function defaultCursor(day: string): number {
   const now = nowSec();
   const offset = now - serviceDayRange(serviceDayOf(now)).start;
@@ -277,7 +277,7 @@ function TimelinePlayer({ days, wide, inset, mapRef, routes, filters, onExit }: 
         onClick={frames.retry}
         className="font-semibold text-destructive underline underline-offset-2"
       >
-        Betöltési hiba — újra
+        Betöltési hiba  újra
       </button>
     ) : (
       <span className="inline-flex items-center gap-1.5 text-primary">
@@ -407,7 +407,7 @@ const ACTIVATABLE_TAGS = new Set(["BUTTON", "A"]);
 
 /**
  * Szóköz = lejátszás/szünet, ←/→ = ±1 perc (Shifttel ±10 perc). Csak akkor
- * él, ha a fókusz a sávon, a térképen vagy sehol sincs — a szűrőpanel saját
+ * él, ha a fókusz a sávon, a térképen vagy sehol sincs  a szűrőpanel saját
  * nyílbillentyűit nem veszi el.
  */
 function useKeyboardControls(
@@ -429,7 +429,7 @@ function useKeyboardControls(
       if (!inBar && !inMap && !idle) return;
 
       if (e.key === " " || e.code === "Space") {
-        // Fókuszált gombon a szóköz a gombot nyomja meg — azt nem duplázzuk.
+        // Fókuszált gombon a szóköz a gombot nyomja meg  azt nem duplázzuk.
         if (target && ACTIVATABLE_TAGS.has(target.tagName)) return;
         e.preventDefault();
         e.stopPropagation();

@@ -94,7 +94,7 @@ export type VehicleDay = {
   routes_n: number;
   dist_m: number;
   service_s: number;
-  /** a szerver most nem méri (null) — ilyenkor a megállókban állás (dwell_s) a „ebből állva” */
+  /** a szerver most nem méri (null)  ilyenkor a megállókban állás (dwell_s) a „ebből állva” */
   moving_s: number | null;
   dwell_s: number;
   max_speed_dms: number | null;
@@ -492,7 +492,7 @@ export const statsApi = {
 };
 
 export function fmtDuration(sec: number | null | undefined): string {
-  if (sec == null || !Number.isFinite(sec)) return "—";
+  if (sec == null || !Number.isFinite(sec)) return "";
   const s = Math.round(Math.abs(sec));
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
@@ -508,7 +508,7 @@ export function fmtSchedTime(sec: number): string {
 }
 
 export function fmtClock(unix: number | null | undefined): string {
-  if (!unix) return "—";
+  if (!unix) return "";
   return new Date(unix * 1000).toLocaleTimeString("hu-HU", {
     timeZone: "Europe/Budapest",
     hour: "2-digit",
@@ -517,18 +517,18 @@ export function fmtClock(unix: number | null | undefined): string {
 }
 
 export function fmtDelay(sec: number | null | undefined): string {
-  if (sec == null) return "—";
+  if (sec == null) return "";
   const m = sec / 60;
   if (Math.abs(sec) < 45) return "pontos";
   return `${sec > 0 ? "+" : "−"}${Math.abs(m).toFixed(1)} p`;
 }
 
 export function fmtKm(meters: number | null | undefined): string {
-  if (meters == null) return "—";
+  if (meters == null) return "";
   return `${(meters / 1000).toFixed(1)} km`;
 }
 
-/** A mai szolgáltatási nap (Budapest szerint, 3:00-kor vált — a készülék időzónájától függetlenül). */
+/** A mai szolgáltatási nap (Budapest szerint, 3:00-kor vált  a készülék időzónájától függetlenül). */
 export function serviceToday(): string {
   return serviceNow().iso;
 }

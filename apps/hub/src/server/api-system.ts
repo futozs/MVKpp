@@ -38,7 +38,7 @@ function cookieValue(req: Request): string | undefined {
 const authRoutes = [
   route("POST", "/api/auth/login", async ({ req, ip, url }) => {
     const wait = loginBlocked(ip);
-    if (wait) throw new HubError(429, `túl sok hibás próbálkozás — próbáld újra ${Math.ceil(wait / 60_000)} perc múlva`);
+    if (wait) throw new HubError(429, `túl sok hibás próbálkozás  próbáld újra ${Math.ceil(wait / 60_000)} perc múlva`);
     const problems = configProblems();
     if (env.password.length < 12) throw new HubError(503, problems.join(" "));
     const b = await readJson<{ password: string }>(req);
@@ -133,7 +133,7 @@ const tokenRoutes = [
     const r = await renewToken();
     await audit("token:renew", null, Boolean(r.ok), r, ip);
     const note = (r as { result?: { note?: string } }).result?.note;
-    return r.ok ? json(r) : json({ ...r, error: `az MVK nem adott új tokent${note ? `: ${note}` : ""} — kérj app-újraindítást az agenttől` }, 502);
+    return r.ok ? json(r) : json({ ...r, error: `az MVK nem adott új tokent${note ? `: ${note}` : ""}  kérj app-újraindítást az agenttől` }, 502);
   }),
   route("POST", "/api/token/ingest", async ({ req, ip }) => {
     const b = await readJson<{ jwt: string; installationId: string }>(req);
@@ -187,7 +187,7 @@ const mvkRoutes = [
     return json({ live, data });
   }),
   route("POST", "/api/sources/regional-build", async ({ ip }) => {
-    // a worker a háttérben épít (3 nap, egyenként pár perc) — itt csak elindítjuk
+    // a worker a háttérben épít (3 nap, egyenként pár perc)  itt csak elindítjuk
     const r = await workerJson("/system/regional-build", { method: "POST", timeoutMs: 15_000 });
     await audit("regional:build", null, true, r, ip);
     return json(r);

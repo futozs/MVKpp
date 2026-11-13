@@ -163,7 +163,7 @@ export function SearchablePicker<T extends string>({
   isFavorite,
   onToggleFavorite,
 }: {
-  /** A `search` csak a szűréshez kell — a pillen nem jelenik meg. */
+  /** A `search` csak a szűréshez kell  a pillen nem jelenik meg. */
   items: {
     id: T;
     label: string;
@@ -237,7 +237,7 @@ export function SearchablePicker<T extends string>({
           />
           {items.length > filtered.length ? (
             <p className="px-1 text-[11px] text-muted-foreground">
-              {filtered.length} látszik a(z) {items.length} elemből — szűkíts a
+              {filtered.length} látszik a(z) {items.length} elemből  szűkíts a
               kereséssel.
             </p>
           ) : null}

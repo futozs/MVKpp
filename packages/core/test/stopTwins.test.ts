@@ -17,7 +17,7 @@ const ISO = "2026-10-31";
 /**
  * Hejőcsaba: két MVK-oszlop (Cementgyár, az út két oldalán), mellette a Volán „Miskolc
  * (Hejőcsaba), cementgyár” megállója; arrébb az Auchan (Volán) és a Keleti kapu (MVK)
- * ugyanott, de más névvel — az nem biztos pár.
+ * ugyanott, de más névvel  az nem biztos pár.
  */
 const feed = feedFromFiles({
   "feed_info.txt": "feed_publisher_name,feed_version\nMVK,20261031-1\n",

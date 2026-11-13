@@ -146,7 +146,7 @@ describe("quietTripIds", () => {
   it("drops pull-outs and trips a bus ran without data, keeps the rest", () => {
     const realGap = leg({ tripId: "6-0410", depS: 4 * H + 10 * M, arrS: 4 * H + 25 * M, fromLat: AVAS.lat, fromLon: AVAS.lon, toLat: UJGYOR.lat, toLon: UJGYOR.lon });
     const legs = new Map([pullOut, next6, realGap].map((l) => [l.tripId, l]));
-    // a 6-os 03:55 lement, utána a 04:10 a busz előző menetének végéről indulna — ott valódi hiány van
+    // a 6-os 03:55 lement, utána a 04:10 a busz előző menetének végéről indulna  ott valódi hiány van
     const quiet = quietTripIds(["1G-0340", "6-0410"], legs, [{ tripId: "6-0355", vehicleId: "1673" }]);
     expect([...quiet]).toEqual(["1G-0340"]);
   });
@@ -154,6 +154,6 @@ describe("quietTripIds", () => {
   it("ignores sightings of trips that are not in today's schedule", () => {
     const legs = new Map([pullOut].map((l) => [l.tripId, l]));
     const quiet = quietTripIds(["1G-0340"], legs, [{ tripId: "unknown", vehicleId: "1673" }]);
-    expect([...quiet]).toEqual(["1G-0340"]); // garázsmenet — ettől még csendes
+    expect([...quiet]).toEqual(["1G-0340"]); // garázsmenet  ettől még csendes
   });
 });

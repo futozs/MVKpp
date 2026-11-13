@@ -211,7 +211,7 @@ export class Persister {
       this.stats.segments += segments.length;
     } catch (e) {
       this.stats.errors++;
-      log.error("persist", `írás sikertelen (${pings.length} pont, ${events.length} esemény) — újrapróbálom`, errMsg(e));
+      log.error("persist", `írás sikertelen (${pings.length} pont, ${events.length} esemény)  újrapróbálom`, errMsg(e));
       // Vissza a sorba, a következő körben újra próbáljuk.
       // concat, nem unshift(...): hosszú kiesésnél a több százezres sor szétterítése veremtúlcsordulást okozna.
       this.pings = pings.concat(this.pings);

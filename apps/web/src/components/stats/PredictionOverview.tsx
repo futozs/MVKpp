@@ -75,7 +75,7 @@ const TILE_TONE = {
   none: "default",
 } as const;
 
-const pctLabel = (p: number | null) => (p == null ? "—" : `${p}%`);
+const pctLabel = (p: number | null) => (p == null ? "" : `${p}%`);
 
 export function PredictionOverview() {
   const [range, setRange] = useState<RangeId>("14");

@@ -59,7 +59,7 @@ export function RidesPanel() {
               ? unsynced
                 ? `${unsynced} utazás feltöltésre vár`
                 : "Minden utazás a felhőben is megvan"
-              : "Csak ezen az eszközön — jelentkezz be, és minden feltöltődik"}
+              : "Csak ezen az eszközön  jelentkezz be, és minden feltöltődik"}
           </p>
         </div>
         <Button size="sm" variant="outline" onClick={() => setAdding([])}>
@@ -183,7 +183,7 @@ function JourneyRow({ legs, onFix, onExtend }: { legs: Ride[]; onFix?: () => voi
       </div>
       <span className="flex shrink-0 items-center">
         {onExtend ? (
-          <IconAction label={`${what}: a végállomáson a buszon maradtam — körbeutazás hozzáadása`} title="Körbeutazás hozzáadása" onClick={onExtend}>
+          <IconAction label={`${what}: a végállomáson a buszon maradtam  körbeutazás hozzáadása`} title="Körbeutazás hozzáadása" onClick={onExtend}>
             <Repeat className="h-4 w-4" />
           </IconAction>
         ) : null}

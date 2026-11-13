@@ -1,6 +1,6 @@
 /**
  * Élő becslés a térképen: két GPS-jel (10–20 mp) között a busz a szerver
- * pályáján (`k`) halad — ezt a tanított mozgás-modell adja (hol tart a busz a
+ * pályáján (`k`) halad  ezt a tanított mozgás-modell adja (hol tart a busz a
  * jel óta eltelt idő múlva: megállók, lámpák, a mai forgalom). Nem ír ki
  * semmit, csak a marker mozog folyamatosan, mint a valóságban, és sosem tolat.
  * Amelyik buszon épp utazol, azt a telefonod GPS-e viszi (lásd `onboard`).
@@ -17,17 +17,17 @@ type Shape = ShapeLine;
 
 /** ennél régebbi jelnél nem találgatunk tovább */
 const MAX_EXTRAPOLATE_S = 90;
-/** ekkora eltérésig a marker nem ugrik, hanem odacsúszik — vagy (ha előrébb jár) megvárja a buszt (m) */
+/** ekkora eltérésig a marker nem ugrik, hanem odacsúszik  vagy (ha előrébb jár) megvárja a buszt (m) */
 const EASE_MAX_M = 400;
 /** egy rajzolási lépésben (250 ms) a hátralévő eltérés ekkora része */
 const EASE_SHARE = 0.3;
-/** ennyi eltérést egy lépésben lekövetünk — a sima haladás nem késik */
+/** ennyi eltérést egy lépésben lekövetünk  a sima haladás nem késik */
 const EASE_MIN_STEP_M = 8;
 
 const shapes = new Map<string, Shape | null>();
 const loading = new Map<string, Promise<void>>();
 
-/** sikertelen letöltés után ennyi idő múlva próbáljuk újra (ms) — egy hiba ne fagyassza le a buszokat */
+/** sikertelen letöltés után ennyi idő múlva próbáljuk újra (ms)  egy hiba ne fagyassza le a buszokat */
 const SHAPE_RETRY_MS = 30_000;
 const retryAt = new Map<string, number>();
 

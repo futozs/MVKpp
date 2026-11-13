@@ -1,4 +1,4 @@
-/** Adatfrissítéskor a fejléc alján végigfutó jel — csak amíg tényleg tölt. */
+/** Adatfrissítéskor a fejléc alján végigfutó jel  csak amíg tényleg tölt. */
 export function RefreshSweep({ isRefreshing }: { isRefreshing: boolean }) {
   return (
     <div aria-hidden className="absolute inset-x-0 -bottom-px h-0.5 overflow-hidden">

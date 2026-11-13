@@ -49,9 +49,9 @@ const BUCKETS_PER_HOUR = 4;
 /** az álldogálás-profil ennyi napból (mp) és felső korlátja */
 const DWELL_DAYS = 28;
 const MAX_DWELL_S = 60;
-/** a modellt ennyi megállóig tanítottuk — azon túl a képlet */
+/** a modellt ennyi megállóig tanítottuk  azon túl a képlet */
 const MODEL_MAX_AHEAD = 30;
-/** a modell becslése legfeljebb ennyit térhet el a mostani késéstől (mp) — védőkorlát */
+/** a modell becslése legfeljebb ennyit térhet el a mostani késéstől (mp)  védőkorlát */
 const MAX_CHANGE_DOWN_S = 20 * 60;
 const MAX_CHANGE_UP_S = 60 * 60;
 /** a közelmúlt forgalmából ennyi ideig tartunk meg méréseket (mp) */
@@ -71,11 +71,11 @@ type DayState = { history: RunHistory; traffic: RecentTraffic; last: Map<string,
 export class DelayForecaster {
   private engine: Engine;
   private profiles = new Map<string, SegmentProfile>();
-  /** megállónként és óránként a várható álldogálás (mp; az áthaladások 0-val számítanak) — a térképi pályához */
+  /** megállónként és óránként a várható álldogálás (mp; az áthaladások 0-val számítanak)  a térképi pályához */
   private dwells = new Map<string, number>();
   private cache = new Map<string, { at: number; value: TripForecast | null }>();
   private model: DelayModelBundle | null = null;
-  /** szolgáltatási naponként az élő előzmények (a mai és — éjfél körül — a tegnapi) */
+  /** szolgáltatási naponként az élő előzmények (a mai és  éjfél körül  a tegnapi) */
   private days = new Map<string, DayState>();
   private lastPrune = 0;
   private featureBuf = new Float32Array(DELAY_FEATURES.length);
@@ -161,10 +161,10 @@ export class DelayForecaster {
         const used = Object.entries(m.report.buckets)
           .filter(([, r]) => r.useMedian)
           .map(([id]) => id);
-        log.info("forecast", `késés-modell betöltve (${m.trainedAt}, ${m.report.overall.improvement}% javulás; modell a(z) ${used.join(", ") || "—"} horizonton)`);
-      } else log.info("forecast", "nincs elfogadott késés-modell — a képlet becsül");
+        log.info("forecast", `késés-modell betöltve (${m.trainedAt}, ${m.report.overall.improvement}% javulás; modell a(z) ${used.join(", ") || ""} horizonton)`);
+      } else log.info("forecast", "nincs elfogadott késés-modell  a képlet becsül");
     } catch (e) {
-      log.warn("forecast", "a késés-modell nem töltődött be — a képlet becsül", errMsg(e));
+      log.warn("forecast", "a késés-modell nem töltődött be  a képlet becsül", errMsg(e));
       this.model = null;
     }
   }
@@ -320,7 +320,7 @@ export class DelayForecaster {
         return { tripId, fromIdx, currentDelayS: current, stops: out, source: "model" };
       } catch (e) {
         this.stats.errors++;
-        if (this.stats.errors < 5) log.warn("forecast", "a modell nem tudott becsülni — a képlet marad", errMsg(e));
+        if (this.stats.errors < 5) log.warn("forecast", "a modell nem tudott becsülni  a képlet marad", errMsg(e));
       }
     }
     this.stats.formula++;

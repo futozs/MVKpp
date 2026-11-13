@@ -71,7 +71,7 @@ export const tripDetailUrl = (tripId: string, date?: string) =>
 
 /**
  * `date` (szolgáltatási nap): a menet arra a napra. Egy korábbi napi menetnek
- * (bezárt app, másnap nyitva) nincs élő adatfolyama — az egyszeri lekérés a végleges állapotát adja.
+ * (bezárt app, másnap nyitva) nincs élő adatfolyama  az egyszeri lekérés a végleges állapotát adja.
  */
 export function useTripLive(tripId: string, date?: string): TripLive | null {
   // Az állapot a menethez kötött: menetváltáskor (körbeutazás) az előző

@@ -247,7 +247,7 @@ export function NotificationsModal({ isOpen, onClose }: NotificationsModalProps)
               </div>
             ) : (
               <p className="text-[11px] text-muted-foreground">
-                Ilyenkor egyetlen értesítés sem érkezik — sem a nyitott lapon,
+                Ilyenkor egyetlen értesítés sem érkezik  sem a nyitott lapon,
                 sem lezárt telefonra.
               </p>
             )}
@@ -267,7 +267,7 @@ export function NotificationsModal({ isOpen, onClose }: NotificationsModalProps)
             {watches.length === 0 ? (
               <p className="flex items-center gap-2 rounded-lg border border-dashed border-border px-3 py-4 text-xs text-muted-foreground">
                 <BellOff className="h-3.5 w-3.5 shrink-0" />
-                Egyetlen megállóra vagy indulásra sincs beállítva figyelés — a
+                Egyetlen megállóra vagy indulásra sincs beállítva figyelés  a
                 menetrend vagy egy megálló kártyáján a csengő ikonnal
                 adhatsz hozzá.
               </p>
@@ -346,7 +346,7 @@ export function NotificationsModal({ isOpen, onClose }: NotificationsModalProps)
                         <button
                           type="button"
                           onClick={() => startEdit(w)}
-                          aria-label={`Figyelés szerkesztése — ${w.stopName}`}
+                          aria-label={`Figyelés szerkesztése  ${w.stopName}`}
                           className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                         >
                           <Pencil className="h-4 w-4" />
@@ -354,7 +354,7 @@ export function NotificationsModal({ isOpen, onClose }: NotificationsModalProps)
                         <button
                           type="button"
                           onClick={() => removeOne(w.stopId)}
-                          aria-label={`Figyelés törlése — ${w.stopName}`}
+                          aria-label={`Figyelés törlése  ${w.stopName}`}
                           className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
                         >
                           <Trash2 className="h-4 w-4" />

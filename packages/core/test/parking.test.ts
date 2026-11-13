@@ -117,7 +117,7 @@ describe("parkoló", () => {
     expect(snap.service.find((v) => v.id === "36")?.deadhead).toBe(true);
   });
 
-  it("élőben a végállomásnál álló, menet nélküli busz ott parkol — időkorlát nélkül", () => {
+  it("élőben a végállomásnál álló, menet nélküli busz ott parkol  időkorlát nélkül", () => {
     const snap = computeParking(input([], { "36": { ts: NOW - 30, lat: TISZAI.lat + 0.001, lon: TISZAI.lon, speed: 0, route: "1" } }));
     expect(where(snap, "36")).toBe("terminus:Tiszai pályaudvar");
   });
@@ -127,7 +127,7 @@ describe("parkoló", () => {
     expect(where(snap, "36")).toBe("depot:bus:seen");
   });
 
-  it("menet közben elnémult busz „jel nélkül” — 1 óra után kocsiszín", () => {
+  it("menet közben elnémult busz „jel nélkül”  1 óra után kocsiszín", () => {
     const r = run({ vehicleId: "1641", tripId: "t1", stopsSeen: 8, closeReason: "silence", actualEnd: null, lastTs: NOW - 900 });
     expect(where(computeParking(input([r])), "1641")).toBe("nosignal");
   });

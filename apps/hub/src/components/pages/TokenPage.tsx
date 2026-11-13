@@ -84,7 +84,7 @@ function AgentCard({ a, now, onCommand, busy }: { a: Agent; now: number; onComma
           ["utoljára", ago(a.lastSeenAt, now)],
           ["gép", String(a.info.host ?? "–")],
           ["MVK app", a.info.appRunning ? "fut" : "nem fut"],
-          ["plist olvasható", a.info.plistReadable ? "igen" : "NEM — Teljes lemezhozzáférés kell"],
+          ["plist olvasható", a.info.plistReadable ? "igen" : "NEM  Teljes lemezhozzáférés kell"],
           ...(typeof a.info.localTokenLeftSec === "number" ? ([["az app tokenje", duration(a.info.localTokenLeftSec)]] as [string, string][]) : []),
           ...(a.info.lastRestartAt ? ([["utolsó app-újraindítás", ago(String(a.info.lastRestartAt), now)]] as [string, string][]) : []),
           ...(a.info.macos ? ([["macOS", String(a.info.macos)]] as [string, string][]) : []),
@@ -154,7 +154,7 @@ export function TokenPage() {
   if (!data) return <ErrorNote error={error} />;
 
   const command = (kind: string, agentId: string | null) =>
-    run(`${kind}:${agentId ?? "*"}`, "/api/token/agent", { kind, agentId }, { success: `„${COMMAND_LABEL[kind]}” elküldve — az agent fél percen belül felveszi`, refresh: ["/api/token"] });
+    run(`${kind}:${agentId ?? "*"}`, "/api/token/agent", { kind, agentId }, { success: `„${COMMAND_LABEL[kind]}” elküldve  az agent fél percen belül felveszi`, refresh: ["/api/token"] });
 
   const reveal = async () => {
     if (revealed) return setRevealed(null);
@@ -194,7 +194,7 @@ export function TokenPage() {
             ) : null}
           </div>
         </Panel>
-        <Panel title="Gyors friss token" hint="Bármelyik élő agent felveheti — ha több Mac van, válassz." className="xl:col-span-2">
+        <Panel title="Gyors friss token" hint="Bármelyik élő agent felveheti  ha több Mac van, válassz." className="xl:col-span-2">
           <Segmented value={target} onChange={setTarget} options={[{ value: "*", label: "bármelyik" }, ...data.agents.map((a) => ({ value: a.agentId, label: a.agentId }))]} className="mb-4 max-w-full overflow-x-auto" />
           <div className="space-y-2">
             {(["restart-app", "send-token", "restart-agent"] as const).map((k) => (
@@ -245,7 +245,7 @@ export function TokenPage() {
             <Empty>Még nem küldtél parancsot.</Empty>
           )}
         </Panel>
-        <Panel title="Token-előzmények" hint="Minden befogadott token (titkosítva tárolva — itt csak a metaadat).">
+        <Panel title="Token-előzmények" hint="Minden befogadott token (titkosítva tárolva  itt csak a metaadat).">
           <div className="max-h-[420px] overflow-y-auto">
             <ul className="divide-y divide-border">
               {data.history.map((h) => (
@@ -268,7 +268,7 @@ export function TokenPage() {
         open={renew}
         onOpenChange={setRenew}
         title="Szerveroldali megújítás"
-        description="A worker a mostani tokennel meghívja az MVK generate-jwt végpontját. App Attest nélkül az MVK ezt gyakran elutasítja — ilyenkor az agentes app-újraindítás a biztos út."
+        description="A worker a mostani tokennel meghívja az MVK generate-jwt végpontját. App Attest nélkül az MVK ezt gyakran elutasítja  ilyenkor az agentes app-újraindítás a biztos út."
         confirmLabel="Megújítás"
         onConfirm={() => run("renew", "/api/token/renew", {}, { success: (r: { result?: { note?: string } }) => `megújítás: ${r.result?.note ?? "kész"}`, refresh: ["/api/token"] })}
       />

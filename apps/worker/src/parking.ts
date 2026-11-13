@@ -1,5 +1,5 @@
 /**
- * Parkoló: a flotta élő helyzete — ki áll melyik végállomáson, ki van a
+ * Parkoló: a flotta élő helyzete  ki áll melyik végállomáson, ki van a
  * kocsiszínben, ki jár menetben. A döntés a core `computeParking`-ja; itt
  * csak a bemenetét gyűjtjük: a járművek utolsó jele, a flotta múltja az
  * adatbázisból, a végállomások a menetrendből, a tippek az előrejelzőből.
@@ -157,7 +157,7 @@ export class Parking {
 
   /**
    * Volán és vasút a megyén belüli végállomásokon (autóbusz-állomás, Tiszai pu.): ugyanaz a
-   * döntés, mint az MVK-nál, de kocsiszín, flotta-múlt és „1 óra néma = beállt” nélkül — ami
+   * döntés, mint az MVK-nál, de kocsiszín, flotta-múlt és „1 óra néma = beállt” nélkül  ami
    * nem áll végállomáson, az nem kerül sehova. A vonal a felületnek szóló címkét kapja
    * („3765”, „IC 191”), nem a kulcsát.
    */
@@ -206,7 +206,7 @@ export class Parking {
     return terminals;
   }
 
-  /** Végállomások, a buszkocsiszín helye és a villamosvonalak — feed-verziónként egyszer. */
+  /** Végállomások, a buszkocsiszín helye és a villamosvonalak  feed-verziónként egyszer. */
   private placesFor(day: ServiceDay, iso: string): Places {
     const feed = day.feed;
     if (this.places && this.places.feedHash === feed.hash && this.places.iso === iso) return this.places;
@@ -240,7 +240,7 @@ export class Parking {
 
   /**
    * Járművenként a legkorábbi menet, amit az előrejelző neki szán (percenként frissítve).
-   * `regional`: a Volán és a vasút menetei — csak a megyén belül induló, a következő 3 órában
+   * `regional`: a Volán és a vasút menetei  csak a megyén belül induló, a következő 3 órában
    * (a regionális parkoló is csak a megyén belüli végállomásokat mutatja).
    */
   private tipsFor(day: ServiceDay, iso: string, now: number, regional = false): Map<string, TripTip> {

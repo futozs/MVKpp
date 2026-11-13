@@ -20,7 +20,7 @@ export function activeFilterCount(f: FilterState): number {
   ].filter(Boolean).length;
 }
 
-/** késettnek számít ettől (mp) — mint a statisztikában (5 perc) */
+/** késettnek számít ettől (mp)  mint a statisztikában (5 perc) */
 export const LATE_S = 300;
 
 /** A jármű késése: a hivatalos (MÁV+), különben a saját illesztőnk mérése. */

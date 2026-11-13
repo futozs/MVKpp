@@ -12,7 +12,7 @@ type LayerKey = "traffic" | "others" | "stops" | "onlyWatched" | "shape" | "labe
 /**
  * Térkép (jobb felső sarok): az alaptérkép és a rétegek egy helyen. Korábban
  * az alaptérkép a fejlécben és a szűrőpanelben is külön gomb volt, a rétegek
- * pedig a szűrők között — pedig nem szűrnek, csak a megjelenítést állítják.
+ * pedig a szűrők között  pedig nem szűrnek, csak a megjelenítést állítják.
  */
 export function MapLayersControl({
   tileLayerId,
@@ -72,7 +72,7 @@ export function MapLayersControl({
                     type="button"
                     onClick={() => onSelectTileLayer(l.id)}
                     aria-pressed={on}
-                    title={`${l.name} — ${l.note}`}
+                    title={`${l.name}  ${l.note}`}
                     className="group flex w-full flex-col items-center gap-1 rounded-lg p-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   >
                     <span

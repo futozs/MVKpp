@@ -74,13 +74,13 @@ export async function body<T>(req: Request): Promise<T | null> {
 /**
  * Gyorsítótár a drága statisztikai lekérdezésekhez: memória + (ha van
  * REDIS_URL) Redis, így több web-példány és újraindítás között is közös.
- * Az érték JSON-ként tárolódik — csak sima adatot adjon vissza `fn`.
+ * Az érték JSON-ként tárolódik  csak sima adatot adjon vissza `fn`.
  */
 export function cached<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
   return sharedCached(`api:${key}`, ttlMs / 1000, fn);
 }
 
-/** Valódi, a mai naptól ±400 napon belüli dátum — különben null (a hívó az alapértéket használja). */
+/** Valódi, a mai naptól ±400 napon belüli dátum  különben null (a hívó az alapértéket használja). */
 export const isoDate = (s: string | null | undefined): string | null => (s && isPlausibleIso(s, serviceClock().iso) ? s : null);
 
 /** Egész szám lekérdezési paraméter, korlátok közé szorítva; hiányzó / hibás → alapérték (nem 500-as hiba). */
@@ -91,7 +91,7 @@ export function intParam(v: string | null, fallback: number, min: number, max: n
 
 /**
  * `?modes=` → melyik forrás adatai kellenek. Nélküle csak az MVK (előtag nélküli
- * azonosító), mint eddig — a regionálisak előtagosak (`hkir:` Volán, `1:` vasút).
+ * azonosító), mint eddig  a regionálisak előtagosak (`hkir:` Volán, `1:` vasút).
  */
 export type Scope = { mvk: boolean; feeds: string[]; key: string };
 

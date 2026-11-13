@@ -70,7 +70,7 @@ export function NewsDialog({ open, onOpenChange, feed, error, isLoading, fresh, 
               {feed?.stale ? (
                 <p className="mt-2 flex items-center gap-1.5 text-[11.5px] font-medium text-nosignal">
                   <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-nosignal" />
-                  Az MVK most nem válaszol — a legutóbb letöltött hírek látszanak.
+                  Az MVK most nem válaszol  a legutóbb letöltött hírek látszanak.
                 </p>
               ) : null}
             </header>

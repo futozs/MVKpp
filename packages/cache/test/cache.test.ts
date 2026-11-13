@@ -34,7 +34,7 @@ describe("memóriás gyorsítótár (Redis nélkül)", () => {
     expect(c.status()).toMatchObject({ backend: "memory", misses: 1, hits: 2 });
   });
 
-  it("a hibát nem teszi el — a következő kérés újraszámol", async () => {
+  it("a hibát nem teszi el  a következő kérés újraszámol", async () => {
     const c = new TieredCache(null);
     await expect(c.cached("x", 60, async () => Promise.reject(new Error("db le")))).rejects.toThrow("db le");
     await new Promise((r) => setTimeout(r, 0));

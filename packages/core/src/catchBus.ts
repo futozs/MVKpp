@@ -1,5 +1,5 @@
 /**
- * „Elérem?” — gyalog odaérek-e a megállóba, mielőtt a busz odaér.
+ * „Elérem?”  gyalog odaérek-e a megállóba, mielőtt a busz odaér.
  *
  * A busz érkezése bizonytalan, és a várhatónál korábban is jöhet. A korai
  * oldal jóval szűkebb, mint a késés felőli (a busz ritkán siet sokat), ezért
@@ -9,7 +9,7 @@
  */
 
 export const CATCH = {
-  /** séta (m/s) — kb. 4,7 km/h */
+  /** séta (m/s)  kb. 4,7 km/h */
   WALK_MPS: 1.3,
   /** kocogás (m/s) */
   RUN_MPS: 2.7,

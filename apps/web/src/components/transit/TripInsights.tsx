@@ -19,7 +19,7 @@ const TONE: Record<CatchVerdict["state"], string> = {
 };
 
 function catchText(v: CatchVerdict): string {
-  if (v.state === "relax") return `Ráérsz — indulj ${hmOf(v.leaveAtUnix)}-kor`;
+  if (v.state === "relax") return `Ráérsz  indulj ${hmOf(v.leaveAtUnix)}-kor`;
   if (v.state === "go") return "Indulj most";
   if (v.state === "run") return `Csak futva éred el (${minText(v.runS)})`;
   return "Ezt már nem éred el";
@@ -42,7 +42,7 @@ export function CatchPill({ verdict, className }: { verdict: CatchVerdict | null
 
 /**
  * A következő indulás „Elérem?” sávja: séta, mikor indulj, és egy gomb, hogy
- * szóljunk, amikor indulni kell (push — a sétaidővel együtt számolva).
+ * szóljunk, amikor indulni kell (push  a sétaidővel együtt számolva).
  */
 export function CatchLine({
   verdict,
@@ -61,7 +61,7 @@ export function CatchLine({
   className?: string;
 }) {
   if (!verdict) return null;
-  const missedNext = verdict.state === "missed" && next ? ` — a következő ${withHungarianSuffix(next.route)}: ${next.time}` : "";
+  const missedNext = verdict.state === "missed" && next ? `  a következő ${withHungarianSuffix(next.route)}: ${next.time}` : "";
   return (
     <div className={cn("flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-[12px] font-semibold", TONE[verdict.state], className)}>
       {verdict.state === "run" ? <Zap aria-hidden className="h-3.5 w-3.5 shrink-0" /> : <Footprints aria-hidden className="h-3.5 w-3.5 shrink-0" />}
@@ -76,7 +76,7 @@ export function CatchLine({
           onClick={onToggleAlert}
           disabled={alertBusy}
           aria-pressed={alertOn}
-          title={alertOn ? "Szólok, amikor indulni kell — koppints a kikapcsoláshoz" : "Szólj, amikor indulnom kell (a sétával együtt számolva)"}
+          title={alertOn ? "Szólok, amikor indulni kell  koppints a kikapcsoláshoz" : "Szólj, amikor indulnom kell (a sétával együtt számolva)"}
           className={cn(
             "inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-bold transition-colors",
             "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
@@ -139,7 +139,7 @@ export function replacementFor(list: readonly ArrivalItem[], a: ArrivalItem): Ar
 /** „helyette 08:05 (+12 perc)” a kihúzott menet mellé. */
 export function ReplacementNote({ instead, cancelled, compact, className }: { instead: ArrivalItem | null; cancelled: ArrivalItem; compact?: boolean; className?: string }) {
   if (!instead) {
-    return compact ? null : <p className={cn("text-[11.5px] font-semibold text-destructive", className)}>Az MVK kihúzta — a közeli indulások között nincs helyette ugyanilyen.</p>;
+    return compact ? null : <p className={cn("text-[11.5px] font-semibold text-destructive", className)}>Az MVK kihúzta  a közeli indulások között nincs helyette ugyanilyen.</p>;
   }
   const gap = Math.max(0, instead.etaMin - cancelled.etaMin);
   return (

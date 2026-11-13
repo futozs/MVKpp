@@ -24,7 +24,7 @@ import { usePreference } from "@/hooks/usePreference";
 import { isRegionalId, pickableStops } from "@/lib/modes";
 import { stopKindLabel } from "@/components/transit/RegionalBits";
 
-/** Kedvenc megállók a statisztikában — localStorage, így a felhős szinkron is viszi. */
+/** Kedvenc megállók a statisztikában  localStorage, így a felhős szinkron is viszi. */
 const FAVORITE_STOPS_KEY = "mvk_stats_favorite_stops";
 const MAX_FAVORITES = 40;
 
@@ -132,7 +132,7 @@ export function StopPanel({ stops }: { stops: Stop[] }) {
 
   const matches = useMemo(() => {
     const t = normalizeSearchText(search.trim());
-    // Kereső nélkül a kedvencek külön sorban vannak — itt a többi.
+    // Kereső nélkül a kedvencek külön sorban vannak  itt a többi.
     if (!t) return pickable.filter((s) => !favoriteIds.includes(s.id)).slice(0, 12);
     return pickable
       .filter(
@@ -232,7 +232,7 @@ export function StopPanel({ stops }: { stops: Stop[] }) {
                       onClick={() => toggleFavorite(stopId)}
                       aria-pressed={isFavorite(stopId)}
                       aria-label={isFavorite(stopId) ? "Eltávolítás a kedvencekből" : "Kedvencnek jelölés"}
-                      title={isFavorite(stopId) ? "Kedvenc — a felhőbe is mentve" : "Kedvencnek jelölés"}
+                      title={isFavorite(stopId) ? "Kedvenc  a felhőbe is mentve" : "Kedvencnek jelölés"}
                       className={cn(
                         "flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
                         isFavorite(stopId) ? "text-early" : "text-muted-foreground",
@@ -250,7 +250,7 @@ export function StopPanel({ stops }: { stops: Stop[] }) {
                 <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
                   <StatTile
                     label="Menetrendtartás"
-                    value={avgOtp != null ? `${avgOtp}%` : "—"}
+                    value={avgOtp != null ? `${avgOtp}%` : ""}
                     tone={
                       avgOtp == null
                         ? "default"
@@ -266,12 +266,12 @@ export function StopPanel({ stops }: { stops: Stop[] }) {
                   />
                   <StatTile
                     label="Átlagos állás"
-                    value={avgDwell != null ? `${avgDwell} mp` : "—"}
+                    value={avgDwell != null ? `${avgDwell} mp` : ""}
                     sub="utasforgalom-proxy"
                   />
                   <StatTile
                     label="Legforgalmasabb óra"
-                    value={busiest ? `${formatServiceHour(busiest.hour)}:00` : "—"}
+                    value={busiest ? `${formatServiceHour(busiest.hour)}:00` : ""}
                     sub={busiest ? `${busiest.events} érkezés` : undefined}
                   />
                 </div>
@@ -283,7 +283,7 @@ export function StopPanel({ stops }: { stops: Stop[] }) {
                     data={rows.map((r) => ({
                       label: formatServiceHour(r.hour),
                       value: r.events,
-                      title: `${formatServiceHour(r.hour)}:00 — ${r.events} érkezés, pontosság ${r.otp ?? "—"}%`,
+                      title: `${formatServiceHour(r.hour)}:00  ${r.events} érkezés, pontosság ${r.otp ?? ""}%`,
                     }))}
                     labelEvery={2}
                   />
@@ -296,7 +296,7 @@ export function StopPanel({ stops }: { stops: Stop[] }) {
                     cells={rows.map((r) => ({
                       hour: r.hour,
                       value: r.otp,
-                      title: `${formatServiceHour(r.hour)}:00 — pontosság ${r.otp ?? "—"}%, átlag ${fmtDelay(r.avgDelay)}`,
+                      title: `${formatServiceHour(r.hour)}:00  pontosság ${r.otp ?? ""}%, átlag ${fmtDelay(r.avgDelay)}`,
                     }))}
                   />
                 </ChartFrame>
@@ -313,7 +313,7 @@ export function StopPanel({ stops }: { stops: Stop[] }) {
                             : (r.avgDelay ?? 0) < -60
                               ? "fill-early"
                               : "fill-ontime",
-                        title: `${formatServiceHour(r.hour)}:00 — ${fmtDelay(r.avgDelay)}`,
+                        title: `${formatServiceHour(r.hour)}:00  ${fmtDelay(r.avgDelay)}`,
                       }))}
                       labelEvery={2}
                     />

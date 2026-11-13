@@ -6,7 +6,7 @@
  * - Napra pontosan feljegyzi, melyik menetrend volt érvényben (service_day),
  *   fallback esetén a sablon-nappal együtt.
  * - Ha egy napra nincs feed, a legfrissebb érvényes feed leghasonlóbb
- *   naptípusú napja lép életbe — így az app sosem áll le az MVK mulasztása
+ *   naptípusú napja lép életbe  így az app sosem áll le az MVK mulasztása
  *   miatt.
  */
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
@@ -52,7 +52,7 @@ export class FeedManager {
 
   constructor(regional: RegionalFeeds | null = null) {
     this.regional = regional;
-    // Új regionális nap: azt az egy napot fésüljük újra (csere, nem ürítés — közben a régi él).
+    // Új regionális nap: azt az egy napot fésüljük újra (csere, nem ürítés  közben a régi él).
     regional?.onUpdate((iso) => {
       if (!this.dayCache.has(iso)) return;
       this.dayCache.delete(iso);
@@ -68,7 +68,7 @@ export class FeedManager {
     for (const m of this.meta.slice(0, 2)) await this.load(m.id);
     const latest = this.latest();
     if (latest) log.info("gtfs", `aktív feed: ${latest.version} (${latest.trips.size} menet, ${latest.stops.size} megálló)`);
-    else log.warn("gtfs", "nincs érvényes GTFS — az élő illesztés addig szünetel");
+    else log.warn("gtfs", "nincs érvényes GTFS  az élő illesztés addig szünetel");
   }
 
   private async reloadMeta() {
@@ -176,7 +176,7 @@ export class FeedManager {
       ],
     );
     if (v.ok) await syncDimensions(feed);
-    if (!v.ok) log.warn("gtfs", `ELUTASÍTOTT feed ${feed.version}: ${v.errors.join("; ")} — a korábbi menetrend marad érvényben`);
+    if (!v.ok) log.warn("gtfs", `ELUTASÍTOTT feed ${feed.version}: ${v.errors.join("; ")}  a korábbi menetrend marad érvényben`);
     else log.info("gtfs", `új érvényes feed ${feed.version} (${v.counts.trips} menet)`);
     return status;
   }
@@ -225,7 +225,7 @@ export class FeedManager {
   /**
    * Az MVK-nap + a regionális (Volán, vasút) nap egy közös nézetben. A régi napot
    * a service_day-ben rögzített regionális feeddel; a mostaniakat a legfrissebbel.
-   * Ha nincs regionális adat (kikapcsolva, még épül), a nap MVK-only — mint eddig.
+   * Ha nincs regionális adat (kikapcsolva, még épül), a nap MVK-only  mint eddig.
    */
   private async withRegional(day: ServiceDay | null, iso: string, feedId: number | null): Promise<ServiceDay | null> {
     const reg = this.regional ? await this.regional.feedFor(iso, { feedId }).catch(() => null) : null;

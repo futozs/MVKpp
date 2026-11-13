@@ -3,7 +3,7 @@
  * füzesabonyi vasúti csomópont (a miskolci vonatok fele ott csatlakozik).
  *
  * Egy Volán- vagy vasúti minta (pattern) akkor kerül be, ha legalább egy
- * megállója a sokszögön belül van — és akkor a TELJES útvonalával együtt
+ * megállója a sokszögön belül van  és akkor a TELJES útvonalával együtt
  * (a Budapest–Miskolc IC, a Miskolc–Debrecen busz végig követhető).
  */
 

@@ -20,7 +20,7 @@ type Status = {
   lastTraining: { trainedAt: string; accepted: boolean; report: Report } | null;
 };
 
-// (a JSON-mező a kulcsokat átrendezi — a horizontok sorrendje rögzített)
+// (a JSON-mező a kulcsokat átrendezi  a horizontok sorrendje rögzített)
 const ORDER = ["1-3", "4-6", "7-10", "11-15", "16+"];
 const HORIZON_LABEL: Record<string, string> = { "1-3": "1–3", "4-6": "4–6", "7-10": "7–10", "11-15": "11–15", "16+": "16+" };
 const DT = new Intl.DateTimeFormat("hu-HU", { timeZone: "Europe/Budapest", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -55,7 +55,7 @@ export function ForecastModelCard() {
           if (!rep)
             return (
               <p className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-                Még nincs tanított modell — a képlet becsül. Az első tanítás a worker indulása után pár perccel, utána minden éjjel fut.
+                Még nincs tanított modell  a képlet becsül. Az első tanítás a worker indulása után pár perccel, utána minden éjjel fut.
               </p>
             );
           const weak = Object.entries(rep.cells ?? {}).filter(([, c]) => !c.useMedian);
@@ -71,7 +71,7 @@ export function ForecastModelCard() {
                   <span className="text-muted-foreground">({rep.overall.improvement}% pontosabb)</span>
                 </p>
                 <p className="text-[12px] text-muted-foreground">
-                  tanítva {d.inUse.trainedAt ? DT.format(new Date(d.inUse.trainedAt)) : "—"} · {rep.days.train.length} nap, {rep.rows.train.toLocaleString("hu-HU")} minta · teszt: {rep.days.test.length} sosem látott nap
+                  tanítva {d.inUse.trainedAt ? DT.format(new Date(d.inUse.trainedAt)) : ""} · {rep.days.train.length} nap, {rep.rows.train.toLocaleString("hu-HU")} minta · teszt: {rep.days.test.length} sosem látott nap
                 </p>
               </div>
               <div className="overflow-x-auto">

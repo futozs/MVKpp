@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { prettyUrl } from "./newsTime";
 
 /**
- * Egy MVK-hír törzse a worker által előkészített blokkokból (core/news.ts) —
+ * Egy MVK-hír törzse a worker által előkészített blokkokból (core/news.ts) 
  * innerHTML nélkül, így az MVK szövegéből semmi sem futhat le. A szövegben
  * említett járat a saját színével jelenik meg, a menetrendi kivonat
  * („Végállomásról: 08:10, 09:15 …”) táblázatszerű kártyán.

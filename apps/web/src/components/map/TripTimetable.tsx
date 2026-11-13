@@ -161,7 +161,7 @@ function Shell({ label, className, children }: { label: string; className?: stri
 }
 
 /**
- * Hol tart a menet az első indulástól a végállomásig — a mostani szakasz felénél, mint a
+ * Hol tart a menet az első indulástól a végállomásig  a mostani szakasz felénél, mint a
  * sorok vonala. `scaleX`-szel nő, hogy az áttűnés ne rendezze újra az oldalt.
  */
 function ProgressBar({ ratio }: { ratio: number }) {

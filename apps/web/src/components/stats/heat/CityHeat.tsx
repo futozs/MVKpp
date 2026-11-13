@@ -45,7 +45,7 @@ function initialHour(from: number, to: number) {
 }
 
 /**
- * Városi hőtérkép: minden megállóköz a napszaknak megfelelő színnel — mennyi
+ * Városi hőtérkép: minden megállóköz a napszaknak megfelelő színnel  mennyi
  * időt veszít ott a busz a menetrendhez képest (medián, a kiválasztott
  * naptípus utolsó heteiből). A csúszkával / lejátszással a nap végigjátszható.
  */

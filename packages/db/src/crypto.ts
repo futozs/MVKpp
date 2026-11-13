@@ -48,7 +48,7 @@ export function verifyAgentRequest(secret: string, tsHeader: string | undefined,
   return safeEqual(signAgentRequest(secret, ts, body), sigHeader);
 }
 
-/** JWT payload olvasása (aláírás-ellenőrzés nélkül — csak a lejárathoz). */
+/** JWT payload olvasása (aláírás-ellenőrzés nélkül  csak a lejárathoz). */
 export function jwtClaims(token: string): Record<string, unknown> {
   try {
     const part = token.split(".")[1] ?? "";

@@ -1,12 +1,12 @@
 /**
  * A szokásos utazás felismerése az utazásnaplóból: ugyanaz a vonal, ugyanarról
- * a megállóról, nagyjából ugyanakkor (munkanapon vagy hétvégén) — legalább
+ * a megállóról, nagyjából ugyanakkor (munkanapon vagy hétvégén)  legalább
  * három külön napon az elmúlt hat hétben. Beállítani nem kell semmit: a
  * Figyelő ebből tudja, mire vagy kíváncsi reggel.
  *
  * Egy héten több szokás is lehet (pl. szerdán-csütörtökön 6:18, a többi
  * munkanapon 6:51): külön szokásként tanuljuk, és megjegyezzük, a hét mely
- * napjain fordult elő — azon a napon az jön elő, amelyik aznap szokásos.
+ * napjain fordult elő  azon a napon az jön elő, amelyik aznap szokásos.
  * A körbeutazás (ülve maradva a következő menetre) egy út: az első felszállás számít.
  */
 import { dayInfo } from "./calendar.ts";
@@ -160,7 +160,7 @@ export function commuteToday(c: Commute, todayIso: string): boolean {
 
 /**
  * Melyik szokásos utazás aktuális most (ami aznap szokásos, a szokásos idő előtt
- * legfeljebb másfél órával, utána negyed óráig) — a legközelebbi.
+ * legfeljebb másfél órával, utána negyed óráig)  a legközelebbi.
  */
 export function upcomingCommute(commutes: readonly Commute[], nowUnix: number, todayIso: string): Commute | null {
   const now = budapestMinute(nowUnix);

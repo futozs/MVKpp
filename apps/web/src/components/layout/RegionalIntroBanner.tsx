@@ -4,7 +4,7 @@ import { usePreference } from "@/hooks/usePreference";
 import { MODE_ITEMS, REGIONAL_INTRO_KEY } from "@/lib/modes";
 
 /**
- * Egyszeri bemutató: a Volán és a vasút alapból be van kapcsolva — itt egy
+ * Egyszeri bemutató: a Volán és a vasút alapból be van kapcsolva  itt egy
  * érintéssel megtartható, vagy vissza lehet állni a csak MVK-s nézetre. A döntés
  * (és a módok) szinkronizálódik, így a többi eszközön már nem kérdez.
  */

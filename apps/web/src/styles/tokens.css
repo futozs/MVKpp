@@ -1,5 +1,5 @@
 /* ==========================================================================
-   MVK MobilON+ — Design tokenek  (shadcn/ui konvenció)
+   MVK MobilON+  Design tokenek  (shadcn/ui konvenció)
    --------------------------------------------------------------------------
    Ez az EGYETLEN hely, ahol szín, sugár, árnyék és tipográfia definiálva van.
    Mindkét app (frontend :5173, hub :5174) innen olvas, és a shadcn/ui
@@ -11,7 +11,7 @@
 @layer base {
   :root {
     /* ------------------------------------------------------------------
-       shadcn/ui alapváltozók — HSL komponensek, hsl() nélkül.
+       shadcn/ui alapváltozók  HSL komponensek, hsl() nélkül.
        Mély, enyhén zöldre hangolt semleges alap: nem a kékbe hajló
        slate, ami minden generált sötét felület alapértelmezése.
        ------------------------------------------------------------------ */
@@ -26,7 +26,7 @@
 
     /* Elsődleges: élénk jáde-zöld. Nem a Tailwind default green-500
        (#22c55e); ez egy telítettebb, hidegebb árnyalat sötét
-       szöveggel — 5,8:1 kontraszt a gombon. */
+       szöveggel  5,8:1 kontraszt a gombon. */
     --primary: 154 71% 41.6%;
     --primary-foreground: 155 79% 9.4%;
 
@@ -51,7 +51,7 @@
     --radius: 0.75rem;
 
     /* ------------------------------------------------------------------
-       Teljes zöld skála — ha egy felületnek árnyalatra van szüksége.
+       Teljes zöld skála  ha egy felületnek árnyalatra van szüksége.
        ------------------------------------------------------------------ */
     --sg-50: 150 69% 94.9%;
     --sg-100: 151 69% 87.5%;
@@ -81,7 +81,7 @@
     --nosignal: 38 92% 56%;
 
     /* ------------------------------------------------------------------
-       Mélység. Valódi, rétegzett árnyékok — a felületek tényleg
+       Mélység. Valódi, rétegzett árnyékok  a felületek tényleg
        egymás fölött lebegnek, nem hajszálvonalak választják el őket.
        ------------------------------------------------------------------ */
     --shadow-xs: 0 1px 2px 0 hsl(160 40% 2% / 0.5);
@@ -92,11 +92,11 @@
 
     /* ------------------------------------------------------------------
        Tipográfia.
-       Plus Jakarta Sans: geometrikus-humanista, kerek formákkal — a
+       Plus Jakarta Sans: geometrikus-humanista, kerek formákkal  a
        modern, lekerekített felülethez illik, és nem az Inter, ami minden
        AI-eszköz alapértelmezése. Rejected: Inter (T1), Space Grotesk /
        Geist (a „második körös” alapértelmezések).
-       JetBrains Mono: minden numerikus kiírás — visszaszámláló, busz-ID,
+       JetBrains Mono: minden numerikus kiírás  visszaszámláló, busz-ID,
        sebesség, késés. Tabuláris számokkal, hogy ne ugráljanak.
        ------------------------------------------------------------------ */
     --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;

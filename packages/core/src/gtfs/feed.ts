@@ -2,7 +2,7 @@
  * Egy GTFS-feed memóriabeli, indexelt alakja.
  *
  * Egy példány = egy feed-verzió. A rendszer több verziót is tart (a múltbeli
- * napokhoz és a fallbackhez), ezért itt nincs globális állapot — a régi
+ * napokhoz és a fallbackhez), ezért itt nincs globális állapot  a régi
  * `gtfs.ts` modulszintű Map-jei miatt egyszerre csak egy feed létezhetett.
  */
 import { createHash } from "node:crypto";
@@ -37,7 +37,7 @@ export type Route = {
    * Volán helyi vonalainak száma városonként ismétlődik („3” Ózdon és Tiszaújvárosban).
    */
   key: string;
-  /** üzemeltető (GTFS agency_id) és a neve — a regionális feedben */
+  /** üzemeltető (GTFS agency_id) és a neve  a regionális feedben */
   agency?: string;
   agencyName?: string;
 };
@@ -104,7 +104,7 @@ export class Feed {
   readonly servicesByDate = new Map<string, Set<string>>();
   readonly routeStops = new Map<string, Set<string>>();
   readonly routeShapeIds = new Map<string, Set<string>>();
-  /** `${shapeId}|${elsőIndulásMp}` → menetek — a feed-verziók közti menet-azonosításhoz */
+  /** `${shapeId}|${elsőIndulásMp}` → menetek  a feed-verziók közti menet-azonosításhoz */
   readonly tripsByShapeStart = new Map<string, string[]>();
   /** állomás → a vágányai / kocsiállásai */
   readonly stationChildren = new Map<string, string[]>();
@@ -193,7 +193,7 @@ export class Feed {
       if (!c.service_id || !c.start_date || !c.end_date) continue;
       const days = DAY_COLS.map((d) => c[d] === "1");
       if (!days.some(Boolean)) continue;
-      // A calendar.txt tartománya legfeljebb ~2 év — védekezés hibás dátum ellen.
+      // A calendar.txt tartománya legfeljebb ~2 év  védekezés hibás dátum ellen.
       let iso = ymdToIso(c.start_date);
       const end = ymdToIso(c.end_date);
       for (let guard = 0; iso <= end && guard < 800; guard++, iso = shiftIso(iso, 1)) {
@@ -310,7 +310,7 @@ export class Feed {
     const t = this.trips.get(tripId);
     const seq = this.tripStops.get(tripId);
     if (!t || !seq?.length) return null;
-    // Ugyanaz a képlet, mint a v2-ben (route_id|irány|megállók) — így a régi
+    // Ugyanaz a képlet, mint a v2-ben (route_id|irány|megállók)  így a régi
     // menetek mintakulcsa egyezik az újakéval, és a tanulás folytonos.
     const raw = `${t.routeId}|${t.dir}|${seq.map((x) => x.stopId).join(",")}`;
     const h = createHash("sha1").update(raw).digest("hex").slice(0, 16);
@@ -321,7 +321,7 @@ export class Feed {
   /**
    * A menet megállói a nyomvonal menti távolsággal. Lépésről lépésre vetít
    * (mindig az előző megálló után keres), így a hurokjáratokon sem ugrik
-   * vissza; ha mégsem monoton, null — ilyenkor a menetet nem illesztjük.
+   * vissza; ha mégsem monoton, null  ilyenkor a menetet nem illesztjük.
    */
   tripStopsAlong(tripId: string): StopAlong[] | null {
     if (this.alongCache.has(tripId)) return this.alongCache.get(tripId) ?? null;

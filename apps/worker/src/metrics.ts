@@ -9,7 +9,7 @@ export const httpMetrics = new RouteMetrics();
 export const upstreamMetrics = new RouteMetrics();
 
 const SAMPLE_MS = 10_000;
-/** a mintavétel felbontása (ms) — a hisztogram ezt alapzajként tartalmazza, ezért levonjuk */
+/** a mintavétel felbontása (ms)  a hisztogram ezt alapzajként tartalmazza, ezért levonjuk */
 const LOOP_RESOLUTION_MS = 20;
 const loop = monitorEventLoopDelay({ resolution: LOOP_RESOLUTION_MS });
 loop.enable();

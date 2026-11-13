@@ -2,7 +2,7 @@ import L from "leaflet";
 import type { LiveVehicle, TransitMode } from "@/types";
 import { displayVehicleId } from "@/lib/modes";
 
-/** A GTFS-szín csak hexa lehet — minden más (üres, szemét) a márkazöldre esik. */
+/** A GTFS-szín csak hexa lehet  minden más (üres, szemét) a márkazöldre esik. */
 const HEX_COLOR = /^[0-9a-f]{3,8}$/i;
 const FALLBACK_BG = "1FB574";
 const FALLBACK_FG = "FFFFFF";
@@ -28,7 +28,7 @@ export function safeHex(color: string | null | undefined, fallback: string): str
  */
 /**
  * A mód szerinti csempe: a Volán szögletesebb; a vonat lekerekített, csak a kategóriával
- * („IC”, „Sz”) — a vonatszám a címkében, ha a térkép azonosítókat mutat; a menetrendből
+ * („IC”, „Sz”)  a vonatszám a címkében, ha a térkép azonosítókat mutat; a menetrendből
  * becsült helyzet szaggatott.
  */
 export type VehicleIconOptions = { mode?: TransitMode; estimated?: boolean };

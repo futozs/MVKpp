@@ -3,7 +3,7 @@
  *
  * Az MVK a hír törzsét HTML-ként adja (`<p>`, `<a>`, `<em>`, `<strong>`, `<br>`,
  * sok `&eacute;` entitással). Ebből biztonságos, szerkezetes blokkokat
- * készítünk — bekezdés, alcím, felsorolás —, így a kliensnek sosem kell
+ * készítünk  bekezdés, alcím, felsorolás , így a kliensnek sosem kell
  * innerHTML-t használnia. A szövegben említett járatokat („a 34-es”,
  * „az 1-es villamos”, „ZOO viszonylat”) a GTFS járatlistájából ismerjük fel.
  *
@@ -66,7 +66,7 @@ const GENERIC_TYPES = new Set(["egyéb", "egyeb", "other"]);
 
 const NAMED: Record<string, string> = {
   amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", shy: "",
-  ndash: "–", mdash: "—", hellip: "…", bdquo: "„", ldquo: "“", rdquo: "”",
+  ndash: "–", mdash: "", hellip: "…", bdquo: "„", ldquo: "“", rdquo: "”",
   lsquo: "‘", rsquo: "’", sbquo: "‚", laquo: "«", raquo: "»", bull: "•",
   middot: "·", deg: "°", euro: "€", times: "×", copy: "©", reg: "®", trade: "™",
   aacute: "á", Aacute: "Á", eacute: "é", Eacute: "É", iacute: "í", Iacute: "Í",
@@ -150,7 +150,7 @@ export function htmlParagraphs(html: string): NewsRun[][] {
     if (tok.startsWith("<!--")) continue;
     if (rawTag === undefined) {
       if (skip) continue;
-      // A forrásbeli sortörés HTML-ben szóköz — de egy-egy hír sima szövegként
+      // A forrásbeli sortörés HTML-ben szóköz  de egy-egy hír sima szövegként
       // jön, üres sorokkal elválasztott bekezdésekkel.
       tok.split(/\r?\n[ \t]*\r?\n/).forEach((part, n) => {
         if (n) flush();
@@ -278,7 +278,7 @@ function listEnd(paras: NewsRun[][], i: number): number {
 /**
  * A hivatalos szövegben a felsorolás egymás utáni, „;”-vel záruló
  * bekezdésekként érkezik (az utolsó „.”-tal), a menetrendi kivonat pedig
- * „Végállomásról: időpontok” sorokként — ezekből lista lesz. A rövid,
+ * „Végállomásról: időpontok” sorokként  ezekből lista lesz. A rövid,
  * írásjel nélküli sorok („34-es autóbusz-viszonylat”) alcímek, a rövid,
  * kettősponttal záruló bevezetők címkék.
  */

@@ -44,7 +44,7 @@ function pickDeparture(c: Commute, arrivals: ArrivalItem[], now: number): Arriva
 
 /**
  * „Szokásos utad”: az utazásnaplóból felismert rendszeres út (ugyanaz a vonal,
- * megálló és időpont) — a Figyelő tetején, a szokásos idő előtt másfél órával.
+ * megálló és időpont)  a Figyelő tetején, a szokásos idő előtt másfél órával.
  * Mutatja a következő indulást, hogy eléred-e, és naponta szólni is tud.
  */
 const capitalize = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
@@ -52,7 +52,7 @@ const capitalize = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
 export function CommuteCard({ className }: { className?: string }) {
   const rides = useRides();
   const [now, setNow] = useState(() => serverNow());
-  // a szerver órája a kapcsolódáskor érkezik — addig a készüléké
+  // a szerver órája a kapcsolódáskor érkezik  addig a készüléké
   const clockVersion = useServerClockVersion();
   useEffect(() => {
     setNow(serverNow());
@@ -92,7 +92,7 @@ export function CommuteCard({ className }: { className?: string }) {
   const verdict = dep ? catchFor.verdict(dep) : null;
   const daily = alerts.find((a) => a.stopId === c.fromStopId && a.slot.startsWith(`commute:${c.route}:`)) ?? null;
 
-  // Naponta: a menetrend szerinti indulási percre (± 4 perc) — a mostani helyedtől számolt sétával.
+  // Naponta: a menetrend szerinti indulási percre (± 4 perc)  a mostani helyedtől számolt sétával.
   const toggleDaily = async () => {
     setBusy(true);
     setNote(null);
@@ -134,7 +134,7 @@ export function CommuteCard({ className }: { className?: string }) {
           onClick={() => void toggleDaily()}
           disabled={busy}
           aria-pressed={Boolean(daily)}
-          title={daily ? `${capitalize(commuteDaysText(c))} szólok, amikor indulni kell — koppints a kikapcsoláshoz` : `Szólj ${commuteDaysText(c)}, amikor indulnom kell`}
+          title={daily ? `${capitalize(commuteDaysText(c))} szólok, amikor indulni kell  koppints a kikapcsoláshoz` : `Szólj ${commuteDaysText(c)}, amikor indulnom kell`}
           className={cn(
             "inline-flex shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-semibold transition-colors",
             "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",

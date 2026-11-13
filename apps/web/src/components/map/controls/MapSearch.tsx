@@ -39,7 +39,7 @@ const vehicleTitle = (v: LiveVehicle) => (vehicleModeOf(v) === "rail" && v.train
 
 /**
  * Keresés (bal alsó sarok): megálló neve vagy a táblán látható kódja, és
- * jármű rendszáma — egy mezőben. Üresen a közeli megállókat mutatja.
+ * jármű rendszáma  egy mezőben. Üresen a közeli megállókat mutatja.
  */
 export function MapSearch({
   stops,
@@ -284,7 +284,7 @@ export function MapSearch({
 
               {empty ? (
                 <p className="px-4 py-6 text-center text-sm text-muted-foreground">
-                  {busy ? "Keresés…" : digits ? `Nincs ilyen rendszámú jármű vagy ${digits} kódú megálló a listában — Enterrel a szervertől is megkérdezem.` : `Nincs „${q.trim()}” nevű megálló.`}
+                  {busy ? "Keresés…" : digits ? `Nincs ilyen rendszámú jármű vagy ${digits} kódú megálló a listában  Enterrel a szervertől is megkérdezem.` : `Nincs „${q.trim()}” nevű megálló.`}
                 </p>
               ) : null}
 

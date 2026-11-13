@@ -2,13 +2,13 @@
  * Közös megállók: ugyanott álló MVK- és Volán-megálló egy megállóként.
  *
  * Az OTP2 a Volán megállóinak egy részét eleve az MVK azonosítójával adja (a Tiszai
- * pályaudvaron a Volán is az SP388-on áll meg) — ezek maguktól közösek. A többi Volán-
+ * pályaudvaron a Volán is az SP388-on áll meg)  ezek maguktól közösek. A többi Volán-
  * megálló külön azonosítóval, pár méterre áll az MVK-étól („Miskolc (Hejőcsaba),
  * cementgyár” ↔ „Cementgyár”). Ezeket párosítjuk: közel vannak, és a nevük ugyanaz
  * (a „Miskolc,” / „Miskolc (Hejőcsaba),” előtag, a zárójeles kiegészítés és az
  * „utca / út / tér” nélkül). Csak a biztos párok: ha a név más, külön marad.
  *
- * Minden Volán-oszlop a legközelebbi egyező nevű MVK-oszlophoz tartozik — így az
+ * Minden Volán-oszlop a legközelebbi egyező nevű MVK-oszlophoz tartozik  így az
  * útnak ugyanazon az oldalán álló, egy irányba induló oszlopok kerülnek egy táblára.
  */
 import type { Feed } from "../gtfs/feed.ts";
@@ -47,7 +47,7 @@ const words = (s: string) =>
 
 /**
  * Egy megállónév szavai: a lényeg (core) és a kiegészítés (extra: település / városrész
- * a vessző előtt, zárójelben vagy szögletes zárójelben) — ez egyezhet, de nem kell.
+ * a vessző előtt, zárójelben vagy szögletes zárójelben)  ez egyezhet, de nem kell.
  */
 export function stopNameParts(name: string): NameParts {
   let n = fold(name);

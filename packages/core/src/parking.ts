@@ -3,9 +3,9 @@
  *
  * Járművenként a mai menetekből, az utolsó GPS-jelből és a flotta múltjából:
  *  - service:  menetet visz (vagy menet nélkül úton van)
- *  - terminus: végállomáson áll — a menete ott ért véget, vagy élőben ott látszik,
+ *  - terminus: végállomáson áll  a menete ott ért véget, vagy élőben ott látszik,
  *              vagy az MVK már kiadta a következő menetét („indulásra vár")
- *  - depot:    kocsiszínben — G-járattal beállt, ma még nem volt kint, vagy
+ *  - depot:    kocsiszínben  G-járattal beállt, ma még nem volt kint, vagy
  *              1 órája néma (a buszok gyakran kikapcsolva mennek vissza)
  *  - nosignal: menet közben elnémult, még az 1 órás határon belül
  *
@@ -77,7 +77,7 @@ export type KindCounts = { service: number; terminus: number; depot: number; nos
 export type ParkingSnapshot = {
   at: number;
   serviceDate: string;
-  /** a szolgáltatási nap kezdete (unix) — a tippek `startS`-e ehhez képest értendő */
+  /** a szolgáltatási nap kezdete (unix)  a tippek `startS`-e ehhez képest értendő */
   midnight: number;
   limitS: number;
   counts: Record<FleetKind, KindCounts>;
@@ -89,7 +89,7 @@ export type ParkingSnapshot = {
   fleet: Record<string, FleetVehicle>;
   /**
    * Volán és vasút: csak a megyén belüli végállomásokon álló járművek (kocsiszín és
-   * „néma = beállt” szabály nélkül — az az MVK-é). A felület külön kapcsolóval mutatja.
+   * „néma = beállt” szabály nélkül  az az MVK-é). A felület külön kapcsolóval mutatja.
    */
   regional?: { terminals: ParkingSnapshot["terminals"] };
 };
@@ -104,7 +104,7 @@ export type ParkingInput = {
   tripEnds: (tripId: string) => TripEnds | null;
   /** a nap összes végállomása (név szerint összevonva) */
   terminals: Place[];
-  /** a buszkocsiszín helye (a villamosé nem ismert — ott csak az időszabály dönt) */
+  /** a buszkocsiszín helye (a villamosé nem ismert  ott csak az időszabály dönt) */
   busDepot: Place | null;
   isDepotStop: (kind: FleetKind, stopName: string) => boolean;
   isTramRoute: (routeShort: string) => boolean;

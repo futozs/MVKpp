@@ -13,7 +13,7 @@ export function delayState(sec: number | null | undefined): DelayState {
 
 export function delayLabel(sec: number | null | undefined): string {
   const state = delayState(sec);
-  if (state === "unknown") return "—";
+  if (state === "unknown") return "";
   if (state === "ontime") return "Pontos";
   const min = Math.max(1, Math.round(Math.abs(sec as number) / 60));
   return state === "late" ? `+${min} perc` : `−${min} perc`;

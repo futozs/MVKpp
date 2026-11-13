@@ -3,12 +3,12 @@
  *
  * Szakaszonként lépünk tovább a mostani késésből: a múltbeli menetidő mediánja
  * és a menetrendi idő különbségének 70%-át adjuk hozzá. A menetrendben van
- * tartalék, de a pontosan járó busz nem siet el vele — ezért a késés legfeljebb
+ * tartalék, de a pontosan járó busz nem siet el vele  ezért a késés legfeljebb
  * 0-ig csökkenhet (ha a busz már most előbb jár, onnan). A felső becslés
  * („mennyit késhet”) a szakaszok szórásából, 85%-os lefedettségre hangolva.
  *
  * Visszamérve (2026-10-27/28, a profilokból kihagyva): 3 / 6 / 10 / 15
- * megállóval előre 46 / 69 / 90 / 107 mp átlagos hiba — a „marad a mostani
+ * megállóval előre 46 / 69 / 90 / 107 mp átlagos hiba  a „marad a mostani
  * késés” becslésnél (56 / 78 / 95 / 110) jobb; a felső becslés ~85%-ban tart.
  */
 

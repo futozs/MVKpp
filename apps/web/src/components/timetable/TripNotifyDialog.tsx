@@ -135,13 +135,13 @@ export function TripNotifyDialog({
       <DialogContent className="sm:max-w-sm">
         <DialogHeader className="text-left">
           <DialogTitle>
-            Értesítés — {what}, {departureLabel}
+            Értesítés  {what}, {departureLabel}
           </DialogTitle>
           <DialogDescription>
             {isDeparture
               ? `Szólunk, mielőtt ez a menet elindul innen: ${stopName}`
               : `Szólunk, mielőtt ez a menet ideér: ${stopName}`}{" "}
-            — lezárt telefonon is, ha a push-regisztráció sikerül.
+             lezárt telefonon is, ha a push-regisztráció sikerül.
           </DialogDescription>
         </DialogHeader>
 
@@ -169,11 +169,11 @@ export function TripNotifyDialog({
 
           <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5">
             <div className="min-w-0">
-              <p className="text-sm font-medium">Ismétlődő — minden nap</p>
+              <p className="text-sm font-medium">Ismétlődő  minden nap</p>
               <p className="text-[11px] text-muted-foreground">
                 Nem csak erre az egy napra, hanem minden napra szól, amikor a{" "}
                 {what} {departureLabel}-kor közlekedik innen. Ez
-                kell a napi iskolabuszhoz/munkába járáshoz — egyszer állítod
+                kell a napi iskolabuszhoz/munkába járáshoz  egyszer állítod
                 be, és nem kell újra minden alkalommal.
               </p>
             </div>

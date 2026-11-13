@@ -13,7 +13,7 @@ const near = (i: number, m = 0) => ({ lat: latOf(i) + m / 111_320, lon: LON });
 describe("hol tart most a busz", () => {
   const stops = line(8);
 
-  it("amíg a megállóban áll, a motor még az előzőt mutatja — a hely szerint már ott van", () => {
+  it("amíg a megállóban áll, a motor még az előzőt mutatja  a hely szerint már ott van", () => {
     expect(currentStopIdx(stops, 2, near(3, 15))).toBe(3);
   });
 
@@ -34,7 +34,7 @@ describe("felszállás megállója a GPS-ből", () => {
     expect(guessBoardIdx(stops, 2, near(3, 10), near(3, 5))).toBe(3);
   });
 
-  it("felismerés: ahol a busz mellett állt, mielőtt együtt elindultak — akkor is, ha a busz azóta továbbment", () => {
+  it("felismerés: ahol a busz mellett állt, mielőtt együtt elindultak  akkor is, ha a busz azóta továbbment", () => {
     expect(guessBoardIdx(stops, 5, near(3, 20), near(5, 200))).toBe(3);
   });
 
@@ -55,7 +55,7 @@ describe("felszállás megállója a GPS-ből", () => {
     expect(guessBoardIdx(stops, 3, { lat: latOf(3), lon: LON + 0.02 }, null)).toBe(3);
   });
 
-  it("körjárat: ugyanaz a megálló az elején és a végén — a busz előrehaladása dönt", () => {
+  it("körjárat: ugyanaz a megálló az elején és a végén  a busz előrehaladása dönt", () => {
     const loop = [...line(5), stop(0, "S0")].map((s, i) => ({ ...s, idx: i }));
     expect(guessBoardIdx(loop, -1, near(0), near(0))).toBe(0);
   });

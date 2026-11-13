@@ -17,7 +17,7 @@ import { FOCUS_RING, FOCUS_RING_INSET, ICON_BUTTON } from "./headerStyles";
 
 interface SettingsMenuProps {
   /**
-   * Ha meg van adva, a menüben „Fiók és felhős mentés” sor is van — ott,
+   * Ha meg van adva, a menüben „Fiók és felhős mentés” sor is van  ott,
    * ahol a fejlécben nem fér el külön fiók-gomb.
    */
   onOpenAccount?: () => void;
@@ -84,7 +84,7 @@ function LocationRow() {
           </label>
           <p id={descriptionId} className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
             {geo.status === "denied"
-              ? "A böngésző letiltotta ehhez az oldalhoz — a böngésző beállításaiban engedélyezheted."
+              ? "A böngésző letiltotta ehhez az oldalhoz  a böngésző beállításaiban engedélyezheted."
               : "Ebből számoljuk a sétát, az „Elérem?”-et és a felszállás felismerését. Csak ezen az eszközön marad."}
           </p>
         </div>
@@ -120,7 +120,7 @@ function ModesGroup() {
 
 /**
  * Közös megállók (ugyanott álló MVK- és Volán-megálló): egy megállóként mindkettő
- * járataival, csak az egyikével, vagy külön — minden megállótáblára érvényes.
+ * járataival, csak az egyikével, vagy külön  minden megállótáblára érvényes.
  */
 function StopMergeRow() {
   const merge = useStopMerge();
@@ -237,7 +237,7 @@ export function SettingsMenu({ onOpenAccount, accountItemClassName, isTouch }: S
             <p className="text-[13px] font-semibold text-foreground">Beállítások</p>
             <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
               {signedIn ? <Cloud aria-hidden className="h-3.5 w-3.5 shrink-0 text-primary" /> : <CloudOff aria-hidden className="h-3.5 w-3.5 shrink-0" />}
-              {signedIn ? "Felhőbe szinkronizálva — minden eszközödön ugyanígy." : "Ezen az eszközön — bejelentkezve a felhőbe is szinkronizáljuk."}
+              {signedIn ? "Felhőbe szinkronizálva  minden eszközödön ugyanígy." : "Ezen az eszközön  bejelentkezve a felhőbe is szinkronizáljuk."}
             </p>
           </div>
 

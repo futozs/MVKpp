@@ -53,7 +53,7 @@ describe("előre bejelentett körbeutazás a végállomáson", () => {
     expect(plannedTurnDecision(T0, null, T0 + 5 * 3600)).toBe("wait");
   });
 
-  it("a busz indulásakor folytatja — a telefon helyétől függetlenül", () => {
+  it("a busz indulásakor folytatja  a telefon helyétől függetlenül", () => {
     expect(plannedTurnDecision(T0, next(false), T0 + 120)).toBe("wait");
     expect(plannedTurnDecision(T0, next(true), T0 + 240)).toBe("continue");
     expect(plannedTurnDecision(T0, next(true, "nearby"), T0 + 600)).toBe("continue");

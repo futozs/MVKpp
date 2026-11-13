@@ -1,5 +1,5 @@
 /**
- * POST /v3/usage — névtelen használati jel a webappból a rendszer-hubnak.
+ * POST /v3/usage  névtelen használati jel a webappból a rendszer-hubnak.
  *
  * Mit tárol: az eszköz véletlen azonosítóját (mvk_device_id), a platformot és
  * böngészőt (a User-Agentből), hogy telepített PWA-e, mely nézeteket nyitotta
@@ -92,7 +92,7 @@ export function cleanViews(v: unknown): Record<string, number> {
   return out;
 }
 
-/** Korlátos Map: a legrégebben beírt kulcsot dobja el (nem üríti ki egyszerre — az kinyitná a korlátot). */
+/** Korlátos Map: a legrégebben beírt kulcsot dobja el (nem üríti ki egyszerre  az kinyitná a korlátot). */
 function remember<V>(m: Map<string, V>, key: string, value: V): void {
   m.delete(key);
   m.set(key, value);

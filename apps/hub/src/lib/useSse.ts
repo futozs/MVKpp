@@ -24,7 +24,7 @@ export function useSse<T>(url: string | null, onMessage: (data: T) => void, onDo
       try {
         handler.current(JSON.parse(e.data) as T);
       } catch {
-        /* hibás sor — kihagyjuk */
+        /* hibás sor  kihagyjuk */
       }
     };
     es.addEventListener("done", (e) => {

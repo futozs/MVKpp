@@ -15,7 +15,7 @@ export function trainMotionModelInThread(opts: Omit<MotionRunOptions, "save" | "
     const w = new Worker(new URL("./trainWorker.ts", import.meta.url), { workerData: opts, resourceLimits: { maxOldGenerationSizeMb: 2560 } });
     let accepted = false;
     const timer = setTimeout(() => {
-      log.warn("motion", "a tanítás túl sokáig tartott — megszakítva");
+      log.warn("motion", "a tanítás túl sokáig tartott  megszakítva");
       void w.terminate();
     }, TIMEOUT_MS);
     w.on("message", (m: { t: string; m?: string; text?: string; saved?: { id: number; accepted: boolean } | null }) => {

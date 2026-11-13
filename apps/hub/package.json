@@ -2,11 +2,11 @@
   "name": "@mvk/hub",
   "version": "3.0.0",
   "private": true,
-  "description": "MVK rendszer-hub — belső hálós üzemeltetői pult (állapot, token, telepítés, mentés, naplók).",
+  "description": "MVK rendszer-hub  belső hálós üzemeltetői pult (állapot, token, telepítés, mentés, naplók).",
   "scripts": {
     "dev": "next dev -p 3010",
     "build": "next build",
-    "start": "echo 'Élesben a Docker-image indítja (node apps/hub/hub-server.mjs) — a next start kihagyná a fejléc-védelmet. Fejlesztéshez: bun run dev' && exit 1",
+    "start": "echo 'Élesben a Docker-image indítja (node apps/hub/hub-server.mjs)  a next start kihagyná a fejléc-védelmet. Fejlesztéshez: bun run dev' && exit 1",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests"
   },

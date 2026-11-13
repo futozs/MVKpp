@@ -1,5 +1,5 @@
 /**
- * „Milyen menetrend volt/lesz ezen a napon?” — a menetrendkönyvhöz és a
+ * „Milyen menetrend volt/lesz ezen a napon?”  a menetrendkönyvhöz és a
  * tervezőhöz. Sorrend: rögzített döntés (service_day) → v2-archívum
  * (legacy_schedule_day) → fallback a legfrissebb feedből.
  */

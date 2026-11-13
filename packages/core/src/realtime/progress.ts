@@ -1,4 +1,4 @@
-/** Hol tart egy jármű a menetén (/live/trip-progress, /live/trip-path) — a régi logika portja. */
+/** Hol tart egy jármű a menetén (/live/trip-progress, /live/trip-path)  a régi logika portja. */
 import type { Feed } from "../gtfs/feed.ts";
 import { haversineKm } from "../geo.ts";
 import type { LiveVeh } from "./types.ts";

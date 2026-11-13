@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 
 /**
  * Ha egy localStorage-kulcs kívülről változik (felhős szinkron egy másik
- * eszközről, vagy egy másik fül), újraolvassuk — különben a memóriában maradt
+ * eszközről, vagy egy másik fül), újraolvassuk  különben a memóriában maradt
  * régi érték a következő helyi módosításkor felülírná a frissebbet.
  */
 export function useStorageRefresh(key: string, reload: () => void): void {

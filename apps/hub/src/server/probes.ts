@@ -50,7 +50,7 @@ export async function runProbes(): Promise<ProbeResult[]> {
     `INSERT INTO hub_probe (at, target, ms, status, ok) SELECT to_timestamp(a / 1000.0), t, m, s, o FROM unnest($1::bigint[], $2::text[], $3::int[], $4::int[], $5::bool[]) AS x(a, t, m, s, o)`,
     [results.map((r) => r.at), results.map((r) => r.id), results.map((r) => r.ms), results.map((r) => r.status), results.map((r) => r.ok)],
   ).catch(() => {
-    /* a tábla még nincs meg (a worker migrál) — a memóriában akkor is megvan */
+    /* a tábla még nincs meg (a worker migrál)  a memóriában akkor is megvan */
   });
   return results;
 }

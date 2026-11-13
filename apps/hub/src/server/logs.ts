@@ -119,7 +119,7 @@ async function pumpWorker(write: (s: string) => void, signal: AbortSignal): Prom
       }
     } catch (e) {
       if (signal.aborted) return;
-      write(`event: notice\ndata: ${JSON.stringify({ msg: `a worker naplója megszakadt (${e instanceof Error ? e.message : e}) — újracsatlakozás…` })}\n\n`);
+      write(`event: notice\ndata: ${JSON.stringify({ msg: `a worker naplója megszakadt (${e instanceof Error ? e.message : e})  újracsatlakozás…` })}\n\n`);
     }
     await new Promise((r) => setTimeout(r, 3000));
   }

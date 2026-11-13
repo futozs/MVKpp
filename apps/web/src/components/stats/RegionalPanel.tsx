@@ -22,7 +22,7 @@ const SCOPES: { id: Scope; label: string; modes: string }[] = [
 /** a nem késés-ok megjegyzések (kocsiösszeállítás, pótlóbusz) külön listában */
 const KIND_LABEL: Record<string, string> = { composition: "kocsiösszeállítás", replacement: "pótlás", other: "közlemény" };
 
-const fmtMin = (s: number | null | undefined) => (s == null ? "—" : `${s >= 0 ? "+" : "−"}${(Math.abs(s) / 60).toFixed(1)} p`);
+const fmtMin = (s: number | null | undefined) => (s == null ? "" : `${s >= 0 ? "+" : "−"}${(Math.abs(s) / 60).toFixed(1)} p`);
 const hasRegionalData = (d: RegionalStats) => Boolean(d.summary?.n) || d.trains.length > 0 || d.causes.length > 0;
 
 /** Vonatnál a kategória és a vonatszám („Sz 6612”), a Volánnál a vonal/menet („4001/748”). */
@@ -31,7 +31,7 @@ function trainLabel(t: RegionalStats["trains"][number]): string {
 }
 
 /**
- * Vasút és Volán — a MÁV+ adataiból mért pontosság a megyében: megállónkénti
+ * Vasút és Volán  a MÁV+ adataiból mért pontosság a megyében: megállónkénti
  * érkezések, vonatonként a végállomáson mért késés, a MÁV által közölt késésokok
  * és a vágány-/kocsiállás-változások. Az MVK statisztikája a többi panelen marad.
  */
@@ -69,12 +69,12 @@ export function RegionalPanel({ modes }: { modes: TransitMode[] }) {
           return (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
-                <StatTile label="Pontos érkezés" value={s?.ontime != null ? `${s.ontime}%` : "—"} sub={s?.n ? `${s.n.toLocaleString("hu-HU")} megálló-érkezés` : "nincs adat"} tone="ontime" />
+                <StatTile label="Pontos érkezés" value={s?.ontime != null ? `${s.ontime}%` : ""} sub={s?.n ? `${s.n.toLocaleString("hu-HU")} megálló-érkezés` : "nincs adat"} tone="ontime" />
                 <StatTile label="Átlagos késés" value={fmtMin(s?.avg_delay_s)} sub={s?.late != null ? `${s.late}% több mint 5 perccel késett` : undefined} tone="late" />
                 <StatTile label="85%-ban legfeljebb" value={fmtMin(s?.p85_delay_s)} sub="a megállókban mért késés" />
                 <StatTile
                   label="Vágány / kocsiállás"
-                  value={d.platforms?.n ? `${changed} változás` : "—"}
+                  value={d.platforms?.n ? `${changed} változás` : ""}
                   sub={d.platforms?.n ? `${d.platforms.n.toLocaleString("hu-HU")} figyelt indulásból` : "a figyelt állomásokon"}
                   tone={changed ? "late" : "default"}
                 />
@@ -88,7 +88,7 @@ export function RegionalPanel({ modes }: { modes: TransitMode[] }) {
                       label: x.date.slice(5).replace("-", "."),
                       value: x.avg_delay_s == null ? null : Math.round(x.avg_delay_s / 6) / 10,
                       tone: (x.avg_delay_s ?? 0) > 180 ? "late" : (x.avg_delay_s ?? 0) < -30 ? "early" : "ontime",
-                      title: `${x.date} · átlag ${fmtMin(x.avg_delay_s)} · ${x.ontime ?? "—"}% pontos · ${x.n} mérés`,
+                      title: `${x.date} · átlag ${fmtMin(x.avg_delay_s)} · ${x.ontime ?? ""}% pontos · ${x.n} mérés`,
                     }))}
                   />
                 </ChartFrame>
@@ -100,13 +100,13 @@ export function RegionalPanel({ modes }: { modes: TransitMode[] }) {
                     <RankBars
                       rows={worst.map((t) => ({
                         label: <RouteTile short={trainLabel(t)} color={t.color ?? "1E5AA8"} text={t.text_color ?? "FFFFFF"} size="sm" />,
-                        sub: `${t.runs} menet · ${t.ontime_pct ?? "—"}% pontos · 85%-ban legfeljebb ${fmtMin(t.p85_end_delay_s)}`,
+                        sub: `${t.runs} menet · ${t.ontime_pct ?? ""}% pontos · 85%-ban legfeljebb ${fmtMin(t.p85_end_delay_s)}`,
                         value: Math.max(0, t.avg_end_delay_s ?? 0),
                         display: fmtMin(t.avg_end_delay_s),
                       }))}
                     />
                   ) : (
-                    <p className="py-6 text-center text-sm text-muted-foreground">Ehhez még kevés a lefutott menet — pár nap múlva telik meg.</p>
+                    <p className="py-6 text-center text-sm text-muted-foreground">Ehhez még kevés a lefutott menet  pár nap múlva telik meg.</p>
                   )}
                 </ChartFrame>
 

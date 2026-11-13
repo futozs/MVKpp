@@ -59,7 +59,7 @@ function PastStatus({ trip }: { trip: JourneyTrip }) {
       </span>
       {detail ? <span className="tabular-nums text-muted-foreground">{detail}</span> : null}
       {o.partial && o.untrackedRoutes.length < o.rideCount ? (
-        <span className="text-muted-foreground">— részleges mérés</span>
+        <span className="text-muted-foreground"> részleges mérés</span>
       ) : null}
     </p>
   );
@@ -73,7 +73,7 @@ function ArriveByWarning({ trip, target }: { trip: JourneyTrip; target: number }
   return (
     <p className={cn("text-[11px] font-semibold", expectedLate ? "text-late" : "text-amber-300")}>
       {expectedLate
-        ? `${hm(target)}-ig várhatóan nem érsz be — válassz korábbi indulást.`
+        ? `${hm(target)}-ig várhatóan nem érsz be  válassz korábbi indulást.`
         : `Rossz esetben ${hm(target)} után érsz be.`}
     </p>
   );
@@ -84,7 +84,7 @@ function ForecastStatus({ trip }: { trip: JourneyTrip }) {
   if (f.expectedArrival == null || f.arrDelayS == null) {
     return (
       <p className="text-xs text-muted-foreground">
-        Nincs késési adat — a menetrend szerinti időket mutatjuk.
+        Nincs késési adat  a menetrend szerinti időket mutatjuk.
       </p>
     );
   }

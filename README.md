@@ -123,7 +123,7 @@ A Beállításokban a figyelő minden funkciója külön kapcsolható, és a vá
 
 | Kapcsoló | Mit csinál |
 |---|---|
-| Elérem? — indulj most | a helyzetedből mikor indulj, és a Szólj gomb |
+| Elérem?  indulj most | a helyzetedből mikor indulj, és a Szólj gomb |
 | Indulási idők a sorokban | minden indulás mellett, mikor kell elindulnod |
 | Késve indulás előrejelzése | ha a busz még az előző menetén késik |
 | Dugó a busz előtt | a beállt forgalom miatti pluszidő |
@@ -187,8 +187,8 @@ Utazásnapló, amely nagyrészt magától vezeti magát.
 - Minden további megállóra élő késés, várható és legkésőbbi érkezés.
 - A busz jelzője a **telefonod GPS-ét** követi, így pontosabb, mint a busz saját jelzése.
 - Látod, ha dugó van előtted, és mennyit hoz.
-- A kijelölt leszállóhelynél az utazás **magától lezárul** — akkor is, ha a telefon a zsebedben van, és csak később nyitod meg.
-- **Leszálltam** / **Korábban**: ha előbb szálltál le, a már elhagyott megállók közül választhatsz. Ha a telefon percek óta messze van a busztól, az app csak megkérdezi, leszálltál-e — magától nem zárja le.
+- A kijelölt leszállóhelynél az utazás **magától lezárul**  akkor is, ha a telefon a zsebedben van, és csak később nyitod meg.
+- **Leszálltam** / **Korábban**: ha előbb szálltál le, a már elhagyott megállók közül választhatsz. Ha a telefon percek óta messze van a busztól, az app csak megkérdezi, leszálltál-e  magától nem zárja le.
 
 ### Ha bezárod az appot
 
@@ -196,10 +196,10 @@ A webapp a háttérben nem tud követni, ezért amikor újra megnyitod, a menet 
 
 ### Körbeutazás
 
-Hurok-végállomásokon a busz megfordul és ugyanaz a jármű viszi tovább a következő menetet. A körbeutazást **előre jelzed** (*„Körbeutazok”*), és megadod, hol szállsz le a következő menetből: a végállomáson az app megmutatja, mikor indul tovább a busz, és indulásakor magától folytatja az utazást — a telefon helyétől függetlenül, zsebre tett, lezárt telefonnal is.
+Hurok-végállomásokon a busz megfordul és ugyanaz a jármű viszi tovább a következő menetet. A körbeutazást **előre jelzed** (*„Körbeutazok”*), és megadod, hol szállsz le a következő menetből: a végállomáson az app megmutatja, mikor indul tovább a busz, és indulásakor magától folytatja az utazást  a telefon helyétől függetlenül, zsebre tett, lezárt telefonnal is.
 
 - Ha az utazás a végállomáson ért véget, ott egy **Körbeutazok** gomb élőben folytatja a busz következő menetével.
-- Az Utazásaim listájában bármelyik fordulóhurkos vonalon tett út utólag is **meghosszabbítható körbeutazásként** — ha rosszul zárult le (nem a végállomáson), az is odáig egészül ki.
+- Az Utazásaim listájában bármelyik fordulóhurkos vonalon tett út utólag is **meghosszabbítható körbeutazásként**  ha rosszul zárult le (nem a végállomáson), az is odáig egészül ki.
 
 ### Utólag felvett és javított utak
 

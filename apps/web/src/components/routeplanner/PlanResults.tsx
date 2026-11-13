@@ -74,7 +74,7 @@ export function PlanResults({ plan, emptyHint }: { plan: JourneyPlanResponse; em
         <div className="rounded-2xl border border-dashed border-border px-4 py-8 text-center">
           <p className="text-sm font-semibold">Ebben az időpontban nincs kapcsolat a két hely között.</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {emptyHint ?? "Éjszaka és hétvégén kevesebb járat közlekedik — próbálj másik időpontot."}
+            {emptyHint ?? "Éjszaka és hétvégén kevesebb járat közlekedik  próbálj másik időpontot."}
           </p>
         </div>
       )}

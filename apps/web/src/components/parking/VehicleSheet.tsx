@@ -119,7 +119,7 @@ function Where({ hit, now, lookup, snap, history }: { hit: Located; now: number;
   const v = hit.v;
   return (
     <div className="divide-y divide-border/70 rounded-xl border border-border px-3">
-      {hit.state === "depot" ? <Row label="Hogyan került ide">{REASON_LABEL[hit.v.reason].toLowerCase()} — {depotLine(hit.v, history, snap.serviceDate)}</Row> : null}
+      {hit.state === "depot" ? <Row label="Hogyan került ide">{REASON_LABEL[hit.v.reason].toLowerCase()}  {depotLine(hit.v, history, snap.serviceDate)}</Row> : null}
       {v.since ? <Row label={hit.state === "nosignal" ? "Utolsó jel" : "Itt áll"}>{`${clockOf(v.since)} óta · ${durationText(Math.max(0, now - v.since))}`}</Row> : null}
       <Row label="GPS">
         <span className="inline-flex items-center gap-1.5">

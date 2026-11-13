@@ -9,7 +9,7 @@
  *
  * Soronként a hiba ára is (lásd core `motion/cost`): meddig látszana egy
  * lemaradás (`lag`), és meddig kellene egy előreszaladt jelölőnek várnia a
- * valódi buszra (`pass`) — ez a nap későbbi fixeiből derül ki, de csak a
+ * valódi buszra (`pass`)  ez a nap későbbi fixeiből derül ki, de csak a
  * veszteséghez kell, a modell bemenete nem látja.
  */
 import {
@@ -53,7 +53,7 @@ export type MotionSampleSet = {
 /** a tanításkor a késleltetés (L) ebből a tartományból sorsolt (mp) */
 const L_MIN = 1;
 const L_MAX = 30;
-/** ennél tovább a pálya nem tart (mp) — lásd MOTION_GRID */
+/** ennél tovább a pálya nem tart (mp)  lásd MOTION_GRID */
 const H_MAX = 90;
 
 /** Növekvő Float32 puffer (a sorok száma előre nem ismert). */
@@ -135,7 +135,7 @@ export function anchorWithTraffic(d: HistoryDay, r: HistoryRun, i: number, prof:
 export type RowOptions = {
   /** a fixek ekkora hányada lesz kiindulópont */
   rate: number;
-  /** kiindulópontonként ennyi sorsolt késleltetés — vagy rögzített késleltetések (teszthez) */
+  /** kiindulópontonként ennyi sorsolt késleltetés  vagy rögzített késleltetések (teszthez) */
   latencies: number | number[];
   rnd: () => number;
 };

@@ -1,5 +1,5 @@
 /**
- * A hub beállításai — mind környezeti változóból (infra/.env, docker-compose).
+ * A hub beállításai  mind környezeti változóból (infra/.env, docker-compose).
  * Csak szerveroldalon importálható.
  */
 
@@ -11,7 +11,7 @@ export const env = {
   workerUrl: trimUrl(process.env.WORKER_URL, "http://127.0.0.1:8090"),
   /** a web belső címe (Compose-ban: http://web:3000) */
   webUrl: trimUrl(process.env.WEB_URL, "http://127.0.0.1:3000"),
-  /** a nyilvános cím a Caddyn át (opcionális — ezt is méri a hub) */
+  /** a nyilvános cím a Caddyn át (opcionális  ezt is méri a hub) */
   publicUrl: process.env.DOMAIN ? `https://${process.env.DOMAIN}` : trimUrl(process.env.PUBLIC_URL, ""),
   adminKey: process.env.ADMIN_KEY ?? "",
   /** a web csak-olvasó metrika-kulcsa (X-Metrics-Key) */
@@ -42,8 +42,8 @@ export const MIN_PASSWORD = 12;
 
 export function configProblems(): string[] {
   const out: string[] = [];
-  if (env.password.length < MIN_PASSWORD) out.push(`HUB_PASSWORD hiányzik vagy rövidebb ${MIN_PASSWORD} karakternél — a belépés le van tiltva.`);
-  if (!env.adminKey) out.push("ADMIN_KEY hiányzik — a worker vezérlése nem működik.");
-  if (!env.metricsKey) out.push("METRICS_KEY hiányzik — a web válaszidői nem látszanak.");
+  if (env.password.length < MIN_PASSWORD) out.push(`HUB_PASSWORD hiányzik vagy rövidebb ${MIN_PASSWORD} karakternél  a belépés le van tiltva.`);
+  if (!env.adminKey) out.push("ADMIN_KEY hiányzik  a worker vezérlése nem működik.");
+  if (!env.metricsKey) out.push("METRICS_KEY hiányzik  a web válaszidői nem látszanak.");
   return out;
 }

@@ -38,7 +38,7 @@ export function tripForecast(trip: JourneyTrip): TripForecast {
 
 const RISK_ORDER: Record<TransferRisk, number> = { safe: 0, tight: 1, risky: 2 };
 
-/** A legrosszabb átszállás — ezt emeljük ki a kártya fejlécében. */
+/** A legrosszabb átszállás  ezt emeljük ki a kártya fejlécében. */
 export function worstTransfer(
   trip: JourneyTrip,
 ): { check: JourneyTransferCheck; index: number } | null {

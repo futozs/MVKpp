@@ -18,7 +18,7 @@ const STALE_AFTER_MS = 2 * 60_000;
 /** A kor-kijelzés ennyi időnként frissül (nem kell másodpercre pontos). */
 const CLOCK_TICK_MS = 15_000;
 /**
- * Betöltéskor ennyi ideig semleges a „Kapcsolódás…” — a csatorna általában
+ * Betöltéskor ennyi ideig semleges a „Kapcsolódás…”  a csatorna általában
  * egy pillanat alatt felépül, ne villanjon fel minden indításkor figyelmeztetés.
  */
 const CONNECT_GRACE_MS = 3_000;
@@ -29,7 +29,7 @@ const STATE_COPY: Record<LinkState, { label: string; title: string; body: string
   live: {
     label: "Élő",
     title: "Élő kapcsolat",
-    body: "A szerver azonnal küldi a járműpozíciókat, amint változnak — nem kell kézzel frissíteni.",
+    body: "A szerver azonnal küldi a járműpozíciókat, amint változnak  nem kell kézzel frissíteni.",
   },
   connecting: {
     label: "Kapcsolódás…",
@@ -165,7 +165,7 @@ function LiveStatusDetails({ status, vehicleCount, lastUpdated, weather }: Detai
             status.isStale ? "text-amber-300" : "text-foreground",
           )}
         >
-          {lastUpdated ? formatClock(lastUpdated, true) : "—"}
+          {lastUpdated ? formatClock(lastUpdated, true) : ""}
           {status.isStale && status.ageMin != null ? (
             <span className="ml-1.5 font-sans font-medium">· {status.ageMin} perce</span>
           ) : null}
@@ -209,7 +209,7 @@ interface LiveStatusProps {
 
 /**
  * Asztali állapotsáv: [● Élő | busz 88 | 01:08:24 | ⟳]. A frissítés gomb
- * azért ül itt, mert az időbélyeghez tartozik — ugyanarról az adatról szól.
+ * azért ül itt, mert az időbélyeghez tartozik  ugyanarról az adatról szól.
  */
 export function LiveStatus({
   vehicleCount,

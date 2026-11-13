@@ -13,7 +13,7 @@ const feed = feedFromFiles({
 });
 
 describe("a regionális parkoló vonal-címkéje", () => {
-  it("vonatnál kategória és vonatszám, Volánnál a vonalszám — nem a vonal kulcsa", () => {
+  it("vonatnál kategória és vonatszám, Volánnál a vonalszám  nem a vonal kulcsa", () => {
     expect(runLabel(feed, { tripId: "1:191", routeId: "1:E1", routeShort: "1:E1" })).toBe("IC 191");
     expect(runLabel(feed, { tripId: "hkir:t1", routeId: "hkir:hkir_V-R-200-3765", routeShort: "hkir:hkir_V-R-200-3765" })).toBe("3765");
   });

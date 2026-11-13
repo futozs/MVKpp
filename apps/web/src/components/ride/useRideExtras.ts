@@ -4,7 +4,7 @@ import { API_BASE } from "@/lib/apiBase";
 import { patchRides, type Ride } from "@/lib/rides";
 import { tripDetailUrl, type TripDetail } from "./useTripLive";
 
-/** a már megpróbált (pótolt vagy mérés nélküli) utazások — nem kérdezzük le őket újra */
+/** a már megpróbált (pótolt vagy mérés nélküli) utazások  nem kérdezzük le őket újra */
 const TRIED_KEY = "mvk_ride_delay_tried";
 /** egy megnyitáskor legfeljebb ennyi menetet kérdezünk le */
 const PER_VISIT = 40;

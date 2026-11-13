@@ -1,5 +1,5 @@
 /**
- * /v3/rides — az utazási napló a felhőben.
+ * /v3/rides  az utazási napló a felhőben.
  *
  * Utazásonként egy sor (azonosító: a kliensen generált UUID), így több eszköz
  * egyszerre is rögzíthet, nem írják felül egymást. A kliens bejelentkezéskor

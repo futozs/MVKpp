@@ -1,7 +1,7 @@
 /**
  * Ki és hogyan használja az appot: aktív eszközök naponta (DAU / heti / havi),
  * új eszközök, platform és böngésző, telepített app arány, nézetek, és a
- * kedvencek ranglistája (vonal, megálló, jármű, parkoló) — mind a /v3/usage
+ * kedvencek ranglistája (vonal, megálló, jármű, parkoló)  mind a /v3/usage
  * jeleiből. Plusz: ki van fent épp most (a worker WebSocket-hubjából).
  */
 import { sql, sqlOne } from "@mvk/db";

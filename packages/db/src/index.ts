@@ -1,12 +1,12 @@
 /**
  * Adatbázis-hozzáférés: közös pg pool a nyers SQL-hez (Timescale-lekérdezések,
  * tömeges beírás unnest-tel). A típusos Prisma kliens külön belépési ponton
- * érhető el (`@mvk/db/prisma`), ugyanazzal a pool-lal — így aki nem használja,
+ * érhető el (`@mvk/db/prisma`), ugyanazzal a pool-lal  így aki nem használja,
  * annak a buildjébe nem kerül bele.
  */
 import pg from "pg";
 
-// A bigint (int8) oszlopokat számként kérjük — a mi értékeink bőven elférnek.
+// A bigint (int8) oszlopokat számként kérjük  a mi értékeink bőven elférnek.
 pg.types.setTypeParser(20, (v) => Number(v));
 // A date oszlop maradjon "YYYY-MM-DD" szöveg (ne csússzon el időzónával).
 pg.types.setTypeParser(1082, (v) => v);

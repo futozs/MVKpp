@@ -3,7 +3,7 @@
  *
  *   v1.<lejárat ms>.<véletlen azonosító>.<HMAC-SHA256>
  *
- * Az aláírókulcs folyamatonként véletlen (nem a jelszóból származik — egy
+ * Az aláírókulcs folyamatonként véletlen (nem a jelszóból származik  egy
  * elcsípett sütiből így nem lehet jelszót törni), és az élő munkamenetek a
  * memóriában vannak: a kilépés azonnal érvényteleníti a sütit, a hub
  * újraindulása pedig mindenkit kiléptet. Tiszta függvények + egy globalThis-en

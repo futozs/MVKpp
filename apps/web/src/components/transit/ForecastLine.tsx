@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 import { delayLabel, delayState, delayTone } from "./DelayBar";
 
 /**
- * Várható késés ennél a megállónál — a mostani késésből és az elmúlt 8 hét
+ * Várható késés ennél a megállónál  a mostani késésből és az elmúlt 8 hét
  * szakaszidejeiből; a „legrosszabb esetben” a 85%-os felső becslés.
  */
 export function ForecastLine({

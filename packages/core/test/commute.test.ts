@@ -36,7 +36,7 @@ describe("egy héten két különböző szokás", () => {
     expect(cs.some((c) => c.fromStopId === "SP414")).toBe(false);
   });
 
-  it("hétfőn a 6:51-es jön elő, szerdán a 6:18-as — mindig az, ami aznap szokásos", () => {
+  it("hétfőn a 6:51-es jön elő, szerdán a 6:18-as  mindig az, ami aznap szokásos", () => {
     const cs = detectCommutes([...week1, ...week2], at("2026-11-15", "20:00"));
     expect(upcomingCommute(cs, at("2026-11-16", "06:00"), "2026-11-16")?.minute).toBe(6 * 60 + 51);
     expect(upcomingCommute(cs, at("2026-11-18", "06:00"), "2026-11-18")?.minute).toBe(6 * 60 + 18);

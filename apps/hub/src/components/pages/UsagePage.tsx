@@ -87,7 +87,7 @@ export function UsagePage() {
     <>
       <PageHeader
         title="Használat"
-        lead="Ki és hogyan használja a webappot: aktív eszközök, visszatérők, platformok, nézetek — és mit tesznek kedvencnek. Névtelen: véletlen eszközazonosító, IP-cím nélkül; bejelentkezve a fiókhoz kötve."
+        lead="Ki és hogyan használja a webappot: aktív eszközök, visszatérők, platformok, nézetek  és mit tesznek kedvencnek. Névtelen: véletlen eszközazonosító, IP-cím nélkül; bejelentkezve a fiókhoz kötve."
         actions={<Segmented value={days} onChange={setDays} options={[{ value: 14, label: "14 nap" }, { value: 30, label: "30 nap" }, { value: 90, label: "90 nap" }]} />}
       />
 

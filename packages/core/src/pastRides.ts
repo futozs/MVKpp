@@ -107,7 +107,7 @@ export type NextLegChoice = PastTrip & { kind: TerminusKind };
 
 /**
  * Körbeutazás utólag: a menet végállomásáról (ugyanabból vagy a szomszédos
- * kocsiállásból) a beérkezés körül induló menetek, indulás szerint — ezek
+ * kocsiállásból) a beérkezés körül induló menetek, indulás szerint  ezek
  * közül folytatta a busz. Melyiket, azt a jármű menetei döntik el (ha ismertek).
  */
 export function nextLegChoices(day: ServiceDay, tripId: string, windowS = NEXT_WINDOW_S): NextLegChoice[] {

@@ -1,5 +1,5 @@
 /**
- * A mozgás-modell jellemzői — UGYANEZ a kód számol a tanításkor (visszajátszott
+ * A mozgás-modell jellemzői  UGYANEZ a kód számol a tanításkor (visszajátszott
  * napokból) és élesben (a worker élő fixeiből), így a kettő nem csúszhat szét.
  *
  * A cél: hol lesz a busz `H` másodperccel a legutóbbi fixe után (elmozdulás a

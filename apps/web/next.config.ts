@@ -6,7 +6,7 @@ import type { NextConfig } from "next";
  * reverse proxy (fejlesztéskor, vagy egyszerű éles telepítésnél).
  *
  * Figyelem: a rewrites() a `next build` alatt fut le, és az eredmény a
- * .next/routes-manifest.json-ba kerül — a WORKER_URL-t tehát a BUILD idején
+ * .next/routes-manifest.json-ba kerül  a WORKER_URL-t tehát a BUILD idején
  * kell megadni, futásidőben már nem írja felül.
  */
 const WORKER_URL = (process.env.WORKER_URL ?? "http://127.0.0.1:8090").replace(

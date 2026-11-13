@@ -219,7 +219,7 @@ export class RegionalFeeds {
       const zip = Buffer.from(zipSync(Object.fromEntries(Object.entries(gtfs.files).map(([k, v]) => [k, strToU8(v)])), { level: 6, mtime: ZIP_MTIME }));
       const feed = feedFromZip(new Uint8Array(zip));
       const v = feed.validate();
-      // Ugyanaz a tartalom (a hash a zipé): nem tároljuk újra, a meglévő marad — de egy korábban
+      // Ugyanaz a tartalom (a hash a zipé): nem tároljuk újra, a meglévő marad  de egy korábban
       // elutasított tartalom most sem mehet át csendben.
       const known = await sql<{ id: number; status: string }>(`SELECT id, status FROM gtfs_feed WHERE sha256 = $1`, [feed.hash]);
       if (known[0] && known[0].status !== "ok") throw new Error(`elutasítva (ugyanez a tartalom korábban is): ${v.errors.join("; ") || "érvénytelen"}`);
@@ -245,7 +245,7 @@ export class RegionalFeeds {
       return entry;
     } catch (e) {
       info.result = errMsg(e);
-      log.warn("regional", `${iso}: építés sikertelen — ${info.result}`);
+      log.warn("regional", `${iso}: építés sikertelen  ${info.result}`);
       return null;
     } finally {
       info.ms = Date.now() - t0;

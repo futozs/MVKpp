@@ -10,7 +10,7 @@ export type RouteLookup = (short: string | null) => Route | undefined;
 const FALLBACK = { color: "3A4A44", text: "FFFFFF" };
 const hex = (v: string | undefined, fb: string) => `#${/^[0-9a-fA-F]{6}$/.test(v ?? "") ? v : fb}`;
 
-/** A vonal színes csempéje — ugyanaz a forma, mint a térképen. */
+/** A vonal színes csempéje  ugyanaz a forma, mint a térképen. */
 export function RouteChip({
   route,
   lookup,
@@ -100,7 +100,7 @@ export function FavoriteButton({ active, name, onToggle }: { active: boolean; na
       onClick={onToggle}
       aria-pressed={active}
       aria-label={active ? `${name}: levétel a kedvencekről` : `${name}: kedvenc parkoló`}
-      title={active ? "Levétel a kedvencekről" : "Kedvenc — mindig elöl lesz"}
+      title={active ? "Levétel a kedvencekről" : "Kedvenc  mindig elöl lesz"}
       className={cn(
         "flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         active ? "text-primary hover:bg-primary/10" : "text-muted-foreground/60 hover:bg-accent hover:text-foreground",

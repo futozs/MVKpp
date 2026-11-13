@@ -126,7 +126,7 @@ const routes: Route[] = [
 
   /**
    * Volán és vasút: pontosság vonatonként / vonalanként, a késések okai (a MÁV
-   * hivatalos megjegyzései), vágányváltások — a megyét érintő menetekre.
+   * hivatalos megjegyzései), vágányváltások  a megyét érintő menetekre.
    * ?modes=rail | coach | rail,coach  &days=30
    */
   route("GET", "/v3/stats/regional", async (_req, _p, url) => {

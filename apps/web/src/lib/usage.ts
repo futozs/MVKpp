@@ -48,7 +48,7 @@ function send(open: boolean, beacon: boolean): void {
   try {
     id = deviceId();
   } catch {
-    return; // nincs localStorage (privát mód) — nincs mit azonosítani
+    return; // nincs localStorage (privát mód)  nincs mit azonosítani
   }
   const favorites = favoritesSnapshot();
   const favJson = JSON.stringify(favorites);
@@ -75,11 +75,11 @@ function send(open: boolean, beacon: boolean): void {
   const session = open ? getSession() : null;
   if (session) headers["x-account-session"] = session.sessionToken;
   fetch(API_BASE + URL_PATH, { method: "POST", headers, body, keepalive: true }).catch(() => {
-    /* a használati jel elveszhet — nem baj */
+    /* a használati jel elveszhet  nem baj */
   });
 }
 
-/** Egy nézet megnyitása (fül, kijelző, stb.) — a következő jel viszi. */
+/** Egy nézet megnyitása (fül, kijelző, stb.)  a következő jel viszi. */
 export function trackView(view: string): void {
   views = { ...views, [view]: (views[view] ?? 0) + 1 };
 }

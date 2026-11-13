@@ -117,7 +117,7 @@ export function MvkPage() {
     <>
       <PageHeader
         title="MVK API"
-        lead="Az MVK valós idejű feedje és menetrendje: lekérések, hibák, válaszidők végpontonként, napi feed-egészség, GTFS-verziók — és egy vizsgáló, amivel bármely végpontot kipróbálhatsz."
+        lead="Az MVK valós idejű feedje és menetrendje: lekérések, hibák, válaszidők végpontonként, napi feed-egészség, GTFS-verziók  és egy vizsgáló, amivel bármely végpontot kipróbálhatsz."
         actions={
           <Button size="sm" icon={<RefreshCw className="h-3.5 w-3.5" />} busy={busy === "gtfs"} onClick={() => void run("gtfs", "/api/mvk/reload-gtfs", {}, { success: "GTFS ellenőrizve / újratöltve", refresh: ["/api/mvk"] })}>
             GTFS újratöltése
@@ -141,13 +141,13 @@ export function MvkPage() {
       )}
 
       <div className="space-y-5">
-        <Panel title="Végpontok (utolsó óra)" hint="Minden hívás, amit a worker az MVK felé indít — a proxyn átmenőket is.">
+        <Panel title="Végpontok (utolsó óra)" hint="Minden hívás, amit a worker az MVK felé indít  a proxyn átmenőket is.">
           {m ? <RouteTable rows={m.upstream} windowMin={60} /> : null}
         </Panel>
 
         {f ? (
           <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-            <Panel title="Napi hibás lekérések" hint="feed_health — 45 nap">
+            <Panel title="Napi hibás lekérések" hint="feed_health  45 nap">
               <Bars data={f.health.map((d) => ({ key: d.day, label: shortDay(d.day), value: d.fail }))} color="hsl(var(--late))" yFormat={(v) => num(v)} />
             </Panel>
             <Panel title="Napi járműmaximum" hint="egyszerre kint lévő járművek csúcsa">

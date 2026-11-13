@@ -26,7 +26,7 @@ export interface Theme3D {
   /** műholdkép a vektoros alap helyett (a feliratok maradnak) */
   satellite?: boolean;
   hillshade: boolean;
-  /** a domborzat nagyítása (1 = valós) — a Bükk és az Avas így jobban kiadja magát */
+  /** a domborzat nagyítása (1 = valós)  a Bükk és az Avas így jobban kiadja magát */
   exaggeration: number;
   /** az épületek színe alacsonytól magasig */
   buildings: [string, string, string];
@@ -85,7 +85,7 @@ export async function load3DStyle(tileLayerId: string, signal?: AbortSignal): Pr
   return build3DStyle((await res.json()) as StyleSpecification, theme);
 }
 
-/** magyar név, ha van; különben a helyi (OSM `name`) — a stílus angol / latin átírást tenne ki */
+/** magyar név, ha van; különben a helyi (OSM `name`)  a stílus angol / latin átírást tenne ki */
 const HU_NAME: ExpressionSpecification = ["coalesce", ["get", "name:hu"], ["get", "name"]];
 
 function isBuilding(layer: LayerSpecification): boolean {

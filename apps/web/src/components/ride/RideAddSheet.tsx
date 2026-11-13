@@ -18,13 +18,13 @@ type LegFields = Omit<Ride, "id" | "chainId">;
 type LegDraft = {
   trip: PastTripRow;
   vehicleId: string;
-  /** a buszt a rendszer látta (vagy az előző menetről öröklődik) — nem kell beírni */
+  /** a buszt a rendszer látta (vagy az előző menetről öröklődik)  nem kell beírni */
   vehicleKnown: boolean;
   /** körbeutazás következő menete: a végállomáson ülve maradt, a felszállás helye biztos */
   fixedFrom: boolean;
   from: number | null;
   to: number | null;
-  /** a lezárt menet mezői — a következő menet felvételekor számoljuk ki, amíg a megállói megvannak */
+  /** a lezárt menet mezői  a következő menet felvételekor számoljuk ki, amíg a megállói megvannak */
   done?: LegFields;
 };
 type Step = "pick" | "trips" | "leg" | "next";
@@ -81,7 +81,7 @@ function terminusFix(r: Ride, d: Detail): Partial<Ride> | null {
  * Utólag felvett utazás: a menetrendből választott menet (nap → vonal →
  * indulás → fel- és leszállás). Körbeutazásnál a végállomáson „Rajta
  * maradtam”, és jön a következő menet. `continueFrom`: egy már rögzített út
- * körbeutazásként meghosszabbítva (a buszon maradt a végállomáson) — ha az utolsó
+ * körbeutazásként meghosszabbítva (a buszon maradt a végállomáson)  ha az utolsó
  * menete nem a végállomáson ért véget (rosszul zárult le), az is odáig hosszabbodik.
  */
 export function RideAddSheet({ continueFrom, onClose }: { continueFrom?: Ride[]; onClose: () => void }) {
@@ -178,7 +178,7 @@ export function RideAddSheet({ continueFrom, onClose }: { continueFrom?: Ride[];
       : step === "trips"
         ? `${days.find((d) => d.iso === day)?.label ?? day} · melyik indulással mentél?`
         : step === "next"
-          ? `A végállomáson (${nextOf?.terminus || "?"}) a buszon maradtál — melyik menettel ment tovább?${
+          ? `A végállomáson (${nextOf?.terminus || "?"}) a buszon maradtál  melyik menettel ment tovább?${
               baseFix && !legs.length ? ` Az előző menet (${base?.toStopName ?? "?"} helyett) a végállomásig hosszabbodik.` : ""
             }`
           : current

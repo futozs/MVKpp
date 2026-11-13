@@ -143,7 +143,7 @@ export function ProofPanel({ plan, trip }: { plan: JourneyPlanResponse; trip: Jo
         <p className="mt-2 text-[11px] text-muted-foreground">
           {o.untrackedRoutes.length < o.rideCount
             ? `Részleges mérés: a(z) ${o.untrackedRoutes.join(", ")} menetéről nincs adatunk.`
-            : "Erről az útról nincs mérésünk — igazolásra nem alkalmas, csak a menetrendet mutatja."}
+            : "Erről az útról nincs mérésünk  igazolásra nem alkalmas, csak a menetrendet mutatja."}
         </p>
       ) : null}
     </section>

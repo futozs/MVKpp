@@ -1,5 +1,5 @@
 /**
- * A v2 API végpontjai, válaszformátumra kompatibilisen — az iOS app ezeket
+ * A v2 API végpontjai, válaszformátumra kompatibilisen  az iOS app ezeket
  * hívja. Új mezők jöhetnek hozzá (a dekóderek figyelmen kívül hagyják),
  * meglévő mező nem tűnik el és nem változik a típusa.
  */
@@ -63,7 +63,7 @@ export type Ctx = {
 };
 
 /**
- * `?modes=tram,bus,coach,rail` — a v2-végpontok opcionális paramétere. Nélküle a
+ * `?modes=tram,bus,coach,rail`  a v2-végpontok opcionális paramétere. Nélküle a
  * válasz pontosan az, ami eddig (csak MVK: az iOS app ezt kapja); vele a Volán
  * és a vasút is jön, ugyanabban az alakban, néhány új mezővel.
  */
@@ -103,7 +103,7 @@ const ADMIN_FAIL_LIMIT = 20;
 export function requireAdmin(req: Req) {
   const now = Date.now();
   const f = adminFails.get(req.ip);
-  if (f && now < f.reset && f.n >= ADMIN_FAIL_LIMIT) throw new HttpError(429, "túl sok hibás admin-kulcs — próbáld később");
+  if (f && now < f.reset && f.n >= ADMIN_FAIL_LIMIT) throw new HttpError(429, "túl sok hibás admin-kulcs  próbáld később");
   if (isAdmin(req)) return;
   if (!f || now > f.reset) adminFails.set(req.ip, { n: 1, reset: now + 10 * 60_000 });
   else f.n++;
@@ -271,7 +271,7 @@ export function registerCompat(r: Router, ctx: Ctx) {
     const sortRows = (rows: ReturnType<typeof rowOf>[]) =>
       rows.sort((a, b) => (a.departureSec ?? Infinity) - (b.departureSec ?? Infinity) || a.tripId.localeCompare(b.tripId));
     const { modes } = modesOf(req);
-    // a regionális (Volán, vasút) törlések csak kérésre — a v2 alapválasza az MVK-é
+    // a regionális (Volán, vasút) törlések csak kérésre  a v2 alapválasza az MVK-é
     const keep = (id: string) => (isMvkId(id) ? modes.has("bus") || modes.has("tram") : modes.has(id.startsWith("1:") ? "rail" : "coach"));
     if (ymd !== todayYmd) {
       const ids = (await sql<{ trip_id: string }>(`SELECT trip_id FROM cancelled_trip WHERE service_date = $1 ORDER BY trip_id`, [iso])).map((x) => x.trip_id).filter(keep);
@@ -316,7 +316,7 @@ export function registerCompat(r: Router, ctx: Ctx) {
       sendJson(req, res, 200, [...feed.stops.values()].map((s) => [s.id, s.code, s.name, s.lat, s.lon]), { "cache-control": "public, max-age=300" });
       return;
     }
-    // v3: [id, kód, név, lat, lon, mód, szülő-állomás, állomás-e (1/0), közös megálló] — a Volán és a vasút is.
+    // v3: [id, kód, név, lat, lon, mód, szülő-állomás, állomás-e (1/0), közös megálló]  a Volán és a vasút is.
     // A közös megálló: a Volán-megálló melyik MVK-oszloppal áll egy helyen (összevont nézetben az mutatja).
     const feed = catalogFeed();
     if (!feed) throw new HttpError(503, "nincs menetrend");
@@ -344,7 +344,7 @@ export function registerCompat(r: Router, ctx: Ctx) {
   });
 
   /**
-   * Egy nyomvonal pontjai és a pontokig mért hossz (m) — a térkép ezen viszi
+   * Egy nyomvonal pontjai és a pontokig mért hossz (m)  a térkép ezen viszi
    * tovább a buszt két GPS-jel között. A hossz ugyanabból a vetítésből jön,
    * mint az illesztőé, így a worker `along` értékei közvetlenül használhatók.
    */
@@ -577,7 +577,7 @@ export function registerCompat(r: Router, ctx: Ctx) {
     const agentId = String(j.agentId ?? "agent");
     await heartbeat(agentId, j.info);
     const st = tokenStatus();
-    // A rendszer-hubból kért parancs (app-újraindítás, token küldése) — az új agent végrehajtja, a régi figyelmen kívül hagyja.
+    // A rendszer-hubból kért parancs (app-újraindítás, token küldése)  az új agent végrehajtja, a régi figyelmen kívül hagyja.
     const command = await pickAgentCommand(agentId);
     // Az agent ebből dönti el, kell-e újraindítania az MVK appot.
     sendJson(req, res, 200, {
@@ -686,7 +686,7 @@ function cancelledRow(day: ServiceDay | null, tripId: string) {
   };
 }
 
-// Az MVK API csak olvasó, utas-oldali végpontjai mehetnek át — a régi
+// Az MVK API csak olvasó, utas-oldali végpontjai mehetnek át  a régi
 // gateway nyitott proxyja bárkinek a tokenünkkel hívhatott bármit.
 const PROXY_ALLOW: [method: string, re: RegExp][] = [
   ["POST", /^\/api\/v1\/route\/plan$/],

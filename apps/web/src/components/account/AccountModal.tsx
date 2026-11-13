@@ -110,7 +110,7 @@ export function AccountModal({ isOpen, onClose }: AccountModalProps) {
     await syncPush();
     const changed = await syncPull();
     const st = getSyncStatus();
-    setActionNote(st.state === "error" ? (st.error ?? "A szinkron nem sikerült.") : changed.length ? `Szinkronizálva — ${changed.length} beállítás érkezett a felhőből.` : "Szinkronizálva.");
+    setActionNote(st.state === "error" ? (st.error ?? "A szinkron nem sikerült.") : changed.length ? `Szinkronizálva  ${changed.length} beállítás érkezett a felhőből.` : "Szinkronizálva.");
     const s = await getBackupStatus();
     setStatus(s.ok ? s.data : null);
     setStatusBusy(false);

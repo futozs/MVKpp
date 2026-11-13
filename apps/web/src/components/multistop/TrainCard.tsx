@@ -19,8 +19,8 @@ const POLL_MS = 20_000;
 const PASSED_SHOWN = 1;
 
 /**
- * Egy vonat vonatszám szerint, minden nap (pl. a 5139): a ma — ha már elment, a
- * holnap — közlekedő példány. Hol jár, mennyit késik és miért, és a hátralévő
+ * Egy vonat vonatszám szerint, minden nap (pl. a 5139): a ma  ha már elment, a
+ * holnap  közlekedő példány. Hol jár, mennyit késik és miért, és a hátralévő
  * megállók vágánnyal.
  */
 export function TrainCard({

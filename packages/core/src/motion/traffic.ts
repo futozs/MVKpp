@@ -4,7 +4,7 @@
  * a tanult profilhoz képest. Ez a modell „mai” tudása: dugó, útlezárás, terelés.
  *
  * Minden áthaladásnak két ideje van: mikor történt, és mikor derült ki (a
- * következő fix ideje). A lekérdezés csak a már kiderült áthaladásokat látja —
+ * következő fix ideje). A lekérdezés csak a már kiderült áthaladásokat látja 
  * így a tanításkor sem lát a jövőbe.
  */
 import { MOTION_BIN_M, typicalTime, type MotionFix, type ShapeProfile } from "./profile.ts";

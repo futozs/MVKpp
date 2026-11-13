@@ -47,7 +47,7 @@ function mergeDirections(days: RouteDay[]) {
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, rows]) => {
       // Csak a menetszám irányonkénti; a többi mező (esemény, pontosság, kimaradt,
-      // torlódás) napi érték, ami minden irány sorában ugyanaz — összeadva duplázna.
+      // torlódás) napi érték, ami minden irány sorában ugyanaz  összeadva duplázna.
       const day = rows[0];
       return {
         date,
@@ -138,7 +138,7 @@ export function RoutePanel({ routes }: { routes: Route[] }) {
                 <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
                   <StatTile
                     label="Menetrendtartás"
-                    value={avgOtp != null ? `${avgOtp}%` : "—"}
+                    value={avgOtp != null ? `${avgOtp}%` : ""}
                     sub="−1…+5 perc ablakban"
                     tone={
                       avgOtp == null

@@ -391,7 +391,7 @@ export function MultiStopDashboard({
           </Card>
         ) : (
           // Asztalon minden megálló ugyanakkora, keskeny kártya (mint a telefonon):
-          // annyi fér egymás mellé, amennyi kifér, a sor középre igazítva —
+          // annyi fér egymás mellé, amennyi kifér, a sor középre igazítva 
           // nem nyúlnak szét a képernyő szélességére, akárhány megállót figyelsz.
           <div className={STOP_GRID}>
             {watched.map((stop, i) => (

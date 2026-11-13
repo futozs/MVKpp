@@ -1,5 +1,5 @@
 /**
- * Utazásnapló: hol szállt fel és le az utas — becslés a GPS-ből, és javítás.
+ * Utazásnapló: hol szállt fel és le az utas  becslés a GPS-ből, és javítás.
  *
  * A motor egy megállót akkor jegyez be elértnek (`lastStopIdx`), amikor a busz
  * elhagyja a megálló körzetét: amíg ott áll, a menet még az előző megállónál
@@ -29,11 +29,11 @@ export interface RideStopEvent {
   delay_s: number;
 }
 
-/** ennyire lehet a busz (vagy a telefon) a megállótól, hogy ott álljon (m) — a GPS pontatlanságával */
+/** ennyire lehet a busz (vagy a telefon) a megállótól, hogy ott álljon (m)  a GPS pontatlanságával */
 export const AT_STOP_M = 70;
 /** a felszállás helyéhez ennél messzebbi megállót nem tekintünk a felszállás megállójának (m) */
 const BOARD_NEAR_M = 400;
-/** leszállás után az utas ennyin belül van még a megállótól (m) — ennél messzebbről nem találgatunk */
+/** leszállás után az utas ennyin belül van még a megállótól (m)  ennél messzebbről nem találgatunk */
 const ALIGHT_NEAR_M = 500;
 /** ennyivel közelebbinek kell lennie egy korábbi megállónak, hogy azt válasszuk a későbbi helyett (m) */
 const PREFER_LATER_M = 25;

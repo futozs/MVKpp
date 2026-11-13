@@ -174,7 +174,7 @@ export function TripProgressRail({
                       : "text-muted-foreground",
                   )}
                 >
-                  {stop.time ?? "—"}
+                  {stop.time ?? ""}
                 </span>
 
                 <span

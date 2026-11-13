@@ -1,6 +1,6 @@
 "use client";
 /**
- * A hub chartjai — saját SVG, könyvtár nélkül, a főapp szabályaival: vékony
+ * A hub chartjai  saját SVG, könyvtár nélkül, a főapp szabályaival: vékony
  * jelek (2 px vonal, legfeljebb 18 px oszlop, 3 px kerekítés a végén),
  * hajszálrács, kerek tengelyértékek, a szöveg szövegszínben (a jel hordozza a
  * színt), minden chartnak saját lebegő súgója (érték elöl, felirat utána).

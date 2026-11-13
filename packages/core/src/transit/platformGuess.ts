@@ -1,11 +1,11 @@
 /**
  * Várható vágány (kocsiállás), amíg a MÁV nem adta ki: a korábbi napok megfigyeléseiből.
  *
- * Két szint: (1) ugyanez a menet ezen az állomáson — a MÁV menetazonosítói naponta
+ * Két szint: (1) ugyanez a menet ezen az állomáson  a MÁV menetazonosítói naponta
  * ismétlődnek, így „az 5139-es Tiszain a 6-osról megy” közvetlenül kiolvasható; (2) ha erről
  * a menetről még nincs elég mérés, ugyanennek a vonalnak az ugyanabba az irányba (ugyanarra
  * a végállomásra) induló menetei ezen az állomáson, a mai nap kiadott vágányaival együtt.
- * Csak akkor jósol, ha a megfigyelések egyértelműek — egy bizonytalan tipp rosszabb a semminél.
+ * Csak akkor jósol, ha a megfigyelések egyértelműek  egy bizonytalan tipp rosszabb a semminél.
  */
 import type { Feed } from "../gtfs/feed.ts";
 import { stationKeyOf } from "./modes.ts";

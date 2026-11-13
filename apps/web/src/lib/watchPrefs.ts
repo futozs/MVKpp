@@ -23,7 +23,7 @@ export const WATCH_FEATURES: readonly PrefItem<WatchFeature>[] = [
   {
     id: "catch",
     key: "mvk_pref_watch_catch",
-    label: "„Elérem?” — indulj most",
+    label: "„Elérem?”  indulj most",
     hint: "A következő indulásnál: a helyzetedből mikor indulj el, hogy elérd, és a „Szólj” gomb.",
   },
   {
@@ -36,7 +36,7 @@ export const WATCH_FEATURES: readonly PrefItem<WatchFeature>[] = [
     id: "startRisk",
     key: "mvk_pref_watch_start_risk",
     label: "Késve indulás előrejelzése",
-    hint: "Ha a menet busza még az előző menetén késik — még mielőtt az MVK kihúzná.",
+    hint: "Ha a menet busza még az előző menetén késik  még mielőtt az MVK kihúzná.",
   },
   {
     id: "traffic",
@@ -54,7 +54,7 @@ export const WATCH_FEATURES: readonly PrefItem<WatchFeature>[] = [
     id: "predictedVehicle",
     key: PREF_PREDICTED_VEHICLE,
     label: "Rendszám-előrejelzés",
-    hint: "Mielőtt a busz élőben megjelenne, a várható rendszámát ~ jellel mutatjuk — a korábbi fordák alapján. Ahol a busz a végállomáson visszafordul, ott ~ nélkül: azt már tudjuk.",
+    hint: "Mielőtt a busz élőben megjelenne, a várható rendszámát ~ jellel mutatjuk  a korábbi fordák alapján. Ahol a busz a végállomáson visszafordul, ott ~ nélkül: azt már tudjuk.",
   },
   {
     id: "replacement",

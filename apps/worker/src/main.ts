@@ -1,5 +1,5 @@
 /**
- * MVK worker — a valós idejű motor.
+ * MVK worker  a valós idejű motor.
  *
  *   MVK GTFS-RT ──(2,5 mp)──► Engine ──► TripMatcher ──► Postgres/Timescale
  *                                │                  └──► WebSocket-hub ──► böngészők
@@ -54,10 +54,10 @@ async function main() {
   const applied = await migrate();
   if (applied.length) log.info("db", `migráció: ${applied.join(", ")}`);
 
-  if (config.adminKey && config.adminKey.length < 32) log.warn("worker", "az ADMIN_KEY rövidebb 32 karakternél — generálj erősebbet: openssl rand -hex 32");
+  if (config.adminKey && config.adminKey.length < 32) log.warn("worker", "az ADMIN_KEY rövidebb 32 karakternél  generálj erősebbet: openssl rand -hex 32");
   await loadToken();
   const st = tokenStatus();
-  log.info("token", st.present ? `betöltve, ${Math.round((st.expiresInSec ?? 0) / 60)} percig érvényes` : "NINCS token — várom a macOS agentet (/agent/token)");
+  log.info("token", st.present ? `betöltve, ${Math.round((st.expiresInSec ?? 0) / 60)} percig érvényes` : "NINCS token  várom a macOS agentet (/agent/token)");
   startRenewLoop();
 
   // A regionális (Volán + vasút) menetrend előbb: a mai nap már összefésülve töltődik be.
@@ -72,7 +72,7 @@ async function main() {
   // a motor indulása előtt: a mai nap visszajátszott fixeiből is épül (menet-előzmény, forgalom)
   const motion = new MotionPredictor(engine);
   await motion.load();
-  // a régóta hallgató menetek elengedése — saját időzítővel, hogy más feladat hibája ne akassza meg
+  // a régóta hallgató menetek elengedése  saját időzítővel, hogy más feladat hibája ne akassza meg
   setInterval(() => motion.prune(nowUnix()), 60_000).unref();
   const predictor = new VehiclePredictor(engine);
   await predictor.learn().catch((e) => log.warn("predict", "tanulás sikertelen", errMsg(e)));
@@ -151,7 +151,7 @@ async function main() {
   await push.start();
 
   // A webes oldal Postgres NOTIFY-jal szól: szinkron-változás, push-figyelés változott.
-  // Ha a kapcsolat megszakad (Postgres újraindul), újrakapcsolódunk — különben a
+  // Ha a kapcsolat megszakad (Postgres újraindul), újrakapcsolódunk  különben a
   // kezeletlen 'error' leállítaná a workert, és a szinkron-értesítések elnémulnának.
   let activeListener: pg.Client | null = null;
   let stopping = false;
@@ -179,7 +179,7 @@ async function main() {
         if (e.type === "sync" && e.userId) hub.notifySync(e.userId, e.keys ?? [], e.deviceId ?? null);
         if (e.type === "push_watch") push.reload().catch(() => {});
       } catch {
-        /* hibás értesítés — figyelmen kívül */
+        /* hibás értesítés  figyelmen kívül */
       }
     });
     try {
@@ -262,7 +262,7 @@ async function main() {
     await closeCache();
     process.exit(0);
   };
-  // Egy elszabadult ígéret ne állítsa le a teljes élő motort — naplózzuk.
+  // Egy elszabadult ígéret ne állítsa le a teljes élő motort  naplózzuk.
   process.on("unhandledRejection", (e) => log.error("process", "kezeletlen hiba", errMsg(e)));
   process.on("SIGINT", () => void shutdown("SIGINT"));
   process.on("SIGTERM", () => void shutdown("SIGTERM"));

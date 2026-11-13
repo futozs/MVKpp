@@ -2,7 +2,7 @@
  * Adatbázis-mentés és -visszaállítás (pg_dump custom formátum).
  *
  * A pg_dump / pg_restore az adatbázis SAJÁT konténerében fut (docker exec),
- * így a verzió mindig egyezik a szerverével — a TimescaleDB ezt megköveteli.
+ * így a verzió mindig egyezik a szerverével  a TimescaleDB ezt megköveteli.
  * A mentések a hub /backups kötetén vannak (a gépen: data/backups), mellettük
  * egy .json leírással.
  *
@@ -195,7 +195,7 @@ async function restoreInto(task: Task, container: string, db: Db, file: string):
   await psql(task, container, db, db.name, "CREATE EXTENSION IF NOT EXISTS timescaledb");
   await psql(task, container, db, db.name, "SELECT timescaledb_pre_restore()");
   task.step("pg_restore (ez a mentés méretétől függően percekig tarthat)");
-  // A TimescaleDB belső objektumai miatt a pg_restore néhány „már létezik” hibát jelezhet — ezek
+  // A TimescaleDB belső objektumai miatt a pg_restore néhány „már létezik” hibát jelezhet  ezek
   // ártalmatlanok, ezért a kilépési kód helyett a végén a tényleges tartalmat ellenőrizzük.
   await run(task, "docker", execArgs(container, ["pg_restore", "-h", "127.0.0.1", "-U", db.user, "-d", db.name, "--no-owner"], true), { input: createReadStream(file), env: pgEnv(db) }).catch((e) =>
     task.log(`pg_restore figyelmeztetéssel zárult: ${e instanceof Error ? e.message : e}`, "error"),
@@ -204,7 +204,7 @@ async function restoreInto(task: Task, container: string, db: Db, file: string):
   await psql(task, container, db, db.name, "SELECT timescaledb_post_restore()");
   await psql(task, container, db, db.name, "ANALYZE");
   const migrations = Number(await psql(task, container, db, db.name, "SELECT count(*) FROM _migration", true));
-  if (!Number.isFinite(migrations) || migrations < 1) throw new Error("a visszaállított adatbázisban nincs _migration tábla — a mentés hiányos");
+  if (!Number.isFinite(migrations) || migrations < 1) throw new Error("a visszaállított adatbázisban nincs _migration tábla  a mentés hiányos");
   task.log(`ellenőrzés rendben (${migrations} migráció)`);
 }
 

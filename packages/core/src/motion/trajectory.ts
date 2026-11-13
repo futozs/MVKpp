@@ -1,7 +1,7 @@
 /**
  * A térkép pályája (`k`): [hely a nyomvonalon (m), idő a fix óta (mp)] pontok.
  * A modell rácspontonként a várható (medián) elmozdulást adja; ebből egy nem
- * csökkenő, enyhén simított pálya lesz — a busz a valóságban sem tolat.
+ * csökkenő, enyhén simított pálya lesz  a busz a valóságban sem tolat.
  */
 import { MOTION_BIN_M, isStanding, typicalDisp, type ShapeProfile } from "./profile.ts";
 import type { MotionAnchor } from "./features.ts";
@@ -54,7 +54,7 @@ const DEFAULT_SPEED = 6;
 
 /**
  * Tartalék becslés modell nélkül: az álló busz kivárja a hely jellemző állásidejét,
- * utána a profil tempójával halad. (A modell ennél bizonyítottan pontosabb — ez
+ * utána a profil tempójával halad. (A modell ennél bizonyítottan pontosabb  ez
  * csak akkor él, ha nincs modell, vagy élesben rosszabbul teljesít.)
  */
 export function fallbackDisp(a: MotionAnchor, H: number, p: ShapeProfile | undefined): number {

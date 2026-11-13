@@ -6,7 +6,7 @@ import { useNews } from "./useNews";
 
 /**
  * Térkép, jobb felső sarok: az MVK hírei. Csak egy kis pötty jelzi, ha van
- * még nem látott hír — a megnyitás mindet látottnak jelöli.
+ * még nem látott hír  a megnyitás mindet látottnak jelöli.
  */
 export function NewsButton({ onShowRoute }: { onShowRoute: (routeId: string) => void }) {
   const news = useNews();

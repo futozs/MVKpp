@@ -1,4 +1,4 @@
-# MVK v3 — éles telepítés egy VPS-en.
+# MVK v3  éles telepítés egy VPS-en.
 #   cp infra/.env.example infra/.env && (töltsd ki)
 #   docker compose -f infra/docker-compose.yml --env-file infra/.env up -d --build
 name: mvk
@@ -40,7 +40,7 @@ services:
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-}
       REDIS_URL: ${REDIS_URL:-}
-      # MÁV+ (OTP2): Volán, vasút és az MVK tartaléka — docs/MAVPLUSZ_OTP2.md, M. fejezet
+      # MÁV+ (OTP2): Volán, vasút és az MVK tartaléka  docs/MAVPLUSZ_OTP2.md, M. fejezet
       OTP2_ENABLED: ${OTP2_ENABLED:-1}
       REGIONAL: ${REGIONAL:-1}
       DB_POOL: "12"
@@ -62,16 +62,16 @@ services:
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-}
-      # A passkey ehhez a domainhez kötődik — ugyanaz legyen, mint a régi rendszeré.
+      # A passkey ehhez a domainhez kötődik  ugyanaz legyen, mint a régi rendszeré.
       RP_ORIGINS: https://${DOMAIN:?DOMAIN kell}
       REDIS_URL: ${REDIS_URL:-}
       DB_POOL: "8"
-      # a rendszer-hub ezzel olvassa a web válaszidőit (/v3/admin/metrics) — NEM a mesterkulcs
+      # a rendszer-hub ezzel olvassa a web válaszidőit (/v3/admin/metrics)  NEM a mesterkulcs
       METRICS_KEY: ${METRICS_KEY:-}
 
   # Rendszer-hub: üzemeltetői pult, CSAK a belső hálón (HUB_BIND = a szerver LAN-címe,
   # pl. 192.168.1.11). Soha ne kösd 0.0.0.0-ra egy nyilvános VPS-en!
-  #   http://<HUB_BIND>:<HUB_PORT>  — belépés a HUB_PASSWORD-del
+  #   http://<HUB_BIND>:<HUB_PORT>   belépés a HUB_PASSWORD-del
   hub:
     build: { context: .., dockerfile: infra/Dockerfile, target: hub }
     restart: unless-stopped
@@ -94,7 +94,7 @@ services:
       DB_POOL: "4"
       APP_NAME: mvk-hub
     volumes:
-      # a Docker vezérlése (konténerek, naplók, újratelepítés) — root-egyenértékű jog, ezért csak belső hálón!
+      # a Docker vezérlése (konténerek, naplók, újratelepítés)  root-egyenértékű jog, ezért csak belső hálón!
       - /var/run/docker.sock:/var/run/docker.sock
       # a repó: git-állapot és frissítés (a telepítő segédkonténer a gépen lévő útvonalon csatolja)
       - ..:/repo

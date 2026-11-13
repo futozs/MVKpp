@@ -171,7 +171,7 @@ export function relationBoard(
   };
 }
 
-/** Kiadott (élő) vágány, a menetrendi, vagy — ma, ha egyik sincs — a várható (megjelölve). */
+/** Kiadott (élő) vágány, a menetrendi, vagy  ma, ha egyik sincs  a várható (megjelölve). */
 function platformOf(
   isToday: boolean,
   trip: string,
@@ -217,7 +217,7 @@ export function findTrip(days: DayCtx[], tripId: string): TrainMatch[] {
 }
 
 /**
- * Bármely mód menete azonosító szerint (MVK, Volán, vasút) — a térképen követett jármű
+ * Bármely mód menete azonosító szerint (MVK, Volán, vasút)  a térképen követett jármű
  * menetrendje. A `keep` szűri a menetet (a vonatos változat csak a vasútit engedi).
  */
 export function findServiceTrip(days: DayCtx[], tripId: string, keep: (t: Trip) => boolean = () => true): TrainMatch[] {

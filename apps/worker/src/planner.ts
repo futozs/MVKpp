@@ -1,5 +1,5 @@
 /**
- * Útvonaltervező — RAPTOR (Round-bAsed Public Transit Optimized Router).
+ * Útvonaltervező  RAPTOR (Round-bAsed Public Transit Optimized Router).
  *
  * Bármelyik napra működik, amire van menetrend (élő feed, tárolt feed, vagy
  * a v2-archívum), így a MÚLTBA is lehet tervezni. A legekhez:
@@ -196,7 +196,7 @@ type Parent =
 type Endpoint = { stop: number; walk: number };
 
 /**
- * `skip`: kihagyandó menetek (az MVK által ma kihúzottak — azokra nem tervezünk);
+ * `skip`: kihagyandó menetek (az MVK által ma kihúzottak  azokra nem tervezünk);
  * `modes`: csak ezekkel a közlekedési módokkal (a felhasználó beállítása szerint).
  */
 function raptor(net: Net, origins: Endpoint[], dests: Endpoint[], dep: number, skip: ReadonlySet<string> = new Set(), modes: ReadonlySet<TransitMode> | null = null) {
@@ -326,7 +326,7 @@ function endpoints(net: Net, spec: string, maxWalk: number, lookup: (id: string)
     name = "Kiválasztott pont";
   } else {
     const i = net.stopIdx.get(sid);
-    // A megálló aznap nem kiszolgált is lehet (más irány / más nap) — ilyenkor a helyéhez legközelebbi megállókat használjuk.
+    // A megálló aznap nem kiszolgált is lehet (más irány / más nap)  ilyenkor a helyéhez legközelebbi megállókat használjuk.
     const s = i != null ? net.stops[i] : lookup(sid);
     if (!s) return null;
     ({ lat, lon, name } = s);
@@ -635,7 +635,7 @@ async function predicted(engine: Engine, iso: string, trip: PTrip, fromStop: str
   let vehicleId: string | null = null;
   if (mode === "now" && iso === engine.today) {
     // A Volánnál és a vasútnál a MÁV hivatalos késése a pontosabb (a jelük 30–60 mp-cel késik,
-    // a GPS-ből mért késés elmarad tőle) — a térkép, a tábla és az előrejelzés is ezt mutatja.
+    // a GPS-ből mért késés elmarad tőle)  a térkép, a tábla és az előrejelzés is ezt mutatja.
     const official = isMvkId(trip.id) ? null : (engine.snapshot.decoded.find((v) => v.tripId === trip.id)?.delaySec ?? null);
     live = official ?? engine.matcher.liveDelay(trip.id, Math.floor(Date.now() / 1000));
     vehicleId = engine.snapshot.vehicles.find((v) => v.tripId === trip.id)?.id ?? null;

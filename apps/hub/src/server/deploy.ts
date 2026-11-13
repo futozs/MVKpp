@@ -4,7 +4,7 @@
  * A git-állapotot a felcsatolt repóból olvassuk (/repo), a repó tulajdonosának
  * nevében (különben root-tulajdonú fájlok kerülnének a .git-be). Maga a
  * telepítés egy külön, leválasztott segédkonténerben fut, amelyben a repó a
- * GAZDAGÉPEN érvényes útvonalán van felcsatolva — így a Compose minden relatív
+ * GAZDAGÉPEN érvényes útvonalán van felcsatolva  így a Compose minden relatív
  * útvonalat (Caddyfile, a hub kötetei) pontosan úgy old fel, mint a gépen
  * kézzel futtatva, és a hub a végén önmagát is lecserélheti: a segéd túléli.
  */
@@ -53,7 +53,7 @@ function asOwner(): { uid?: number; gid?: number } {
   return { uid: o.uid, gid: o.gid };
 }
 
-/** A GitHub-token a git környezetében (GIT_CONFIG_*), nem a parancssorban — így a folyamatlistában sem látszik. */
+/** A GitHub-token a git környezetében (GIT_CONFIG_*), nem a parancssorban  így a folyamatlistában sem látszik. */
 function authEnv(): Record<string, string> {
   if (!env.gitToken) return {};
   const basic = Buffer.from(`x-access-token:${env.gitToken}`).toString("base64");
@@ -75,7 +75,7 @@ async function git(args: string[], timeoutMs = 20_000, withAuth = false): Promis
   } catch (e) {
     const msg = (e as { stderr?: string }).stderr || (e instanceof Error ? e.message : String(e));
     if (/could not read Username|Authentication failed|terminal prompts disabled/i.test(msg)) {
-      throw new HubError(502, "a git-repó hitelesítést kér (privát repó?) — állítsd be a HUB_GIT_TOKEN-t (GitHub fine-grained token, Contents: read)");
+      throw new HubError(502, "a git-repó hitelesítést kér (privát repó?)  állítsd be a HUB_GIT_TOKEN-t (GitHub fine-grained token, Contents: read)");
     }
     throw new HubError(502, `git ${args.find((a) => !a.startsWith("-") && !a.includes("=")) ?? ""}: ${msg.trim().split("\n").slice(-2).join(" ")}`);
   }
@@ -152,7 +152,7 @@ async function selfInfo(): Promise<SelfInfo> {
   try {
     me = await inspectContainer(hostname());
   } catch {
-    throw new HubError(503, "a hub nem Docker-konténerben fut — a telepítés csak ott érhető el");
+    throw new HubError(503, "a hub nem Docker-konténerben fut  a telepítés csak ott érhető el");
   }
   const repo = me.mounts.find((m) => m.destination === env.repoDir);
   if (!repo) throw new HubError(503, `a repó nincs felcsatolva a hubba (${env.repoDir})`);
@@ -189,7 +189,7 @@ export function deployScript(opts: { pull: boolean; services: Deployable[]; comp
       `  id=$(${dc} ps -q "$s"); n=0`,
       '  while [ "$n" -lt 60 ]; do',
       `    st=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$id" 2>/dev/null || echo "?")`,
-      '    case "$st" in healthy|running) echo "  $s: $st"; break;; unhealthy|exited|dead) echo "  $s: $st — HIBA"; exit 1;; esac',
+      '    case "$st" in healthy|running) echo "  $s: $st"; break;; unhealthy|exited|dead) echo "  $s: $st  HIBA"; exit 1;; esac',
       "    n=$((n+1)); sleep 3",
       "  done",
       "done",
@@ -289,7 +289,7 @@ export async function previousDeploys(): Promise<DeployRecord[]> {
         const r = JSON.parse(readFileSync(join(historyDir(), f), "utf8")) as DeployRecord;
         saved.push({ name: r.name, exitCode: r.exitCode, state: r.state, createdAt: r.createdAt });
       } catch {
-        /* sérült naplófájl — kihagyjuk */
+        /* sérült naplófájl  kihagyjuk */
       }
     }
   }

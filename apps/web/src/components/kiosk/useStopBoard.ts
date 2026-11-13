@@ -44,7 +44,7 @@ export function useStopBoard(stopId: string) {
   return { data, error };
 }
 
-/** Az aktuális idő, másodpercenként — a nagy órához és a visszaszámlálásokhoz. */
+/** Az aktuális idő, másodpercenként  a nagy órához és a visszaszámlálásokhoz. */
 export function useClock(): Date {
   // a szerver órája: egy rossz órájú kijelző-gépen se térjen el az indulásoktól
   const [now, setNow] = useState(() => new Date(serverNow() * 1000));
@@ -69,7 +69,7 @@ export function useWakeLock(enabled: boolean) {
           else lock = l;
         })
         .catch(() => {
-          /* a böngésző megtagadta (pl. energiatakarékos mód) — a kijelző ettől még működik */
+          /* a böngésző megtagadta (pl. energiatakarékos mód)  a kijelző ettől még működik */
         });
     };
     const onVisible = () => {

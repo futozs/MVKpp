@@ -34,7 +34,7 @@ export function ApproachStrip({
     position: geo.position,
   });
 
-  // Helymeghatározás nélkül nincs mit mondani a busz és a helyzetem viszonyáról —
+  // Helymeghatározás nélkül nincs mit mondani a busz és a helyzetem viszonyáról 
   // ilyenkor nem kérdezünk rá („Hol vagyok?”), csak a menetrendi eltérés marad.
   const located = Boolean(geo.position);
   const hasDelay = delayState(deviationSec) !== "unknown";

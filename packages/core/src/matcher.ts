@@ -171,7 +171,7 @@ export interface MatcherSink {
   runUpdated?(run: RunOut): void;
   runClosed?(run: RunOut): void;
   stopEvent?(ev: StopEventOut, run: RunOut): void;
-  /** a jármű a megállóba ért (még nem indult el) — csak élő kijelzéshez */
+  /** a jármű a megállóba ért (még nem indult el)  csak élő kijelzéshez */
   atStop?(run: RunOut, stopIdx: number, arrTs: number): void;
 }
 
@@ -216,13 +216,13 @@ export type VehicleMotion = {
   fromStopId: string | null;
   toStopId: string;
   fromAlongM: number;
-  /** a következő megálló helye a nyomvonalon (m) — a becslés eddig mehet */
+  /** a következő megálló helye a nyomvonalon (m)  a becslés eddig mehet */
   toAlongM: number;
   /** a mostani szakasz menetrendi ideje (mp) */
   schedSegS: number | null;
   /** a szakasz kezdetének menetrendi ideje (a szolgáltatási nap mp-e) */
   segDepS: number;
-  /** a legutóbbi jelkor állt (megállóban, lámpánál) — a becslés ne vigye tovább */
+  /** a legutóbbi jelkor állt (megállóban, lámpánál)  a becslés ne vigye tovább */
   stopped: boolean;
 };
 
@@ -336,7 +336,7 @@ export class TripMatcher {
     const r = vs?.current?.started ? vs.current : vs?.closing?.run.out.status === "running" ? vs.closing.run : null;
     if (!r || !r.lastPing || !r.started) return null;
     // Még a kiinduló megállóban áll (beállt, kiosztották, de nem indult el):
-    // nincs mit becsülni — különben a térképen magától elindulna.
+    // nincs mit becsülni  különben a térképen magától elindulna.
     if (r.out.actualStart == null && r.progressM <= r.along[0].alongM + r.prof.ZONE_M) return null;
     const a = r.along;
     let next = 0;
@@ -504,7 +504,7 @@ export class TripMatcher {
     run.lastPing = { ts: p.ts, along, lat: p.lat, lon: p.lon };
     run.progressM = Math.max(run.progressM, along);
 
-    // Utolsó megálló: amint a zónába ér, a menet kész — nem várunk 10 perc csendre.
+    // Utolsó megálló: amint a zónába ér, a menet kész  nem várunk 10 perc csendre.
     const lastIdx = run.along.length - 1;
     const last = run.along[lastIdx];
     const enter = last.alongM - P.ZONE_M;

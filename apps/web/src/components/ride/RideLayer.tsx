@@ -14,7 +14,7 @@ import { useBoardingDetector, type BoardingSpot } from "./useBoardingDetector";
 const SAVED_NOTE_MS = 8000;
 /**
  * Végső biztosíték: egy napnál régebbi, le nem zárt utazás, amit a menet adataiból
- * sem sikerült lezárni (a menet nem tölthető be) — nem hozzuk vissza.
+ * sem sikerült lezárni (a menet nem tölthető be)  nem hozzuk vissza.
  */
 const LOST_RIDE_S = 24 * 3600;
 
@@ -31,7 +31,7 @@ export interface BoardInfo {
 /**
  * Felszállás: utazás indítása (a térkép a buszt követi). Felismert felszállásnál
  * `since` a hely és idő, ahol a telefon a busz mellett állt, mielőtt együtt
- * elindultak — a kérdésre adott válasz percekkel később is jöhet (zsebben a telefon).
+ * elindultak  a kérdésre adott válasz percekkel később is jöhet (zsebben a telefon).
  */
 export function boardVehicle(info: BoardInfo, detected: "auto" | "manual", since?: BoardingSpot) {
   // folyamatban lévő utazást nem írunk felül csendben (az elveszne a naplóból)
@@ -88,7 +88,7 @@ export function RideLayer({
   }, []);
 
   // Lezárt vagy zsebben alvó app: az utazás megmarad, és újranyitáskor a menet adataiból
-  // zárul le (a kijelölt leszállóhelyen, vagy a végállomáson) — lásd RidePanel. Ami egy nap
+  // zárul le (a kijelölt leszállóhelyen, vagy a végállomáson)  lásd RidePanel. Ami egy nap
   // után sem zárult le, annak a menete nem tölthető be: azt elengedjük.
   // A készülék órája eltérhet (és egy visszajátszott napon el is tér): csak a szerver órájával döntünk.
   const clockVersion = useServerClockVersion();

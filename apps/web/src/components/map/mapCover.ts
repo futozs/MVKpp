@@ -1,5 +1,5 @@
 /**
- * A térkép alját teljes szélességben takaró panel (követett jármű, utazás —
+ * A térkép alját teljes szélességben takaró panel (követett jármű, utazás 
  * `data-map-cover`) magassága: telefonon ezek alatt nem látszana a busz útja.
  */
 export function coveredBottom(container: HTMLElement): number {

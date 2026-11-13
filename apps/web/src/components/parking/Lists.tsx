@@ -5,7 +5,7 @@ import { durationText } from "./format";
 import { RouteChip, type RouteLookup } from "./parts";
 import { displayVehicleId, vehicleIdTitle } from "@/lib/modes";
 
-/** Menet közben elnémult járművek — a borostyán sáv az 1 órás határig hátralévő időt mutatja. */
+/** Menet közben elnémult járművek  a borostyán sáv az 1 órás határig hátralévő időt mutatja. */
 export function NoSignalList({
   vehicles,
   now,
@@ -58,7 +58,7 @@ export function NoSignalList({
   );
 }
 
-/** Akik most menetet visznek — összecsukható, hogy a parkolók legyenek elöl. */
+/** Akik most menetet visznek  összecsukható, hogy a parkolók legyenek elöl. */
 export function ServiceList({ vehicles, onSelect, lookup }: { vehicles: ServiceVehicle[]; onSelect: (id: string) => void; lookup: RouteLookup }) {
   if (!vehicles.length) return null;
   return (

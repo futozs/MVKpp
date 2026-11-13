@@ -6,10 +6,10 @@ import { pruneAlerts, removeAlert, useAlerts, type AlertWatch } from "@/lib/aler
 const hm = (min: number) => `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
 
 function describe(a: AlertWatch): { icon: typeof Footprints; title: string; sub: string } {
-  if (a.kind === "traffic") return { icon: TrafficCone, title: `Dugóriasztás — ${a.stopName}`, sub: a.routeShorts?.length ? `csak: ${a.routeShorts.join(", ")}` : "bármelyik ide tartó busz" };
+  if (a.kind === "traffic") return { icon: TrafficCone, title: `Dugóriasztás  ${a.stopName}`, sub: a.routeShorts?.length ? `csak: ${a.routeShorts.join(", ")}` : "bármelyik ide tartó busz" };
   if (a.kind === "transfer") {
     const p = a.params ?? {};
-    return { icon: Shuffle, title: `Átszállás — ${a.stopName}`, sub: `${p.fromRoute ?? "?"} → ${p.toRoute ?? "?"}, szólok, ha veszélybe kerül` };
+    return { icon: Shuffle, title: `Átszállás  ${a.stopName}`, sub: `${p.fromRoute ?? "?"} → ${p.toRoute ?? "?"}, szólok, ha veszélybe kerül` };
   }
   const walk = Number(a.params?.walkS ?? 0);
   const d = a.params?.days;
@@ -22,12 +22,12 @@ function describe(a: AlertWatch): { icon: typeof Footprints; title: string; sub:
         : "naponta";
   return {
     icon: a.schedMin != null ? Repeat : Footprints,
-    title: `Indulj most — ${a.stopName}`,
+    title: `Indulj most  ${a.stopName}`,
     sub: `${a.schedMin != null ? `${days} ${hm(a.schedMin)}` : "egy menetre"}${a.routeShorts?.length ? ` · ${a.routeShorts.join(", ")}` : ""}${walk ? ` · ${Math.round(walk / 60)} perc séta` : ""}`,
   };
 }
 
-/** A különleges értesítések (indulj most, dugó, átszállás) — itt lehet őket kikapcsolni. */
+/** A különleges értesítések (indulj most, dugó, átszállás)  itt lehet őket kikapcsolni. */
 export function AlertList() {
   const alerts = useAlerts();
   useEffect(() => pruneAlerts(), []);

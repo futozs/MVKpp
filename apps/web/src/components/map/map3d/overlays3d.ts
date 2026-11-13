@@ -106,7 +106,7 @@ export function setFocusLine(map: MLMap, shape: [number, number][] | null, color
 
 /**
  * A követett menet útja: ami előtte van, a vonal színével; amit már megtett, halványan.
- * `progress`: hol tart a busz a vonal hosszán (0–1), `null`: nem tudjuk — az egész színes.
+ * `progress`: hol tart a busz a vonal hosszán (0–1), `null`: nem tudjuk  az egész színes.
  */
 export function setFocusProgress(map: MLMap, color: string, passed: string, progress: number | null): void {
   if (!map.getLayer(FOCUS_LINE)) return;

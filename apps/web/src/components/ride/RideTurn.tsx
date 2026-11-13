@@ -88,7 +88,7 @@ function inLabel(sec: number): string {
 
 /**
  * Körbeutazás a végállomáson: az utas előre megmondta, hogy a buszon marad.
- * Amint a busz a következő menetével elindul, ezzel az utazással folytatjuk —
+ * Amint a busz a következő menetével elindul, ezzel az utazással folytatjuk 
  * akkor is, ha a telefon közben a zsebben van, lezárva.
  */
 export function TurnCard({ turn, plan, cont, onAlight }: { turn: RideTurn; plan: LoopPlan; cont: Continuation | null; onAlight: () => void }) {
@@ -102,7 +102,7 @@ export function TurnCard({ turn, plan, cont, onAlight }: { turn: RideTurn; plan:
         <Repeat className="h-3.5 w-3.5" aria-hidden /> Körbeutazás · {turn.terminusName}
       </p>
       <p className="mt-0.5 text-xs text-muted-foreground">
-        Beért {hm(turn.arrivedAt)}-kor. {next ? "Maradj ülve — a busz innen így megy tovább:" : "Keresem, mikor és merre indul tovább a busz…"}
+        Beért {hm(turn.arrivedAt)}-kor. {next ? "Maradj ülve  a busz innen így megy tovább:" : "Keresem, mikor és merre indul tovább a busz…"}
       </p>
       {next ? (
         <div className="mt-2 flex items-center gap-2.5">
@@ -122,7 +122,7 @@ export function TurnCard({ turn, plan, cont, onAlight }: { turn: RideTurn; plan:
       <p className="mt-2 text-[11.5px] text-muted-foreground">
         {plan.stopName ? (
           <>
-            Leszállás: <span className="font-semibold text-foreground">{plan.stopName}</span> — ha odaértél, magától lezárom.
+            Leszállás: <span className="font-semibold text-foreground">{plan.stopName}</span>  ha odaértél, magától lezárom.
           </>
         ) : (
           "Ha a busz elindul, kiválaszthatod, hol szállsz le."

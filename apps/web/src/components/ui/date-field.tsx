@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * Saját dátum-választó a natív <input type="date"> helyett. iOS Safariban a
- * natív naptár egy le nem stílozható, mindig világos rendszer-sheet — ez
+ * natív naptár egy le nem stílozható, mindig világos rendszer-sheet  ez
  * sötét témában minden telefonon rendszeridegennek hat, asztali böngészőben
  * viszont a lapba illeszkedik, ezért ez korábban csak mobilon (főleg
  * iPhone-on) tűnt fel hibaként. Ez a komponens ugyanazt a megjelenést adja

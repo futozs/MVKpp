@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * Saját idő-választó a natív <input type="time"> helyett. iOS Safariban a
- * natív óra-választó egy le nem stílozható, mindig világos rendszer-sheet —
+ * natív óra-választó egy le nem stílozható, mindig világos rendszer-sheet 
  * ez sötét témában minden telefonon rendszeridegennek hat. Ez a komponens
  * ugyanazt a megjelenést adja minden platformon.
  */

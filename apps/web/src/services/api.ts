@@ -25,7 +25,7 @@ import { API_BASE } from "@/lib/apiBase";
 import { boardKeyNow, boardQuery, modesParam } from "@/lib/modes";
 
 /* ---------------------------------------------------------------------------
-   Saját útvonaltervező (/engine/plan) — a menetrend, a mért késések és az élő
+   Saját útvonaltervező (/engine/plan)  a menetrend, a mért késések és az élő
    adatok egyetlen forrása. Az ISO időbélyegek UTC-ben érkeznek, a `sched*`,
    `depTs`, `arrTs` mezők unix másodpercek.
    ------------------------------------------------------------------------- */
@@ -107,7 +107,7 @@ export interface JourneyTransferCheck {
   at: string;
   marginSec: number;
   risk: TransferRisk;
-  /** v3: 0..1 — eléred-e a csatlakozást (a két busz várható/rossz esetbeli idejéből) */
+  /** v3: 0..1  eléred-e a csatlakozást (a két busz várható/rossz esetbeli idejéből) */
   chance?: number;
   /** v3: ha lekésed, a következő ugyanazzal a vonallal (ma) */
   fallback?: { tripId: string; time: string; departUnix: number } | null;
@@ -421,7 +421,7 @@ export const api = {
 
   /**
    * Az MVK saját, hiteles útvonaltervezője (autó/gyalog/kerékpár/tömegközlekedés
-   * variánsokkal) — a gateway a `/api/*` proxyn keresztül automatikusan
+   * variánsokkal)  a gateway a `/api/*` proxyn keresztül automatikusan
    * beteszi a Bearer JWT-t, itt nincs külön hitelesítés.
    */
   async planRoute(

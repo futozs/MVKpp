@@ -35,11 +35,11 @@ export type FinishInfo = { atLoopTerminus: boolean };
 
 /**
  * Felszállás után: hol jár a busz, mennyit késik, mennyit késhet, hol áll a
- * forgalom előtte, és mikor melyik megállóban áll meg — a menet végéig, vagy
+ * forgalom előtte, és mikor melyik megállóban áll meg  a menet végéig, vagy
  * amíg le nem szállsz.
  *
  * Mindig az utas mondja meg, hol szállt fel, hol száll le, és hogy körbeutazik-e
- * (lásd RideSetup) — a telefon helyéből nem találgatunk. A kijelölt leszállóhelynél
+ * (lásd RideSetup)  a telefon helyéből nem találgatunk. A kijelölt leszállóhelynél
  * (körbeutazásnál a következő menet megadott megállójánál) magától zárul le.
  */
 export function RidePanel({
@@ -162,7 +162,7 @@ export function RidePanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trip, needsFrom, clockReady]);
 
-  // Ha a telefon tartósan eltávolodik a busztól, csak megkérdezzük — magától nem zárjuk le
+  // Ha a telefon tartósan eltávolodik a busztól, csak megkérdezzük  magától nem zárjuk le
   // (a busz GPS-e is tévedhet, és aki zsebre tett telefonnal körbeutazik, az nem szállt le).
   useAlightingDetector(Boolean(trip) && !needsFrom && !turn && !setup && !alightPicker && Date.now() > awaySnooze, position, busPos, () => setAwayAsk(true));
 
@@ -205,7 +205,7 @@ export function RidePanel({
   const onAlight = () => {
     if (!trip) return;
     if (turn) return finish(turn.atIdx, "user", turn.arrivedAt);
-    // A telefon már messze a busztól: korábban szállt le — megkérdezzük, hol.
+    // A telefon már messze a busztól: korábban szállt le  megkérdezzük, hol.
     if (away) return setAlightPicker(true);
     finish(Math.max(currentStopIdx(trip.stops, passed, fresh ?? busPos, px.atStop), fromIdx), "user", Math.round(serverNow()));
   };
@@ -330,7 +330,7 @@ export function RidePanel({
               </p>
               <p className="mt-0.5 text-sm font-bold">{plan.stopName ? `Leszállás: ${plan.stopName}` : "A végállomáson a buszon maradsz"}</p>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                {plan.stopName ? "a busz következő menetén — ha odaértél, magától lezárom" : "a leszállást a következő menet indulása után adhatod meg"}
+                {plan.stopName ? "a busz következő menetén  ha odaértél, magától lezárom" : "a leszállást a következő menet indulása után adhatod meg"}
               </p>
               {worst ? <TrafficLine t={worst} trip={trip} /> : null}
               <PlanActions onChange={() => setStep("to")} />
@@ -372,7 +372,7 @@ export function RidePanel({
               <LogOut /> {turn ? `Leszálltam (${turn.terminusName})` : "Leszálltam"}
             </Button>
             {turn ? null : (
-              <Button variant="ghost" onClick={() => setAlightPicker(true)} title="Már korábban leszálltam — kijelölöm, hol">
+              <Button variant="ghost" onClick={() => setAlightPicker(true)} title="Már korábban leszálltam  kijelölöm, hol">
                 <Undo2 /> Korábban
               </Button>
             )}
@@ -520,7 +520,7 @@ function StopRow({ s, trip, passed, ride, jam }: { s: TripLive["stops"][number];
 
 /**
  * A lezárás mezői a megadott megállónál. `alightedAt`: ha a busznak ott még nincs
- * érkezési eseménye — null esetén a menetrend és a késés adja. A felszállás ideje és
+ * érkezési eseménye  null esetén a menetrend és a késés adja. A felszállás ideje és
  * késése is itt véglegesül: addigra a busz indulása onnan már mért esemény.
  */
 function endFields(ride: ActiveRide, trip: TripLive, times: Map<number, RideStopTime>, atIdx: number, endedBy: RideEndedBy | null, alightedAt: number | null) {

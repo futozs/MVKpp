@@ -4,7 +4,7 @@ import "./globals.css";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: { default: "Rendszer-hub — MVK++", template: "%s · Rendszer-hub" },
+  title: { default: "Rendszer-hub  MVK++", template: "%s · Rendszer-hub" },
   robots: { index: false, follow: false },
   icons: { icon: "/icon-192.png", apple: "/icon-180.png" },
 };

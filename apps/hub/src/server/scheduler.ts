@@ -64,5 +64,5 @@ export function startScheduler(): void {
   every(5 * 60_000, autoBackup, 2 * 60_000);
   every(5 * 60_000, sweepDeployHelpers, 20_000);
   every(24 * HOUR_MS, purgeOldRows, 10 * 60_000);
-  console.log(`[scheduler] fut — mérés ${Math.round(env.probeEveryMs / 1000)} mp-enként, napi mentés ${env.backupHour >= 0 ? `${env.backupHour} órakor` : "kikapcsolva"}`);
+  console.log(`[scheduler] fut  mérés ${Math.round(env.probeEveryMs / 1000)} mp-enként, napi mentés ${env.backupHour >= 0 ? `${env.backupHour} órakor` : "kikapcsolva"}`);
 }

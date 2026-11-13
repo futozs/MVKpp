@@ -87,7 +87,7 @@ export function routeDirections(feed: Feed, routeShort: string): RouteDirection[
 
 /**
  * Egy vonal-irány fő megállósora (a leggyakoribb nyomvonal), és az irány
- * összes nyomvonala (a tényadatok szűréséhez — betérő menetekkel együtt).
+ * összes nyomvonala (a tényadatok szűréséhez  betérő menetekkel együtt).
  */
 export function mainPattern(feed: Feed, routeShort: string, dir: string): { stops: { id: string; name: string }[]; shapeIds: string[] } | null {
   const count = new Map<string, { n: number; tripId: string }>();

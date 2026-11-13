@@ -30,7 +30,7 @@ export async function loadLatestBundle(): Promise<DelayModelBundle | null> {
   return isDelayBundle(b) ? b : null;
 }
 
-/** Az utolsó tanítás jelentése (elfogadott vagy sem) — az állapotlekérdezéshez. */
+/** Az utolsó tanítás jelentése (elfogadott vagy sem)  az állapotlekérdezéshez. */
 export async function latestReport(): Promise<{ trainedAt: string; accepted: boolean; report: unknown } | null> {
   const rows = await sql<{ trained_at: Date; accepted: boolean; report: unknown }>(
     `SELECT trained_at, accepted, report FROM ml_model WHERE name = $1 ORDER BY trained_at DESC LIMIT 1`,

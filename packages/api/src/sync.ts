@@ -1,5 +1,5 @@
 /**
- * /v3/sync — kétirányú, kulcsonkénti felhős szinkron.
+ * /v3/sync  kétirányú, kulcsonkénti felhős szinkron.
  *
  * Minden mvk_* localStorage-kulcs külön sor; a később módosított nyer
  * (last-write-wins a szerkesztés ideje szerint; a letöltés kurzora a szerver
@@ -21,7 +21,7 @@ const MAX_USER_BYTES = 4 * 1024 * 1024;
 // Ugyanaz a lista, mint a kliensen (apps/web/src/lib/sync.ts). Az mvk_account
 // a munkamenet-tokent tartalmazza: az SOHA nem kerülhet a szerverre.
 // Az értesítés-figyelések az adott eszköz push-feliratkozásához tartoznak, a
-// helymeghatározás engedélye is eszközönkénti — ezek sem utazhatnak át.
+// helymeghatározás engedélye is eszközönkénti  ezek sem utazhatnak át.
 export const DEVICE_ONLY = new Set([
   "mvk_account",
   "mvk_device_id",
@@ -82,7 +82,7 @@ const routes: Route[] = [
     const since = url.searchParams.get("since");
     const sinceOk = since && Number.isFinite(Date.parse(since)) ? since : null;
     // A kurzor a szerver írási ideje (synced_at): amit a kliens a legutóbbi
-    // `serverTime` óta nem látott, az mind jön — a szerkesztő eszköz órájától függetlenül.
+    // `serverTime` óta nem látott, az mind jön  a szerkesztő eszköz órájától függetlenül.
     const serverTime = new Date().toISOString();
     const rows = await sql<{ key: string; value: unknown; deleted: boolean; updated_at: Date }>(
       `SELECT key, value, deleted, updated_at FROM user_state WHERE user_id = $1 ${sinceOk ? "AND synced_at > $2::timestamptz - interval '5 seconds'" : ""} ORDER BY synced_at`,

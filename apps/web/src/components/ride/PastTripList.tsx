@@ -55,7 +55,7 @@ export function PastTripList<T extends PastTripRow>({
                   <span className="rounded bg-primary/12 px-1.5 py-px font-mono text-[11px] font-bold tabular-nums text-primary">{displayVehicleId(t.run.vehicleId)}</span>
                 ) : (
                   <span className="text-[11px] text-muted-foreground" title="Ezen a meneten a rendszer nem látta a buszt">
-                    —
+                    
                   </span>
                 )}
                 {note ? <span className="text-[10px] font-semibold text-primary">{note}</span> : null}

@@ -1,5 +1,5 @@
 /**
- * Belső hivatkozások (értesítésből): `/?stop=SP12#multistop` — a Figyelő az
+ * Belső hivatkozások (értesítésből): `/?stop=SP12#multistop`  a Figyelő az
  * adott megállóval. Hidegindításkor az URL-ből, nyitott appnál a service
  * worker üzenetéből vagy az oldalon belüli értesítés kattintásából jön.
  */

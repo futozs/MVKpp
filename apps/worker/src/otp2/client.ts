@@ -8,7 +8,7 @@
  *   pozíció (high) mindig a menetrend-építés (low) elé kerül. Korlát-találatnál
  *   az egész sor szünetel, és a kérés újra próbálkozik.
  * - A szerver hibás lekérdezésre is HTTP 200-at ad, a hiba az `errors` tömbben
- *   jön — ezt mindig nézzük.
+ *   jön  ezt mindig nézzük.
  * - Magyar szöveget kérünk (`Accept-Language: hu`; nélküle angol a tervező és a zavarok).
  */
 import { config } from "../config.ts";
@@ -132,7 +132,7 @@ export class Otp2Client {
       try {
         body = JSON.parse(text) as GqlResponse<T>;
       } catch {
-        // 200 + HTML (karbantartási oldal): a szerver baja, nem a lekérdezésé — ritkítunk
+        // 200 + HTML (karbantartási oldal): a szerver baja, nem a lekérdezésé  ritkítunk
         throw new Otp2Error("nem JSON válasz (karbantartás?)", 502);
       }
       if (body.errors?.length) throw new Otp2Error(body.errors.map((e) => e.message).join("; ").slice(0, 300), 200);

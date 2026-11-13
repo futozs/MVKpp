@@ -1,4 +1,4 @@
-/** A worker beállításai — minden környezeti változóból, értelmes alapértékkel. */
+/** A worker beállításai  minden környezeti változóból, értelmes alapértékkel. */
 const num = (v: string | undefined, d: number) => (v != null && v !== "" && Number.isFinite(Number(v)) ? Number(v) : d);
 
 export const config = {
@@ -6,7 +6,7 @@ export const config = {
   host: process.env.WORKER_HOST ?? "0.0.0.0",
   mvkApi: process.env.MVK_API ?? "https://mccaze.mvkzrt.hu:8443",
   gtfsUrl: process.env.MVK_GTFS_URL ?? "http://84.206.68.21:8080/MVK_mobilapp/GTFS/MVK_GTFS.zip",
-  /** pozíció + előrejelzés lekérdezése (ms) — a járművek ~15 mp-enként adnak új fixet */
+  /** pozíció + előrejelzés lekérdezése (ms)  a járművek ~15 mp-enként adnak új fixet */
   pollMs: num(process.env.POLL_MS, 2500),
   cancelledMs: num(process.env.CANCELLED_MS, 30_000),
   gtfsCheckMs: num(process.env.GTFS_CHECK_MS, 30 * 60_000),
@@ -30,7 +30,7 @@ export const config = {
     enabled: process.env.OTP2_ENABLED !== "0",
     url: process.env.OTP2_URL ?? "https://mavplusz.hu/otp2-backend/otp/routers/default/index/graphql",
     userAgent: process.env.OTP2_USER_AGENT ?? "mvk-zsombi-modra/3 (+https://mvk.futozs.hu)",
-    /** a regionális járművek lekérdezése (ms) — az OTP2 adata maga is 20–60 mp-enként frissül */
+    /** a regionális járművek lekérdezése (ms)  az OTP2 adata maga is 20–60 mp-enként frissül */
     pollMs: num(process.env.OTP2_POLL_MS, 15_000),
     /** tartalék üzemben az MVK-járművek miatt sűrűbben */
     fallbackPollMs: num(process.env.OTP2_FALLBACK_POLL_MS, 10_000),

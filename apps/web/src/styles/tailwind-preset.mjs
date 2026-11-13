@@ -1,11 +1,11 @@
 /**
- * MVK MobilON+ — megosztott Tailwind preset.
+ * MVK MobilON+  megosztott Tailwind preset.
  *
  * A shadcn/ui-val kompatibilis névtér (background, card, primary, muted,
  * border, ring, radius…), kiegészítve a projekt saját szemantikus
  * jelzéseivel (live / late / early) és a teljes zöld skálával.
  *
- * Minden érték a theme/tokens.css változóira mutat — a téma cseréjéhez
+ * Minden érték a theme/tokens.css változóira mutat  a téma cseréjéhez
  * ez a fájl nem módosul.
  *
  * A tailwindcss-animate plugint az egyes appok configja adja hozzá: a
@@ -57,7 +57,7 @@ export default {
           foreground: 'hsl(var(--card-foreground))',
         },
 
-        /* Szemantikus jelzések — a zöld jelentése: „ez az adat élő”. */
+        /* Szemantikus jelzések  a zöld jelentése: „ez az adat élő”. */
         live: 'hsl(var(--live))',
         late: 'hsl(var(--late))',
         early: 'hsl(var(--early))',
@@ -129,7 +129,7 @@ export default {
           from: { height: 'var(--radix-accordion-content-height)' },
           to: { height: '0' },
         },
-        /* Élő adat üteme — a felület egyetlen ambient mozgása. */
+        /* Élő adat üteme  a felület egyetlen ambient mozgása. */
         'live-pulse': {
           '0%, 100%': { opacity: '1', transform: 'scale(1)' },
           '50%': { opacity: '0.4', transform: 'scale(0.75)' },

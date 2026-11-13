@@ -75,8 +75,8 @@ export const normStopId = (id: string) => (id.startsWith(MVK_STOP_PREFIX) ? id.s
 const PICKUP: Record<string, string> = { SCHEDULED: "0", NONE: "1", CALL_AGENCY: "2", COORDINATE_WITH_DRIVER: "3" };
 
 /**
- * Illik-e a menet a (tárolt) mintára: ugyanannyi megálló, és — ha a menet megállói
- * ismertek — ugyanazok, ugyanabban a sorrendben. Az OTP mintakódjai sorszámok
+ * Illik-e a menet a (tárolt) mintára: ugyanannyi megálló, és  ha a menet megállói
+ * ismertek  ugyanazok, ugyanabban a sorrendben. Az OTP mintakódjai sorszámok
  * (`…:1:01`, `…:1:02`): egy menetrend-frissítés után ugyanaz a kód egy másik
  * megállósort jelenthet (pl. egy expresszjáratét), ezért a tárolt mintát ellenőrizni kell.
  */
@@ -294,7 +294,7 @@ export function regionalGtfsForDay(
 
   const files: Record<string, string> = {
     "feed_info.txt": csv(["feed_publisher_name", "feed_publisher_url", "feed_lang", "feed_start_date", "feed_end_date", "feed_version"], [
-      ["MÁV+ OTP2 — Borsod-Abaúj-Zemplén (Volán + vasút)", "https://mavplusz.hu/", "hu", ymd, isoToYmd(shiftIso(serviceIso, 1)), version],
+      ["MÁV+ OTP2  Borsod-Abaúj-Zemplén (Volán + vasút)", "https://mavplusz.hu/", "hu", ymd, isoToYmd(shiftIso(serviceIso, 1)), version],
     ]),
     "routes.txt": csv(["route_id", "agency_id", "route_short_name", "route_long_name", "route_type", "route_color", "route_text_color", "agency_name", "route_mode"], routeRows),
     "stops.txt": csv(["stop_id", "stop_code", "stop_name", "stop_lat", "stop_lon", "location_type", "parent_station", "platform_code"], [...stops.values()]),

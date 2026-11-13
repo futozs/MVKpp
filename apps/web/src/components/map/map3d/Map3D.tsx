@@ -253,7 +253,7 @@ export const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D(props, r
       .then((style) => {
         // közben már másik alaptérképet választottak
         if (ctl.signal.aborted) return;
-        // A régi domborzat a csere alatt nem rajzolhat (az új stílus vetülete még nincs kész —
+        // A régi domborzat a csere alatt nem rajzolhat (az új stílus vetülete még nincs kész 
         // MapLibre-hiba); az új stílus a betöltésekor visszateszi a sajátját.
         map.setTerrain(null);
         map.setStyle(style, { diff: false });
@@ -384,7 +384,7 @@ function wireInteractions(map: MLMap, follower: FocusFollower, propsRef: React.M
 /**
  * A rajzolás üteme: negyedmásodpercenként új célok a becslésből, képkockánként
  * siklás és a követő kamera. Amíg a felhasználó a térképen tartja az ujját (vagy
- * görget), a kamera nem nyúl hozzá — a MapLibre `jumpTo` megszakítaná a mozdulatát.
+ * görget), a kamera nem nyúl hozzá  a MapLibre `jumpTo` megszakítaná a mozdulatát.
  */
 function runLoop(map: MLMap, markers: VehicleMarkers, follower: FocusFollower, propsRef: React.MutableRefObject<Map3DProps>): () => void {
   const pointers = new Set<number>();

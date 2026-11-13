@@ -43,7 +43,7 @@ export function useAction() {
   return { busy, run };
 }
 
-/** Másodpercenként frissülő „most” — a visszaszámlálókhoz. */
+/** Másodpercenként frissülő „most”  a visszaszámlálókhoz. */
 export function useNow(everyMs = 1000): number {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {

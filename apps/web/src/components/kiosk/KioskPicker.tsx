@@ -44,7 +44,7 @@ export function KioskPicker({
       <div className="flex max-h-[90dvh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-xl">
         <header className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
           <div>
-            <h2 className="text-lg font-bold tracking-tight">Kijelző — megállók</h2>
+            <h2 className="text-lg font-bold tracking-tight">Kijelző  megállók</h2>
             <p className="mt-0.5 text-[12.5px] text-muted-foreground">Legalább 1, legfeljebb {KIOSK_MAX} megálló, egymás mellett.</p>
           </div>
           {onClose ? (

@@ -59,8 +59,8 @@ type TimetableGroup = "all" | "mvk" | "coach" | "rail";
 const TT_GROUP_KEY = "mvk_pref_tt_group";
 const TT_GROUPS: { id: TimetableGroup; label: string; title: string; modes: TransitMode[] }[] = [
   { id: "all", label: "Mind", title: "", modes: [] },
-  { id: "mvk", label: "MVK", title: "MVK — busz és villamos", modes: ["bus", "tram"] },
-  { id: "coach", label: "Volán", title: "Volán — helyközi busz", modes: ["coach"] },
+  { id: "mvk", label: "MVK", title: "MVK  busz és villamos", modes: ["bus", "tram"] },
+  { id: "coach", label: "Volán", title: "Volán  helyközi busz", modes: ["coach"] },
   { id: "rail", label: "Vonat", title: "Vonat", modes: ["rail"] },
 ];
 
@@ -79,7 +79,7 @@ const ymdToIso = (ymd: string) =>
   `${ymd.slice(0, 4)}-${ymd.slice(4, 6)}-${ymd.slice(6, 8)}`;
 const isoToYmd = (iso: string) => iso.replace(/-/g, "");
 
-/** A mai SZOLGÁLTATÁSI nap (Budapest, 3:00-kor vált) — éjfél után még a tegnapi menetek futnak. */
+/** A mai SZOLGÁLTATÁSI nap (Budapest, 3:00-kor vált)  éjfél után még a tegnapi menetek futnak. */
 const todayIso = () => serviceNow().iso;
 
 const clampIso = (iso: string, min: string | null, max: string | null) =>
@@ -316,7 +316,7 @@ export function TimetableView({
     return out;
   }, [favorites, routes]);
 
-  // A csoportok: MVK, Volán, vasút — a nézet-csempével egyre szűkíthető; „Mind”-nél csoportfejlécekkel.
+  // A csoportok: MVK, Volán, vasút  a nézet-csempével egyre szűkíthető; „Mind”-nél csoportfejlécekkel.
   const groupOf = (r: TimetableRoute): Exclude<TimetableGroup, "all"> => {
     const m = routeModeOf(r);
     return m === "coach" ? "coach" : m === "rail" ? "rail" : "mvk";
@@ -882,14 +882,14 @@ function TripDetail({
   day: DayRelation;
   onClose: () => void;
   onFocusTrip: (tripId: string, vehicleId?: string) => void;
-  /** a nap (YYYYMMDD) — a tényleges megálló-időkhöz */
+  /** a nap (YYYYMMDD)  a tényleges megálló-időkhöz */
   dateYmd?: string;
 }) {
   const [notifyTarget, setNotifyTarget] = useState<{
     stop: TimetableResponse["stops"][number];
     isDeparture: boolean;
   } | null>(null);
-  // Bármelyik megállóhoz állítható értesítés (nem csak a kiindulóhoz) — az
+  // Bármelyik megállóhoz állítható értesítés (nem csak a kiindulóhoz)  az
   // első a "indul", a többi "ideér" szövegezést kap.
   const watchedStopIndex = stops.findIndex(
     (s) => getWatch(s.id)?.tripId === trip.tripId,
@@ -904,7 +904,7 @@ function TripDetail({
     day,
     waitingAtStart: isWaitingAtStart(journalEntry ?? undefined),
   });
-  // A naplózott jármű a menet UTÁN is megvan — a térképen ilyenkor már máshol
+  // A naplózott jármű a menet UTÁN is megvan  a térképen ilyenkor már máshol
   // jár, de az utasnak pont az a kérdés, hogy „melyik busz vitte ezt". Egy még
   const pastVehicleId = showsJournalVehicle(state)
     ? (journalEntry?.vehicleId ?? null)
@@ -992,7 +992,7 @@ function TripDetail({
               variant="outline"
               size="sm"
               className="h-8 shrink-0"
-              title={`${vehicleIdTitle(pastVehicleId)} teljesítette ezt a menetet — megnézem, hol jár most`}
+              title={`${vehicleIdTitle(pastVehicleId)} teljesítette ezt a menetet  megnézem, hol jár most`}
               onClick={() => onFocusTrip(trip.tripId, pastVehicleId)}
             >
               <Bus />
@@ -1021,8 +1021,8 @@ function TripDetail({
         {cancelled ? (
           <p className="border-b border-destructive/25 bg-destructive/10 px-3 py-2 text-xs text-destructive sm:px-4">
             {day === "today"
-              ? "Az MVK kihúzta ezt a menetet — ma nem közlekedik. Válassz másik indulást."
-              : "Az MVK kihúzta ezt a menetet — ezen a napon nem közlekedett."}
+              ? "Az MVK kihúzta ezt a menetet  ma nem közlekedik. Válassz másik indulást."
+              : "Az MVK kihúzta ezt a menetet  ezen a napon nem közlekedett."}
           </p>
         ) : showRunSummary && journalEntry ? (
           <RunSummary entry={journalEntry} />
@@ -1097,7 +1097,7 @@ function TripDetail({
                         onClick={() =>
                           setNotifyTarget({ stop, isDeparture: i === 0 })
                         }
-                        aria-label={`Értesítés beállítása — ${stop.name}`}
+                        aria-label={`Értesítés beállítása  ${stop.name}`}
                         className={cn(
                           "flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
                           isWatchingThisStop && "text-primary hover:text-primary",

@@ -2,7 +2,7 @@
 -- műveleti napló és a válaszidő-mérések.
 
 -- ── Használat ───────────────────────────────────────────────────────────
--- Eszközönként egy sor (a webapp véletlen mvk_device_id-je — IP-cím nincs
+-- Eszközönként egy sor (a webapp véletlen mvk_device_id-je  IP-cím nincs
 -- tárolva). A kedvencek pillanatképe a legutóbbi állapot; a hub ebből
 -- összesít (legkedveltebb vonalak, megállók, járművek, parkolók).
 CREATE TABLE IF NOT EXISTS usage_device (

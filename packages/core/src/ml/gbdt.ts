@@ -9,7 +9,7 @@
  * Soronkénti költséggel (`RowCosts`) a veszteség aszimmetrikus és soronként
  * más: méterenként `over[i]`, ha a becslés a valóság fölé lő, `under[i]`, ha
  * alá. (A soronkénti alpha önmagában nem elég: egy levélen belül csak az
- * átlaga számítana — a két költség aránya és nagysága együtt viszi az infót.)
+ * átlaga számítana  a két költség aránya és nagysága együtt viszi az infót.)
  *
  * Gyorsítás: a jellemzők legfeljebb 255 rekeszbe kerülnek (+1 a hiányzó
  * értéknek), a hisztogramot csak a kisebbik gyerekre építjük, a nagyobbikét
@@ -82,7 +82,7 @@ export function rowCost(over: number, under: number, y: number, q: number): numb
  * A költségekkel súlyozott kvantilis: a sorba rendezett értékek közül az első,
  * ahol a fölé lövés határköltsége (az addigiak `over`-e) eléri az alá lövésé
  * (a többiek `under`-e). Rendezés nélkül, súlyozott gyorskiválasztással
- * (átlagosan O(n)) — a fák minden levelénél lefut.
+ * (átlagosan O(n))  a fák minden levelénél lefut.
  */
 export function costQuantile(values: ArrayLike<number>, over: ArrayLike<number>, under: ArrayLike<number>): number {
   const n = values.length;
@@ -197,7 +197,7 @@ type Split = { gain: number; feature: number; bin: number; missingLeft: boolean 
 /**
  * Tanítás. `valid` megadásával korai leállás: a legjobb validációs veszteségű
  * fa-számnál vágjuk el a modellt. `costs` megadásával (és a validációs sorok
- * `costs`-ával) a soronkénti költséges veszteséget minimalizálja — `alpha` ekkor
+ * `costs`-ával) a soronkénti költséges veszteséget minimalizálja  `alpha` ekkor
  * nem számít.
  */
 export function trainGbdt(

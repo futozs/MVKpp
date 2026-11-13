@@ -27,7 +27,7 @@ export function registerV3(r: Router, ctx: Ctx) {
 
   /**
    * Egy menet megállónként: menetrend + tény (érkezés, indulás, késés).
-   * A mai napon az élő illesztő eseményei is benne vannak — nincs többé
+   * A mai napon az élő illesztő eseményei is benne vannak  nincs többé
    * órás várakozás az „indult” időpontra.
    */
   r.get("/engine/trip", async (req, res) => {
@@ -59,7 +59,7 @@ export function registerV3(r: Router, ctx: Ctx) {
       /** a végállomás fordulóhurok: ülve maradva a következő menettel körbe lehet utazni */
       loopEnd: day ? endsAtLoop(day.feed, tripId) : false,
       stops: (stops ?? []).map((s, i) => {
-        // v3: vágány (vasút, autóbusz-állomás) — élőben, ha a MÁV+ tudja, különben a menetrendi
+        // v3: vágány (vasút, autóbusz-állomás)  élőben, ha a MÁV+ tudja, különben a menetrendi
         const platform = (iso === engine.today ? ctx.regionalRt.platform(tripId, s.id) : null) ?? day?.feed.stops.get(s.id)?.platform ?? null;
         return { ...s, schedTime: secToHm(s.dep), schedTs: midnight + s.dep, idx: i, ...(platform ? { platform } : {}) };
       }),
@@ -146,7 +146,7 @@ export function registerV3(r: Router, ctx: Ctx) {
 
   /**
    * A mai zavarok összesítve (Menetrend → Mai zavarok): törölt, most kimaradó és
-   * korábban el nem indult menetek, pótló indulással. ?near=SP1,SP2 — a kliens
+   * korábban el nem indult menetek, pótló indulással. ?near=SP1,SP2  a kliens
    * közelében lévő megállók: az ott megálló menetek ott mikor jöttek volna.
    */
   r.get("/engine/disruptions", (req, res) => {
@@ -161,7 +161,7 @@ export function registerV3(r: Router, ctx: Ctx) {
   });
 
   /**
-   * Körbeutazás: a menet végállomásán hogyan folytatja a busz — melyik menettel,
+   * Körbeutazás: a menet végállomásán hogyan folytatja a busz  melyik menettel,
    * mikor, és ugyanabból a megállóból indul-e (fordulóhurok). Az élő jármű
    * menete az elsődleges forrás (az MVK percekkel korábban kiosztja), utána a
    * forda-terv.
@@ -247,7 +247,7 @@ export function registerV3(r: Router, ctx: Ctx) {
     );
   });
 
-  /** Vonal-hőtérkép: megálló × óra — késés és késésnövekmény (lezárt napokból). */
+  /** Vonal-hőtérkép: megálló × óra  késés és késésnövekmény (lezárt napokból). */
   r.get("/engine/heat/route", async (req, res) => {
     const route = (req.query.get("route") ?? "").trim();
     if (!/^[\w-]{1,8}$/.test(route)) throw new HttpError(400, "hiányzó vagy érvénytelen ?route=");
@@ -279,7 +279,7 @@ export function registerV3(r: Router, ctx: Ctx) {
 
   /**
    * A térképi mozgás-modell: a teszten mért és az élő pontszám (minden új fix leosztályozza az
-   * előzőből mutatott pályát — modell és tartalék is), melyik becsül most, és az utolsó tanítás.
+   * előzőből mutatott pályát  modell és tartalék is), melyik becsül most, és az utolsó tanítás.
    */
   r.get("/engine/motion/status", async (req, res) => {
     const last = await latestMotionReport();
@@ -367,7 +367,7 @@ export function registerV3(r: Router, ctx: Ctx) {
     const rawModes = req.query.get("modes");
     const modes = rawModes ? parseModes(rawModes) : undefined;
     const run = () => plan(engine, { from, to, at, arriveBy, limit, modes }, ctx.insights);
-    // A múltbeli tervezés (tényadatokból) már nem változik — a pár órán belüli
+    // A múltbeli tervezés (tényadatokból) már nem változik  a pár órán belüli
     // még kaphat késve beérő adatot, ezért az csak röviden él; az élő mindig friss.
     const age = nowUnix() - at;
     const key = `plan:${from}:${to}:${at}:${arriveBy ? 1 : 0}:${limit}:${modes ? [...modes].sort().join(",") : "mvk"}`;

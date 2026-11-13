@@ -33,10 +33,10 @@ const KIND_META: Record<IncidentV3["kind"], { label: string; icon: typeof Ban; t
 const fmtTime = (unix: number) => new Date(unix * 1000).toLocaleTimeString("hu-HU", { timeZone: "Europe/Budapest", hour: "2-digit", minute: "2-digit" });
 
 /**
- * Üzemzavarok — két, élesen elválasztott forrás:
+ * Üzemzavarok  két, élesen elválasztott forrás:
  *  · hivatalos: az MVK saját törlési listája (biztos adat)
  *  · észlelt: menet közben elnémuló jármű, amely 30+ percig nem jelentkezett,
- *    és NEM ismert térerő-hiányos szakaszon — bizonyítékkal és megbízhatósággal.
+ *    és NEM ismert térerő-hiányos szakaszon  bizonyítékkal és megbízhatósággal.
  * A v2 itt minden félbeszakadt menetet meghibásodásnak mutatott.
  */
 /**
@@ -150,7 +150,7 @@ function IncidentBody({ data, from, to }: { data: { incidents: IncidentV3[]; byD
       <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3">
         <StatTile label="Törölt menet (MVK)" value={stats.cancelled} sub="hivatalos adat" tone="late" />
         <StatTile label="Észlelt megállás" value={stats.detected} sub="bizonyítékkal, ≥50% megbízhatóság" />
-        <StatTile label="Leginkább érintett vonal" value={stats.top ? stats.top[0] : "—"} sub={stats.top ? `${stats.top[1]} esemény` : undefined} />
+        <StatTile label="Leginkább érintett vonal" value={stats.top ? stats.top[0] : ""} sub={stats.top ? `${stats.top[1]} esemény` : undefined} />
       </div>
 
       <ChartFrame title="Események naponta" hint="a kiválasztott típusú események száma">

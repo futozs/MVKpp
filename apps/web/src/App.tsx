@@ -149,7 +149,7 @@ export function App() {
       localStorage.setItem("mvk_monitored_stops", next);
     } catch {}
   }, [monitoredStopIds]);
-  // Értesítésből nyitott megálló: a Figyelőben elő is kerül (ha még nem figyelte, felvesszük —
+  // Értesítésből nyitott megálló: a Figyelőben elő is kerül (ha még nem figyelte, felvesszük 
   // különben a hivatkozás sehová sem vinne). Nyitott appnál a service worker üzen.
   const [linkStop, setLinkStop] = useState<{ id: string } | null>(null);
   const applyLink = useCallback((link: ParsedLink) => {
@@ -179,7 +179,7 @@ export function App() {
 
   // Közös megállók összevonva: a térképen és a keresőben a Volán-iker nem külön pötty
   // (az MVK-oszlop tábláján ott vannak a járatai), a figyelőben pedig a régi iker-
-  // bejegyzés az MVK-oszlopra kerül — különben ugyanaz a tábla kétszer látszana.
+  // bejegyzés az MVK-oszlopra kerül  különben ugyanaz a tábla kétszer látszana.
   const stopMerge = useStopMerge();
   const mapStops = useMemo(() => (stopMerge === "off" ? stops : stops.filter((s) => !isMergedTwin(s, stopMerge))), [stops, stopMerge]);
   useEffect(() => {
@@ -221,7 +221,7 @@ export function App() {
   });
 
   // A menetrend alapadatai. Gyenge térerőnél vagy a worker újraindulása alatt
-  // az első kérés elbukhat — ilyenkor visszalépő várakozással újrapróbáljuk
+  // az első kérés elbukhat  ilyenkor visszalépő várakozással újrapróbáljuk
   // (és hálózat-visszatéréskor azonnal), különben üres maradna a térkép.
   // A módok változásakor (Volán, vonat be/ki) újratöltődik.
   useEffect(() => {
@@ -245,7 +245,7 @@ export function App() {
         setRoutes(rMap);
         setGtfsMeta(meta);
         // A worker indulás után percekig építi a Volán és a vasút menetrendjét: addig a lista
-        // csak MVK-s — újrakérjük, különben az állomások (Tiszai, Gömöri) újratöltésig hiányoznának.
+        // csak MVK-s  újrakérjük, különben az állomások (Tiszai, Gömöri) újratöltésig hiányoznának.
         if (meta.regional === "pending" && /coach|rail/.test(modesKey)) {
           loaded = false;
           timer = setTimeout(initGtfs, REGIONAL_RETRY_MS);
@@ -279,7 +279,7 @@ export function App() {
       const valid = (res.vehicles || []).filter(
         (v) => v.lat != null && v.lon != null,
       );
-      // a „hol jár most” ugrások ebből keresnek — tartalék pollnál is legyen friss
+      // a „hol jár most” ugrások ebből keresnek  tartalék pollnál is legyen friss
       vehicleMap.current = new Map(valid.map((v) => [v.id, v]));
       setLiveVehicles(valid);
       setLastUpdated(new Date());
@@ -355,7 +355,7 @@ export function App() {
   }, []);
 
   // A menetrendből: ha a jármű azóta már másik menetet visz („ő vitte, hol jár most?”),
-  // a mostani menetét követjük — különben a régi menet nyomvonala és adatai látszanának.
+  // a mostani menetét követjük  különben a régi menet nyomvonala és adatai látszanának.
   const handleFocusTripOnMap = useCallback((tripId: string, vehicleId?: string) => {
     const now = vehicleId ? vehicleMap.current.get(vehicleId) : undefined;
     setActiveTab("map");

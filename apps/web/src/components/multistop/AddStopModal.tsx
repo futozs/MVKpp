@@ -24,7 +24,7 @@ type AddStopModalProps = {
   stops: Stop[];
   selectedStopIds: string[];
   onToggleStop: (stopId: string) => void;
-  /** viszonylat (A → B) és vonatszám figyelése — a vasúthoz, de bármelyik módra jó */
+  /** viszonylat (A → B) és vonatszám figyelése  a vasúthoz, de bármelyik módra jó */
   relations?: RelationWatch[];
   onAddRelation?: (r: RelationWatch) => void;
   trains?: string[];
@@ -122,7 +122,7 @@ export function AddStopModal({
       ? `${trains.length} vonat a figyelőn${trains.length >= MAX_TRAINS ? " (több nem fér)" : ""}`
       : tab === "relation"
         ? relFrom
-          ? `Honnan: ${relFrom.name} — most válaszd ki, hová`
+          ? `Honnan: ${relFrom.name}  most válaszd ki, hová`
           : relationsFull
             ? "A figyelő megtelt viszonylattal"
             : "Válaszd ki, honnan indulsz"

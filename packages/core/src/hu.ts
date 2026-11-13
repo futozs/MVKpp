@@ -7,7 +7,7 @@ export function withHungarianSuffix(routeShort: string): string {
   const m = trimmed.match(/^(\d+)([A-Za-zÁÉÍÓÖŐÚÜŰáéíóöőúüű]*)$/);
   if (!m) return routeShort;
   const n = Number(m[1]);
-  // Betűs jelzésnél (1V, 34A) a toldalék a kiejtéstől függ — inkább hagyjuk.
+  // Betűs jelzésnél (1V, 34A) a toldalék a kiejtéstől függ  inkább hagyjuk.
   if (m[2]) return routeShort;
   if (n === 100) return `${trimmed}-as`;
   if (n === 1000) return `${trimmed}-es`;

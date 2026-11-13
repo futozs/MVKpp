@@ -1,6 +1,6 @@
 /**
  * Felhasználók (passkey-fiókok): lista, részletek, kedvencek, eszközök,
- * utazások, push — és a kezelés (munkamenetek visszavonása, passkey vagy
+ * utazások, push  és a kezelés (munkamenetek visszavonása, passkey vagy
  * fiók törlése, adatexport).
  */
 import { getPool, sql, sqlOne } from "@mvk/db";
@@ -161,7 +161,7 @@ export async function deleteUser(id: string): Promise<boolean> {
   return (r.rowCount ?? 0) > 0;
 }
 
-/** Minden, amit a rendszer a felhasználóról tárol (GDPR-hozzáférési kérés) — a munkamenet-hash-ek nélkül. */
+/** Minden, amit a rendszer a felhasználóról tárol (GDPR-hozzáférési kérés)  a munkamenet-hash-ek nélkül. */
 export async function exportUser(id: string) {
   assertUuid(id);
   const [user, state, rides, passkeys, push, devices] = await Promise.all([

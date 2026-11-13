@@ -1,7 +1,7 @@
 /**
  * Utazás közben a telefon GPS-e a pontos hely: annak a busznak a jelölője,
  * amelyiken utazol, nem a becslést követi, hanem a telefont (a nyomvonalra
- * vetítve) — a követés és a térkép többi része ugyanaz marad. Csak addig, amíg
+ * vetítve)  a követés és a térkép többi része ugyanaz marad. Csak addig, amíg
  * a telefon tényleg a buszon van: friss és pontos a helyzete, a nyomvonalon
  * van, és a busz saját jeleivel is összeillik (leszállás után a busz elhúz,
  * a telefon lemarad → újra a becslés mozgatja). A helyzet a telefonon marad.
@@ -77,7 +77,7 @@ export function projectOnShape(shape: ShapeLine, lat: number, lon: number, near:
 
 /**
  * A telefon helyzetéből pálya a jelölőnek (ugyanaz a követő viszi, mint a
- * becslést — így a váltás sem ugrik), vagy `null`, ha most nem a telefon a
+ * becslést  így a váltás sem ugrik), vagy `null`, ha most nem a telefon a
  * pontosabb. `near`: ahol a becslés szerint a busz most jár.
  */
 export function onboardPath(gps: GeoPosition, shape: ShapeLine, m: LiveMotion, near: number, nowServer: number, nowMs = Date.now()): MotionPath | null {

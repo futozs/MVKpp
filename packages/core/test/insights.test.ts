@@ -27,7 +27,7 @@ describe("Elérem?", () => {
     expect(walkSecondsFor(-5)).toBe(0);
   });
 
-  it("ráérsz, ha bőven van idő — és megmondja, mikor indulj", () => {
+  it("ráérsz, ha bőven van idő  és megmondja, mikor indulj", () => {
     const v = catchVerdict({ nowUnix: NOW, expectedUnix: NOW + 900, upperUnix: NOW + 1100, walkS: 240 });
     expect(v.state).toBe("relax");
     // legkorábban: 900 − 0,35·200 = 830 → indulás 830 − 240 − 30 = 560 mp múlva

@@ -115,7 +115,7 @@ export function OverviewPanel({
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
                     <StatTile
                       label="Feed elérhetőség"
-                      value={uptime != null ? `${uptime}%` : "—"}
+                      value={uptime != null ? `${uptime}%` : ""}
                       sub={`${nf.format(t.polls_ok)} sikeres, ${nf.format(t.polls_fail)} hibás`}
                       tone={uptime != null && uptime < 95 ? "late" : "ontime"}
                     />

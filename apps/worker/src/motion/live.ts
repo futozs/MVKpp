@@ -5,10 +5,10 @@
  * Folyamatosan önellenőriz: minden új fix „leosztályozza” az előző fixből
  * számolt pályát (a térkép szemszögéből: hol mutattuk volna, hol volt
  * valójában), ugyanazzal a költséggel, amire tanult (core `motion/cost`: az
- * előreszaladás ára az, ameddig a jelölőnek várnia kellett volna a buszra —
+ * előreszaladás ára az, ameddig a jelölőnek várnia kellett volna a buszra 
  * ez a következő fixekből derül ki). A modell és a profil-alapú tartalék is
  * számol (árnyékban), és ha a modell élesben tartósan rosszabb, magától a
- * tartalékra vált — amíg újra jobb nem lesz. Éjszaka a friss napokból újratanul
+ * tartalékra vált  amíg újra jobb nem lesz. Éjszaka a friss napokból újratanul
  * (lásd thread.ts).
  */
 import {
@@ -54,7 +54,7 @@ const KEEP_FIXES = 16;
 const KEEP_SCORABLE = 4;
 /** menetenként legfeljebb ennyi mérés vár a költségére (az állás ritkán tart 90 mp-nél tovább) */
 const KEEP_PENDING = 12;
-/** a lemaradás ára legfeljebb ennyi (mp) — egy nagyon késve érkezett jel se torzítson */
+/** a lemaradás ára legfeljebb ennyi (mp)  egy nagyon késve érkezett jel se torzítson */
 const MAX_LAG_S = 60;
 /** ennyi csend után a menetet elengedjük (mp) */
 const RUN_IDLE_S = 30 * 60;
@@ -160,7 +160,7 @@ export class MotionPredictor {
     try {
       const b = await loadMotionBundle();
       if (!b) {
-        log.info("motion", "még nincs elfogadott mozgás-modell — a térkép a régi becsléssel megy");
+        log.info("motion", "még nincs elfogadott mozgás-modell  a térkép a régi becsléssel megy");
         return;
       }
       const profile = unpackProfile(b.profile);
@@ -186,7 +186,7 @@ export class MotionPredictor {
     return this.model != null;
   }
 
-  /** A betöltött modell még a régi célra tanult (pl. medián) — érdemes mielőbb újratanítani. */
+  /** A betöltött modell még a régi célra tanult (pl. medián)  érdemes mielőbb újratanítani. */
   isOutdated(): boolean {
     return this.model != null && this.info?.objective !== MOTION_OBJECTIVE;
   }
@@ -245,7 +245,7 @@ export class MotionPredictor {
   /**
    * Az új fix eldönti a korábbi mérések költségét: ha a busz már `PASS_M`-mel
    * továbbjutott (vagy letelt a `PASS_CAP_S`), kiderült, meddig kellett volna egy
-   * előreszaladt jelölőnek várnia — pont úgy, ahogy a tanításkor (core `passTimes`).
+   * előreszaladt jelölőnek várnia  pont úgy, ahogy a tanításkor (core `passTimes`).
    */
   private settle(key: string, prev: MotionFix | undefined, fix: MotionFix) {
     const list = this.pending.get(key);
@@ -276,7 +276,7 @@ export class MotionPredictor {
     else this.pending.delete(key);
   }
 
-  /** Ha a modell élesben tartósan rosszabb a tartaléknál (a térkép költségén), átvált — és vissza, ha újra jobb. */
+  /** Ha a modell élesben tartósan rosszabb a tartaléknál (a térkép költségén), átvált  és vissza, ha újra jobb. */
   private gate() {
     if (this.score.costModel.n < GATE_MIN) return;
     const cm = this.score.costModel.mean();
@@ -304,7 +304,7 @@ export class MotionPredictor {
   /**
    * A busz várható pályája a legutóbbi fixe óta. `now`: a szerver órája (a
    * térkép ennyivel később kapja meg a fixet → a modell ezt is figyelembe veszi).
-   * `null`, ha nincs modell vagy előzmény — ekkor a hub a régi becslést adja.
+   * `null`, ha nincs modell vagy előzmény  ekkor a hub a régi becslést adja.
    */
   trajectory(vehicleId: string, m: VehicleMotion, serviceDate: string, now: number): Path | null {
     try {
@@ -324,7 +324,7 @@ export class MotionPredictor {
     const last = r?.fixes.length ? r.fixes.length - 1 : -1;
     if (!r || last < 0 || r.fixes[last][0] !== m.ts) return null;
     // Fixenként egyszer számolunk (amikor megérkezett): a később csatlakozó kliens ugyanazt a pályát kapja,
-    // mint a többiek — és egy tömeges újracsatlakozás sem terheli a fő szálat.
+    // mint a többiek  és egy tömeges újracsatlakozás sem terheli a fő szálat.
     const hit = this.computed.get(key);
     if (hit && hit.t === m.ts) return this.mode === "model" ? hit.model : hit.fallback;
     const L = Math.max(0, now - m.ts);

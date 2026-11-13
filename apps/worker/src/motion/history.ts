@@ -1,6 +1,6 @@
 /**
  * A mozgás-modell tanításához: a múltbeli napok nyers GPS-jeit ugyanazon az
- * illesztőn játsszuk vissza, ami élesben fut — így a tanító fixek pontosan
+ * illesztőn játsszuk vissza, ami élesben fut  így a tanító fixek pontosan
  * azok, amelyekből a térkép élesben becsül (ugyanaz az elfogadás, ugyanaz a
  * vetítés a nyomvonalra).
  */

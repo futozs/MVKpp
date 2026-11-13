@@ -1,5 +1,5 @@
 /**
- * „Melyik menetrend érvényes ezen a napon?” — fallbackkel.
+ * „Melyik menetrend érvényes ezen a napon?”  fallbackkel.
  *
  * Ha az MVK késik a GTFS-sel (vagy üreset ad ki, mint 2026-10-27-én), a
  * rendszer nem állhat le: a legfrissebb ÉRVÉNYES feedből a céllal
@@ -75,7 +75,7 @@ export function tripsOn(day: ServiceDay): Trip[] {
  *
  * Az MVK GTFS-RT a SAJÁT aktuális feedjének azonosítóit küldi
  * ("<service>_<shape>_<HHMMSS>_<kód>"). Ha nálunk fallback vagy egy napos
- * eltérésű feed él, a pontos azonosító nem létezik — ekkor nyomvonal +
+ * eltérésű feed él, a pontos azonosító nem létezik  ekkor nyomvonal +
  * indulási idő alapján keressük meg ugyanazt a menetet.
  */
 export function resolveTrip(day: ServiceDay, rtTripId: string): Trip | null {

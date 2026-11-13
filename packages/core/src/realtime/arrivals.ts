@@ -27,7 +27,7 @@ export type ArrivalExtras = {
   startRisk?: (tripId: string) => StartRisk | null;
   /** (tripId, stopId) → dugó a busz előtt a megállóig */
   trafficAhead?: (tripId: string, stopId: string) => ArrivalItem["trafficAhead"];
-  /** csak ezek a módok (a v2 alapból csak MVK) — hiányában minden */
+  /** csak ezek a módok (a v2 alapból csak MVK)  hiányában minden */
   modes?: ReadonlySet<TransitMode>;
   /** (tripId, stopId) → élő vágány / kocsiállás (vasút, autóbusz-állomás) */
   platform?: (tripId: string, stopId: string) => string | null;
@@ -35,7 +35,7 @@ export type ArrivalExtras = {
   predictedPlatform?: (tripId: string, stopId: string) => string | null;
   /** tripId → hivatalos megjegyzések (késés oka, kocsiösszeállítás) */
   notices?: (tripId: string) => string[] | null;
-  /** az MVK-sorokhoz is kellenek a v3-mezők (mód, vonal-kulcs) — a v2 alapválasza bájtra a régi marad */
+  /** az MVK-sorokhoz is kellenek a v3-mezők (mód, vonal-kulcs)  a v2 alapválasza bájtra a régi marad */
   rich?: boolean;
   /**
    * Közös megálló (lásd `mergedBoard`): ezeknek a megállóknak az indulásai egy táblán
@@ -65,7 +65,7 @@ export function arrivalsForStop(
   for (const sid of stopIds) for (const [trip, p] of snap.predByStop.get(sid) ?? []) if (!pred.has(trip)) pred.set(trip, { ...p, stopId: sid });
 
   // A menet-azonosítók napról napra ismétlődnek: ugyanaz a trip_id ma és holnap is
-  // közlekedhet. Ezért a jelöltek kulcsa nap + menet — különben este a holnapi
+  // közlekedhet. Ezért a jelöltek kulcsa nap + menet  különben este a holnapi
   // (hajnali) indulások kiesnének, mert a mai, már elment példány foglalja a helyet.
   // Az élő adat (előrejelzés, jármű, törlés) csak a mai szolgáltatási napra vonatkozik.
   type Cand = { tripId: string; unix: number; delay: number | null; hasRT: boolean; dc: DayCtx; primary: boolean; stopId: string };

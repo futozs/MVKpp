@@ -24,7 +24,7 @@ const titleOf = (r: RelationRow) => (r.trainName ? `${r.trainName} → ${r.heads
 
 /**
  * Viszonylat: A-ból B-be közvetlenül (pl. Miskolc-Tiszai → Füzesabony). Csak azok a
- * menetek, amelyek mindkét helyen megállnak — indulás A-ból vágánnyal és késéssel,
+ * menetek, amelyek mindkét helyen megállnak  indulás A-ból vágánnyal és késéssel,
  * érkezés B-be, menetidő, és a MÁV megjegyzései (késés oka).
  */
 export function RelationCard({

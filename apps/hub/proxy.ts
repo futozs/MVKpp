@@ -15,7 +15,7 @@ export function proxy(req: NextRequest) {
     return new NextResponse("A rendszer-hub csak belső hálóról érhető el.", { status: 403 });
   }
   if (!hostAllowed(req.headers.get("host"), env.allowedHosts)) {
-    return new NextResponse("Ismeretlen hosztnév — IP-címmel nyisd meg, vagy vedd fel a HUB_ALLOWED_HOSTS-ba.", { status: 421 });
+    return new NextResponse("Ismeretlen hosztnév  IP-címmel nyisd meg, vagy vedd fel a HUB_ALLOWED_HOSTS-ba.", { status: 421 });
   }
   const path = req.nextUrl.pathname;
   if (PUBLIC_PATHS.has(path)) return NextResponse.next();

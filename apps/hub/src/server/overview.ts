@@ -1,6 +1,6 @@
 /**
  * Az Áttekintés egyetlen hívásban: minden alrendszer legfontosabb száma és a
- * riasztások. Egy forrás kiesése nem dönti el az oldalt — az a rész jelzi a hibát.
+ * riasztások. Egy forrás kiesése nem dönti el az oldalt  az a rész jelzi a hibát.
  */
 import { sql, sqlOne } from "@mvk/db";
 import type { MetricStat } from "@mvk/core/ops/metrics";

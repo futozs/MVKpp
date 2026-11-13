@@ -41,9 +41,9 @@ export interface Ride {
    * eltávolodott a busztól (away), vagy a menet végén, az utas jelzése nélkül (terminus).
    */
   endedBy?: RideEndedBy | null;
-  /** utólagos javítás ideje (unix) — utána a fel- és leszállás helye végleges */
+  /** utólagos javítás ideje (unix)  utána a fel- és leszállás helye végleges */
   editedAt?: number | null;
-  /** utólagos kiegészítés ideje (körbeutazásként meghosszabbítás, a késés pótlása) — a szerver ezt egy javított utazásnál is elfogadja */
+  /** utólagos kiegészítés ideje (körbeutazásként meghosszabbítás, a késés pótlása)  a szerver ezt egy javított utazásnál is elfogadja */
   patchedAt?: number | null;
   /** a menet fordulóhurkos végállomáson ér véget (ülve maradva körbe lehet utazni) */
   loopEnd?: boolean | null;
@@ -53,8 +53,8 @@ export type RideEndedBy = "user" | "dest" | "away" | "terminus";
 export type RideSource = "auto" | "manual" | "later";
 
 /**
- * Körbeutazás a végállomáson: a menet véget ért, és — mert az utas előre
- * megmondta, hogy marad — a busz következő menetével folytatjuk, amint elindul.
+ * Körbeutazás a végállomáson: a menet véget ért, és  mert az utas előre
+ * megmondta, hogy marad  a busz következő menetével folytatjuk, amint elindul.
  */
 export interface RideTurn {
   /** mikor ért be a végállomásra (unix) */
@@ -69,7 +69,7 @@ export interface LoopPlan {
   /** null: a leszállást a következő menet indulása után adja meg */
   stopId: string | null;
   stopName: string | null;
-  /** a következő menet, amelyből a megállót választotta (tájékoztató — a busz valódi folytatása dönt) */
+  /** a következő menet, amelyből a megállót választotta (tájékoztató  a busz valódi folytatása dönt) */
   tripId: string | null;
 }
 
@@ -90,7 +90,7 @@ export interface ActiveRide {
   fromConfirmed?: boolean;
   /**
    * amikor a telefon utoljára a busszal volt: a busz által addig elhagyott megálló és
-   * az időpont — bezárt app után is megmarad, ebből tudjuk, legkorábban hol szállhatott le
+   * az időpont  bezárt app után is megmarad, ebből tudjuk, legkorábban hol szállhatott le
    */
   withBus?: { passed: number; at: number } | null;
   fromStopId: string | null;
@@ -104,7 +104,7 @@ export interface ActiveRide {
   /** előre megadott körbeutazás (a végállomáson a buszon marad) */
   loopPlan?: LoopPlan | null;
   detected: "auto" | "manual";
-  /** körbeutazás: az első menet azonosítója — a láncolt menetek ezzel kapcsolódnak */
+  /** körbeutazás: az első menet azonosítója  a láncolt menetek ezzel kapcsolódnak */
   chainId?: string | null;
   /** hányadik menet a körbeutazásban (1-től) */
   leg?: number;
@@ -252,7 +252,7 @@ function nextLegRide(next: NextLeg, base: { serviceDate: string; vehicleId: stri
 
 /**
  * Körbeutazás: a befejezett menet a naplóba kerül, és ugyanazon a buszon a
- * következő menet indul — a kettőt a közös `chainId` köti össze. A következő
+ * következő menet indul  a kettőt a közös `chainId` köti össze. A következő
  * menetben ott száll le, amit előre megadott (`dest`).
  */
 export function continueRide(end: RideEnd, next: NextLeg, dest: LoopPlan | null): ActiveRide | null {
@@ -272,7 +272,7 @@ export type RideFix = Partial<
 >;
 
 /**
- * Körbeutazok — egy már lezárt út (a végállomáson ért véget) élőben folytatódik a
+ * Körbeutazok  egy már lezárt út (a végállomáson ért véget) élőben folytatódik a
  * busz következő menetével. A lezárt menet nem változik; az új menet az ő láncához kapcsolódik.
  */
 export function extendRideLive(legs: readonly Ride[], next: NextLeg): ActiveRide | null {
@@ -286,7 +286,7 @@ export function extendRideLive(legs: readonly Ride[], next: NextLeg): ActiveRide
 
 /**
  * Utólagos kiegészítés (körbeutazásként meghosszabbítás, a késés pótlása): nem
- * „javítás”, így egy már javított utazáson is elmegy — a `patchedAt` jelzi a szervernek.
+ * „javítás”, így egy már javított utazáson is elmegy  a `patchedAt` jelzi a szervernek.
  */
 export function patchRides(patches: Readonly<Record<string, Partial<Omit<Ride, "id">>>>) {
   const patchedAt = Math.round(Date.now() / 1000);
@@ -318,7 +318,7 @@ export function fixRide(legIds: readonly string[], fixes: Readonly<Record<string
 
 /**
  * Utólag felvett utazás (a menetrendből választott menet), körbeutazásnál az
- * összes menete — vagy egy meglévő út folytatása (a menetek `chainId`-ja annak az útnak a lánca).
+ * összes menete  vagy egy meglévő út folytatása (a menetek `chainId`-ja annak az útnak a lánca).
  */
 export function addRides(legs: readonly Ride[]) {
   if (!legs.length) return;
@@ -372,7 +372,7 @@ export async function deleteRide(id: string) {
   const wasSynced = rides.some((r) => r.id === id && r.synced);
   setRides(rides.filter((r) => r.id !== id));
   if (!wasSynced && !getSession()) return;
-  // Amíg a szerver nem erősíti meg a törlést, megjegyezzük — különben a következő szinkron visszahozná.
+  // Amíg a szerver nem erősíti meg a törlést, megjegyezzük  különben a következő szinkron visszahozná.
   setDeleted([...deleted.filter((x) => x !== id), id]);
   await flushDeletes();
 }
@@ -436,7 +436,7 @@ async function doSync() {
 // Bejelentkezéskor (vagy egy másik fülön történt belépéskor) azonnal szinkronizálunk.
 if (typeof window !== "undefined") {
   window.addEventListener("mvk-session-change", () => void syncRides());
-  // Kijelentkezéskor a fiók (már feltöltött) utazásai lekerülnek az eszközről —
+  // Kijelentkezéskor a fiók (már feltöltött) utazásai lekerülnek az eszközről 
   // a felhőben megmaradnak. A még fel nem töltöttek itt maradnak, hogy ne vesszenek el.
   window.addEventListener("mvk-rides-reset", () => {
     setDeleted([]);

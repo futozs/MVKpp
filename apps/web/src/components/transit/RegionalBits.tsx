@@ -58,7 +58,7 @@ export function PlatformBadge({
     <span
       title={
         predicted
-          ? `Várhatóan a ${platform}. ${label} — még nincs kiadva, a korábbi napok alapján`
+          ? `Várhatóan a ${platform}. ${label}  még nincs kiadva, a korábbi napok alapján`
           : changed
             ? `A ${label} változott: most ${platform}.`
             : `${platform}. ${label}`

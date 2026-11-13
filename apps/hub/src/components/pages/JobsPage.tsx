@@ -43,7 +43,7 @@ export function JobsPage() {
 
   return (
     <>
-      <PageHeader title="Feladatok" lead="Az ütemezett munkák (pg-boss) és a tanuló modellek. Bármelyik indítható most is — a futás a workerben történik, az eredmény alább látszik." />
+      <PageHeader title="Feladatok" lead="Az ütemezett munkák (pg-boss) és a tanuló modellek. Bármelyik indítható most is  a futás a workerben történik, az eredmény alább látszik." />
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {JOBS.map((j) => {
           const running = runs?.running.includes(j.id);

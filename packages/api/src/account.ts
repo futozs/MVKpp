@@ -1,5 +1,5 @@
 /**
- * /account/* — jelszó nélküli fiók (passkey / WebAuthn) és munkamenet.
+ * /account/*  jelszó nélküli fiók (passkey / WebAuthn) és munkamenet.
  *
  * A v2 végpontjai változatlan kérés/válasz formával (az iOS app és a régi
  * kliens is ezt hívja): sessionToken a válaszban, X-Account-Session a
@@ -118,7 +118,7 @@ const routes: Route[] = [
     const b = await body<{ email?: string }>(req);
     const email = (b?.email ?? "").trim().toLowerCase();
     if (!validEmail(email)) throw new ApiError(400, "Érvénytelen e-mail cím");
-    if (await findUser(email)) throw new ApiError(409, "Ehhez az e-mailhez már van fiók — jelentkezz be a meglévő passkey-vel.");
+    if (await findUser(email)) throw new ApiError(409, "Ehhez az e-mailhez már van fiók  jelentkezz be a meglévő passkey-vel.");
     const options = await generateRegistrationOptions({
       rpName: RP_NAME,
       rpID: r.rpID,
@@ -139,7 +139,7 @@ const routes: Route[] = [
     if (!validEmail(email) || !b?.response) throw new ApiError(400, "Hiányzó mező");
     const expectedChallenge = takeChallenge(email);
     if (!expectedChallenge) throw new ApiError(400, "A regisztráció lejárt, próbáld újra.");
-    if (await findUser(email)) throw new ApiError(409, "Ehhez az e-mailhez már van fiók — jelentkezz be a meglévő passkey-vel.");
+    if (await findUser(email)) throw new ApiError(409, "Ehhez az e-mailhez már van fiók  jelentkezz be a meglévő passkey-vel.");
     const v = await verifyRegistrationResponse({ response: b.response, expectedChallenge, expectedOrigin: r.origin, expectedRPID: r.rpID }).catch((e: Error) => {
       throw new ApiError(400, `A passkey ellenőrzése sikertelen: ${e.message}`);
     });
@@ -297,7 +297,7 @@ const routes: Route[] = [
       const p = prevRow ? JSON.parse(prevRow.payload.toString("utf8")) : {};
       if (p && typeof p === "object" && !Array.isArray(p)) prev = p as Record<string, unknown>;
     } catch {
-      /* sérült régi mentés — mintha nem lenne */
+      /* sérült régi mentés  mintha nem lenne */
     }
     await getPool().query(
       `INSERT INTO legacy_backup (user_id, payload, bytes, updated_at) VALUES ($1, $2, $3, now())

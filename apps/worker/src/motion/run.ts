@@ -40,7 +40,7 @@ export async function runMotionTraining(o: MotionRunOptions = {}): Promise<{ bun
     const d = await replayDay(feeds, iso);
     const fixes = d.runs.reduce((s, r) => s + r.fixes.length, 0);
     if (fixes < MIN_DAY_FIXES) {
-      log(`${iso}: csak ${fixes} fix — kimarad`);
+      log(`${iso}: csak ${fixes} fix  kimarad`);
       continue;
     }
     days.push(d);
@@ -51,7 +51,7 @@ export async function runMotionTraining(o: MotionRunOptions = {}): Promise<{ bun
   const valid = days.slice(days.length - testDays - validDays, days.length - testDays);
   const train = days.slice(0, days.length - testDays - validDays);
 
-  // A napi összegeket egyenként adjuk hozzá (egy nap ~20 MB — nem tartjuk mind a memóriában).
+  // A napi összegeket egyenként adjuk hozzá (egy nap ~20 MB  nem tartjuk mind a memóriában).
   let total: ProfileSums | null = null;
   for (const d of train) total = total ? sumProfiles([total, sumsOfDay(d)]) : sumsOfDay(d);
   const rnd = mulberry32(7);

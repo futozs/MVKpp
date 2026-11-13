@@ -105,12 +105,12 @@ export function ParkedTile({ v, ctx }: { v: ParkedVehicle; ctx: LotContext }) {
       </span>
       <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
         <RouteChip route={v.lastRoute} lookup={ctx.lookup} />
-        <span className="truncate">{parked != null ? `áll ${durationText(parked)}` : v.online ? "itt áll" : "—"}</span>
+        <span className="truncate">{parked != null ? `áll ${durationText(parked)}` : v.online ? "itt áll" : ""}</span>
       </span>
       {toLimit != null ? (
         <span
           className="h-1 w-full overflow-hidden rounded-full bg-muted"
-          title={`${durationText(silent!)} óta nincs jel — ${Math.round(ctx.limitS / 60)} perc után a kocsiszínbe soroljuk`}
+          title={`${durationText(silent!)} óta nincs jel  ${Math.round(ctx.limitS / 60)} perc után a kocsiszínbe soroljuk`}
         >
           <span
             className={cn("block h-full origin-left rounded-full", toLimit > 0.75 ? "bg-nosignal" : "bg-park/70")}

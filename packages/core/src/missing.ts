@@ -1,10 +1,10 @@
 /**
- * Élőben „valószínűleg kimaradt” menetek — csak akkor szólunk, ha tényleg baj van:
+ * Élőben „valószínűleg kimaradt” menetek  csak akkor szólunk, ha tényleg baj van:
  *
  *  - az „igény esetén” közlekedő menet kérés nélkül el sem indul → soha nem riaszt
  *  - a vonal szomszédos meneteit (±75 perc) látjuk → a követés működik, a hiány valódi
  *  - nincs úton olyan késő busz, ami épp ennek a menetnek az induló végállomására
- *    tart: az fogja vinni, csak késik — ez késés, nem kimaradás
+ *    tart: az fogja vinni, csak késik  ez késés, nem kimaradás
  *  - a hiányzó adat nem kimaradás (`quietTripIds`): a garázsból kiálló menet alatt az
  *    OBU gyakran még néma, és ha a busz a menet végállomásán pontosan érkezésre
  *    feltűnik, a menetet levitte, csak nem küldött róla adatot
@@ -172,7 +172,7 @@ export function silentRuns(flagged: readonly ScheduledLeg[], seen: readonly Seen
 
 /**
  * A kimaradásgyanús menetek közül azok, amelyekről csak az adat hiányzik
- * (garázsmenet, vagy a busz adat nélkül levitte) — ezeket nem nevezzük kimaradtnak.
+ * (garázsmenet, vagy a busz adat nélkül levitte)  ezeket nem nevezzük kimaradtnak.
  * `seen`: a ma látott (nem félbehagyott) menetek és a buszuk.
  */
 export function quietTripIds(flaggedIds: Iterable<string>, legs: ReadonlyMap<string, ScheduledLeg>, seen: readonly { tripId: string; vehicleId: string }[]): Set<string> {

@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { cn, normalizeSearchText } from "@/lib/utils";
 import { routeModeOf } from "@/lib/modes";
 
-/** az MVK vonalai elöl, utána a Volán-vonalak (azonos számok — pl. az ózdi 1-es — ne keveredjenek) */
+/** az MVK vonalai elöl, utána a Volán-vonalak (azonos számok  pl. az ózdi 1-es  ne keveredjenek) */
 const GROUP = { tram: 0, bus: 0, coach: 1, rail: 2 } as const;
 
 interface RouteChipsProps {
@@ -33,7 +33,7 @@ export function RouteChips({
 
   const ordered = useMemo(
     () =>
-      // a vonatoknak nincs vonalszáma (a csempe a kategória: Sz, IC…) — azokat a vasúti szűrő kezeli
+      // a vonatoknak nincs vonalszáma (a csempe a kategória: Sz, IC…)  azokat a vasúti szűrő kezeli
       Object.values(routes)
         .filter((r) => routeModeOf(r) !== "rail")
         .sort((a, b) => {

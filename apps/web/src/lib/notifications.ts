@@ -185,7 +185,7 @@ export function checkAndNotify(
 
   const nowMin = budapestMinuteOfDay();
   const matches = arrivals.filter((a) => {
-    // A törölt menet nem érkezik meg — arra nem szólunk (a push-oldal is így szűr).
+    // A törölt menet nem érkezik meg  arra nem szólunk (a push-oldal is így szűr).
     if (a.cancelled) return false;
     if (watch.schedMin != null) {
       if (watch.routeShorts?.length && !watch.routeShorts.includes(a.route)) return false;
@@ -224,11 +224,11 @@ export function checkAndNotify(
         : label(fresh[0]);
     const delayNote = fresh.length === 1 ? delaySuffix(fresh[0].delaySec) : "";
     const isSchedulePinned = watch.tripId != null || watch.schedMin != null;
-    // a regionális megálló azonosítója (`1:005510009`) nem mond semmit — ott csak a név
+    // a regionális megálló azonosítója (`1:005510009`) nem mond semmit  ott csak a név
     const where = isRegionalId(stopId) ? stopName : `${stopName} (${stopId})`;
     const body = isSchedulePinned
-      ? `kb. ${minEta} percen belül ${watch.isDeparture ? "indul" : "ér ide"}${delayNote} — ${where}`
-      : `${where} — kb. ${minEta} percen belül${delayNote}`;
+      ? `kb. ${minEta} percen belül ${watch.isDeparture ? "indul" : "ér ide"}${delayNote}  ${where}`
+      : `${where}  kb. ${minEta} percen belül${delayNote}`;
 
     try {
       const n = new Notification(title, {

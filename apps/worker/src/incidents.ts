@@ -1,16 +1,16 @@
 /**
- * Üzemzavarok v3 — csak bizonyítékkal, csak lezárt napra.
+ * Üzemzavarok v3  csak bizonyítékkal, csak lezárt napra.
  *
  * A régi detektor 5 percenként futott a FOLYAMATBAN lévő napra, és minden
  * félbeszakadt menetet (amit egy versenyhelyzet maga okozott) „menet közben
- * elhallgatott”-nak könyvelt — két hónap alatt 2693 hamis esetet.
+ * elhallgatott”-nak könyvelt  két hónap alatt 2693 hamis esetet.
  *
  * Most:
- *  - cancelled  — az MVK hivatalos törlési listája (100% biztos)
- *  - missed     — menetrend szerinti menet, amit senki nem vitt, MIKÖZBEN a
+ *  - cancelled   az MVK hivatalos törlési listája (100% biztos)
+ *  - missed      menetrend szerinti menet, amit senki nem vitt, MIKÖZBEN a
  *                 vonal szomszédos meneteit láttuk (tehát a követés működött);
  *                 a garázsmenet és az adat nélkül levitt menet nem ide tartozik
- *  - breakdown  — menet közben elnémuló jármű, ami 20+ percig nem bukkan fel,
+ *  - breakdown   menet közben elnémuló jármű, ami 20+ percig nem bukkan fel,
  *                 és NEM ismert térerő-hiányos helyen (ahol ugyanez a minta
  *                 más napokon is rendszeresen elhallgat)
  */
@@ -63,7 +63,7 @@ export async function detectIncidentsForDay(feeds: FeedManager, iso: string): Pr
     );
     inserted += r.rowCount ?? 0;
   }
-  log.info("incidents", `${iso}: ${inserted} esemény (${out.filter((x) => x.kind === "cancelled").length} hivatalos törlés)${collectionOk ? "" : " — a gyűjtés akadozott, saját észlelés kihagyva"}`);
+  log.info("incidents", `${iso}: ${inserted} esemény (${out.filter((x) => x.kind === "cancelled").length} hivatalos törlés)${collectionOk ? "" : "  a gyűjtés akadozott, saját észlelés kihagyva"}`);
   return { inserted, skipped: collectionOk ? null : "a gyűjtés akadozott ezen a napon" };
 }
 
@@ -87,7 +87,7 @@ async function officialCancellations(day: ServiceDay, iso: string): Promise<Inci
       endedAt: null,
       lat: null,
       lon: null,
-      title: `${route ?? "?"}${dep != null ? ` · ${secToHm(dep)}` : ""} — az MVK törölte a menetet`,
+      title: `${route ?? "?"}${dep != null ? ` · ${secToHm(dep)}` : ""}  az MVK törölte a menetet`,
       detail: t ? `${t.headsign}` : null,
       evidence: { source: "list-cancelled-trips", firstSeen: r.first_seen },
     };
@@ -112,7 +112,7 @@ async function missedTrips(day: ServiceDay, iso: string): Promise<IncidentIn[]> 
   for (const t of day.feed.trips.values()) {
     // Az üzemzavar-észlelés az MVK-ra hangolt (a regionális GPS-lefedettség hézagos lenne „kimaradásnak”).
     if (!isMvkId(t.id) || !day.services.has(t.serviceId) || ranIds.has(t.id) || cancelled.has(t.id)) continue;
-    // „igény esetén” menet kérés nélkül el sem indul — nem kimaradás
+    // „igény esetén” menet kérés nélkül el sem indul  nem kimaradás
     if (isOnDemandTrip(t.headsign)) continue;
     const st = day.feed.tripStops.get(t.id);
     if (!st || st.length < 2) continue;
@@ -133,8 +133,8 @@ async function missedTrips(day: ServiceDay, iso: string): Promise<IncidentIn[]> 
       endedAt: null,
       lat: null,
       lon: null,
-      title: `${route} · ${secToHm(dep)} — valószínűleg kimaradt`,
-      detail: `${t.headsign} — egyetlen jármű sem teljesítette, miközben a vonal ${near} szomszédos menetét követtük.`,
+      title: `${route} · ${secToHm(dep)}  valószínűleg kimaradt`,
+      detail: `${t.headsign}  egyetlen jármű sem teljesítette, miközben a vonal ${near} szomszédos menetét követtük.`,
       evidence: { trackedNeighbours: near, cancelledByMvk: false },
     });
   }
@@ -168,7 +168,7 @@ async function breakdowns(day: ServiceDay, iso: string): Promise<IncidentIn[]> {
     [iso],
   );
   if (!runs.length) return [];
-  // Nyers GPS nélkül nem igazolható, hogy a jármű visszatért-e — ilyen napra nem jelzünk meghibásodást.
+  // Nyers GPS nélkül nem igazolható, hogy a jármű visszatért-e  ilyen napra nem jelzünk meghibásodást.
   const hasPings = await sql<{ x: number }>(`SELECT 1 AS x FROM veh_ping WHERE service_date = $1 LIMIT 1`, [iso]);
   if (!hasPings.length) return [];
   // Ismert „néma zónák”: ugyanaz a minta, ugyanott (±1 megálló) más napokon is gyakran megszakad.
@@ -227,7 +227,7 @@ async function breakdowns(day: ServiceDay, iso: string): Promise<IncidentIn[]> {
       endedAt: back,
       lat: pos[0]?.lat ?? null,
       lon: pos[0]?.lon ?? null,
-      title: `${r.route_short} (${r.vehicle_id}) — menet közben megállt, ${stopName} után`,
+      title: `${r.route_short} (${r.vehicle_id})  menet közben megállt, ${stopName} után`,
       detail:
         silentMin == null
           ? `A menet ${Math.round(progress * 100)}%-ánál elnémult, és aznap nem tért vissza.`

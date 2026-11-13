@@ -2,7 +2,7 @@
  * Idő Miskolcon.
  *
  * Két dolgot kell mindenhol egyformán csinálni, különben a napok szétcsúsznak:
- *  1. Az időzóna mindig Europe/Budapest — soha nem a futtató gép TZ-je
+ *  1. Az időzóna mindig Europe/Budapest  soha nem a futtató gép TZ-je
  *     (a VPS UTC-ben fut, a régi kód ezt a folyamat TZ-jéből vette).
  *  2. A „szolgáltatási nap” hajnali 3:00-kor fordul, nem éjfélkor: a 24:30-as
  *     GTFS-idő az előző nap menete. A régi megállófigyelő éjfélkor fordult,
@@ -87,7 +87,7 @@ export type ServiceClock = {
   /** szolgáltatási nap */
   iso: string;
   ymd: string;
-  /** a szolgáltatási nap éjfele óta eltelt mp — 3:00 előtt 86400 fölötti */
+  /** a szolgáltatási nap éjfele óta eltelt mp  3:00 előtt 86400 fölötti */
   secOfDay: number;
   /** a szolgáltatási nap helyi éjfele (unix) */
   midnightUnix: number;

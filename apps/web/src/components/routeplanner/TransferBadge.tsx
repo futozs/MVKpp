@@ -43,7 +43,7 @@ function copy(check: JourneyTransferCheck, mode: JourneyMode, measured: boolean)
     const pct = Math.round(check.chance * 100);
     const title = `Az első busz várható és rossz esetbeli érkezéséből, a csatlakozás várható indulásából és a séta idejéből (${m} ${check.marginSec < 0 ? "hiány" : "tartalék"} várhatóan).`;
     const alt = check.fallback ? ` · ha lekésed: ${check.fallback.time}` : "";
-    if (check.risk === "risky") return { label: `${pct}% esély — valószínűleg lekésed${alt}`, title };
+    if (check.risk === "risky") return { label: `${pct}% esély  valószínűleg lekésed${alt}`, title };
     if (check.risk === "tight") return { label: `${pct}% eséllyel eléred${alt}`, title };
     return { label: `${pct}% eséllyel eléred · ${m} tartalék`, title };
   }

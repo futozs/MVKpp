@@ -1,7 +1,7 @@
 /**
  * Útvonal-változatok egy vonal egy irányán belül: a leggyakoribb megállósor az
  * alap, a többi menet betűjelet kap, és leírást arról, MIBEN más (melyik
- * megállót érinti még, melyiket hagyja ki, honnan indul, meddig megy) — a
+ * megállót érinti még, melyiket hagyja ki, honnan indul, meddig megy)  a
  * menetrendkönyvek „E = … érintésével” jelölése szerint.
  */
 export type VariantTrip = { tripId: string; headsign: string; stops: string[] };

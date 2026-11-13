@@ -1,6 +1,6 @@
 /**
  * A worker és a web elérése a belső hálón, admin-kulccsal. A kulcs csak itt,
- * a hub szerveroldalán él — a böngésző sosem kapja meg.
+ * a hub szerveroldalán él  a böngésző sosem kapja meg.
  */
 import { env } from "./env.ts";
 import { HubError } from "./http.ts";
@@ -49,7 +49,7 @@ export function postJson(body: unknown): RequestInit {
   return { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) };
 }
 
-/** A worker gyakran kért, ritkán változó listái (megálló- és vonalnevek) — 30 percig a memóriában. */
+/** A worker gyakran kért, ritkán változó listái (megálló- és vonalnevek)  30 percig a memóriában. */
 const nameCache = new Map<string, { at: number; data: unknown }>();
 const NAME_TTL_MS = 30 * 60_000;
 
@@ -61,7 +61,7 @@ export async function cachedWorkerJson<T>(path: string): Promise<T> {
   return data;
 }
 
-/** /gtfs/stops.json: [id, kód, név, lat, lon][] — /gtfs/routes.json: [id, rövid, hosszú, típus, szín, szövegszín][] */
+/** /gtfs/stops.json: [id, kód, név, lat, lon][]  /gtfs/routes.json: [id, rövid, hosszú, típus, szín, szövegszín][] */
 type StopTuple = [string, string, string, number, number];
 type RouteTuple = [string, string, string, number, string, string];
 

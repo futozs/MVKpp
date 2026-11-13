@@ -177,7 +177,7 @@ export function FilterPanel({
             </Section>
 
             <Section title="Kiemelt járművek" aside={filters.watch.length ? <span className="font-mono text-[11px] tabular-nums text-muted-foreground">{filters.watch.length}/{MAX_WATCHED}</span> : undefined}>
-              <p className="-mt-1 text-[11.5px] text-muted-foreground">Csak ezek a rendszámok látszanak — a többi szűrőtől függetlenül.</p>
+              <p className="-mt-1 text-[11.5px] text-muted-foreground">Csak ezek a rendszámok látszanak  a többi szűrőtől függetlenül.</p>
               <form
                 className="flex items-center gap-2"
                 onSubmit={(e) => {
@@ -345,7 +345,7 @@ export function FilterPanel({
                         </span>
                         <span className="block truncate text-[11px] text-muted-foreground">{v.headsign}</span>
                       </span>
-                      <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-muted-foreground">{v.speed != null ? `${Math.round(v.speed * 3.6)} km/h` : "—"}</span>
+                      <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-muted-foreground">{v.speed != null ? `${Math.round(v.speed * 3.6)} km/h` : ""}</span>
                     </button>
                   </li>
                 ))}

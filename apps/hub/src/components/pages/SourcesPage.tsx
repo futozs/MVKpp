@@ -62,7 +62,7 @@ function ShadowPanel({ live }: { live: Live }) {
           <Stat label="minták ma" value={num(s.samples)} />
         </div>
       ) : (
-        <Empty>{live.mvk.state === "otp2" ? "A tartalék fut — most nincs natív jel, amihez mérhetnénk." : "Még nincs összevethető minta ebben a futásban."}</Empty>
+        <Empty>{live.mvk.state === "otp2" ? "A tartalék fut  most nincs natív jel, amihez mérhetnénk." : "Még nincs összevethető minta ebben a futásban."}</Empty>
       )}
     </Panel>
   );
@@ -149,7 +149,7 @@ export function SourcesPage() {
     <>
       <PageHeader
         title="Adatforrások"
-        lead="Az MVK saját feedje az elsődleges. Ha a token hiányzik vagy elutasított (401/403), azonnal; ha az MVK egy percig nem válaszol, a MÁV+ (OTP2) adja az MVK járműveit — 5 sikeres MVK-lekérés után visszaváltunk. A Volán és a vasút mindig a MÁV+-ból jön."
+        lead="Az MVK saját feedje az elsődleges. Ha a token hiányzik vagy elutasított (401/403), azonnal; ha az MVK egy percig nem válaszol, a MÁV+ (OTP2) adja az MVK járműveit  5 sikeres MVK-lekérés után visszaváltunk. A Volán és a vasút mindig a MÁV+-ból jön."
       />
       {live ? (
         <>
@@ -217,7 +217,7 @@ export function SourcesPage() {
 
             {d ? (
               <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-                <Panel title="Tartalékon töltött idő naponta" hint="source_health — 30 nap, percben">
+                <Panel title="Tartalékon töltött idő naponta" hint="source_health  30 nap, percben">
                   <Bars data={fallbackDays.map((h) => ({ key: h.day, label: shortDay(h.day), value: Math.round(h.fallbackS / 60) }))} color="hsl(var(--nosignal))" yFormat={(v) => `${num(v)} p`} />
                 </Panel>
                 <Panel title="Volán + vasút járműmaximum" hint="egyszerre látott regionális járművek csúcsa naponta">

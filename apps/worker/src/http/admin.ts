@@ -1,5 +1,5 @@
 /**
- * A rendszer-hub (apps/hub) üzemeltetési végpontjai — mind admin-kulcsos
+ * A rendszer-hub (apps/hub) üzemeltetési végpontjai  mind admin-kulcsos
  * (X-Admin-Key). A hub szerveroldala hívja őket a belső hálón; a böngésző
  * soha nem kapja meg a kulcsot.
  *
@@ -56,7 +56,7 @@ export function registerAdmin(r: Router, ctx: AdminCtx) {
     "ml-train": async () => {
       const saved = await trainDelayModelInThread();
       if (saved) await ctx.forecaster.loadModel();
-      return saved ? "új késés-modell élesítve" : "a modell nem lett jobb — a régi marad";
+      return saved ? "új késés-modell élesítve" : "a modell nem lett jobb  a régi marad";
     },
     nightly: async () => {
       const out: string[] = [];
@@ -116,7 +116,7 @@ export function registerAdmin(r: Router, ctx: AdminCtx) {
   r.post("/system/jobs/run", (req, res) => {
     requireAdmin(req);
     const job = String(parseJson(req.body)?.job ?? "") as JobName;
-    if (!JOB_NAMES.includes(job)) throw new HttpError(400, `ismeretlen feladat — ezek vannak: ${JOB_NAMES.join(", ")}`);
+    if (!JOB_NAMES.includes(job)) throw new HttpError(400, `ismeretlen feladat  ezek vannak: ${JOB_NAMES.join(", ")}`);
     if (running.has(job)) throw new HttpError(409, "ez a feladat már fut");
     const run: JobRun = { job, startedAt: Date.now(), finishedAt: null, ok: null, note: null };
     runs.push(run);
@@ -180,7 +180,7 @@ async function inspectMvk(raw: Buffer | undefined) {
       out.body = { decodedFrom: "GTFS-RT protobuf", entities: feed.entity.length, header: feed.header, sample: feed.entity.slice(0, 25) };
       return out;
     } catch {
-      /* nem dekódolható — nyersen adjuk vissza */
+      /* nem dekódolható  nyersen adjuk vissza */
     }
   }
   const text = r.buf.subarray(0, MAX_INSPECT_BYTES).toString("utf8");

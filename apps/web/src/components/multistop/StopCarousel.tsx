@@ -69,7 +69,7 @@ export function StopCarousel({
   }, [total]);
 
   // A megállók a viszonylat- és vonatkártyák után töltődnek be (a GTFS-listából): a böngésző
-  // ilyenkor a már látott kártyán tartaná a görgetést — az első betöltéskor az elejére ugrunk.
+  // ilyenkor a már látott kártyán tartaná a görgetést  az első betöltéskor az elejére ugrunk.
   const hadStopsRef = useRef(stops.length > 0);
   useEffect(() => {
     if (hadStopsRef.current || !stops.length) return;
@@ -115,7 +115,7 @@ export function StopCarousel({
   useEffect(() => {
     if (!focusStop || appliedFocusRef.current === focusStop) return;
     const i = stops.findIndex((s) => s.id === focusStop.id);
-    if (i < 0) return; // még nincs kint (épp most vettük fel) — a következő körben
+    if (i < 0) return; // még nincs kint (épp most vettük fel)  a következő körben
     appliedFocusRef.current = focusStop;
     requestAnimationFrame(() => scrollToCard(i));
     // eslint-disable-next-line react-hooks/exhaustive-deps

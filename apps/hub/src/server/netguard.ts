@@ -3,7 +3,7 @@
  *
  * Alapból engedett: loopback, a magánhálózati tartományok (RFC 1918), a
  * link-local, a CGNAT-tartomány (Tailscale / WireGuard szokásos címei) és az
- * IPv6 ULA. A HUB_ALLOWED_CIDRS felülírja. Ez a jelszó MELLETT véd — a Docker
+ * IPv6 ULA. A HUB_ALLOWED_CIDRS felülírja. Ez a jelszó MELLETT véd  a Docker
  * userland-proxyja mögött a forráscím lehet a híd átjárója (az is magáncím),
  * ezért a valódi védelem a port kötése (HUB_BIND) és a jelszó.
  */
@@ -66,7 +66,7 @@ export function ipAllowed(ip: string, cidrs: string[]): boolean {
 /**
  * DNS-rebinding ellen: a Host fejléc csak IP-cím, localhost vagy egy kifejezetten
  * engedett név lehet. (Egy rosszindulatú oldal a saját domainjét a hub címére
- * irányíthatja — a böngésző ilyenkor a saját nevét küldi Hostként.)
+ * irányíthatja  a böngésző ilyenkor a saját nevét küldi Hostként.)
  */
 export function hostAllowed(hostHeader: string | null, allowedHosts: string[]): boolean {
   if (!hostHeader) return false;

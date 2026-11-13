@@ -1,6 +1,6 @@
 /**
  * Térgeometria. Miskolc kicsi, ezért egy helyi síkvetület (equirectangular a
- * város közepén) méterpontos — nincs szükség PostGIS-re a forró úton.
+ * város közepén) méterpontos  nincs szükség PostGIS-re a forró úton.
  */
 
 const R_KM = 6371;
@@ -92,7 +92,7 @@ export class ProjectedShape {
       const local = scan(nearAlongM - backM, nearAlongM + aheadM);
       if (local.distM <= 60) return local;
       const global = scan(-Infinity, Infinity);
-      // A lokális találat marad, ha a globális csak kicsit jobb — ez véd az
+      // A lokális találat marad, ha a globális csak kicsit jobb  ez véd az
       // önkeresztező szakaszok közti ugrálás ellen.
       return global.distM + 25 < local.distM ? global : local;
     }

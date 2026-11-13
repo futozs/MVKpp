@@ -1,5 +1,5 @@
 /**
- * Felhős szinkron — minden mvk_* localStorage-kulcs, mindkét irányban.
+ * Felhős szinkron  minden mvk_* localStorage-kulcs, mindkét irányban.
  *
  *  - Helyi változás: a localStorage írásait elkapjuk (az app sok helyen
  *    közvetlenül ír bele), és 1,5 mp-es összevárás után felküldjük.
@@ -14,7 +14,7 @@ import { realtime } from "@/lib/realtime";
 
 const DEVICE_KEY = "mvk_device_id";
 const META_KEY = "mvk_sync_meta";
-/** Eszközhöz kötött kulcsok — ezek nem utaznak. */
+/** Eszközhöz kötött kulcsok  ezek nem utaznak. */
 const DEVICE_ONLY = new Set([
   "mvk_account",
   DEVICE_KEY,
@@ -137,7 +137,7 @@ async function api<T>(method: "GET" | "PUT", path: string, body?: unknown): Prom
     // Egy beragadt mobil-kérés ne tartsa „szinkronizál” állapotban a végtelenségig.
     signal: AbortSignal.timeout(SYNC_TIMEOUT_MS),
   });
-  if (res.status === 401) throw new Error("A munkamenet lejárt — jelentkezz be újra.");
+  if (res.status === 401) throw new Error("A munkamenet lejárt  jelentkezz be újra.");
   if (!res.ok) throw new Error(`szinkron HTTP ${res.status}`);
   return res.json();
 }
@@ -249,7 +249,7 @@ export function startSync(): void {
     else onLoggedOut();
   });
   // Az élő szinkron (WebSocket, időzítő, háttérbe kerülés) bejelentkezés nélkül is
-  // fel van iratkozva — a kezelők maguk nézik a munkamenetet. Így egy menet közbeni
+  // fel van iratkozva  a kezelők maguk nézik a munkamenetet. Így egy menet közbeni
   // bejelentkezés után is azonnal él, nem csak az app következő indításakor.
   const refresh = () => void pull().then((c) => c.length && announce(c));
   realtime.subscribe("sync", refresh);

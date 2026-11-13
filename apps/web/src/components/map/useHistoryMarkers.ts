@@ -127,8 +127,8 @@ function fillPopup(refs: PopupRefs, t: number, sample: Sample | null): void {
   refs.fix.textContent = formatClock(sample.fixTs);
   const { bearing, speedKmh } = motionOf(sample);
   refs.heading.textContent =
-    bearing == null ? "—" : `${compassLabel(bearing)} · ${Math.round(bearing)}°`;
-  refs.speed.textContent = speedKmh == null ? "—" : `~${Math.round(speedKmh)} km/h`;
+    bearing == null ? "" : `${compassLabel(bearing)} · ${Math.round(bearing)}°`;
+  refs.speed.textContent = speedKmh == null ? "" : `~${Math.round(speedKmh)} km/h`;
 }
 
 /**

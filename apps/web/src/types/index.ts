@@ -7,14 +7,14 @@ export interface Stop {
   name: string;
   lat: number;
   lon: number;
-  /** v3 (?modes=): melyik forrásé — "mvk", "coach" (Volán) vagy "rail" */
+  /** v3 (?modes=): melyik forrásé  "mvk", "coach" (Volán) vagy "rail" */
   feed?: "mvk" | "coach" | "rail";
-  /** v3: a szülő-állomás (vasútállomás, autóbusz-állomás) — a vágány / kocsiállás így tartozik hozzá */
+  /** v3: a szülő-állomás (vasútállomás, autóbusz-állomás)  a vágány / kocsiállás így tartozik hozzá */
   parent?: string;
   /** v3: maga az állomás */
   station?: boolean;
   /**
-   * v3: közös megálló — ez a Volán-megálló ugyanott áll, mint ez az MVK-oszlop
+   * v3: közös megálló  ez a Volán-megálló ugyanott áll, mint ez az MVK-oszlop
    * (összevont nézetben nem külön tétel, az MVK-oszlop táblája mutatja a járatait)
    */
   twinOf?: string;
@@ -52,7 +52,7 @@ export interface GtfsMeta {
   shapes?: number;
   serviceRange?: { from: string; to: string } | null;
   archiveRange?: { from: string; to: string; days: number } | null;
-  /** v3: a Volán és a vasút a mai menetrendben — „pending”, amíg a worker indulás után építi */
+  /** v3: a Volán és a vasút a mai menetrendben  „pending”, amíg a worker indulás után építi */
   regional?: "off" | "pending" | "ready";
 }
 
@@ -66,7 +66,7 @@ export interface LiveMotion {
   t: number;
   e: number;
   v: number;
-  /** várható pálya: [hely a nyomvonalon (m), idő a jel óta (mp)] — ezt követi a térkép */
+  /** várható pálya: [hely a nyomvonalon (m), idő a jel óta (mp)]  ezt követi a térkép */
   k?: [number, number][] | null;
 }
 
@@ -94,7 +94,7 @@ export interface LiveVehicle {
   /** v3: vasút: vonatszám és név (TOKAJ) */
   trainNo?: string;
   trainName?: string;
-  /** v3: hivatalos késés a következő megállónál (mp) — Volán, vasút, tartalék üzem */
+  /** v3: hivatalos késés a következő megállónál (mp)  Volán, vasút, tartalék üzem */
   delaySec?: number | null;
   /** v3: menetrendből becsült helyzet (nem GPS) */
   estimated?: boolean;
@@ -125,7 +125,7 @@ export interface ArrivalVehicle {
   plate?: string;
   trainNo?: string;
   trainName?: string;
-  /** a MÁV által közölt késés (mp) — vonatnál ez a hivatalos, a menetrend is ebből számol */
+  /** a MÁV által közölt késés (mp)  vonatnál ez a hivatalos, a menetrend is ebből számol */
   delaySec?: number;
 }
 
@@ -154,7 +154,7 @@ export interface ArrivalItem {
   forecastUpperSec?: number | null;
   /** v3: menetrend szerinti idő ennél a megállónál (unix) */
   schedUnix?: number | null;
-  /** v3: késve indul / valószínűleg kimarad — a busza még az előző menetén jár */
+  /** v3: késve indul / valószínűleg kimarad  a busza még az előző menetén jár */
   startRisk?: {
     vehicleId: string;
     expectedDelayS: number;
@@ -175,7 +175,7 @@ export interface ArrivalItem {
   /** v3: vágány / kocsiállás (élőben változhat) */
   platform?: string | null;
   platformChanged?: boolean;
-  /** v3: a vágány még nincs kiadva — a korábbi napok szerinti várható */
+  /** v3: a vágány még nincs kiadva  a korábbi napok szerinti várható */
   platformPredicted?: boolean;
   /** v3: a megálló (állomásnál a vágány), ahonnan indul */
   stopId?: string;
@@ -191,7 +191,7 @@ export interface StopArrivalsResponse {
     lat?: number;
     lon?: number;
   };
-  /** v3: közös megálló — a táblán ezeknek a megállóknak az indulásai (MVK-oszlop + Volán-pár) */
+  /** v3: közös megálló  a táblán ezeknek a megállóknak az indulásai (MVK-oszlop + Volán-pár) */
   merged?: string[];
   now: number;
   rtError: string | null;
@@ -233,7 +233,7 @@ export interface FilterState {
   vq: string;
   watch: string[];
   routes: string[];
-  /** a térképen látszó módok ([] = minden bekapcsolt mód) — a régi `type` (busz / villamos) helyett */
+  /** a térképen látszó módok ([] = minden bekapcsolt mód)  a régi `type` (busz / villamos) helyett */
   modes: TransitMode[];
   /** Volán: üzemeltető-egység (pl. „Helyközi busz”, „Tiszaújváros”); [] = mind */
   operators: string[];
@@ -380,12 +380,12 @@ export interface TimetableTrip {
   stopCount: number;
   deviates: boolean;
   headsignDiffers: boolean;
-  /** útvonal-változat betűjele (az alaptól eltérő menetnél) — magyarázata a `variants`-ban */
+  /** útvonal-változat betűjele (az alaptól eltérő menetnél)  magyarázata a `variants`-ban */
   variant?: string;
   times: (string | null)[];
 }
 
-/** „A = Avas városközpont érintésével” — miben más a betűjeles menet */
+/** „A = Avas városközpont érintésével”  miben más a betűjeles menet */
 export interface TimetableVariant {
   code: string;
   label: string;
@@ -516,7 +516,7 @@ export interface RelationRow {
   durationMin: number;
   stops: number;
   platform: string | null;
-  /** v3: a vágány még nincs kiadva — a korábbi napok szerinti várható */
+  /** v3: a vágány még nincs kiadva  a korábbi napok szerinti várható */
   platformPredicted?: boolean;
   live: boolean;
   cancelled: boolean;
@@ -539,7 +539,7 @@ export interface TrainStop {
   platform: string | null;
   /** az élő vágány eltér a menetrenditől */
   platformChanged?: boolean;
-  /** v3: a vágány még nincs kiadva — a korábbi napok szerinti várható */
+  /** v3: a vágány még nincs kiadva  a korábbi napok szerinti várható */
   platformPredicted?: boolean;
   schedArr: string;
   schedDep: string;

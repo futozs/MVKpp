@@ -1,7 +1,7 @@
 /**
  * MVK-hírek: kérésre töltjük le, 10 percig frissnek tekintjük. Ha az MVK nem
  * válaszol (pl. lejárt a token), a legutóbbi jó lista megy ki `stale`
- * jelzéssel, és egy percig nem próbálkozunk újra — a kliens ilyenkor is
+ * jelzéssel, és egy percig nem próbálkozunk újra  a kliens ilyenkor is
  * azonnal kap választ.
  */
 import { normalizeNews, nowUnix, type NewsFeed } from "@mvk/core";

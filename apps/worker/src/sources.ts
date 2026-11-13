@@ -26,7 +26,7 @@ export class SourceManager {
   private okStreak = 0;
   private failingSince = 0;
   private lastProbe = 0;
-  /** a mai napon tartalékban töltött idő (mp) — a source_health-be */
+  /** a mai napon tartalékban töltött idő (mp)  a source_health-be */
   fallbackMsToday = 0;
   private fallbackFrom = 0;
   switches: { at: string; to: MvkSource; reason: string }[] = [];

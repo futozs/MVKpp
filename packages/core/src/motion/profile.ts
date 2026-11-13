@@ -12,7 +12,7 @@
  */
 
 export const MOTION_BIN_M = 20;
-/** egy rekeszben eltöltött idő felső korlátja menetenként (mp) — egy lerobbanás ne torzítson */
+/** egy rekeszben eltöltött idő felső korlátja menetenként (mp)  egy lerobbanás ne torzítson */
 const CAP_BIN_S = 90;
 /** egy állás hosszának felső korlátja (mp) */
 const CAP_DWELL_S = 180;

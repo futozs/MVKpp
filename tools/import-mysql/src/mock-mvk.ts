@@ -64,7 +64,7 @@ function positions(): Uint8Array {
         trip: { tripId: p.trip },
         vehicle: { id: p.id, label: p.id },
         position: { latitude: p.lat, longitude: p.lon, bearing: p.bearing ?? undefined, speed: p.speed ?? undefined },
-        // Az MVK helyi időt küld unix-ként — a szimulátor is így tesz.
+        // Az MVK helyi időt küld unix-ként  a szimulátor is így tesz.
         timestamp: p.ts + shift + off,
       },
     }));

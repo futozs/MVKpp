@@ -1,7 +1,7 @@
 /**
  * A járművek a 3D térképen: ugyanaz a csempe és ugyanaz a mozgásbecslés, mint a
  * 2D-ben (negyedmásodpercenként új cél), de két ütem között a jelölő minden
- * képkockán egyenletesen siklik — a követő kamera is folyamatosan halad vele.
+ * képkockán egyenletesen siklik  a követő kamera is folyamatosan halad vele.
  */
 import { Marker, Popup, type Map as MLMap } from "maplibre-gl";
 import type { LiveMotion, LiveVehicle } from "@/types";
@@ -12,14 +12,14 @@ import { VEHICLE_ICON_SIZE } from "../vehicleIcon";
 import { vehiclePopupHtml, wireVehiclePopup } from "../vehiclePopup";
 import { lerp, metersBetween } from "./chaseCam";
 
-/** a becslés üteme (ms) — mint a 2D-ben */
+/** a becslés üteme (ms)  mint a 2D-ben */
 export const TICK_MS = 250;
-/** ekkora ugrásnál nem siklik, hanem odaugrik (m) — új menet, hibás illesztés */
+/** ekkora ugrásnál nem siklik, hanem odaugrik (m)  új menet, hibás illesztés */
 const SNAP_M = 400;
 /** a terep mögé került jelölő ennyire látszik */
 const COVERED_OPACITY = "0.2";
 
-/** [lon, lat] — a MapLibre sorrendje */
+/** [lon, lat]  a MapLibre sorrendje */
 export type LngLat = [number, number];
 
 /** amit a becsléshez tudni kell egy járműről */

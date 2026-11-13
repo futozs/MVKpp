@@ -32,7 +32,7 @@ function anchorOf(v: BlockRow): { route: string; start: number } {
 
 type Group = { route: string | null; rows: BlockRow[] };
 
-/** Vonal szerint csoportosítva, a csoporton belül a mostani menet indulása szerint — mint egy menetrend. */
+/** Vonal szerint csoportosítva, a csoporton belül a mostani menet indulása szerint  mint egy menetrend. */
 function groupRows(rows: BlockRow[], sort: SortMode): Group[] {
   if (sort === "id") return [{ route: null, rows: [...rows].sort((a, b) => byNumeric(a.id, b.id)) }];
   if (sort === "first") return [{ route: null, rows }];

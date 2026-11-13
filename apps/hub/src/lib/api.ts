@@ -27,5 +27,5 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 export const post = <T,>(path: string, body: unknown = {}) => api<T>(path, { method: "POST", body: JSON.stringify(body) });
 
-/** Egy rész-forrás hibája ({ error }) — a szerver a kiesett részeket így jelzi. */
+/** Egy rész-forrás hibája ({ error })  a szerver a kiesett részeket így jelzi. */
 export const isErr = (v: unknown): v is { error: string } => typeof v === "object" && v != null && "error" in v && typeof (v as { error: unknown }).error === "string" && Object.keys(v).length === 1;

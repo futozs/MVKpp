@@ -6,17 +6,17 @@
  * ugyanazzal a busszal), ennek híján a végállomásról legközelebb induló
  * menettel. A buszok a szabaddá válásuk sorrendjében választanak (FIFO a
  * végállomáson), egy menetet csak egy busz kaphat, és a lánc órákra előre
- * kiterjed — így a még messze lévő menetekre is van jóslat.
+ * kiterjed  így a még messze lévő menetekre is van jóslat.
  */
 import { fastDistM } from "./geo.ts";
 
 /** Egy még el nem indult menet a mai menetrendből. */
 export type RotationSlot = {
   tripId: string;
-  /** mintakulcs (`pattern@schedStartS`) — ezen tanulunk napokon át */
+  /** mintakulcs (`pattern@schedStartS`)  ezen tanulunk napokon át */
   key: string;
   route: string;
-  /** villamosmenet — buszra sosem kerülhet, és fordítva */
+  /** villamosmenet  buszra sosem kerülhet, és fordítva */
   tram: boolean;
   startS: number;
   endS: number;

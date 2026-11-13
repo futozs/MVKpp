@@ -40,7 +40,7 @@ function useLegs(legs: Ride[], enabled: boolean): Loaded {
 
 /**
  * Utólagos javítás: hol szálltál fel és hol szálltál le. Körbeutazásnál az
- * egész út egyszerre — a felszállás az első, a leszállás az utolsó menetben.
+ * egész út egyszerre  a felszállás az első, a leszállás az utolsó menetben.
  */
 export function RideFixSheet({ legs, initial, onClose }: { legs: Ride[]; initial: "from" | "to"; onClose: () => void }) {
   const sorted = useMemo(() => [...legs].sort((a, b) => a.boardedAt - b.boardedAt), [legs]);

@@ -1,5 +1,5 @@
 /**
- * Riasztási szabályok — tiszta függvény: a begyűjtött állapotból a
+ * Riasztási szabályok  tiszta függvény: a begyűjtött állapotból a
  * figyelmeztetések listája (súlyosság szerint), az Áttekintés tetejére.
  */
 export type Severity = "crit" | "warn" | "info";

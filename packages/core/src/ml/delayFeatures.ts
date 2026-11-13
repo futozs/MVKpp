@@ -1,5 +1,5 @@
 /**
- * A késés-modell jellemzői — UGYANEZ a kód számolja a tanításkor (múltbeli
+ * A késés-modell jellemzői  UGYANEZ a kód számolja a tanításkor (múltbeli
  * megálló-eseményekből) és élesben (a worker élő eseményeiből), így a kettő
  * nem csúszhat szét. A cél: a busz késése egy későbbi megállóban, a mostani
  * késéséhez képest (mennyit szed még fel / hoz be odáig).
@@ -110,7 +110,7 @@ export function profileAhead(stops: readonly StopLike[], fromIdx: number, profil
 }
 
 /**
- * A nap menetei megállónként (idő, késés) — az előtte járó busz és a busz
+ * A nap menetei megállónként (idő, késés)  az előtte járó busz és a busz
  * saját késés-trendje innen jön. Tanításkor az egész nap előre betöltve, és
  * a lekérdezés csak a `atTs` előtti eseményeket látja; élesben folyamatosan töltődik.
  */
@@ -154,7 +154,7 @@ export class RunHistory {
   /**
    * Az előtte járó busz (ugyanazon a nyomvonalon, legfeljebb `maxAgeS` mp-cel
    * korábban hagyta el a `fromIdx` megállót): mennyit változott a késése a
-   * `fromIdx` és `toIdx` között — addig, ameddig `atTs`-ig eljutott.
+   * `fromIdx` és `toIdx` között  addig, ameddig `atTs`-ig eljutott.
    */
   leader(pattern: string, runKey: string, fromIdx: number, toIdx: number, atTs: number, maxAgeS = 2400): { gain: number; cover: number; ageMin: number } | null {
     let best: { from: { ts: number; delay: number }; at: Map<number, { ts: number; delay: number }> } | null = null;
@@ -183,7 +183,7 @@ export class RunHistory {
 
 /**
  * A közelmúlt forgalma: szakaszonként (honnan|hova) a frissen mért menetidők
- * többlete a szokásoshoz képest. Bármely vonal mérése számít — a dugó mindenkit lassít.
+ * többlete a szokásoshoz képest. Bármely vonal mérése számít  a dugó mindenkit lassít.
  */
 export class RecentTraffic {
   private bySeg = new Map<string, { ts: number[]; excess: number[] }>();

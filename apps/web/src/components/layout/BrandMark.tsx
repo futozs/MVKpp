@@ -20,7 +20,7 @@ export function BrandMark({ onSelect, labelClassName, isTouch }: BrandMarkProps)
     <button
       type="button"
       onClick={onSelect}
-      aria-label="MVK++ — ugrás a forgalmi térképre"
+      aria-label="MVK++  ugrás a forgalmi térképre"
       className={cn(
         "group flex shrink-0 items-center gap-2.5 rounded-md",
         isTouch ? "h-11 px-0.5" : "h-9 pr-1",

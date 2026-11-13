@@ -23,7 +23,7 @@ const SOLID_N = 8;
 /**
  * Vonal-hőtérkép: a vonal megállói (fentről le, menetirányban) × a nap órái.
  * „Késés”: mennyit késik ott a busz; „Hol szedi fel”: az előző megállóhoz
- * képest mennyivel nőtt a késése — ez mutatja meg, melyik szakasz a bűnös.
+ * képest mennyivel nőtt a késése  ez mutatja meg, melyik szakasz a bűnös.
  */
 export function RouteHeat({ data }: { data: RouteHeatData }) {
   const [metric, setMetric] = useState<Extract<HeatMetric, "delay" | "gain">>("delay");
@@ -64,7 +64,7 @@ export function RouteHeat({ data }: { data: RouteHeatData }) {
         ) : null}
         {insights.bestHour ? (
           <Insight icon={Sparkles} tone="text-ontime" title="A legpontosabb napszak">
-            {hourLabel(insights.bestHour.h)} óra — átlagosan <b className="font-mono">{fmtSec(insights.bestHour.avg)}</b> eltérés
+            {hourLabel(insights.bestHour.h)} óra  átlagosan <b className="font-mono">{fmtSec(insights.bestHour.avg)}</b> eltérés
           </Insight>
         ) : null}
       </div>

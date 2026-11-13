@@ -33,7 +33,7 @@ export class LogRing {
     return line;
   }
 
-  /** A `after` sorszám utáni sorok (0: a legrégebbitől), legfeljebb `limit` darab — a legfrissebbek. */
+  /** A `after` sorszám utáni sorok (0: a legrégebbitől), legfeljebb `limit` darab  a legfrissebbek. */
   since(after = 0, limit = 500): LogLine[] {
     const out = this.lines.filter((l) => l.seq > after);
     return out.length > limit ? out.slice(out.length - limit) : out;

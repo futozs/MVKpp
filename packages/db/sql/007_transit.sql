@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS source_health (
   PRIMARY KEY (service_date, source)
 );
 
--- Hivatalos megjegyzések menetenként (vasút: késés oka, kocsiösszeállítás, pótlóbusz) — a statisztikához
+-- Hivatalos megjegyzések menetenként (vasút: késés oka, kocsiösszeállítás, pótlóbusz)  a statisztikához
 CREATE TABLE IF NOT EXISTS transit_notice (
   service_date date        NOT NULL,
   trip_id      text        NOT NULL,

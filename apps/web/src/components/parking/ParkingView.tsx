@@ -104,7 +104,7 @@ export function ParkingView({ routes, onFocusVehicle }: { routes: Route[]; onFoc
             {regionalOn ? (
               <section aria-labelledby="parking-regional" className="space-y-3 pt-2">
                 <SectionTitle id="parking-regional" count={regionalLots.reduce((n, t) => n + t.vehicles.length, 0)}>
-                  Volán és vonat — végállomáson
+                  Volán és vonat  végállomáson
                 </SectionTitle>
                 {regionalLots.length ? (
                   <div className="grid gap-3 md:grid-cols-2">

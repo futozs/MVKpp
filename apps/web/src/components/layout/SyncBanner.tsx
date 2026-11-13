@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { getSyncStatus, onSyncStatus, type SyncStatus } from "@/lib/sync";
 
-/** Egy másik eszközön módosított beállítás megérkezett — egy kattintással betölthető. */
+/** Egy másik eszközön módosított beállítás megérkezett  egy kattintással betölthető. */
 export function SyncBanner() {
   const [s, setS] = useState<SyncStatus>(getSyncStatus);
   useEffect(() => {

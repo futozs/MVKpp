@@ -29,7 +29,7 @@ function Delay({ sec, children }: { sec: number | null; children: React.ReactNod
   );
 }
 
-/** „08:35:12-kor” — az idő és a rag ne törjön el egymástól. */
+/** „08:35:12-kor”  az idő és a rag ne törjön el egymástól. */
 function At({ unix }: { unix: number }) {
   return (
     <span className="whitespace-nowrap">
@@ -43,7 +43,7 @@ function ForecastInsight({ leg }: { leg: JourneyTransitLeg }) {
   if (!p || p.source === "none" || (p.depDelayS == null && p.arrDelayS == null)) {
     return (
       <p className="text-[11px] text-muted-foreground">
-        Ehhez a menethez nincs késési adatunk — a menetrendi időt mutatjuk.
+        Ehhez a menethez nincs késési adatunk  a menetrendi időt mutatjuk.
       </p>
     );
   }
