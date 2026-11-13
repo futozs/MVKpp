@@ -52,9 +52,3 @@
   border-radius: 999px;
 }
 
-/* A háttér finom szemcséje: a vezérlőterem-hangulat, ami mögött a kártyák lebegnek. */
-.hub-backdrop {
-  background-image:
-    radial-gradient(1200px 520px at 12% -8%, hsl(var(--sg-900) / 0.35), transparent 60%),
-    radial-gradient(900px 480px at 100% 0%, hsl(var(--sg-950) / 0.5), transparent 55%);
-}

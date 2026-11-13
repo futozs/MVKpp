@@ -42,7 +42,7 @@ export function LoginForm() {
   };
 
   return (
-    <main className="hub-backdrop flex min-h-dvh items-center justify-center px-4">
+    <main className="flex min-h-dvh items-center justify-center px-4">
       <form onSubmit={submit} className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-xl">
         <div className="mb-6 flex items-center gap-3">
           <BrandGlyph className="h-11 w-11" />

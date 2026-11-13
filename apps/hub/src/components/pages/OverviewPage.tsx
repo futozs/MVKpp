@@ -25,13 +25,12 @@ function Hero({ o, now }: { o: Overview; now: number }) {
   const headline = crit ? `${crit} dolog azonnali beavatkozást kér` : warn ? `${warn} dolog figyelmet kér` : "Minden rendszer él";
   const tokenLeft = w?.token.exp ? w.token.exp * 1000 - now : null;
   return (
-    <section className="relative overflow-hidden rounded-3xl border border-border bg-card px-5 py-6 shadow-md sm:px-7 sm:py-7">
-      <div aria-hidden className={cn("absolute -right-24 -top-24 h-72 w-72 rounded-full blur-3xl", tone === "ok" ? "bg-live/10" : tone === "warn" ? "bg-nosignal/10" : "bg-late/15")} />
-      <div className="relative flex flex-wrap items-center gap-3">
+    <section className="rounded-2xl border border-border bg-card px-5 py-6 sm:px-7 sm:py-7">
+      <div className="flex flex-wrap items-center gap-3">
         <StatusDot tone={tone} pulse className="scale-150" />
         <h2 className="text-xl font-extrabold tracking-tight sm:text-2xl">{headline}</h2>
       </div>
-      <div className="relative mt-6 grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3 xl:grid-cols-6">
+      <div className="mt-6 grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3 xl:grid-cols-6">
         <Stat label="Járművek most" value={w ? num(w.poll.vehicles) : "–"} sub={w ? `ma max ${num(w.poll.vehiclesMax)}` : "a worker nem elérhető"} tone={w ? "ok" : "crit"} />
         <Stat label="Fent most" value={live ? num(live.clients) : "–"} sub={live ? `${live.signedIn} bejelentkezve` : "–"} />
         <Stat label="Ma használta" value={o.usage && !isErr(o.usage) ? num(o.usage.today) : "–"} sub="eszköz (webapp)" />

@@ -1,8 +1,7 @@
 "use client";
 /**
  * A pult kerete: asztalon bal oldali sáv (navigáció + élő állapot), telefonon
- * felső sáv és kihúzható menü. Az oldal tartalma jobbra, a háttérben finom
- * zöldes ragyogás — ugyanaz a sötét, jádezöld világ, mint a főappé.
+ * felső sáv és kihúzható menü. Az oldal tartalma jobbra.
  */
 import { LogOut, Menu, X } from "lucide-react";
 import Link from "next/link";
@@ -95,8 +94,8 @@ export function Shell({ children }: { children: ReactNode }) {
   useEffect(() => setOpen(false), [path]);
 
   return (
-    <div className="hub-backdrop min-h-dvh">
-      <aside className="fixed inset-y-0 left-0 z-bar hidden w-[264px] flex-col border-r border-border bg-card/80 backdrop-blur-xl lg:flex">
+    <div className="min-h-dvh">
+      <aside className="fixed inset-y-0 left-0 z-bar hidden w-[264px] flex-col border-r border-border bg-card lg:flex">
         <div className="px-5 pb-4 pt-5">
           <BrandMark />
         </div>
@@ -114,7 +113,7 @@ export function Shell({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      <header className="sticky top-0 z-bar flex h-14 items-center justify-between border-b border-border bg-card/85 px-4 pt-[env(safe-area-inset-top)] backdrop-blur-xl lg:hidden">
+      <header className="sticky top-0 z-bar flex h-14 items-center justify-between border-b border-border bg-card px-4 pt-[env(safe-area-inset-top)] lg:hidden">
         <BrandMark />
         <button onClick={() => setOpen(true)} className="rounded-xl p-2 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Menü">
           <Menu className="h-5 w-5" />
@@ -123,7 +122,7 @@ export function Shell({ children }: { children: ReactNode }) {
 
       {open ? (
         <div className="fixed inset-0 z-drawer lg:hidden" role="dialog" aria-modal="true" aria-label="Menü">
-          <button className="absolute inset-0 bg-background/70 backdrop-blur-sm" aria-label="Menü bezárása" onClick={() => setOpen(false)} />
+          <button className="absolute inset-0 bg-background/70" aria-label="Menü bezárása" onClick={() => setOpen(false)} />
           <div className="absolute inset-y-0 right-0 flex w-[min(320px,88vw)] flex-col border-l border-border bg-card shadow-xl animate-in slide-in-from-right">
             <div className="flex items-center justify-between px-4 py-3">
               <SystemPulse />

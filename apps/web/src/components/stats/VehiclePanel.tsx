@@ -36,7 +36,7 @@ import type { Route } from "@/types";
 /** a menet vonala a statisztikában: a regionálisé a vonal azonosítója, a feliratra a rövid neve kell */
 type RouteLabel = (routeShort: string) => string;
 
-const KIND_SUB: Record<string, string | undefined> = { TRAM: "🚋", COACH: "Volán", RAIL: "vonat" };
+const KIND_SUB: Record<string, string | undefined> = { TRAM: "villamos", COACH: "Volán", RAIL: "vonat" };
 
 const FAST_DMS = 100;
 

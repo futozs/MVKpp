@@ -159,16 +159,16 @@ export function NotificationsModal({ isOpen, onClose }: NotificationsModalProps)
         <div className="max-h-[70dvh] space-y-5 overflow-y-auto px-5 py-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] sm:max-h-[65vh]">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-sm font-semibold">Értesítések engedélyezve</p>
+              <p className="text-sm font-semibold">Értesítések ezen az eszközön</p>
               <p className="text-[11px] text-muted-foreground">
                 {permission === "granted"
-                  ? "A böngésző engedélyezve."
+                  ? "A böngésző engedélyezte."
                   : permission === "denied"
-                    ? "A böngésző letiltotta — a rendszerbeállításokban engedélyezhető."
-                    : "Még nincs engedélyezve."}
+                    ? "A böngésző letiltotta. A webhely beállításaiban engedélyezheted újra."
+                    : "Még nem engedélyezted."}
               </p>
             </div>
-            {permission !== "granted" ? (
+            {permission === "denied" ? null : permission !== "granted" ? (
               <Button
                 size="sm"
                 variant="outline"
@@ -183,7 +183,7 @@ export function NotificationsModal({ isOpen, onClose }: NotificationsModalProps)
               <Switch
                 checked={settings.enabled}
                 onCheckedChange={applyEnabled}
-                aria-label="Értesítések engedélyezve"
+                aria-label="Értesítések ezen az eszközön"
               />
             )}
           </div>
