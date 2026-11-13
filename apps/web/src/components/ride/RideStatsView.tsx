@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Clock, Hourglass, MapPin, Route as RouteIcon, Timer, Trophy } from "lucide-react";
+import { Clock, MapPin, Route as RouteIcon, Timer, Trophy } from "lucide-react";
 import type { RideStats } from "@mvk/core/rideStats";
 import { BarChart, ChartFrame, RankBars, StatTile } from "@/components/charts/Charts";
 import { RouteTile } from "@/components/transit/RouteTile";
@@ -13,15 +13,28 @@ const DAY = new Intl.DateTimeFormat("hu-HU", { timeZone: "Europe/Budapest", year
 const WEEKDAYS = ["H", "K", "Sze", "Cs", "P", "Szo", "V"];
 const STOPS_FOLDED = 24;
 
-/** perc → „2 ó 14 p” / „38 perc” */
+/** perc → „2 óra 14 perc” / „38 perc” / „2 óra” */
 export function formatMinutes(minutes: number): string {
   if (minutes < 60) return `${minutes} perc`;
   const h = Math.floor(minutes / 60);
   if (h >= 48) return `${nf.format(Math.round((minutes / 60 / 24) * 10) / 10)} nap`;
-  return `${h} ó ${minutes % 60} p`;
+  return minutes % 60 ? `${h} óra ${minutes % 60} perc` : `${h} óra`;
 }
 
 const fmtS = (s: number) => formatMinutes(Math.round(s / 60));
+
+function DelayPart({ swatch, label, value, note }: { swatch: string; label: string; value: number; note: string }) {
+  return (
+    <div>
+      <dt className="flex items-center gap-2 text-[13px] text-muted-foreground">
+        <span className={cn("h-2.5 w-2.5 shrink-0 rounded-sm", swatch)} aria-hidden />
+        {label}
+      </dt>
+      <dd className="mt-1 pl-[18px] text-lg font-semibold tabular-nums">{fmtS(value)}</dd>
+      <dd className="pl-[18px] text-[12px] leading-snug text-muted-foreground">{note}</dd>
+    </div>
+  );
+}
 
 /**
  * A késésekből összegyűlt idő: a buszon a menetrendhez képest plusz eltöltött
@@ -29,36 +42,34 @@ const fmtS = (s: number) => formatMinutes(Math.round(s / 60));
  * a késő buszra várva töltött.
  */
 function DelayHero({ s }: { s: RideStats<Ride> }) {
+  const total = s.extraOnboardS + s.lateWaitS;
+  const measured = `${s.delayMeasured} / ${s.journeys} utadnál ismert a fel- és leszálláskori késés.`;
+  if (total < 60) {
+    return (
+      <section className="rounded-2xl border border-border bg-card px-4 py-4 sm:px-6 sm:py-5">
+        <h3 className="text-lg font-semibold tracking-tight">Eddig nem vett el tőled időt a késés</h3>
+        <p className="mt-1 text-[12px] text-muted-foreground">{measured}</p>
+      </section>
+    );
+  }
+  const onboardPct = (100 * s.extraOnboardS) / total;
   return (
-    <section
-      aria-label="Késések miatt elveszett idő"
-      className="relative overflow-hidden rounded-2xl border border-late/30 bg-gradient-to-br from-late/[0.13] via-card to-card px-4 py-4 sm:px-6 sm:py-5"
-    >
-      <div className="grid gap-4 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] sm:items-end">
-        <div>
-          <p className="flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-late">
-            <Hourglass className="h-3.5 w-3.5" aria-hidden /> Késés miatt a buszon, pluszban
-          </p>
-          <p className="mt-2 text-4xl font-black leading-none tracking-tight sm:text-5xl">{fmtS(s.extraOnboardS)}</p>
-          <p className="mt-2 max-w-md text-[12px] leading-snug text-muted-foreground">
-            Ennyivel tovább ültél a buszon, mint a menetrend szerint kellett volna — az utak végén ennyivel nagyobb volt a késés, mint felszálláskor.
-          </p>
-        </div>
-        <dl className="grid grid-cols-2 gap-3 border-t border-late/20 pt-3 sm:border-l sm:border-t-0 sm:pl-5 sm:pt-0">
-          <div>
-            <dt className="text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground">Késő buszra várva</dt>
-            <dd className="mt-1 text-xl font-bold tabular-nums">{fmtS(s.lateWaitS)}</dd>
-            <dd className="text-[11px] text-muted-foreground">a megállóban, a menetrendhez képest</dd>
-          </div>
-          <div>
-            <dt className="text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground">Összesen</dt>
-            <dd className="mt-1 text-xl font-bold tabular-nums text-late">{fmtS(s.extraOnboardS + s.lateWaitS)}</dd>
-            <dd className="text-[11px] text-muted-foreground">
-              {s.delayMeasured} / {s.journeys} út mért késéssel
-            </dd>
-          </div>
-        </dl>
+    <section className="rounded-2xl border border-border bg-card px-4 py-4 sm:px-6 sm:py-5">
+      <h3 className="text-balance text-xl font-semibold tracking-tight sm:text-2xl">
+        <span className="font-bold tabular-nums text-late">{fmtS(total)}</span> ment el a késések miatt
+      </h3>
+
+      <div className="mt-4 flex h-2 gap-0.5 overflow-hidden rounded-full bg-muted" aria-hidden>
+        {s.extraOnboardS > 0 ? <span className="h-full bg-late" style={{ width: `${onboardPct}%` }} /> : null}
+        {s.lateWaitS > 0 ? <span className="h-full flex-1 bg-late/40" /> : null}
       </div>
+
+      <dl className="mt-4 grid gap-4 sm:grid-cols-2 sm:gap-8">
+        <DelayPart swatch="bg-late" label="A buszon ülve" value={s.extraOnboardS} note="Ennyivel tartottak tovább az útjaid a menetrendnél." />
+        <DelayPart swatch="bg-late/40" label="A megállóban várva" value={s.lateWaitS} note="Ennyit vártál pluszban a késve érkező buszokra." />
+      </dl>
+
+      <p className="mt-4 border-t border-border/60 pt-3 text-[11.5px] text-muted-foreground">{measured}</p>
     </section>
   );
 }
