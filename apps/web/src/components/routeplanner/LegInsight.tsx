@@ -72,9 +72,9 @@ function ForecastInsight({ leg }: { leg: JourneyTransitLeg }) {
               várhatóan <Delay sec={p.arrDelayS}>{delayForecast(p.arrDelayS)}</Delay>
             </span>
           )}
+          {showWorst ? " " : null}
           {showWorst ? (
             <span className="whitespace-nowrap text-muted-foreground">
-              {" "}
               · rossz esetben <span className="font-semibold tabular-nums text-late">{delayShort(p85)}</span>
             </span>
           ) : null}
