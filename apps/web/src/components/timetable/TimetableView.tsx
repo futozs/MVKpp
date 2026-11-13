@@ -390,11 +390,7 @@ export function TimetableView({
     day === "today" && selectedTrip && !selectedTripCancelled
       ? (vehicleByTrip.get(selectedTrip.tripId) ?? null)
       : null;
-  const dayLabel = new Date(`${date}T12:00:00`).toLocaleDateString("hu-HU", {
-    month: "short",
-    day: "numeric",
-    weekday: "short",
-  });
+  const dayLabel = new Date(`${date}T12:00:00`).toLocaleDateString("hu-HU", { weekday: "long" });
   const runsWord = isToday ? "menet ma" : "menet ezen a napon";
 
   return (
@@ -445,38 +441,40 @@ export function TimetableView({
               ))}
             </div>
           ) : null}
-          <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+          <div className="mt-2 flex flex-wrap items-stretch gap-2">
+            <DayPicker
+              value={date}
+              onChange={setDate}
+              min={minIso}
+              max={maxIso}
+              className="min-w-0 flex-[1_1_11rem]"
+            />
+            <button
+              type="button"
+              onClick={() => onDisruptionsOpenChange(true)}
+              title="Mai zavarok: mi marad ki, mi jön helyette"
+              className={cn(
+                "flex h-[34px] flex-[1_0_auto] items-center justify-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition-colors",
+                "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                todayCancelled > 0
+                  ? "border-destructive/40 bg-destructive/[0.07] text-foreground hover:bg-destructive/12"
+                  : "border-border text-muted-foreground hover:bg-accent hover:text-foreground",
+              )}
+            >
+              <Ban aria-hidden className={cn("h-3.5 w-3.5", todayCancelled > 0 && "text-destructive")} />
+              Mai zavarok
+              {todayCancelled > 0 ? (
+                <span className="rounded bg-destructive/15 px-1.5 text-[10.5px] font-bold tabular-nums text-destructive">{todayCancelled}</span>
+              ) : null}
+            </button>
+          </div>
+
+          <div className="mt-2.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
             <p className="text-[11px] text-muted-foreground">
               {visibleRoutes.length} járat · {dayLabel}
             </p>
             <HereChip stops={stops} />
           </div>
-
-          <button
-            type="button"
-            onClick={() => onDisruptionsOpenChange(true)}
-            className={cn(
-              "mt-2 flex w-full items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left text-xs font-semibold transition-colors",
-              "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-              todayCancelled > 0
-                ? "border-destructive/40 bg-destructive/[0.07] text-foreground hover:bg-destructive/12"
-                : "border-border text-muted-foreground hover:bg-accent",
-            )}
-          >
-            <Ban aria-hidden className={cn("h-3.5 w-3.5 shrink-0", todayCancelled > 0 ? "text-destructive" : "")} />
-            <span className="min-w-0 flex-1 truncate">Mai zavarok — mi marad ki, mi jön helyette</span>
-            {todayCancelled > 0 ? (
-              <span className="shrink-0 rounded bg-destructive/15 px-1.5 font-mono text-[10.5px] font-bold tabular-nums text-destructive">{todayCancelled}</span>
-            ) : null}
-          </button>
-
-          <DayPicker
-            value={date}
-            onChange={setDate}
-            min={minIso}
-            max={maxIso}
-            className="mt-2 w-full"
-          />
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
