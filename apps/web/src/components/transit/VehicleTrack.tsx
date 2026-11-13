@@ -49,7 +49,6 @@ export function VehicleTrack({
         className,
       )}
     >
-      {}
       <div className="flex items-center gap-2 sm:hidden">
         <Radio aria-hidden className="h-3.5 w-3.5 shrink-0 text-primary" />
         {vehicle ? (

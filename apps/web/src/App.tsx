@@ -399,7 +399,6 @@ export function App() {
     <GeoProvider>
       <TooltipProvider>
         <div className="flex h-full w-full flex-col overflow-hidden bg-background text-foreground">
-          {}
           <Header
             activeTab={activeTab}
             setActiveTab={setActiveTab}
@@ -429,9 +428,7 @@ export function App() {
           <SyncBanner />
           <RegionalIntroBanner />
 
-          {}
           <div className="flex-1 flex overflow-hidden relative">
-            {}
             {activeTab === "map" && (
               <div className="flex-1 flex h-full w-full overflow-hidden relative">
                 <TransitMap
@@ -455,7 +452,6 @@ export function App() {
                   dock={Boolean(focusTripId) && !activeRide}
                 />
 
-                {}
                 <RideLayer vehicles={liveVehicles} followingTripId={focusTripId} onFollow={handleFocusTrip} onStopFollow={handleExitFocus} />
 
                 {focusTripId && !activeRide ? (
@@ -468,7 +464,6 @@ export function App() {
                   />
                 ) : null}
 
-                {}
                 <StopDetailDrawer
                   stopId={focusTripId ? null : selectedStopId}
                   stops={stops}
@@ -480,7 +475,6 @@ export function App() {
               </div>
             )}
 
-            {}
             {activeTab === "multistop" && (
               <MultiStopDashboard
                 stops={stops}
@@ -492,8 +486,6 @@ export function App() {
               />
             )}
 
-            {}
-            {}
             {activeTab === "stats" && (
               <StatsView
                 stops={stops}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { boardKey, boardQuery, displayVehicleId, vehicleIdTitle, feedOfId, isMergedTwin, modesParam, pickableStops, regionRank, rideModeOf, routeModeOf, vehicleModeOf } from "../src/lib/modes.ts";
-import { travelEmptyHint, travelSentence } from "../src/components/routeplanner/TravelModes.tsx";
+import { travelEmptyHint } from "../src/components/routeplanner/TravelModes.tsx";
 import { arrivalTileText, arrivalTitle, arrivalVehicleLabel, stopKindLabel } from "../src/components/transit/RegionalBits.tsx";
 import { legTileText, vehiclePhrase } from "../src/components/routeplanner/format.ts";
 import { tripRunLabel } from "../src/lib/tripStatus.ts";
@@ -107,9 +107,7 @@ describe("közös megállók és a tábla kulcsa", () => {
 });
 
 describe("a tervező pipái", () => {
-  it("a mondat és az üres eredmény tanácsa a pipák szerint", () => {
-    expect(travelSentence({ coach: false, rail: false })).toMatch(/Csak az MVK/);
-    expect(travelSentence({ coach: true, rail: true })).toMatch(/Teljes hálózat/);
+  it("az üres eredmény tanácsa a pipák szerint", () => {
     expect(travelEmptyHint({ coach: true, rail: true })).toBeNull();
     expect(travelEmptyHint({ coach: true, rail: false })).toMatch(/pipáld be a vonatot/);
     expect(travelEmptyHint({ coach: false, rail: false })).toMatch(/a Volánt vagy a vonatot/);

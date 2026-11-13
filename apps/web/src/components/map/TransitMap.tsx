@@ -114,6 +114,8 @@ const HIT_TOLERANCE = IS_TOUCH ? 15 : 6;
 
 /** A megállópöttyök rajzolt mérete — érintésre nagyobb, hogy látszódjon is. */
 const STOP_R = IS_TOUCH ? 5 : 3.5;
+/** városnyi távolságból kisebb pötty: a buszok a lényeg, a megállók csak háttér */
+const STOP_R_FAR = IS_TOUCH ? 3 : 2.5;
 const STOP_R_ACTIVE = IS_TOUCH ? 7.5 : 6;
 /** a Volán-megállók csak ettől a nagyítástól látszanak (a megyében ~3500 van belőlük) */
 const COACH_STOPS_ZOOM = 14;
@@ -616,9 +618,9 @@ export function TransitMap({
       const rail = s.feed === "rail";
 
       const marker = L.circleMarker([s.lat, s.lon], {
-        radius: active ? STOP_R_ACTIVE : rail ? RAIL_STOP_R : STOP_R,
+        radius: active ? STOP_R_ACTIVE : rail ? RAIL_STOP_R : close ? STOP_R : STOP_R_FAR,
         color: outline,
-        weight: rail ? 2 : 1.5,
+        weight: rail ? 2 : close || active ? 1.5 : 1,
         fillColor: active ? brand : rail ? RAIL_COLOR : neutral,
         fillOpacity: 1,
         // A renderer 15 képpontos ráhagyásával együtt ez adja a

@@ -112,7 +112,6 @@ export function TimetableGrid({
               isCurrentHour && "bg-primary/[0.07]",
             )}
           >
-            {}
             <span
               className={cn(
                 "flex w-[68px] shrink-0 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5",
@@ -126,7 +125,6 @@ export function TimetableGrid({
               {String(row.hour % 24).padStart(2, "0")}
             </span>
 
-            {}
             <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
               {row.trips.map((trip) => {
                 const isCancelled = cancelledTripIds.has(trip.tripId);
@@ -186,7 +184,6 @@ export function TimetableGrid({
                   >
                     {String(minute).padStart(2, "0")}
 
-                    {}
                     {isCancelled ? (
                       <span className="sr-only"> — törölve</span>
                     ) : null}
@@ -209,7 +206,6 @@ export function TimetableGrid({
                       />
                     ) : null}
 
-                    {}
                     {trip.headsignDiffers && !trip.variant && !isCancelled ? (
                       <span
                         aria-hidden

@@ -21,7 +21,7 @@ export function FleetSummary({ counts, facts }: { counts: KindCounts; facts: { l
               <span className={cn("h-2 w-2 rounded-[3px]", s.color)} />
               {s.label}
             </dt>
-            <dd className={cn("mt-0.5 font-mono text-[26px] font-bold leading-none tabular-nums sm:text-[30px]", s.text)}>{counts[s.key]}</dd>
+            <dd className={cn("mt-1 text-[26px] font-bold leading-none tracking-tight tabular-nums sm:text-[30px]", s.text)}>{counts[s.key]}</dd>
           </div>
         ))}
       </dl>

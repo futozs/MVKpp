@@ -165,7 +165,6 @@ export function StopCarousel({
         ))}
       </div>
 
-      {}
       {total > 1 ? (
         <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border bg-card px-4 py-2.5">
           <Button
@@ -179,7 +178,6 @@ export function StopCarousel({
             <ChevronLeft />
           </Button>
 
-          {}
           <div className="flex min-w-0 flex-1 items-center justify-center">
             {total <= 8 ? (
               <div className="flex items-center gap-1.5">

@@ -36,7 +36,6 @@ export function Countdown({
           </span>
         ) : (
           <span className="font-mono font-bold tabular-nums text-foreground">
-            {}
             <span
               className={
                 size === "lg"

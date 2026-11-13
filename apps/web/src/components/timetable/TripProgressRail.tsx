@@ -127,14 +127,12 @@ export function TripProgressRail({
       )}
 
       <div className="relative isolate">
-        {}
         <span
           aria-hidden
           className="absolute left-[70px] top-0 w-0.5 rounded-full bg-border"
           style={{ height: stops.length * ROW_HEIGHT }}
         />
 
-        {}
         {busTop != null ? (
           <span
             aria-hidden
@@ -143,7 +141,6 @@ export function TripProgressRail({
           />
         ) : null}
 
-        {}
         {busTop != null && data.live ? (
           <span
             className="absolute z-10 flex h-7 w-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-background bg-primary text-primary-foreground shadow-md"
@@ -180,7 +177,6 @@ export function TripProgressRail({
                   {stop.time ?? "—"}
                 </span>
 
-                {}
                 <span
                   aria-hidden
                   className={cn(

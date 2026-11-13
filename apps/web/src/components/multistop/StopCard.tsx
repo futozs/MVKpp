@@ -183,7 +183,6 @@ export function StopCard({
         className,
       )}
     >
-      {}
       <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
         <div className="min-w-0">
           <h3
@@ -209,7 +208,6 @@ export function StopCard({
         </div>
 
         <div className="flex shrink-0 items-center gap-0.5">
-          {}
           {reorder ? (
             <>
               <Button
@@ -296,7 +294,6 @@ export function StopCard({
         onChanged={setIsWatching}
       />
 
-      {}
       <div className="border-b border-border bg-muted/30 px-4 py-3.5">
         {error ? (
           <p role="status" className="mb-2.5 flex items-center gap-2 rounded-lg border border-late/30 bg-late/10 px-3 py-2 text-xs">
@@ -421,7 +418,6 @@ export function StopCard({
         )}
       </div>
 
-      {}
       <div className="min-h-0 flex-1 overflow-y-auto">
         {rest.length > 0 ? (
           <ul className="divide-y divide-border/60">

@@ -157,7 +157,6 @@ export function NotificationsModal({ isOpen, onClose }: NotificationsModalProps)
         </DialogHeader>
 
         <div className="max-h-[70dvh] space-y-5 overflow-y-auto px-5 py-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] sm:max-h-[65vh]">
-          {}
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="text-sm font-semibold">Értesítések engedélyezve</p>
@@ -194,7 +193,6 @@ export function NotificationsModal({ isOpen, onClose }: NotificationsModalProps)
             <p className="-mt-3 text-[11px] text-early">{enabledNote}</p>
           ) : null}
 
-          {}
           <div
             className={cn(
               "space-y-3 rounded-xl border border-border bg-muted/30 p-3.5",
@@ -262,7 +260,6 @@ export function NotificationsModal({ isOpen, onClose }: NotificationsModalProps)
 
           <AlertList />
 
-          {}
           <div className="space-y-2">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               Aktív figyelések ({watches.length})

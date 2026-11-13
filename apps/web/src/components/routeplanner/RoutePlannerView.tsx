@@ -199,10 +199,6 @@ export function RoutePlannerView({ stops }: { stops: Stop[] }) {
       <div className="mx-auto w-full max-w-3xl space-y-4 px-3 py-4 sm:px-4 sm:py-6">
         <div className="px-1">
           <h1 className="text-lg font-bold tracking-tight sm:text-xl">Útvonaltervező</h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            Mikor érsz be valójában? Menetrend, élő adat és mért késések egy
-            helyen — múltbeli napra azt is megmutatja, mi történt.
-          </p>
         </div>
 
         <PlanForm

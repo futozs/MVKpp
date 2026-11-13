@@ -91,7 +91,6 @@ export function StatsView({
 
   return (
     <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col">
-      {}
       <nav
         aria-label="Statisztikai nézetek"
         className="flex shrink-0 items-stretch gap-1 border-b border-border bg-background/85 px-3 backdrop-blur-sm sm:px-4"
@@ -101,6 +100,7 @@ export function StatsView({
           className={cn(
             "flex min-w-0 flex-1 gap-1 overflow-x-auto py-2",
             "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+            "[mask-image:linear-gradient(to_right,black_calc(100%-28px),transparent)] sm:[mask-image:none]",
           )}
         >
           {panels.map((p) => {
@@ -129,8 +129,7 @@ export function StatsView({
           })}
         </ul>
 
-        {}
-        <button
+          <button
           type="button"
           onClick={() => setPanel("overview")}
           aria-current={panel === "overview" ? "page" : undefined}

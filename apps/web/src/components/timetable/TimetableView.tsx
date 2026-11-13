@@ -405,7 +405,6 @@ export function TimetableView({
         stops={stops}
         onPickTrip={openDisruptedTrip}
       />
-      {}
       <aside
         className={cn(
           "flex min-w-0 flex-col overflow-hidden border-border bg-card",
@@ -494,7 +493,6 @@ export function TimetableView({
             </p>
           ) : (
             <>
-              {}
               {favoriteLines.length > 0 && !query.trim() ? (
                 <section className="border-b border-border bg-muted/25 py-1">
                   <p className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -611,7 +609,6 @@ export function TimetableView({
         </div>
       </aside>
 
-      {}
       <div
         className={cn(
           "min-w-0 flex-1 flex-col overflow-hidden",
@@ -631,7 +628,6 @@ export function TimetableView({
           </div>
         ) : (
           <>
-            {}
             <div className="shrink-0 border-b border-border bg-card/70 px-3 py-3 sm:px-4">
               <div className="flex items-center gap-2.5">
                 <Button
@@ -674,7 +670,6 @@ export function TimetableView({
                   </p>
                 </div>
 
-                {}
                 <Button
                   variant={
                     isFavorite(selectedRoute.id, selectedDir)
@@ -709,7 +704,6 @@ export function TimetableView({
                 />
               </div>
 
-              {}
               <div className="mt-3 flex flex-wrap gap-1.5">
                 {selectedRoute.directions.map((d) => {
                   const isOn = d.dir === selectedDir;
@@ -772,7 +766,6 @@ export function TimetableView({
               ) : null}
             </div>
 
-            {}
             {/* A jelmagyarázat csak kérésre: telefonon két sort venne el a táblától. */}
             {hasLegend && legendOpen && table ? (
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border/60 px-3 py-1.5 text-[11px] text-muted-foreground sm:px-4">
@@ -795,7 +788,6 @@ export function TimetableView({
               </div>
             ) : null}
 
-            {}
             <div className="min-h-0 flex-1 overflow-y-auto">
               {tableLoading ? (
                 <p className="px-4 py-10 text-center font-mono text-xs text-muted-foreground">
@@ -836,7 +828,6 @@ export function TimetableView({
               ) : null}
             </div>
 
-            {}
             {selectedTrip && table ? (
               <TripDetail
                 // Másik menet = friss állapot (értesítő-cél, előrehaladás, tény-idők).
@@ -971,7 +962,6 @@ function TripDetail({
                 {variantLabel}
               </span>
             ) : null}
-            {}
             {!cancelled && statusLabel && (vehicle || pastVehicleId) ? (
               <span
                 className={cn(

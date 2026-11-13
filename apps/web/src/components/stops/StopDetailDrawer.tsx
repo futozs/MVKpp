@@ -124,7 +124,6 @@ export function StopDetailDrawer({
         "md:inset-x-auto md:bottom-4 md:right-4 md:max-h-[min(62vh,520px)] md:w-[340px] md:rounded-xl md:border",
       )}
     >
-      {}
       <div
         role="button"
         tabIndex={0}
@@ -261,7 +260,6 @@ export function StopDetailDrawer({
                       </p>
 
                       <div className="mt-1 flex items-center gap-2">
-                        {}
                         <PlatformBadge platform={arr.platform} changed={arr.platformChanged} predicted={arr.platformPredicted} mode={arr.mode} compact />
                         {arrivalVehicleLabel(arr) ? (
                           <span className="rounded bg-primary/12 px-1.5 py-px font-mono text-[11px] font-bold tabular-nums text-primary">
