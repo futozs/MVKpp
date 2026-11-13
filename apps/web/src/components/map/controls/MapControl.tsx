@@ -102,8 +102,8 @@ type Corner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 const CORNER: Record<Corner, string> = {
   "top-left": "left-3 top-3 items-start",
   "top-right": "right-3 top-3 items-end",
-  "bottom-left": "bottom-3 left-3 items-start mb-[env(safe-area-inset-bottom)]",
-  "bottom-right": "bottom-3 right-3 items-end mb-[env(safe-area-inset-bottom)]",
+  "bottom-left": "bottom-3 left-3 items-start md:mb-[env(safe-area-inset-bottom)]",
+  "bottom-right": "bottom-3 right-3 items-end md:mb-[env(safe-area-inset-bottom)]",
 };
 
 /**

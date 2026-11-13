@@ -200,7 +200,7 @@ export function StopDetailDrawer({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)] md:pb-0">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         {error ? (
           <p
             role="alert"

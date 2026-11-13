@@ -125,7 +125,7 @@ export function MapTimeline({ mapRef, routes, filters, onExit, onInsetChange }: 
     <section
       ref={barRef}
       aria-label="Idővonal"
-      className="absolute inset-x-3 bottom-3 z-overlay mx-auto mb-[env(safe-area-inset-bottom)] max-w-[880px] rounded-2xl border border-border bg-card/95 p-3 shadow-2xl backdrop-blur-sm"
+      className="absolute inset-x-3 bottom-3 z-overlay mx-auto max-w-[880px] md:mb-[env(safe-area-inset-bottom)] rounded-2xl border border-border bg-card/95 p-3 shadow-2xl backdrop-blur-sm"
     >
       {body}
     </section>

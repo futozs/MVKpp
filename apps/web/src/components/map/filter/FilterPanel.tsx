@@ -355,7 +355,7 @@ export function FilterPanel({
         )}
 
         {/* Telefonon a fiók alján: egy érintéssel vissza a térképre, a találatok számával. */}
-        <footer className="shrink-0 border-t border-border p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] md:hidden">
+        <footer className="shrink-0 border-t border-border p-3 md:hidden">
           <Button className="w-full" onClick={onClose}>
             {visibleVehicles.length} jármű a térképen
           </Button>

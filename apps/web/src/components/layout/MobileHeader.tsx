@@ -10,17 +10,14 @@ import { useTabBadges } from "@/lib/watchPrefs";
 import { RefreshSweep } from "./RefreshSweep";
 import { SettingsMenu } from "./SettingsMenu";
 import { formatTemp } from "./WeatherReadout";
-import { FOCUS_RING, ICON_BUTTON, WELL } from "./headerStyles";
+import { FOCUS_RING, ICON_BUTTON } from "./headerStyles";
 
 interface MobileHeaderProps {
-  activeTab: ActiveTab;
   setActiveTab: (tab: ActiveTab) => void;
   vehicleCount: number;
   lastUpdated: Date | null;
   isRefreshing: boolean;
   onManualRefresh: () => void;
-  monitoredStopsCount: number;
-  liveIncidentCount: number;
   onOpenNotifications: () => void;
   onOpenAccount: () => void;
 }
@@ -32,20 +29,17 @@ const INSET_X =
   "pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))]";
 
 /**
- * Mobil fejléc (md alatt). Felül egy tömör sáv: márkajel, élő állapot,
- * ikongombok (44 px érintési felület). Alatta az öt nézet egyenlő szélességű
- * szegmensekben — nincs vízszintes görgetés, minden nézet egyszerre látszik.
- * A fiók a beállítások menüben érhető el, a kézi frissítés az állapot-panelen.
+ * Mobil fejléc (md alatt): egy tömör sáv márkajellel, élő állapottal és
+ * ikongombokkal (44 px érintési felület). A nézetek a képernyő alján, a
+ * hüvelykujj alatt vannak (MobileTabBar). A fiók a beállítások menüben érhető
+ * el, a kézi frissítés az állapot-panelen.
  */
 export function MobileHeader({
-  activeTab,
   setActiveTab,
   vehicleCount,
   lastUpdated,
   isRefreshing,
   onManualRefresh,
-  monitoredStopsCount,
-  liveIncidentCount,
   onOpenNotifications,
   onOpenAccount,
 }: MobileHeaderProps) {
@@ -86,31 +80,29 @@ export function MobileHeader({
         </div>
       </div>
 
-      <MobileNav
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        counts={{ monitoredStopsCount, liveIncidentCount }}
-      />
-
       <RefreshSweep isRefreshing={isRefreshing} />
     </header>
   );
 }
 
-interface MobileNavProps {
+interface MobileTabBarProps {
   activeTab: ActiveTab;
   setActiveTab: (tab: ActiveTab) => void;
   counts: TabCounts;
 }
 
-function MobileNav({ activeTab, setActiveTab, counts }: MobileNavProps) {
+/** A nézetek mobilon: alsó sáv, hat egyenlő oszlop, az aktív ikon mögött egy halvány pirula. */
+export function MobileTabBar({ activeTab, setActiveTab, counts }: MobileTabBarProps) {
   // a számlálók a Beállításokban kikapcsolhatók
   const showBadges = useTabBadges();
   const reduceMotion = useReducedMotion();
 
   return (
-    <nav aria-label="Fő nézetek" className={cn("pb-2", INSET_X)}>
-      <ul className={cn("grid grid-cols-6 gap-0.5 p-[3px]", WELL)}>
+    <nav
+      aria-label="Fő nézetek"
+      className={cn("shrink-0 border-t border-border bg-card pb-[env(safe-area-inset-bottom)] md:hidden", INSET_X)}
+    >
+      <ul className="grid grid-cols-6">
         {NAV_TABS.map((tab) => {
           const isActive = activeTab === tab.id;
           const badge = showBadges ? tabBadge(tab.id, counts) : null;
@@ -122,29 +114,34 @@ function MobileNav({ activeTab, setActiveTab, counts }: MobileNavProps) {
                 onClick={() => setActiveTab(tab.id)}
                 aria-current={isActive ? "page" : undefined}
                 className={cn(
-                  "relative flex h-11 w-full min-w-0 flex-col items-center justify-center gap-[3px] rounded-md transition-colors duration-fast",
-                  "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
-                  isActive
-                    ? "text-primary-foreground"
-                    : "text-muted-foreground active:bg-accent/70",
+                  "group flex h-14 w-full min-w-0 flex-col items-center justify-center gap-1 transition-colors duration-fast",
+                  "outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                  isActive ? "text-foreground" : "text-muted-foreground",
                 )}
               >
-                {isActive ? (
-                  <motion.span
-                    aria-hidden
-                    layoutId="mobile-tab-indicator"
-                    transition={reduceMotion ? { duration: 0 } : INDICATOR_SPRING}
-                    className="absolute inset-0 rounded-md bg-primary shadow-[inset_0_1px_0_hsl(0_0%_100%/0.2),0_1px_2px_hsl(160_40%_2%/0.6)]"
-                  />
-                ) : null}
-                <span className="sr-only">{tab.label}</span>
-                <span className="relative flex">
-                  <Icon aria-hidden className="h-[17px] w-[17px]" strokeWidth={isActive ? 2.25 : 2} />
-                  {badge ? <TabBadge {...badge} isActive={isActive} placement="corner" /> : null}
+                <span className="relative flex h-7 w-12 items-center justify-center">
+                  {isActive ? (
+                    <motion.span
+                      aria-hidden
+                      layoutId="mobile-tab-indicator"
+                      transition={reduceMotion ? { duration: 0 } : INDICATOR_SPRING}
+                      className="absolute inset-0 rounded-full bg-primary/20"
+                    />
+                  ) : (
+                    <span aria-hidden className="absolute inset-0 rounded-full bg-accent opacity-0 transition-opacity duration-fast group-active:opacity-100" />
+                  )}
+                  <span className="sr-only">{tab.label}</span>
+                  <span className="relative flex">
+                    <Icon aria-hidden className={cn("h-5 w-5", isActive && "text-primary")} strokeWidth={isActive ? 2.25 : 1.85} />
+                    {badge ? <TabBadge {...badge} isActive={false} placement="corner" /> : null}
+                  </span>
                 </span>
                 <span
                   aria-hidden
-                  className="relative max-w-full truncate text-[10px] font-semibold leading-[1.25] tracking-[-0.01em] min-[360px]:text-[10.5px]"
+                  className={cn(
+                    "max-w-full truncate text-[10.5px] leading-none tracking-[-0.01em]",
+                    isActive ? "font-semibold" : "font-medium",
+                  )}
                 >
                   {tab.short}
                 </span>

@@ -9,7 +9,7 @@ import type {
 } from "@/types";
 import { api } from "@/services/api";
 import { Header } from "@/components/layout/Header";
-import { MobileHeader } from "@/components/layout/MobileHeader";
+import { MobileHeader, MobileTabBar } from "@/components/layout/MobileHeader";
 import { InstallBanner } from "@/components/layout/InstallBanner";
 import { SyncBanner } from "@/components/layout/SyncBanner";
 import { TransitMap } from "@/components/map/TransitMap";
@@ -412,14 +412,11 @@ export function App() {
             onOpenAccount={() => setAccountOpen(true)}
           />
           <MobileHeader
-            activeTab={activeTab}
             setActiveTab={setActiveTab}
             vehicleCount={liveVehicles.length}
             lastUpdated={lastUpdated}
             isRefreshing={isRefreshing}
             onManualRefresh={fetchLivePositions}
-            monitoredStopsCount={shownMonitoredCount}
-            liveIncidentCount={liveIncidentCount}
             onOpenNotifications={() => setNotificationsOpen(true)}
             onOpenAccount={() => setAccountOpen(true)}
           />
@@ -520,6 +517,12 @@ export function App() {
 
             {activeTab === "planner" && <RoutePlannerView stops={stops} />}
           </div>
+
+          <MobileTabBar
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            counts={{ monitoredStopsCount: shownMonitoredCount, liveIncidentCount }}
+          />
 
 
           <NotificationsModal
