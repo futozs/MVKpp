@@ -56,6 +56,16 @@ const nextConfig: NextConfig = {
       destination: `${WORKER_URL}${source}`,
     }));
   },
+  // Az iOS-app passkey-je (webcredentials) ezt a fájlt olvassa: kiterjesztés nélküli, ezért a típust
+  // meg kell adni  az Apple csak application/json-t fogad el, átirányítás nélkül.
+  async headers() {
+    return [
+      {
+        source: "/.well-known/apple-app-site-association",
+        headers: [{ key: "Content-Type", value: "application/json" }],
+      },
+    ];
+  },
 };
 
 export default nextConfig;
