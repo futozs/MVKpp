@@ -79,6 +79,7 @@ describe("élő tevékenység", () => {
     nextStopEtaUnix: 1_000_100,
     stopsLeft: 7,
     stopEtaUnix: null,
+    destName: null,
     speedKmh: 31,
     ended: false,
     updatedAt: 1_000_000,

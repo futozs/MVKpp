@@ -44,6 +44,7 @@ type TokenRow = {
   trip_id: string;
   vehicle_id: string | null;
   stop_id: string | null;
+  from_stop_id: string | null;
   created_at: Date;
   end_requested: boolean;
   last_sent_at: Date | null;
@@ -65,8 +66,10 @@ export type ActivityInput = {
   /** a szolgáltatási nap éjfele (unix)  a megállók `dep` ideje ehhez képest mp */
   midnightUnix: number;
   now: number;
-  /** a feliratkozáskor megadott megálló */
+  /** a feliratkozáskor megadott megálló (az iOS-utazásnál a leszállóhely) */
   stopId: string | null;
+  /** a felszállás megállója: a haladás innen számít a megadott megállóig */
+  fromStopId: string | null;
   /** a feliratkozáskor megadott jármű (ha a menet még nem indult el) */
   vehicleId: string | null;
 };
@@ -80,18 +83,29 @@ export function activityState(i: ActivityInput): LiveActivityState {
   const nextIdx = i.progress ? Math.min(i.stops.length - 1, i.progress.segmentIndex + 1) : 0;
   const next = i.stops[nextIdx] ?? null;
   const ended = i.complete || (!i.vehicle && last != null && i.now > i.midnightUnix + last.dep + END_GRACE_S);
-  const target = i.stopId ? i.stops.find((s) => s.id === i.stopId) : undefined;
+  const targetIdx = i.stopId ? i.stops.findIndex((s) => s.id === i.stopId) : -1;
+  const target = targetIdx >= 0 ? i.stops[targetIdx] : undefined;
+  // Megadott megállónál a haladás és a hátralévő megállók odáig (a felszállástól) számítanak,
+  // ahogy az app is mutatja  a push így nem ugratja a zárolt képernyőt.
+  const fromIdx = Math.max(0, i.fromStopId ? i.stops.findIndex((s) => s.id === i.fromStopId) : 0);
+  const span = target && targetIdx > fromIdx ? targetIdx - fromIdx : null;
+  const progress = !i.progress
+    ? null
+    : span == null
+      ? i.progress.progress
+      : Math.min(1, Math.max(0, (i.progress.progress * Math.max(1, i.stops.length - 1) - fromIdx) / span));
   return {
     tripId: i.tripId,
     vehicleId: i.vehicle?.id ?? i.vehicleId,
     live: i.vehicle != null,
-    progress: ended ? 1 : i.progress ? Math.round(i.progress.progress * 1000) / 1000 : null,
+    progress: ended ? 1 : progress == null ? null : Math.round(progress * 1000) / 1000,
     delaySec: delaySec == null ? null : Math.round(delaySec),
     nextStopId: ended ? null : (next?.id ?? null),
     nextStopName: ended ? null : (next?.name ?? null),
     nextStopEtaUnix: ended || !next ? null : Math.round(at(next.dep)),
-    stopsLeft: ended ? 0 : i.stops.length - nextIdx,
+    stopsLeft: ended ? 0 : Math.max(0, (target ? targetIdx + 1 : i.stops.length) - nextIdx),
     stopEtaUnix: target ? Math.round(at(target.dep)) : null,
+    destName: target?.name ?? null,
     speedKmh: i.vehicle?.speed != null ? Math.round(i.vehicle.speed * 3.6) : null,
     ended,
     updatedAt: i.now,
@@ -130,7 +144,7 @@ export class LiveActivityPusher {
   async reload(): Promise<void> {
     if (!this.apns.configured) return;
     this.rows = await sql<TokenRow>(
-      `SELECT token, env, trip_id, vehicle_id, stop_id, created_at, end_requested, last_sent_at, last_state, fail_count FROM live_activity_token`,
+      `SELECT token, env, trip_id, vehicle_id, stop_id, from_stop_id, created_at, end_requested, last_sent_at, last_state, fail_count FROM live_activity_token`,
     );
   }
 
@@ -163,6 +177,7 @@ export class LiveActivityPusher {
         midnightUnix: clock.midnightUnix,
         now,
         stopId: row.stop_id,
+        fromStopId: row.from_stop_id,
         vehicleId: row.vehicle_id,
       });
       if (state.ended || tooOld) {
@@ -243,6 +258,7 @@ function emptyState(tripId: string, now: number): LiveActivityState {
     nextStopEtaUnix: null,
     stopsLeft: null,
     stopEtaUnix: null,
+    destName: null,
     speedKmh: null,
     ended: true,
     updatedAt: now,

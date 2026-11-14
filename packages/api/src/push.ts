@@ -240,12 +240,13 @@ const routes: Route[] = [
   // ── élő tevékenység (iOS Live Activity) ─────────────────────────────────
   route("POST", "/push/live-activity", async (req) => {
     if (!apnsConfigured()) throw new ApiError(503, "A push-értesítés nincs beállítva a szerveren");
-    const b = await body<{ token?: string; env?: string; tripId?: string; vehicleId?: string; stopId?: string; deviceId?: string }>(req);
+    const b = await body<{ token?: string; env?: string; tripId?: string; vehicleId?: string; stopId?: string; fromStopId?: string; deviceId?: string }>(req);
     const env = apnsEnvOf(b?.env);
     if (!b || !validActivityToken(b.token) || !env) throw new ApiError(400, "Érvénytelen token");
     if (!b.tripId || !TRIP_ID_RE.test(b.tripId)) throw new ApiError(400, "Érvénytelen menet");
     if (b.vehicleId != null && !VEHICLE_ID_RE.test(b.vehicleId)) throw new ApiError(400, "Érvénytelen jármű");
     if (b.stopId != null && !STOP_ID_RE.test(b.stopId)) throw new ApiError(400, "Érvénytelen megálló");
+    if (b.fromStopId != null && !STOP_ID_RE.test(b.fromStopId)) throw new ApiError(400, "Érvénytelen megálló");
     const deviceId = b.deviceId != null && DEVICE_ID_RE.test(b.deviceId) ? b.deviceId : null;
     const token = b.token.toLowerCase();
     if (deviceId) {
@@ -253,10 +254,10 @@ const routes: Route[] = [
       if ((n?.n ?? 0) >= MAX_ACTIVITIES_PER_DEVICE) throw new ApiError(429, `Egy eszközön legfeljebb ${MAX_ACTIVITIES_PER_DEVICE} élő tevékenység lehet`);
     }
     await getPool().query(
-      `INSERT INTO live_activity_token (token, env, trip_id, vehicle_id, stop_id, device_id) VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO live_activity_token (token, env, trip_id, vehicle_id, stop_id, from_stop_id, device_id) VALUES ($1, $2, $3, $4, $5, $6, $7)
        ON CONFLICT (token) DO UPDATE SET env = EXCLUDED.env, trip_id = EXCLUDED.trip_id, vehicle_id = EXCLUDED.vehicle_id, stop_id = EXCLUDED.stop_id,
-         device_id = EXCLUDED.device_id, end_requested = false, last_state = NULL, last_sent_at = NULL, fail_count = 0, updated_at = now()`,
-      [token, env, b.tripId, b.vehicleId ?? null, b.stopId ?? null, deviceId],
+         from_stop_id = EXCLUDED.from_stop_id, device_id = EXCLUDED.device_id, end_requested = false, last_state = NULL, last_sent_at = NULL, fail_count = 0, updated_at = now()`,
+      [token, env, b.tripId, b.vehicleId ?? null, b.stopId ?? null, b.fromStopId ?? null, deviceId],
     );
     await notifyActivities();
     return json({ ok: true });

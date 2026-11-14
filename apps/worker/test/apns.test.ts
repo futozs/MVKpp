@@ -45,6 +45,7 @@ describe("élő tevékenység állapota", () => {
     midnightUnix: MIDNIGHT,
     now: MIDNIGHT + 8 * 3600 + 400,
     stopId: "C",
+    fromStopId: null,
     vehicleId: null,
   };
 
@@ -60,10 +61,18 @@ describe("élő tevékenység állapota", () => {
       nextStopEtaUnix: MIDNIGHT + 8 * 3600 + 600 + 120,
       stopsLeft: 2,
       stopEtaUnix: MIDNIGHT + 8 * 3600 + 1500 + 120,
+      destName: "Újgyőri főtér",
       speedKmh: 36,
       ended: false,
       updatedAt: base.now,
     });
+  });
+
+  it("felszállással: a haladás és a hátralévő megállók a felszállástól a leszállóhelyig", () => {
+    const riding = { ...base, fromStopId: "B", stopId: "C", progress: { segmentIndex: 1, progress: 0.75, scheduleDeviationSec: 90 } };
+    expect(activityState(riding)).toMatchObject({ progress: 0.5, nextStopId: "C", stopsLeft: 1, destName: "Újgyőri főtér" });
+    expect(activityState({ ...riding, stopId: "B", fromStopId: "A" })).toMatchObject({ progress: 1, stopsLeft: 0 });
+    expect(activityState({ ...riding, stopId: null })).toMatchObject({ progress: 0.75, stopsLeft: 1, destName: null });
   });
 
   it("mért késés nélkül a menetrendtől való eltérés", () => {

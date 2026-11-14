@@ -90,6 +90,8 @@ export type LiveActivityState = {
   stopsLeft: number | null;
   /** a feliratkozáskor megadott megálló (felszállás / leszállás) várható ideje, unix mp */
   stopEtaUnix: number | null;
+  /** a feliratkozáskor megadott megálló neve (az iOS-utazásnál a leszállóhely) */
+  destName: string | null;
   speedKmh: number | null;
   /** a menet véget ért (beért, vagy már nem fut) */
   ended: boolean;
