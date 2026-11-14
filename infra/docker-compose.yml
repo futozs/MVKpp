@@ -39,6 +39,10 @@ services:
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-}
+      APNS_KEY_ID: ${APNS_KEY_ID:-}
+      APNS_TEAM_ID: ${APNS_TEAM_ID:-}
+      APNS_KEY: ${APNS_KEY:-}
+      APNS_TOPIC: ${APNS_TOPIC:-}
       REDIS_URL: ${REDIS_URL:-}
       # MÁV+ (OTP2): Volán, vasút és az MVK tartaléka  docs/MAVPLUSZ_OTP2.md, M. fejezet
       OTP2_ENABLED: ${OTP2_ENABLED:-1}
@@ -62,6 +66,11 @@ services:
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-}
+      # a /push/apns csak azt nézi, be van-e állítva (a küldés a workeré)
+      APNS_KEY_ID: ${APNS_KEY_ID:-}
+      APNS_TEAM_ID: ${APNS_TEAM_ID:-}
+      APNS_KEY: ${APNS_KEY:-}
+      APNS_TOPIC: ${APNS_TOPIC:-}
       # A passkey ehhez a domainhez kötődik  ugyanaz legyen, mint a régi rendszeré.
       RP_ORIGINS: https://${DOMAIN:?DOMAIN kell}
       REDIS_URL: ${REDIS_URL:-}

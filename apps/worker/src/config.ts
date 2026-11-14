@@ -24,6 +24,13 @@ export const config = {
     privateKey: (process.env.VAPID_PRIVATE_KEY ?? "").trim(),
     subject: (process.env.VAPID_SUBJECT ?? "").trim(),
   },
+  /** natív iOS-értesítés (APNs): a .p8 kulcs tartalma és azonosítója, a csapat és az app bundle-azonosítója */
+  apns: {
+    keyId: (process.env.APNS_KEY_ID ?? "").trim(),
+    teamId: (process.env.APNS_TEAM_ID ?? "").trim(),
+    key: (process.env.APNS_KEY ?? "").trim(),
+    topic: (process.env.APNS_TOPIC ?? "").trim(),
+  },
   weather: { lat: 48.104, lon: 20.79 },
   /** MÁV+ OTP2: a Volán és a vasút, és az MVK tartaléka (docs/MAVPLUSZ_OTP2.md) */
   otp2: {

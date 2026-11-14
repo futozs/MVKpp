@@ -40,3 +40,4 @@ export * from "./transit/otp2Realtime.ts";
 export * from "./transit/stopTwins.ts";
 export * from "./transit/platformGuess.ts";
 export * from "./realtime/relation.ts";
+export * from "./apns.ts";

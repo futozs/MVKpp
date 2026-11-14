@@ -40,6 +40,8 @@ import { Parking } from "./parking.ts";
 import { NewsSource } from "./news.ts";
 import { VehiclePredictor } from "./predict.ts";
 import { PushEngine } from "./push.ts";
+import { ApnsClient } from "./apns.ts";
+import { LiveActivityPusher } from "./liveActivity.ts";
 import { RegionalFeeds } from "./regional/feeds.ts";
 import { RegionalRealtime } from "./regional/realtime.ts";
 import { loadToken, startRenewLoop, tokenStatus } from "./token.ts";
@@ -147,8 +149,12 @@ async function main() {
 
   regionalRt.start();
   await engine.start();
-  const push = new PushEngine(engine, boss, insights);
+  // natív iOS-értesítés és élő tevékenység: egy APNs-kapcsolat mindkettőnek
+  const apns = new ApnsClient();
+  const push = new PushEngine(engine, boss, insights, apns);
   await push.start();
+  const activities = new LiveActivityPusher(engine, apns);
+  await activities.start();
 
   // A webes oldal Postgres NOTIFY-jal szól: szinkron-változás, push-figyelés változott.
   // Ha a kapcsolat megszakad (Postgres újraindul), újrakapcsolódunk  különben a
@@ -178,6 +184,7 @@ async function main() {
         const e = JSON.parse(n.payload ?? "{}") as { type?: string; userId?: string; keys?: string[]; deviceId?: string };
         if (e.type === "sync" && e.userId) hub.notifySync(e.userId, e.keys ?? [], e.deviceId ?? null);
         if (e.type === "push_watch") push.reload().catch(() => {});
+        if (e.type === "live_activity") activities.reload().catch(() => {});
       } catch {
         /* hibás értesítés  figyelmen kívül */
       }
@@ -186,7 +193,10 @@ async function main() {
       await listener.connect();
       await listener.query("LISTEN mvk_events");
       // Kimaradt értesítések: a push-figyeléseket újratöltjük.
-      if (attempt > 0) push.reload().catch(() => {});
+      if (attempt > 0) {
+        push.reload().catch(() => {});
+        activities.reload().catch(() => {});
+      }
     } catch (e) {
       log.warn("listen", "a NOTIFY-kapcsolat nem jött létre", errMsg(e));
       listener.removeAllListeners("end");

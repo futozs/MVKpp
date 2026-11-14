@@ -20,20 +20,25 @@ import webpush from "web-push";
 import type { PgBoss } from "pg-boss";
 import {
   ALL_MODES,
+  apnsAlertPayload,
   budapestOffsetSec,
   catchVerdict,
+  collapseId,
   dayKindOf,
   isMvkId,
   isoDow,
   MVK_MODES,
   nowUnix,
   onlyMvk,
+  parseApnsEndpoint,
   parseModes,
   parseStopMerge,
   withHungarianSuffix,
   type ArrivalItem,
+  type PushMessage,
 } from "@mvk/core";
 import { getPool, sql } from "@mvk/db";
+import { type ApnsClient, isGone } from "./apns.ts";
 import { config } from "./config.ts";
 import type { Engine } from "./engine.ts";
 import type { TripInsights } from "./insights.ts";
@@ -151,17 +156,22 @@ export class PushEngine {
   private evaluating = false;
   stats = { queued: 0, sent: 0, failed: 0, gone: 0, skipped: 0 };
 
-  constructor(engine: Engine, boss: PgBoss, insights: TripInsights) {
+  private apns: ApnsClient;
+
+  constructor(engine: Engine, boss: PgBoss, insights: TripInsights, apns: ApnsClient) {
     this.engine = engine;
     this.boss = boss;
     this.insights = insights;
+    this.apns = apns;
   }
 
   async start(): Promise<void> {
-    if (!pushConfigured) {
-      log.warn("push", "VAPID kulcsok nincsenek beállítva  a push kikapcsolva");
+    if (!pushConfigured && !this.apns.configured) {
+      log.warn("push", "sem VAPID, sem APNs kulcs nincs beállítva  a push kikapcsolva");
       return;
     }
+    if (!pushConfigured) log.warn("push", "VAPID kulcsok nincsenek beállítva  csak az iOS-app (APNs) kap értesítést");
+    if (!this.apns.configured) log.warn("push", "APNS_* nincs beállítva  az iOS-app helyi értesítéssel szól");
     await this.boss.createQueue(QUEUE, { retryLimit: 3, retryDelay: 4, retryBackoff: true, expireInSeconds: 60 });
     await this.boss.work<{ deliveryId: number }>(QUEUE, { batchSize: 5 }, async (jobs) => {
       for (const job of jobs) await this.deliver(job.data.deliveryId, job.retryCount >= 2);
@@ -196,7 +206,9 @@ export class PushEngine {
       `SELECT w.id, w.subscription_id, w.kind, w.params, w.stop_id, w.stop_name, w.threshold_min, w.route_shorts, w.trip_id, w.sched_min, w.is_departure,
               s.dnd_start_min, s.dnd_end_min
          FROM push_watch w JOIN push_subscription s ON s.id = w.subscription_id
-        WHERE s.enabled`,
+        WHERE s.enabled AND (CASE WHEN s.endpoint LIKE 'apns:%' THEN $1 ELSE $2 END)`,
+      // csak az a csatorna, amelyikhez van kulcs (különben a kézbesítés biztosan elbukna)
+      [this.apns.configured, pushConfigured],
     );
   }
 
@@ -401,8 +413,8 @@ export class PushEngine {
       created_at: Date;
       sub_id: number;
       endpoint: string;
-      p256dh: string;
-      auth: string;
+      p256dh: string | null;
+      auth: string | null;
     }>(
       `SELECT d.status, d.payload, d.created_at, s.id AS sub_id, s.endpoint, s.p256dh, s.auth
          FROM push_delivery d JOIN push_watch w ON w.id = d.watch_id JOIN push_subscription s ON s.id = w.subscription_id
@@ -417,18 +429,14 @@ export class PushEngine {
       return;
     }
     try {
-      await webpush.sendNotification({ endpoint: d.endpoint, keys: { p256dh: d.p256dh, auth: d.auth } }, JSON.stringify(d.payload), {
-        TTL: 300,
-        urgency: "high",
-        topic: d.payload.tag.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 32) || undefined,
-      });
+      await this.sendTo(d.endpoint, d.p256dh, d.auth, d.payload);
       await getPool().query(`UPDATE push_delivery SET status = 'sent', sent_at = now(), attempts = attempts + 1, last_error = NULL WHERE id = $1`, [deliveryId]);
       await getPool().query(`UPDATE push_subscription SET last_success_at = now(), fail_count = 0 WHERE id = $1`, [d.sub_id]);
       this.stats.sent++;
     } catch (e) {
       const status = (e as { statusCode?: number }).statusCode;
       if (status === 404 || status === 410) {
-        await getPool().query(`UPDATE push_delivery SET status = 'gone', attempts = attempts + 1, last_error = $2 WHERE id = $1`, [deliveryId, `HTTP ${status}`]);
+        await getPool().query(`UPDATE push_delivery SET status = 'gone', attempts = attempts + 1, last_error = $2 WHERE id = $1`, [deliveryId, `HTTP ${status} ${errMsg(e)}`.slice(0, 300)]);
         await getPool().query(`DELETE FROM push_subscription WHERE id = $1`, [d.sub_id]);
         this.stats.gone++;
         await this.reload();
@@ -445,5 +453,32 @@ export class PushEngine {
       }
       throw e; // pg-boss újrapróbálja
     }
+  }
+
+  /**
+   * Egy értesítés a feliratkozás csatornáján: iPhone-app → APNs, böngésző → Web Push.
+   * Hibánál `statusCode`-dal dob (a végleg érvénytelen APNs-token 410), ahogy a web-push.
+   */
+  private async sendTo(endpoint: string, p256dh: string | null, auth: string | null, payload: PushMessage): Promise<void> {
+    const apns = parseApnsEndpoint(endpoint);
+    if (apns) {
+      const r = await this.apns.send({
+        ...apns,
+        pushType: "alert",
+        payload: apnsAlertPayload(payload),
+        // a Web Push 5 perces élettartama: később már téves lenne
+        expiration: nowUnix() + 300,
+        collapseId: collapseId(payload.tag),
+        priority: 10,
+      });
+      if (r.status === 200) return;
+      throw Object.assign(new Error(`APNs: ${r.reason ?? r.status}`), { statusCode: isGone(r) ? 410 : r.status });
+    }
+    if (!p256dh || !auth) throw new Error("hiányzó Web Push-kulcs");
+    await webpush.sendNotification({ endpoint, keys: { p256dh, auth } }, JSON.stringify(payload), {
+      TTL: 300,
+      urgency: "high",
+      topic: payload.tag.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 32) || undefined,
+    });
   }
 }

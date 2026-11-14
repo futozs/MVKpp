@@ -3,6 +3,7 @@
  * kézbesítési napló. A tényleges küldést a worker végzi (sorral,
  * újrapróbálással); a web csak tárol és Postgres NOTIFY-jal szól.
  */
+import { apnsEnvOf, isApnsEndpoint, validActivityToken } from "@mvk/core";
 import { getPool, sql, sqlOne } from "@mvk/db";
 import { ApiError, body, dispatch, json, route, type Route } from "./http.ts";
 import { sessionUser } from "./account.ts";
@@ -11,15 +12,21 @@ type Sub = { endpoint?: string; keys?: { p256dh?: string; auth?: string } };
 
 const publicKey = () => (process.env.VAPID_PUBLIC_KEY ?? "").trim();
 const configured = () => Boolean(publicKey() && process.env.VAPID_PRIVATE_KEY && process.env.VAPID_SUBJECT);
+/** A natív iOS-értesítés (APNs) kulcsai  a küldést a worker végzi ugyanezekkel. */
+export const apnsConfigured = () =>
+  Boolean(process.env.APNS_KEY_ID?.trim() && process.env.APNS_TEAM_ID?.trim() && process.env.APNS_KEY?.trim() && process.env.APNS_TOPIC?.trim());
 const notifyWatches = () => getPool().query(`SELECT pg_notify('mvk_events', '{"type":"push_watch"}')`);
+const notifyActivities = () => getPool().query(`SELECT pg_notify('mvk_events', '{"type":"live_activity"}')`);
 
 async function upsertSub(req: Request, s: Sub | undefined, extra: { dndStart?: number | null; dndEnd?: number | null; enabled?: boolean } = {}): Promise<number> {
   const endpoint = s?.endpoint;
-  const p256dh = s?.keys?.p256dh;
-  const auth = s?.keys?.auth;
-  if (!endpoint || !p256dh || !auth) throw new ApiError(400, "Hiányzó mező");
+  // az iPhone (APNs) végpontjához nincs kulcs: a payload az Apple-höz megy, nem a böngészőhöz
+  const apns = typeof endpoint === "string" && isApnsEndpoint(endpoint);
+  const p256dh = apns ? null : s?.keys?.p256dh;
+  const auth = apns ? null : s?.keys?.auth;
+  if (!endpoint || (!apns && (!p256dh || !auth))) throw new ApiError(400, "Hiányzó mező");
   if (endpoint.length > 1000 || !validPushEndpoint(endpoint)) throw new ApiError(400, "Érvénytelen push végpont");
-  if (p256dh.length > 200 || auth.length > 100) throw new ApiError(400, "Érvénytelen push kulcs");
+  if ((p256dh?.length ?? 0) > 200 || (auth?.length ?? 0) > 100) throw new ApiError(400, "Érvénytelen push kulcs");
   const user = await sessionUser(req).catch(() => null);
   const r = await sqlOne<{ id: number }>(
     `INSERT INTO push_subscription (endpoint, p256dh, auth, user_id, user_agent) VALUES ($1, $2, $3, $4, $5)
@@ -38,10 +45,13 @@ const validMin = (n: unknown): n is number => typeof n === "number" && Number.is
 /**
  * Csak a böngészők valódi push-szolgáltatásaira küldünk (Chrome/Edge/Samsung/Opera: FCM,
  * Firefox: Mozilla, régi Edge: WNS, Safari/iOS: Apple). Egy tetszőleges https-cím
- * különben a worker nevében hívatna meg belső címeket (SSRF).
+ * különben a worker nevében hívatna meg belső címeket (SSRF). A natív iPhone-app
+ * `apns:<környezet>:<hex token>` végpontja nem cím: a worker a környezetből a két
+ * Apple-kiszolgáló egyikét választja.
  */
 const PUSH_HOSTS = [/^fcm\.googleapis\.com$/, /(^|\.)googleapis\.com$/, /(^|\.)push\.services\.mozilla\.com$/, /(^|\.)notify\.windows\.com$/, /(^|\.)push\.apple\.com$/];
-function validPushEndpoint(endpoint: string): boolean {
+export function validPushEndpoint(endpoint: string): boolean {
+  if (isApnsEndpoint(endpoint)) return true;
   try {
     const u = new URL(endpoint);
     return u.protocol === "https:" && !u.port && PUSH_HOSTS.some((re) => re.test(u.hostname));
@@ -52,6 +62,10 @@ function validPushEndpoint(endpoint: string): boolean {
 const STOP_ID_RE = /^[\w:.-]{1,32}$/;
 const TRIP_ID_RE = /^[\w:.-]{1,80}$/;
 const MAX_WATCHES_PER_SUB = 60;
+/** egy eszközön egyszerre ennyi élő tevékenység (követett menet) */
+const MAX_ACTIVITIES_PER_DEVICE = 5;
+const DEVICE_ID_RE = /^[\w-]{1,64}$/;
+const VEHICLE_ID_RE = /^[\w:.-]{1,64}$/;
 const KINDS = new Set(["arrival", "leave", "traffic", "transfer"]);
 
 type WatchParams = {
@@ -122,8 +136,10 @@ function cleanParams(kind: string, p: WatchParams | undefined): WatchParams | nu
 const routes: Route[] = [
   route("GET", "/push/vapid-public-key", () => json({ publicKey: configured() ? publicKey() : null })),
 
+  /** Van-e natív iOS-értesítés  ha nincs, az iPhone-app helyi értesítéssel szól. */
+  route("GET", "/push/apns", () => json({ configured: apnsConfigured() })),
+
   route("POST", "/push/watch", async (req) => {
-    if (!configured()) throw new ApiError(503, "A push-értesítés nincs beállítva a szerveren");
     const b = await body<{
       subscription?: Sub;
       stopId?: string;
@@ -137,6 +153,8 @@ const routes: Route[] = [
       kind?: string;
       params?: WatchParams;
     }>(req);
+    const apns = typeof b?.subscription?.endpoint === "string" && isApnsEndpoint(b.subscription.endpoint);
+    if (!(apns ? apnsConfigured() : configured())) throw new ApiError(503, "A push-értesítés nincs beállítva a szerveren");
     if (!b?.stopId || !b.stopName) throw new ApiError(400, "Hiányzó mező");
     if (!STOP_ID_RE.test(b.stopId) || (b.tripId != null && (typeof b.tripId !== "string" || !TRIP_ID_RE.test(b.tripId)))) throw new ApiError(400, "Érvénytelen megálló vagy menet");
     const kind = b.kind ?? "arrival";
@@ -201,11 +219,12 @@ const routes: Route[] = [
     // Az eszköz figyelései + az utolsó 30 kézbesítés (mi ment ki, mi nem és miért).
     const b = await body<{ endpoint?: string }>(req);
     if (!b?.endpoint) throw new ApiError(400, "hiányzó endpoint");
+    const ready = isApnsEndpoint(b.endpoint) ? apnsConfigured() : configured();
     const sub = await sqlOne<{ id: number; enabled: boolean; dnd_start_min: number | null; dnd_end_min: number | null; last_success_at: Date | null; fail_count: number }>(
       `SELECT id, enabled, dnd_start_min, dnd_end_min, last_success_at, fail_count FROM push_subscription WHERE endpoint = $1`,
       [b.endpoint],
     );
-    if (!sub) return json({ known: false, configured: configured(), watches: [], deliveries: [] });
+    if (!sub) return json({ known: false, configured: ready, watches: [], deliveries: [] });
     const watches = await sql(
       `SELECT id, slot, kind, params, stop_id, stop_name, threshold_min, route_shorts, trip_id, sched_min, is_departure, updated_at FROM push_watch WHERE subscription_id = $1 ORDER BY stop_name`,
       [sub.id],
@@ -215,7 +234,41 @@ const routes: Route[] = [
          FROM push_delivery d JOIN push_watch w ON w.id = d.watch_id WHERE w.subscription_id = $1 ORDER BY d.created_at DESC LIMIT 30`,
       [sub.id],
     );
-    return json({ known: true, configured: configured(), subscription: sub, watches, deliveries });
+    return json({ known: true, configured: ready, subscription: sub, watches, deliveries });
+  }),
+
+  // ── élő tevékenység (iOS Live Activity) ─────────────────────────────────
+  route("POST", "/push/live-activity", async (req) => {
+    if (!apnsConfigured()) throw new ApiError(503, "A push-értesítés nincs beállítva a szerveren");
+    const b = await body<{ token?: string; env?: string; tripId?: string; vehicleId?: string; stopId?: string; deviceId?: string }>(req);
+    const env = apnsEnvOf(b?.env);
+    if (!b || !validActivityToken(b.token) || !env) throw new ApiError(400, "Érvénytelen token");
+    if (!b.tripId || !TRIP_ID_RE.test(b.tripId)) throw new ApiError(400, "Érvénytelen menet");
+    if (b.vehicleId != null && !VEHICLE_ID_RE.test(b.vehicleId)) throw new ApiError(400, "Érvénytelen jármű");
+    if (b.stopId != null && !STOP_ID_RE.test(b.stopId)) throw new ApiError(400, "Érvénytelen megálló");
+    const deviceId = b.deviceId != null && DEVICE_ID_RE.test(b.deviceId) ? b.deviceId : null;
+    const token = b.token.toLowerCase();
+    if (deviceId) {
+      const n = await sqlOne<{ n: number }>(`SELECT count(*)::int AS n FROM live_activity_token WHERE device_id = $1 AND token <> $2 AND NOT end_requested`, [deviceId, token]);
+      if ((n?.n ?? 0) >= MAX_ACTIVITIES_PER_DEVICE) throw new ApiError(429, `Egy eszközön legfeljebb ${MAX_ACTIVITIES_PER_DEVICE} élő tevékenység lehet`);
+    }
+    await getPool().query(
+      `INSERT INTO live_activity_token (token, env, trip_id, vehicle_id, stop_id, device_id) VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (token) DO UPDATE SET env = EXCLUDED.env, trip_id = EXCLUDED.trip_id, vehicle_id = EXCLUDED.vehicle_id, stop_id = EXCLUDED.stop_id,
+         device_id = EXCLUDED.device_id, end_requested = false, last_state = NULL, last_sent_at = NULL, fail_count = 0, updated_at = now()`,
+      [token, env, b.tripId, b.vehicleId ?? null, b.stopId ?? null, deviceId],
+    );
+    await notifyActivities();
+    return json({ ok: true });
+  }),
+
+  route("DELETE", "/push/live-activity", async (req) => {
+    const b = await body<{ token?: string }>(req);
+    if (!b || !validActivityToken(b.token)) throw new ApiError(400, "Érvénytelen token");
+    // a worker még egy „end”-et küld (a zárolt képernyőről is lekerüljön), aztán törli
+    await getPool().query(`UPDATE live_activity_token SET end_requested = true, updated_at = now() WHERE token = $1`, [b.token.toLowerCase()]);
+    await notifyActivities();
+    return json({ ok: true });
   }),
 
   route("DELETE", "/v3/push/watch", async (req) => {
