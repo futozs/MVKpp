@@ -206,7 +206,7 @@ export class PushEngine {
       `SELECT w.id, w.subscription_id, w.kind, w.params, w.stop_id, w.stop_name, w.threshold_min, w.route_shorts, w.trip_id, w.sched_min, w.is_departure,
               s.dnd_start_min, s.dnd_end_min
          FROM push_watch w JOIN push_subscription s ON s.id = w.subscription_id
-        WHERE s.enabled AND (CASE WHEN s.endpoint LIKE 'apns:%' THEN $1 ELSE $2 END)`,
+        WHERE s.enabled AND (CASE WHEN s.endpoint LIKE 'apns:%' THEN $1::boolean ELSE $2::boolean END)`,
       // csak az a csatorna, amelyikhez van kulcs (különben a kézbesítés biztosan elbukna)
       [this.apns.configured, pushConfigured],
     );

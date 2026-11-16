@@ -121,11 +121,14 @@ function significant(prev: LiveActivityState | null, next: LiveActivityState): b
 export class LiveActivityPusher {
   private rows: TokenRow[] = [];
   private running = false;
+  // Nem paraméter-tulajdonságok: a Node strip-only TypeScript módja azt nem támogatja.
+  private readonly engine: Engine;
+  private readonly apns: ApnsClient;
 
-  constructor(
-    private readonly engine: Engine,
-    private readonly apns: ApnsClient,
-  ) {}
+  constructor(engine: Engine, apns: ApnsClient) {
+    this.engine = engine;
+    this.apns = apns;
+  }
 
   async start(): Promise<void> {
     if (!this.apns.configured) return;

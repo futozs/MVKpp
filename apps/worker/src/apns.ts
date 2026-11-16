@@ -54,8 +54,11 @@ export class ApnsClient {
   private jwt: { value: string; at: number } | null = null;
   private sessions = new Map<string, http2.ClientHttp2Session>();
   readonly configured: boolean;
+  // Nem paraméter-tulajdonság: a Node strip-only TypeScript módja azt nem támogatja.
+  private readonly cfg: typeof config.apns;
 
-  constructor(private readonly cfg = config.apns) {
+  constructor(cfg = config.apns) {
+    this.cfg = cfg;
     this.configured = Boolean(cfg.keyId && cfg.teamId && cfg.key && cfg.topic);
   }
 
