@@ -9,6 +9,8 @@ import { DelayTrail } from "./DelayTrail";
 import { fetchCached } from "./fleetCache";
 import { minShort } from "./fleetText";
 import { ModeChips, Segmented, useFleetMode } from "./RankList";
+import { RoutePicker } from "./RoutePicker";
+import type { Route } from "@/types";
 
 type Period = "day" | "7" | "30" | "all";
 type Kind = "late" | "early";
@@ -28,7 +30,10 @@ const pct = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` : 
  * az elmúlt 7 / 30 napban, vagy mindig, amióta adat van. Kinyitva a menet
  * késése megállónként; egy gombbal az egész oldal arra a pillanatra ugrik.
  */
-export function FleetRecords({ date, onJump }: { date: string; onJump: (t: number) => void }) {
+export function FleetRecords({ date, onJump, pageRoutes, allRoutes }: { date: string; onJump: (t: number) => void; pageRoutes: string[]; allRoutes: Route[] }) {
+  /** null: az oldal vonalszűrőjét követi; különben csak itt érvényes saját választás */
+  const [own, setOwn] = useState<string[] | null>(null);
+  const routes = own ?? pageRoutes;
   const [period, setPeriod] = useState<Period>("day");
   const [kind, setKind] = useState<Kind>("late");
   const [mode, setMode] = useFleetMode();
@@ -42,13 +47,14 @@ export function FleetRecords({ date, onJump }: { date: string; onJump: (t: numbe
     setRes(null);
     setFailed(false);
     // a lezárt időszak nem változik; a mai napot érintő csak rövid ideig él
-    fetchCached<Result>(`/engine/fleet/records?date=${date}&period=${period}&mode=${mode}&kind=${kind}&limit=25`, period === "all" ? 600 : 120)
+    const only = routes.length ? `&routes=${encodeURIComponent(routes.join(","))}` : "";
+    fetchCached<Result>(`/engine/fleet/records?date=${date}&period=${period}&mode=${mode}&kind=${kind}&limit=25${only}`, period === "all" ? 600 : 120)
       .then((r) => alive && setRes(r))
       .catch(() => alive && setFailed(true));
     return () => {
       alive = false;
     };
-  }, [date, period, mode, kind]);
+  }, [date, period, mode, kind, routes.join(",")]);
 
   return (
     <div className="space-y-3">
@@ -71,6 +77,14 @@ export function FleetRecords({ date, onJump }: { date: string; onJump: (t: numbe
           ))}
         </div>
         <ModeChips mode={mode} onChange={setMode} />
+      </div>
+      <div className="flex flex-wrap items-start gap-2">
+        <RoutePicker routes={allRoutes} value={routes} onChange={setOwn} allLabel="minden" className="min-w-0 flex-1" />
+        {own ? (
+          <button type="button" onClick={() => setOwn(null)} className="h-9 rounded-lg px-2 text-[11.5px] font-semibold text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            az oldal szűrője
+          </button>
+        ) : null}
       </div>
 
       {res ? (

@@ -183,6 +183,8 @@ export function App() {
   // Közös megállók összevonva: a térképen és a keresőben a Volán-iker nem külön pötty
   // (az MVK-oszlop tábláján ott vannak a járatai), a figyelőben pedig a régi iker-
   // bejegyzés az MVK-oszlopra kerül  különben ugyanaz a tábla kétszer látszana.
+  // a Flotta vonalszűrőjéhez az MVK vonalai (a Volán és a vasút azonosítója előtagos)
+  const mvkRoutes = useMemo(() => Object.values(routes).filter((r) => !r.id.includes(":")), [routes]);
   const stopMerge = useStopMerge();
   const mapStops = useMemo(() => (stopMerge === "off" ? stops : stops.filter((s) => !isMergedTwin(s, stopMerge))), [stops, stopMerge]);
   useEffect(() => {
@@ -524,7 +526,7 @@ export function App() {
 
             {activeTab === "planner" && <RoutePlannerView stops={stops} />}
 
-            {activeTab === "fleet" && <FleetView onFocusTrip={handleFocusTripOnMap} />}
+            {activeTab === "fleet" && <FleetView routes={mvkRoutes} onFocusTrip={handleFocusTripOnMap} />}
           </div>
 
           <MobileTabBar

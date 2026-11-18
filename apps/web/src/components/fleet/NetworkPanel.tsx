@@ -8,7 +8,9 @@ import { TramLineMap } from "./TramLineMap";
  * A hálózat: fent a villamosvonal (mi történik, néhány szám, a vonal rajza a
  * villamosokkal), alatta a busz-gerinc dugói. A szöveg csak akkor, ha baj van.
  */
-export function NetworkPanel({ data }: { data: BoardSnapshot }) {
+export function NetworkPanel({ data, routes }: { data: BoardSnapshot; routes: string[] }) {
+  // vonalszűrésnél csak a kiválasztott vonalakat érintő dugók
+  const corridors = routes.length ? data.bus.corridors.filter((c) => c.routes.some((r) => routes.includes(r))) : data.bus.corridors;
   const t = data.tram;
   const v = verdictText(t.analysis.verdict);
   const bad = t.analysis.verdict.kind !== "ok";
@@ -51,10 +53,12 @@ export function NetworkPanel({ data }: { data: BoardSnapshot }) {
           <Num label="5+ perc" value={String(data.bus.late)} tone={data.bus.late ? "text-late" : undefined} />
           <Num label="siet" value={String(data.bus.early)} tone={data.bus.early ? "text-early" : undefined} />
         </dl>
-        {data.bus.corridors.length ? (
-          <CorridorList corridors={data.bus.corridors} />
+        {corridors.length ? (
+          <CorridorList corridors={corridors} />
         ) : (
-          <p className="mt-3 text-[12.5px] text-muted-foreground">Nincs dugó a legalább öt vonal közös szakaszain.</p>
+          <p className="mt-3 text-[12.5px] text-muted-foreground">
+            {routes.length ? "A kiválasztott vonalakat nem érinti dugó a gerincen." : "Nincs dugó a legalább öt vonal közös szakaszain."}
+          </p>
         )}
       </section>
     </div>

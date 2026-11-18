@@ -4,11 +4,15 @@ import { Button } from "@/components/ui/button";
 import { DateField } from "@/components/ui/date-field";
 import { addDays, formatClockShort, serviceDayOf, serviceDayRange } from "@/components/map/historyTime";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { usePreference } from "@/hooks/usePreference";
+import type { Route } from "@/types";
 import { cn } from "@/lib/utils";
 import { NetworkPanel } from "./NetworkPanel";
 import { RankList, Segmented, useFleetMode, ON_TIME_S, inMode } from "./RankList";
 import { StatusTiles } from "./StatusTiles";
 import { TimePanel } from "./TimePanel";
+import { RoutePicker } from "./RoutePicker";
+import { RouteSummary } from "./RouteSummary";
 import { useFleetBoard } from "./useFleetBoard";
 
 type Panel = "list" | "network" | "time";
@@ -21,11 +25,16 @@ const nowUnix = () => Math.floor(Date.now() / 1000);
  * görbéje, rekordok, összeomlások). Keskenyebb kijelzőn a rangsor mellett egy
  * oszlop, telefonon fülek. Élőben, vagy visszanézve bármely pillanatra.
  */
-export function FleetView({ onFocusTrip }: { onFocusTrip?: (tripId: string, vehicleId?: string) => void }) {
+export function FleetView({ routes: allRoutes, onFocusTrip }: { routes: Route[]; onFocusTrip?: (tripId: string, vehicleId?: string) => void }) {
   /** null: élő; különben a visszanézett pillanat (unix mp) */
   const [at, setAt] = useState<number | null>(null);
   const { data, failed, loading } = useFleetBoard(at);
   const [mode, setMode] = useFleetMode();
+  /** az egész oldal vonalszűrője (üres: minden vonal) */
+  const [routes, setRoutes] = usePreference<string[]>("mvk_fleet_routes", []);
+  const known = new Set(allRoutes.map((r) => r.short));
+  // a menetrendből azóta kikerült vonal ne szűrjön láthatatlanul
+  const picked = allRoutes.length ? routes.filter((r) => known.has(r)) : routes;
   const [panel, setPanel] = useState<Panel>("list");
   const isLg = useMediaQuery("(min-width: 1024px)");
   const isXl = useMediaQuery("(min-width: 1280px)");
@@ -41,12 +50,14 @@ export function FleetView({ onFocusTrip }: { onFocusTrip?: (tripId: string, vehi
     }
   };
 
-  const late = data ? data.vehicles.filter((v) => inMode(v, mode) && v.delayS >= ON_TIME_S).length : undefined;
+  const vehicles = data ? (picked.length ? data.vehicles.filter((v) => picked.includes(v.route)) : data.vehicles) : [];
+  const late = data ? vehicles.filter((v) => inMode(v, mode) && v.delayS >= ON_TIME_S).length : undefined;
 
   return (
     <div ref={scroller} className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:overflow-hidden">
       <header className="flex flex-col gap-2 border-b border-border bg-card/60 px-3 py-2.5 sm:px-4 lg:shrink-0 lg:flex-row lg:items-center">
         {data ? <StatusTiles data={data} onOpen={() => setPanel("network")} className="lg:w-[30rem] lg:shrink-0" /> : <div className="h-[58px] rounded-xl bg-muted/40 lg:w-[30rem]" />}
+        <RoutePicker routes={allRoutes} value={picked} onChange={setRoutes} className="lg:order-none lg:min-w-[14rem] lg:flex-1" />
         <TimeControl at={at} onAt={setAt} onLive={() => setAt(null)} loading={loading} />
       </header>
 
@@ -82,10 +93,13 @@ export function FleetView({ onFocusTrip }: { onFocusTrip?: (tripId: string, vehi
         >
           {columns.map((c) => (
             <div key={c} className={cn("min-w-0 transition-opacity duration-fast lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain lg:py-3", loading && c !== "time" && "opacity-60")}>
-              {c === "network" ? <NetworkPanel data={data} /> : null}
+              {c === "network" ? <NetworkPanel data={data} routes={picked} /> : null}
+              {c === "list" && picked.length ? (
+                <RouteSummary routes={picked} vehicles={data.vehicles} date={serviceDayOf(data.at)} past={at != null} allRoutes={allRoutes} />
+              ) : null}
               {c === "list" ? (
                 <RankList
-                  vehicles={data.vehicles}
+                  vehicles={vehicles}
                   mode={mode}
                   onMode={setMode}
                   past={at != null ? { t: data.at, date: serviceDayOf(data.at) } : null}
@@ -93,7 +107,7 @@ export function FleetView({ onFocusTrip }: { onFocusTrip?: (tripId: string, vehi
                   refreshKey={data.at}
                 />
               ) : null}
-              {c === "time" ? <TimePanel at={at} onAt={jump} /> : null}
+              {c === "time" ? <TimePanel at={at} onAt={jump} routes={picked} allRoutes={allRoutes} /> : null}
             </div>
           ))}
         </div>

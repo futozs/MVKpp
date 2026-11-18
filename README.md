@@ -124,6 +124,8 @@ Fent két csempe mondja meg egy-két szóban, mi a helyzet (Villamos: *Rendben /
   - **Rekordok**: a legnagyobb késések és sietések menetenként, a napon, 7 vagy 30 napra, vagy mindig, busz/villamos szűrővel; az időszak összesítője (a menetek hány százaléka késett 5+ / 10+ percet) és a legtöbbet késő vonalak. Egy rekordból egy gombbal az egész hálózat arra a pillanatra ugrik.
   - **Összeomlások**: a nap és a korábbi napok villamos-összeomlásai és gerinc-dugói, és a „Legutóbbi villamos-összeomlás” ugrás.
 
+**Vonalszűrő**: a fejlécben egy vagy több vonal kiválasztható (pl. csak a 14-es), és az egész oldal arra szűr: a rangsor fölött a vonal összesítője (most hány jár és késik, és az egész napon hány menete volt, ezek hány százaléka késett), a görbén vonalanként külön sáv, a rekordok és a gerinc-dugók is csak a kiválasztott vonalaké. A Rekordok saját vonalválasztóval csak arra a részre is szűrhetők.
+
 A lezárt napok görbéjét és rekordjait a worker induláskor és hatóránként előre kiszámolja, a böngésző pedig megtartja a már betöltött pillanatokat, így a visszanézés gyorsítótárból jön.
 
 ### Megállónkénti értesítések
