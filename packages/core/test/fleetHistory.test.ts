@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { breakdowns, dayBuckets, dayRecords, mergeRecords, runStateAt, stillFor, type RunEvent } from "../src/fleetHistory.ts";
+import { breakdowns, dayBuckets, dayRecords, mergeRecords, routeLanes, runStateAt, stillFor, type RunEvent } from "../src/fleetHistory.ts";
 
 const T0 = 1_800_000_000;
 const ev = (idx: number, atS: number, delayS: number, dwell = 20, isLast = false): RunEvent => ({ idx, stopId: `S${idx}`, ts: T0 + atS, depTs: isLast ? null : T0 + atS + dwell, delayS, isLast });
@@ -122,3 +122,45 @@ describe("késési rekordok", () => {
     expect(m.routes.every((r) => r.color === "FDEA00")).toBe(true);
   });
 });
+
+describe("vonalra szűrve", () => {
+  const peak = (route: string, hiS: number, loS = 0) => ({
+    date: "2026-11-18",
+    tripId: `${route}-${hiS}-${loS}`,
+    vehicleId: "1641",
+    route,
+    color: "3D3F8E",
+    text: "FFFFFF",
+    headsign: "x",
+    tram: false,
+    startDelayS: 0,
+    hiS,
+    hiTs: T0,
+    hiStop: "Villanyrendőr",
+    loS,
+    loTs: T0,
+    loStop: "Selyemrét",
+  });
+
+  it("a 14-es rekordjai akkor is megvannak, ha a teljes napi első 25-be nem kerülnének", () => {
+    const others = Array.from({ length: 40 }, (_, i) => peak("23", 3000 - i * 10));
+    const d = dayRecords("2026-11-18", [...others, peak("14", 500), peak("14", 300, -120), peak("14", 60)]);
+    const m = mergeRecords([d], { mode: "all", kind: "late", limit: 10, routes: ["14"] });
+    expect(m.items.map((r) => r.delayS)).toEqual([500, 300, 60]);
+    expect(m).toMatchObject({ runs: 3, late5: 2 });
+    expect(m.routes.map((r) => r.route)).toEqual(["14"]);
+    expect(mergeRecords([d], { mode: "all", kind: "early", limit: 10, routes: ["14"] }).items[0].delayS).toBe(-120);
+  });
+
+  it("a vonalak görbéje: vonalanként úton lévő és késő menetek; összegük a flotta görbéje", () => {
+    const run = (route: string, tram: boolean, delay: number) => ({ route, tram, events: [ev(0, 0, delay), ev(1, 1800, delay, 0, true)] });
+    const lanes = routeLanes([run("14", false, 400), run("14", false, 30), run("1V", true, 700)], T0, T0 + 3600);
+    const l14 = lanes.find((l) => l.route === "14")!;
+    expect(l14.n[1]).toBe(2);
+    expect(l14.late[1]).toBe(1);
+    expect(lanes.find((l) => l.route === "1V")!.severe[1]).toBe(1);
+    const b = dayBuckets([run("14", false, 400), run("14", false, 30), run("1V", true, 700)], T0, T0 + 3600);
+    expect(b[1]).toMatchObject({ bus: 2, busLate: 1, tram: 1, tramSevere: 1 });
+  });
+});
+

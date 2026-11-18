@@ -5,7 +5,9 @@
  */
 import {
   breakdowns,
-  dayBuckets,
+  bucketsFromLanes,
+  DAY_STEP_S,
+  routeLanes,
   isMvkId,
   dayRecords,
   mergeRecords,
@@ -165,7 +167,7 @@ async function segmentsAt(forecaster: DelayForecaster, day: ServiceDay, t: numbe
 /** A nap késésgörbéje és összeomlásai; a lezárult nap egyszer számolódik. */
 export function fleetDay(deps: Deps, iso: string): Promise<FleetDay> {
   const today = serviceClock().iso;
-  return cached(`fleet-day:v1:${iso}`, iso < today ? 30 * DAY_S : 120, () => buildFleetDay(deps, iso));
+  return cached(`fleet-day:v2:${iso}`, iso < today ? 30 * DAY_S : 120, () => buildFleetDay(deps, iso));
 }
 
 async function buildFleetDay({ feeds }: Deps, iso: string): Promise<FleetDay> {
@@ -181,14 +183,17 @@ async function buildFleetDay({ feeds }: Deps, iso: string): Promise<FleetDay> {
       ORDER BY e.run_key, e.ts`,
     [iso, from, from + DAY_S],
   );
-  const tramOf = new Map<string, boolean>();
+  const runOf = new Map<string, { route: string; tram: boolean }>();
   for (const r of rows) {
     // a villamospótló busz (VP) busznak számít: a villamos-görbe a villamosoké
-    if (!tramOf.has(r.run_key)) tramOf.set(r.run_key, day ? isTramRoute(day, r.route_id ?? "") : /^\d*A?V$/.test(r.route_short));
+    if (!runOf.has(r.run_key)) runOf.set(r.run_key, { route: r.route_short, tram: day ? isTramRoute(day, r.route_id ?? "") : /^\d*A?V$/.test(r.route_short) });
   }
-  const runs = [...groupRuns(rows)].map(([key, events]) => ({ tram: tramOf.get(key) ?? false, events }));
-  const buckets = to > from ? dayBuckets(runs, from, to) : [];
-  return { date: iso, from, to: from + DAY_S, step: buckets.length > 1 ? buckets[1].t - buckets[0].t : 300, buckets, breakdowns: breakdowns(buckets) };
+  const runs = [...groupRuns(rows)].map(([key, events]) => ({ route: runOf.get(key)?.route ?? "?", tram: runOf.get(key)?.tram ?? false, events }));
+  const count = to > from ? Math.ceil((to - from) / DAY_STEP_S) : 0;
+  // vonalanként egyszer számolunk; a flotta görbéje ezek összege
+  const lanes = count ? routeLanes(runs, from, to) : [];
+  const buckets = bucketsFromLanes(lanes, from, count);
+  return { date: iso, from, to: from + DAY_S, step: DAY_STEP_S, buckets, breakdowns: breakdowns(buckets), lanes };
 }
 
 /** az első nap, amelyről menetadat van (eddig lehet visszanézni) */
@@ -225,7 +230,7 @@ function tramShorts(feeds: FeedManager): Set<string> {
 /** A nap rekordjai: menetenként a csúcskésés és a legnagyobb sietés (egy adatbázis-összesítésből). */
 export function recordsOfDay(deps: Deps, iso: string): Promise<DayRecords> {
   const today = serviceClock().iso;
-  return cached(`fleet-rec:v3:${iso}`, iso < today ? 30 * DAY_S : 300, () => buildDayRecords(deps, iso));
+  return cached(`fleet-rec:v4:${iso}`, iso < today ? 30 * DAY_S : 300, () => buildDayRecords(deps, iso));
 }
 
 async function buildDayRecords({ feeds }: Deps, iso: string): Promise<DayRecords> {

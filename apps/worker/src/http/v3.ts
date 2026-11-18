@@ -23,6 +23,15 @@ const isoOf = (v: string | null, fallback: string) => {
   return iso;
 };
 
+/** `?routes=14,23` → a vonalak rövid nevei (legfeljebb 12, csak érvényes karakterek) */
+function routeList(raw: string | null): string[] {
+  return (raw ?? "")
+    .split(",")
+    .map((x) => x.trim())
+    .filter((x) => /^[\w-]{1,8}$/.test(x))
+    .slice(0, 12);
+}
+
 export function registerV3(r: Router, ctx: Ctx) {
   const { engine, feeds, predictor, parking } = ctx;
 
@@ -290,16 +299,20 @@ export function registerV3(r: Router, ctx: Ctx) {
     sendJson(req, res, 200, await boardAt(ctx, t), { "cache-control": settled ? "public, max-age=86400" : "no-store" });
   });
 
-  /** A nap késésgörbéje (5 percenként) és összeomlásai. */
+  /** A nap késésgörbéje (5 percenként) és összeomlásai; ?routes=14,23: ezeknek a vonalaknak a görbéje is. */
   r.get("/engine/fleet/day", async (req, res) => {
     const iso = isoOf(req.query.get("date"), engine.today);
     if (iso > engine.today) throw new HttpError(400, "a jövő még nem látszik");
-    sendJson(req, res, 200, await fleetDay(ctx, iso), { "cache-control": iso < engine.today ? "public, max-age=3600" : "no-store" });
+    const want = routeList(req.query.get("routes"));
+    const { lanes, ...day } = await fleetDay(ctx, iso);
+    const out = want.length ? { ...day, lanes: (lanes ?? []).filter((l) => want.includes(l.route)) } : day;
+    sendJson(req, res, 200, out, { "cache-control": iso < engine.today ? "public, max-age=3600" : "no-store" });
   });
 
   /**
    * Késési rekordok: ?period=day|7|30|all (a ?date= naptól visszafelé; all: minden nap, amiről adat van),
-   * ?kind=late|early, ?mode=all|bus|tram, ?limit= (legfeljebb 50). Vonalanként a késő menetek aránya is.
+   * ?kind=late|early, ?mode=all|bus|tram, ?routes=14,23 (csak ezek a vonalak), ?limit= (legfeljebb 50).
+   * Vonalanként a késő menetek aránya is.
    */
   r.get("/engine/fleet/records", async (req, res) => {
     const date = isoOf(req.query.get("date"), engine.today);
@@ -309,8 +322,9 @@ export function registerV3(r: Router, ctx: Ctx) {
     const mode = m === "bus" || m === "tram" ? m : "all";
     const kind = req.query.get("kind") === "early" ? "early" : "late";
     const limit = Math.min(50, Math.max(1, Number(req.query.get("limit")) || 20));
+    const routes = routeList(req.query.get("routes"));
     const settled = period !== "all" && date < engine.today;
-    sendJson(req, res, 200, await fleetRecords(ctx, date > engine.today ? engine.today : date, period, { mode, kind, limit }), {
+    sendJson(req, res, 200, await fleetRecords(ctx, date > engine.today ? engine.today : date, period, { mode, kind, limit, routes }), {
       "cache-control": settled ? "public, max-age=3600" : "no-store",
     });
   });
