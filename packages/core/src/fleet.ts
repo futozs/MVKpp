@@ -4,6 +4,8 @@
  * Itt csak a tiszta döntések vannak; a worker `fleet.ts` gyűjti az adatot.
  */
 
+import type { TramLineView, TramVerdict } from "./tramLine.ts";
+
 /** ekkora késés-növekedéstől érdemes megnevezni, hol szedte fel (mp) */
 const PICKUP_MIN_S = 60;
 /** ennél kisebb lépés megállóról megállóra csak menetidő-ingadozás (mp) */
@@ -59,18 +61,19 @@ export function delayPickup(points: DelayPoint[], live?: { toStopId: string; toI
   };
 }
 
-export type TramState = "off" | "ok" | "late" | "thin" | "halted" | "replaced";
+export type TramState = "off" | "ok" | "late" | "thin" | "collapsed" | "halted" | "replaced";
 
 export type TramInput = {
   /** most menetrend szerint úton lévő villamosmenetek */
   scheduled: number;
-  /** most élőben úton lévő villamosok */
-  running: number;
+  /** most élőben úton lévő villamosok késése (mp) */
+  delaysS: number[];
   /** ennyi ideje (mp) egy helyben álló villamosok, a megállóban várakozással együtt */
   stalledS: number[];
   /** most úton lévő villamospótló buszok */
   replacementRunning: number;
-  medianDelayS: number | null;
+  /** a vonal-elemző következtetése (álló sor, araszoló sor) */
+  line?: TramVerdict["kind"];
 };
 
 export const TRAM = {
@@ -78,23 +81,59 @@ export const TRAM = {
   STALL_S: 5 * 60,
   /** egyetlen villamos ennyi álldogálás után már jelzés (mp) */
   SINGLE_STALL_S: 8 * 60,
+  /** a miskolci villamos rendesen 0–3 percen belül jár: ennyi már rendkívüli (mp) */
+  SEVERE_S: 10 * 60,
+  LATE_S: 5 * 60,
+  /** ennyi rendkívül késő villamos egyszerre: összeomlott a közlekedés */
+  COLLAPSE_SEVERE: 3,
+  /** vagy kettő, ha közben a villamosok ekkora része 5+ percet késik */
+  COLLAPSE_LATE_SHARE: 0.4,
   /** a menetrend szerinti villamosoknak legalább ekkora része kell járjon */
   MIN_RUNNING_SHARE: 0.5,
-  LATE_MEDIAN_S: 4 * 60,
 } as const;
 
 /**
  * A villamosvonal állapota. Miskolcon egy vonal (1, 1A, 2): ha egy szerelvény
- * elakad, a mögötte jövők is beállnak, ezért két álló villamos már leállás.
+ * elakad, a mögötte jövők is beállnak. Nem a medián késést nézzük: ha az egyik
+ * irány összeomlik, a másik irány pontos villamosai a mediánt lent tartják.
  */
 export function tramState(i: TramInput): TramState {
-  const stalled = i.stalledS.filter((s) => s >= TRAM.STALL_S).length;
-  if (stalled >= 2) return "halted";
+  const running = i.delaysS.length;
+  const severe = i.delaysS.filter((d) => d >= TRAM.SEVERE_S).length;
+  const late = i.delaysS.filter((d) => d >= TRAM.LATE_S).length;
+  if (i.stalledS.filter((s) => s >= TRAM.STALL_S).length >= 2) return "halted";
+  if (i.line === "one-way" || i.line === "both-ways" || i.line === "whole-line") return "halted";
+  if (severe >= TRAM.COLLAPSE_SEVERE || (severe >= 2 && late >= running * TRAM.COLLAPSE_LATE_SHARE)) return "collapsed";
   if (i.replacementRunning > 0) return "replaced";
-  if (i.scheduled === 0 && i.running === 0) return "off";
-  if (i.scheduled >= 4 && i.running < i.scheduled * TRAM.MIN_RUNNING_SHARE) return "thin";
-  if (i.stalledS.some((s) => s >= TRAM.SINGLE_STALL_S) || (i.medianDelayS ?? 0) >= TRAM.LATE_MEDIAN_S) return "late";
+  if (i.scheduled === 0 && running === 0) return "off";
+  if (i.scheduled >= 4 && running < i.scheduled * TRAM.MIN_RUNNING_SHARE) return "thin";
+  if (severe >= 1 || late >= 2 || i.line === "queue" || i.stalledS.some((s) => s >= TRAM.SINGLE_STALL_S)) return "late";
   return "ok";
+}
+
+/**
+ * Hol a baj: a késő járművek felszedési szakaszainak (megálló-azonosító
+ * sorozatok) legtöbbjük által közösen érintett része, a `reference` menet
+ * megállói mentén. Egyetlen jármű szakasza nem „közös baj”.
+ */
+export function troubleSpan(reference: string[], windows: string[][]): { fromIdx: number; toIdx: number; vehicles: number } | null {
+  if (windows.length < 2) return null;
+  const count = new Map<string, number>();
+  for (const w of windows) {
+    for (const k of new Set(w.slice(1).map((id, i) => `${w[i]}|${id}`))) count.set(k, (count.get(k) ?? 0) + 1);
+  }
+  const pairs = reference.slice(1).map((id, i) => count.get(`${reference[i]}|${id}`) ?? 0);
+  const top = Math.max(0, ...pairs);
+  if (top < 2) return null;
+  let best: { fromIdx: number; toIdx: number } | null = null;
+  for (let i = 0; i < pairs.length; i++) {
+    if (pairs[i] !== top) continue;
+    let j = i;
+    while (j + 1 < pairs.length && pairs[j + 1] === top) j++;
+    if (!best || j + 1 - i > best.toIdx - best.fromIdx) best = { fromIdx: i, toIdx: j + 1 };
+    i = j;
+  }
+  return best && { ...best, vehicles: top };
 }
 
 export type JamSegment = { fromId: string; toId: string; from: string; to: string; routes: string[]; excessS: number; level: number };
@@ -222,10 +261,18 @@ export type BoardSnapshot = {
     scheduled: number;
     running: number;
     replacementRunning: number;
-    /** ma menetrend szerint is jár villamospótló (tervezett vágányzár) */
+    /** a menetrend szerint most is jár villamospótló (tervezett vágányzár) */
     replacementPlanned: boolean;
     medianDelayS: number | null;
+    /** 10+ / 5+ percet késő villamosok, és a legnagyobb késés (mp) */
+    severe: number;
+    late: number;
+    maxDelayS: number | null;
+    /** a késő villamosok közös baj-szakasza: honnan hová, melyik irányban, hány villamost érint */
+    trouble: { from: string; to: string; toward: string; vehicles: number } | null;
     stalled: { vehicleId: string; route: string; at: string; stallS: number }[];
+    /** a villamosvonal irányonként, és mire utal a helyzet */
+    analysis: { lines: TramLineView[]; verdict: TramVerdict };
   };
   bus: {
     state: BusState;

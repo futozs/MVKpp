@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { busState, delayPickup, jamCorridors, tramState, type JamSegment } from "../src/fleet.ts";
+import { busState, delayPickup, jamCorridors, tramState, troubleSpan, type JamSegment } from "../src/fleet.ts";
 
 const pt = (idx: number, delayS: number) => ({ idx, stopId: `S${idx}`, delayS });
 
@@ -26,19 +26,50 @@ describe("hol szedte fel a késést", () => {
 });
 
 describe("villamosvonal állapota", () => {
-  const base = { scheduled: 10, running: 10, stalledS: [], replacementRunning: 0, medianDelayS: 60 };
+  const base = { scheduled: 10, delaysS: [60, 30, 90, -20, 120, 0, 45, 60, 30, 10], stalledS: [], replacementRunning: 0 };
 
   it("rendben, ha mennek a villamosok", () => expect(tramState(base)).toBe("ok"));
   it("két álló villamos: leállt a vonal (a pótlóbusznál is ez az erősebb)", () => {
     expect(tramState({ ...base, stalledS: [400, 600, 30], replacementRunning: 3 })).toBe("halted");
   });
-  it("pótlóbusz jár", () => expect(tramState({ ...base, running: 2, replacementRunning: 4 })).toBe("replaced"));
-  it("a menetrendinél jóval kevesebb villamos", () => expect(tramState({ ...base, running: 4 })).toBe("thin"));
-  it("egy sokáig álló villamos vagy nagy késés: akadozik", () => {
-    expect(tramState({ ...base, stalledS: [9 * 60] })).toBe("late");
-    expect(tramState({ ...base, medianDelayS: 300 })).toBe("late");
+  it("2026-11-18 este: az egyik irány összeomlott, a másik pontos, a medián csak 4 perc", () => {
+    const delaysS = [1696, 1312, 1017, 716, 557, 268, 201, 59, -5, -7, -25];
+    expect(tramState({ ...base, scheduled: 11, delaysS })).toBe("collapsed");
   });
-  it("éjszaka nem jár", () => expect(tramState({ ...base, scheduled: 0, running: 0, medianDelayS: null })).toBe("off"));
+  it("két nagyon késő villamos, ha sok villamos késik, már összeomlás", () => {
+    expect(tramState({ ...base, delaysS: [700, 650, 400, 320, 60, 30] })).toBe("collapsed");
+    expect(tramState({ ...base, delaysS: [700, 650, 60, 30, 0, 10, 20, 40] })).toBe("late");
+  });
+  it("pótlóbusz jár", () => expect(tramState({ ...base, delaysS: [60, 30], replacementRunning: 4 })).toBe("replaced"));
+  it("a menetrendinél jóval kevesebb villamos", () => expect(tramState({ ...base, delaysS: [60, 30, 0, 10] })).toBe("thin"));
+  it("egy rendkívül késő vagy sokáig álló villamos: akadozik", () => {
+    expect(tramState({ ...base, stalledS: [9 * 60] })).toBe("late");
+    expect(tramState({ ...base, delaysS: [...base.delaysS.slice(1), 700] })).toBe("late");
+  });
+  it("a vonal-elemző álló sora leállás, araszoló sora akadozás", () => {
+    expect(tramState({ ...base, line: "one-way" })).toBe("halted");
+    expect(tramState({ ...base, line: "whole-line" })).toBe("halted");
+    expect(tramState({ ...base, line: "queue" })).toBe("late");
+  });
+  it("éjszaka nem jár", () => expect(tramState({ ...base, scheduled: 0, delaysS: [] })).toBe("off"));
+});
+
+describe("hol a közös baj", () => {
+  const ref = Array.from({ length: 23 }, (_, i) => `S${i}`);
+  const win = (a: number, b: number) => ref.slice(a, b + 1);
+
+  it("a késő villamosok szakaszainak közös része (Villanyrendőr → Diósgyőri Gimnázium)", () => {
+    expect(troubleSpan(ref, [win(4, 22), win(3, 20), win(1, 16)])).toEqual({ fromIdx: 4, toIdx: 16, vehicles: 3 });
+  });
+
+  it("egy jármű vagy egymást nem érintő szakaszok: nincs közös baj", () => {
+    expect(troubleSpan(ref, [win(4, 22)])).toBeNull();
+    expect(troubleSpan(ref, [win(1, 3), win(10, 12)])).toBeNull();
+  });
+
+  it("az ellenkező irány szakasza nem számít bele", () => {
+    expect(troubleSpan(ref, [win(4, 10), win(5, 12), [...win(4, 10)].reverse()])).toEqual({ fromIdx: 5, toIdx: 10, vehicles: 2 });
+  });
 });
 
 const seg = (from: string, to: string, excessS: number, level: number): JamSegment => ({ fromId: from, toId: to, from, to, routes: ["1", "2"], excessS, level });
