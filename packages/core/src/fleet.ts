@@ -92,6 +92,11 @@ export const TRAM = {
   MIN_RUNNING_SHARE: 0.5,
 } as const;
 
+/** sok, egyszerre nagyon késő villamos: összeomlott a közlekedés (az élő állapot és a visszanézés közös mércéje) */
+export function tramCollapsed(severe: number, late: number, running: number): boolean {
+  return severe >= TRAM.COLLAPSE_SEVERE || (severe >= 2 && late >= running * TRAM.COLLAPSE_LATE_SHARE);
+}
+
 /**
  * A villamosvonal állapota. Miskolcon egy vonal (1, 1A, 2): ha egy szerelvény
  * elakad, a mögötte jövők is beállnak. Nem a medián késést nézzük: ha az egyik
@@ -103,7 +108,7 @@ export function tramState(i: TramInput): TramState {
   const late = i.delaysS.filter((d) => d >= TRAM.LATE_S).length;
   if (i.stalledS.filter((s) => s >= TRAM.STALL_S).length >= 2) return "halted";
   if (i.line === "one-way" || i.line === "both-ways" || i.line === "whole-line") return "halted";
-  if (severe >= TRAM.COLLAPSE_SEVERE || (severe >= 2 && late >= running * TRAM.COLLAPSE_LATE_SHARE)) return "collapsed";
+  if (tramCollapsed(severe, late, running)) return "collapsed";
   if (i.replacementRunning > 0) return "replaced";
   if (i.scheduled === 0 && running === 0) return "off";
   if (i.scheduled >= 4 && running < i.scheduled * TRAM.MIN_RUNNING_SHARE) return "thin";

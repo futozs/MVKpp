@@ -7,6 +7,7 @@ import type { Ctx } from "./compat.ts";
 import { plan, segmentEstimate } from "../planner.ts";
 import { disruptions, liveMissing } from "../disruptions.ts";
 import { cityHeat, clampHeatQuery, routeHeat } from "../heat.ts";
+import { boardAt, findBreakdowns, fleetDay } from "../fleetHistory.ts";
 import { latestReport } from "../ml/store.ts";
 import { latestMotionReport } from "../motion/store.ts";
 
@@ -273,6 +274,41 @@ export function registerV3(r: Router, ctx: Ctx) {
 
   /** Élő flotta-rangsor: minden úton lévő MVK-jármű késése, hol szedte fel, és a villamos- és buszhálózat állapota. */
   r.get("/engine/fleet/live", (req, res) => sendJson(req, res, 200, ctx.fleet.snapshot(), { "cache-control": "no-store" }));
+
+  /** A fejléc jelzéséhez: csak a villamos és a buszhálózat állapota. */
+  r.get("/engine/fleet/status", (req, res) => {
+    const s = ctx.fleet.snapshot();
+    sendJson(req, res, 200, { at: s.at, tram: s.tram.state, bus: s.bus.state }, { "cache-control": "no-store" });
+  });
+
+  /** A flotta egy múltbeli pillanatban (?t= unix mp), az élővel azonos alakban, amíg van adat. */
+  r.get("/engine/fleet/at", async (req, res) => {
+    const t = Number(req.query.get("t"));
+    if (!Number.isFinite(t) || t <= 0) throw new HttpError(400, "hiányzó ?t= (unix mp)");
+    if (t > nowUnix()) throw new HttpError(400, "a jövő még nem látszik");
+    const settled = t < nowUnix() - SETTLED_S;
+    sendJson(req, res, 200, await boardAt(ctx, t), { "cache-control": settled ? "public, max-age=86400" : "no-store" });
+  });
+
+  /** A nap késésgörbéje (5 percenként) és összeomlásai. */
+  r.get("/engine/fleet/day", async (req, res) => {
+    const iso = isoOf(req.query.get("date"), engine.today);
+    if (iso > engine.today) throw new HttpError(400, "a jövő még nem látszik");
+    sendJson(req, res, 200, await fleetDay(ctx, iso), { "cache-control": iso < engine.today ? "public, max-age=3600" : "no-store" });
+  });
+
+  /**
+   * Korábbi összeomlások visszafelé: ?before=NAP (alap: ma), ?days= ennyi napot néz át (legfeljebb 31),
+   * ?limit= ennyit ad vissza, ?kind=tram|bus. A `next` nappal lehet folytatni.
+   */
+  r.get("/engine/fleet/breakdowns", async (req, res) => {
+    const before = isoOf(req.query.get("before"), engine.today);
+    const days = Math.min(31, Math.max(1, Number(req.query.get("days")) || 14));
+    const limit = Math.min(50, Math.max(1, Number(req.query.get("limit")) || 20));
+    const k = req.query.get("kind");
+    const kind = k === "tram" || k === "bus" ? k : null;
+    sendJson(req, res, 200, await findBreakdowns(ctx, before > engine.today ? engine.today : before, { days, limit, kind }), { "cache-control": "no-store" });
+  });
 
   /** A késés-modell állapota: az utolsó tanítás visszamérése, és mi becsül most. */
   r.get("/engine/ml/status", async (req, res) => {
