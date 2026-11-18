@@ -36,6 +36,7 @@ import { MotionPredictor } from "./motion/live.ts";
 import { trainMotionModelInThread } from "./motion/thread.ts";
 import { TrafficMonitor } from "./traffic.ts";
 import { FleetBoard } from "./fleet.ts";
+import { warmFleetHistory } from "./fleetHistory.ts";
 import { TripInsights } from "./insights.ts";
 import { Parking } from "./parking.ts";
 import { NewsSource } from "./news.ts";
@@ -207,6 +208,15 @@ async function main() {
     }
   };
   await listen();
+
+  // A flotta-visszanézés lezárt napjai előre kiszámolva (gyorsítótárba): induláskor kicsit később,
+  // utána hatóránként (a már kiszámolt nap azonnal kész, csak az új és a lejárt napok futnak).
+  const warmFleet = () =>
+    warmFleetHistory({ feeds, forecaster })
+      .then((n) => log.info("fleet", `visszanézés előkészítve: ${n} nap`))
+      .catch((e) => log.warn("fleet", "a visszanézés előkészítése megszakadt", errMsg(e)));
+  setTimeout(() => void warmFleet(), 60_000).unref();
+  setInterval(() => void warmFleet(), 6 * 3600_000).unref();
 
   // Ütemezett feladatok (pg-boss: egy példányban fut, újraindítás után is).
   await boss.createQueue("nightly");

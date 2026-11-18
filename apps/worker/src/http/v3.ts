@@ -7,7 +7,7 @@ import type { Ctx } from "./compat.ts";
 import { plan, segmentEstimate } from "../planner.ts";
 import { disruptions, liveMissing } from "../disruptions.ts";
 import { cityHeat, clampHeatQuery, routeHeat } from "../heat.ts";
-import { boardAt, findBreakdowns, fleetDay } from "../fleetHistory.ts";
+import { boardAt, findBreakdowns, fleetDay, fleetRecords, type RecordPeriod } from "../fleetHistory.ts";
 import { latestReport } from "../ml/store.ts";
 import { latestMotionReport } from "../motion/store.ts";
 
@@ -295,6 +295,24 @@ export function registerV3(r: Router, ctx: Ctx) {
     const iso = isoOf(req.query.get("date"), engine.today);
     if (iso > engine.today) throw new HttpError(400, "a jövő még nem látszik");
     sendJson(req, res, 200, await fleetDay(ctx, iso), { "cache-control": iso < engine.today ? "public, max-age=3600" : "no-store" });
+  });
+
+  /**
+   * Késési rekordok: ?period=day|7|30|all (a ?date= naptól visszafelé; all: minden nap, amiről adat van),
+   * ?kind=late|early, ?mode=all|bus|tram, ?limit= (legfeljebb 50). Vonalanként a késő menetek aránya is.
+   */
+  r.get("/engine/fleet/records", async (req, res) => {
+    const date = isoOf(req.query.get("date"), engine.today);
+    const p = req.query.get("period");
+    const period: RecordPeriod = p === "7" || p === "30" || p === "all" ? p : "day";
+    const m = req.query.get("mode");
+    const mode = m === "bus" || m === "tram" ? m : "all";
+    const kind = req.query.get("kind") === "early" ? "early" : "late";
+    const limit = Math.min(50, Math.max(1, Number(req.query.get("limit")) || 20));
+    const settled = period !== "all" && date < engine.today;
+    sendJson(req, res, 200, await fleetRecords(ctx, date > engine.today ? engine.today : date, period, { mode, kind, limit }), {
+      "cache-control": settled ? "public, max-age=3600" : "no-store",
+    });
   });
 
   /**

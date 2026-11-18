@@ -154,3 +154,126 @@ export function breakdowns(buckets: DayBucket[]): Breakdown[] {
 
 /** a nap késésgörbéje és összeomlásai (a worker `/engine/fleet/day` válasza) */
 export type FleetDay = { date: string; from: number; to: number; step: number; buckets: DayBucket[]; breakdowns: Breakdown[] };
+
+/** egy menet csúcsa (rekordokhoz): a legnagyobb késése vagy sietése, hol és mikor */
+export type RecordRun = {
+  date: string;
+  tripId: string;
+  vehicleId: string;
+  route: string;
+  /** a vonal színe és szövegszíne (hex, # nélkül) */
+  color: string;
+  text: string;
+  headsign: string;
+  tram: boolean;
+  delayS: number;
+  ts: number;
+  stop: string;
+  startDelayS: number | null;
+};
+
+export type RouteTally = { route: string; tram: boolean; runs: number; late5: number; late10: number; maxS: number };
+
+/** egy nap rekordjai: a legkésőbb és a legkorábban járó menetek (busz és villamos külön), és vonalanként a számok */
+export type DayRecords = { date: string; runs: number; late5: number; late10: number; late: RecordRun[]; early: RecordRun[]; routes: RouteTally[] };
+
+/** egy menet a napi összesítéshez: a csúcskésése és a legnagyobb sietése */
+export type RunPeak = Omit<RecordRun, "delayS" | "ts" | "stop"> & { hiS: number; hiTs: number; hiStop: string; loS: number; loTs: number; loStop: string };
+
+export const RECORDS = {
+  /** naponta, típusonként ennyi menetet tartunk meg a rangsorokhoz */
+  KEEP: 25,
+  LATE5_S: 5 * 60,
+  LATE10_S: 10 * 60,
+  /** ennél kevesebb menetű vonal arányát nem rangsoroljuk */
+  MIN_ROUTE_RUNS: 10,
+} as const;
+
+const asRecord = (p: RunPeak, which: "hi" | "lo"): RecordRun => ({
+  date: p.date,
+  tripId: p.tripId,
+  vehicleId: p.vehicleId,
+  route: p.route,
+  color: p.color,
+  text: p.text,
+  headsign: p.headsign,
+  tram: p.tram,
+  startDelayS: p.startDelayS,
+  delayS: which === "hi" ? p.hiS : p.loS,
+  ts: which === "hi" ? p.hiTs : p.loTs,
+  stop: which === "hi" ? p.hiStop : p.loStop,
+});
+
+/** A nap rekordjai a menetek csúcsaiból. */
+export function dayRecords(date: string, peaks: RunPeak[]): DayRecords {
+  const top = (list: RunPeak[], which: "hi" | "lo") =>
+    [...list]
+      .sort((a, b) => (which === "hi" ? b.hiS - a.hiS : a.loS - b.loS))
+      .slice(0, RECORDS.KEEP)
+      .map((p) => asRecord(p, which));
+  const trams = peaks.filter((p) => p.tram);
+  const buses = peaks.filter((p) => !p.tram);
+  const routes = new Map<string, RouteTally>();
+  for (const p of peaks) {
+    const r = routes.get(p.route) ?? { route: p.route, tram: p.tram, runs: 0, late5: 0, late10: 0, maxS: -Infinity };
+    r.runs++;
+    if (p.hiS >= RECORDS.LATE5_S) r.late5++;
+    if (p.hiS >= RECORDS.LATE10_S) r.late10++;
+    r.maxS = Math.max(r.maxS, p.hiS);
+    routes.set(p.route, r);
+  }
+  return {
+    date,
+    runs: peaks.length,
+    late5: peaks.filter((p) => p.hiS >= RECORDS.LATE5_S).length,
+    late10: peaks.filter((p) => p.hiS >= RECORDS.LATE10_S).length,
+    late: [...top(buses, "hi"), ...top(trams, "hi")],
+    early: [...top(buses, "lo"), ...top(trams, "lo")],
+    routes: [...routes.values()],
+  };
+}
+
+export type RecordQuery = { mode: "all" | "bus" | "tram"; kind: "late" | "early"; limit: number };
+
+export type RecordsResult = {
+  days: number;
+  runs: number;
+  late5: number;
+  late10: number;
+  items: RecordRun[];
+  /** a legrosszabb vonalak: a menetek mekkora része késett 5+ percet */
+  routes: RouteTally[];
+};
+
+/** Több nap rekordjainak összefésülése egy időszakra. */
+export function mergeRecords(days: DayRecords[], q: RecordQuery): RecordsResult {
+  const want = (tram: boolean) => q.mode === "all" || (q.mode === "tram") === tram;
+  const items = days
+    .flatMap((d) => (q.kind === "late" ? d.late : d.early))
+    .filter((r) => want(r.tram))
+    .sort((a, b) => (q.kind === "late" ? b.delayS - a.delayS : a.delayS - b.delayS))
+    .slice(0, q.limit);
+  const routes = new Map<string, RouteTally>();
+  for (const r of days.flatMap((d) => d.routes)) {
+    if (!want(r.tram)) continue;
+    const t = routes.get(r.route) ?? { ...r, runs: 0, late5: 0, late10: 0, maxS: -Infinity };
+    t.runs += r.runs;
+    t.late5 += r.late5;
+    t.late10 += r.late10;
+    t.maxS = Math.max(t.maxS, r.maxS);
+    routes.set(r.route, t);
+  }
+  const tallies = [...routes.values()];
+  const sum = (k: "runs" | "late5" | "late10") => tallies.reduce((n, r) => n + r[k], 0);
+  return {
+    days: days.length,
+    runs: sum("runs"),
+    late5: sum("late5"),
+    late10: sum("late10"),
+    items,
+    routes: tallies
+      .filter((r) => r.runs >= RECORDS.MIN_ROUTE_RUNS)
+      .sort((a, b) => b.late5 / b.runs - a.late5 / a.runs || b.maxS - a.maxS)
+      .slice(0, 10),
+  };
+}

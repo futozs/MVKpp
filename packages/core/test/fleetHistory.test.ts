@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { breakdowns, dayBuckets, runStateAt, stillFor, type RunEvent } from "../src/fleetHistory.ts";
+import { breakdowns, dayBuckets, dayRecords, mergeRecords, runStateAt, stillFor, type RunEvent } from "../src/fleetHistory.ts";
 
 const T0 = 1_800_000_000;
 const ev = (idx: number, atS: number, delayS: number, dwell = 20, isLast = false): RunEvent => ({ idx, stopId: `S${idx}`, ts: T0 + atS, depTs: isLast ? null : T0 + atS + dwell, delayS, isLast });
@@ -69,5 +69,54 @@ describe("a nap görbéje és az összeomlások", () => {
 
   it("rendes napon nincs összeomlás", () => {
     expect(breakdowns(dayBuckets([tramRun(0, 60), tramRun(600, 90), busRun(0, 120)], T0, T0 + 3600))).toEqual([]);
+  });
+});
+
+describe("késési rekordok", () => {
+  const peak = (route: string, tram: boolean, hiS: number, loS = 0, date = "2026-11-18") => ({
+    date,
+    tripId: `${route}-${hiS}`,
+    vehicleId: route === "1V" ? "609" : "2203",
+    route,
+    color: "FDEA00",
+    text: "000000",
+    headsign: "x",
+    tram,
+    startDelayS: 0,
+    hiS,
+    hiTs: T0,
+    hiStop: "Villanyrendőr",
+    loS,
+    loTs: T0 + 60,
+    loStop: "Selyemrét",
+  });
+
+  it("a nap rangsora: buszok és villamosok külön is megmaradnak, a vonalak számlálva", () => {
+    const buses = Array.from({ length: 40 }, (_, i) => peak("23", false, 2000 - i * 10));
+    const d = dayRecords("2026-11-18", [...buses, peak("1V", true, 1700), peak("1V", true, 100, -240)]);
+    expect(d.runs).toBe(42);
+    expect(d.late.filter((r) => r.tram).map((r) => r.delayS)).toEqual([1700, 100]);
+    expect(d.late.filter((r) => !r.tram)).toHaveLength(25);
+    expect(d.routes.find((r) => r.route === "1V")).toMatchObject({ runs: 2, late5: 1, late10: 1, maxS: 1700 });
+  });
+
+  it("időszakra összefésülve: típus szerint szűrve, a legnagyobbtól", () => {
+    const a = dayRecords("2026-11-17", [peak("23", false, 900, 0, "2026-11-17"), peak("1V", true, 3050, 0, "2026-11-17")]);
+    const b = dayRecords("2026-11-18", [peak("23", false, 1200), peak("1V", true, 1700)]);
+    expect(mergeRecords([a, b], { mode: "all", kind: "late", limit: 3 }).items.map((r) => r.delayS)).toEqual([3050, 1700, 1200]);
+    expect(mergeRecords([a, b], { mode: "bus", kind: "late", limit: 5 }).items.map((r) => r.date)).toEqual(["2026-11-18", "2026-11-17"]);
+    const m = mergeRecords([a, b], { mode: "tram", kind: "late", limit: 5 });
+    expect(m).toMatchObject({ days: 2, runs: 2, late5: 2, late10: 2 });
+  });
+
+  it("a legnagyobb sietés a legkorábbtól", () => {
+    const d = dayRecords("2026-11-18", [peak("23", false, 100, -400), peak("14", false, 50, -90)]);
+    expect(mergeRecords([d], { mode: "all", kind: "early", limit: 2 }).items.map((r) => r.delayS)).toEqual([-400, -90]);
+  });
+
+  it("a vonalak rangsora csak elég menetből, a késő menetek aránya szerint", () => {
+    const runs = [...Array.from({ length: 12 }, () => peak("23", false, 400)), ...Array.from({ length: 12 }, (_, i) => peak("14", false, i < 3 ? 400 : 60)), peak("ZOO", false, 900)];
+    const m = mergeRecords([dayRecords("2026-11-18", runs)], { mode: "all", kind: "late", limit: 5 });
+    expect(m.routes.map((r) => r.route)).toEqual(["23", "14"]);
   });
 });

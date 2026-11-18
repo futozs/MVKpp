@@ -6,6 +6,8 @@
 import {
   breakdowns,
   dayBuckets,
+  dayRecords,
+  mergeRecords,
   localMidnightUnix,
   nowUnix,
   runStateAt,
@@ -17,6 +19,10 @@ import {
   TRAFFIC,
   type BoardSnapshot,
   type Breakdown,
+  type DayRecords,
+  type RecordQuery,
+  type RecordsResult,
+  type RunPeak,
   type FleetDay,
   type RunEvent,
   type ServiceDay,
@@ -207,4 +213,123 @@ export async function findBreakdowns(deps: Deps, before: string, opts: { days: n
   }
   const end = Boolean(first && d < first);
   return { items: items.slice(0, opts.limit), next: end ? null : d, firstDay: first };
+}
+
+/** a villamosvonalak rövid nevei a mai menetrendből (a rövid nevek napról napra ugyanazok) */
+function tramShorts(feeds: FeedManager): Set<string> {
+  const feed = feeds.cachedDay(serviceClock().iso)?.feed;
+  return new Set(feed ? [...feed.routes.values()].filter((r) => r.type === "900").map((r) => r.short) : ["1V", "1AV", "2V"]);
+}
+
+/** A nap rekordjai: menetenként a csúcskésés és a legnagyobb sietés (egy adatbázis-összesítésből). */
+export function recordsOfDay(deps: Deps, iso: string): Promise<DayRecords> {
+  const today = serviceClock().iso;
+  return cached(`fleet-rec:v2:${iso}`, iso < today ? 30 * DAY_S : 300, () => buildDayRecords(deps, iso));
+}
+
+async function buildDayRecords({ feeds }: Deps, iso: string): Promise<DayRecords> {
+  const from = localMidnightUnix(iso) + 3 * 3600;
+  // menetenként a legnagyobb és a legkisebb mért késés; a becsült végállomást (src 3) és a
+  // nyilvánvaló illesztési hibát (két óránál nagyobb eltérés) kihagyjuk, és legalább három mérés kell
+  const rows = await sql<{
+    run_key: string;
+    trip_id: string;
+    vehicle_id: string;
+    route_short: string;
+    headsign: string | null;
+    start_delay_s: number | null;
+    hi_s: number;
+    hi_ts: number;
+    hi_stop: string;
+    lo_s: number;
+    lo_ts: number;
+    lo_stop: string;
+  }>(
+    `WITH ev AS (
+       SELECT run_key, delay_s, ts, stop_id FROM stop_event
+        WHERE service_date = $1 AND ts BETWEEN to_timestamp($2) - interval '1 hour' AND to_timestamp($2) + interval '27 hours'
+          AND vehicle_id NOT LIKE '%:%' AND src <> 3 AND delay_s BETWEEN -1800 AND 7200
+     ), counted AS (
+       SELECT run_key FROM ev GROUP BY run_key HAVING count(*) >= 3
+     ), hi AS (
+       SELECT DISTINCT ON (run_key) run_key, delay_s, ts, stop_id FROM ev WHERE run_key IN (SELECT run_key FROM counted) ORDER BY run_key, delay_s DESC, ts
+     ), lo AS (
+       SELECT DISTINCT ON (run_key) run_key, delay_s, ts, stop_id FROM ev WHERE run_key IN (SELECT run_key FROM counted) ORDER BY run_key, delay_s ASC, ts
+     )
+     SELECT r.run_key, r.trip_id, r.vehicle_id, r.route_short, r.headsign, r.start_delay_s,
+            hi.delay_s AS hi_s, extract(epoch FROM hi.ts)::int AS hi_ts, hi.stop_id AS hi_stop,
+            lo.delay_s AS lo_s, extract(epoch FROM lo.ts)::int AS lo_ts, lo.stop_id AS lo_stop
+       FROM hi JOIN lo USING (run_key) JOIN trip_run r ON r.run_key = hi.run_key`,
+    [iso, from],
+  );
+  const trams = tramShorts(feeds);
+  const feed = feeds.cachedDay(serviceClock().iso)?.feed;
+  const stops = feed?.stops;
+  const routeByShort = new Map(feed ? [...feed.routes.values()].map((r) => [r.short, r] as const) : []);
+  const name = (id: string) => stops?.get(id)?.name ?? id;
+  const peaks: RunPeak[] = rows.map((r) => ({
+    date: iso,
+    tripId: r.trip_id,
+    vehicleId: r.vehicle_id,
+    route: r.route_short,
+    color: routeByShort.get(r.route_short)?.color ?? "",
+    text: routeByShort.get(r.route_short)?.text ?? "",
+    headsign: r.headsign ?? "",
+    tram: trams.has(r.route_short),
+    startDelayS: r.start_delay_s,
+    hiS: r.hi_s,
+    hiTs: r.hi_ts,
+    hiStop: name(r.hi_stop),
+    loS: r.lo_s,
+    loTs: r.lo_ts,
+    loStop: name(r.lo_stop),
+  }));
+  return dayRecords(iso, peaks);
+}
+
+export type RecordPeriod = "day" | "7" | "30" | "all";
+
+/** napok egyszerre legfeljebb ennyi párhuzamos lekérdezéssel */
+async function eachDay<T>(days: string[], fn: (d: string) => Promise<T>, parallel = 4): Promise<T[]> {
+  const out: T[] = new Array(days.length);
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(parallel, days.length) }, async () => {
+      while (next < days.length) {
+        const i = next++;
+        out[i] = await fn(days[i]);
+      }
+    }),
+  );
+  return out;
+}
+
+/** Rekordok egy időszakra: a nap, az előző 7 vagy 30 nap, vagy minden, amiről adat van. */
+export async function fleetRecords(deps: Deps, date: string, period: RecordPeriod, q: RecordQuery): Promise<RecordsResult & { from: string; to: string }> {
+  const today = serviceClock().iso;
+  const first = (await firstDay()) ?? date;
+  const to = period === "all" ? today : date;
+  const span = period === "day" ? 1 : period === "7" ? 7 : period === "30" ? 30 : Number.POSITIVE_INFINITY;
+  const days: string[] = [];
+  for (let d = to; d >= first && days.length < span; d = shiftIso(d, -1)) days.push(d);
+  const recs = await eachDay(days, (d) => recordsOfDay(deps, d));
+  return { ...mergeRecords(recs, q), from: days[days.length - 1] ?? to, to };
+}
+
+/**
+ * A lezárt napok görbéje és rekordjai előre kiszámolva, a háttérben: így a
+ * visszanézés, az összeomlás-keresés és a „mindig” rekordok gyorsítótárból jönnek.
+ */
+export async function warmFleetHistory(deps: Deps): Promise<number> {
+  const first = await firstDay();
+  if (!first) return 0;
+  let n = 0;
+  for (let d = shiftIso(serviceClock().iso, -1); d >= first; d = shiftIso(d, -1)) {
+    await fleetDay(deps, d);
+    await recordsOfDay(deps, d);
+    n++;
+    // a napi forgalmat ne fogja meg: kis szünet napok között
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  return n;
 }
