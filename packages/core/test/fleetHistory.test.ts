@@ -97,7 +97,7 @@ describe("késési rekordok", () => {
     expect(d.runs).toBe(42);
     expect(d.late.filter((r) => r.tram).map((r) => r.delayS)).toEqual([1700, 100]);
     expect(d.late.filter((r) => !r.tram)).toHaveLength(25);
-    expect(d.routes.find((r) => r.route === "1V")).toMatchObject({ runs: 2, late5: 1, late10: 1, maxS: 1700 });
+    expect(d.routes.find((r) => r.route === "1V")).toMatchObject({ color: "FDEA00", text: "000000", runs: 2, late5: 1, late10: 1, maxS: 1700 });
   });
 
   it("időszakra összefésülve: típus szerint szűrve, a legnagyobbtól", () => {
@@ -118,5 +118,7 @@ describe("késési rekordok", () => {
     const runs = [...Array.from({ length: 12 }, () => peak("23", false, 400)), ...Array.from({ length: 12 }, (_, i) => peak("14", false, i < 3 ? 400 : 60)), peak("ZOO", false, 900)];
     const m = mergeRecords([dayRecords("2026-11-18", runs)], { mode: "all", kind: "late", limit: 5 });
     expect(m.routes.map((r) => r.route)).toEqual(["23", "14"]);
+    // a vonal színe a rangsorral együtt jön, akkor is, ha nincs a rekordlistában
+    expect(m.routes.every((r) => r.color === "FDEA00")).toBe(true);
   });
 });

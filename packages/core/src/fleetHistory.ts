@@ -172,7 +172,7 @@ export type RecordRun = {
   startDelayS: number | null;
 };
 
-export type RouteTally = { route: string; tram: boolean; runs: number; late5: number; late10: number; maxS: number };
+export type RouteTally = { route: string; color: string; text: string; tram: boolean; runs: number; late5: number; late10: number; maxS: number };
 
 /** egy nap rekordjai: a legkésőbb és a legkorábban járó menetek (busz és villamos külön), és vonalanként a számok */
 export type DayRecords = { date: string; runs: number; late5: number; late10: number; late: RecordRun[]; early: RecordRun[]; routes: RouteTally[] };
@@ -215,7 +215,7 @@ export function dayRecords(date: string, peaks: RunPeak[]): DayRecords {
   const buses = peaks.filter((p) => !p.tram);
   const routes = new Map<string, RouteTally>();
   for (const p of peaks) {
-    const r = routes.get(p.route) ?? { route: p.route, tram: p.tram, runs: 0, late5: 0, late10: 0, maxS: -Infinity };
+    const r = routes.get(p.route) ?? { route: p.route, color: p.color, text: p.text, tram: p.tram, runs: 0, late5: 0, late10: 0, maxS: -Infinity };
     r.runs++;
     if (p.hiS >= RECORDS.LATE5_S) r.late5++;
     if (p.hiS >= RECORDS.LATE10_S) r.late10++;

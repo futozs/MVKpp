@@ -6,6 +6,7 @@
 import {
   breakdowns,
   dayBuckets,
+  isMvkId,
   dayRecords,
   mergeRecords,
   localMidnightUnix,
@@ -218,13 +219,13 @@ export async function findBreakdowns(deps: Deps, before: string, opts: { days: n
 /** a villamosvonalak rövid nevei a mai menetrendből (a rövid nevek napról napra ugyanazok) */
 function tramShorts(feeds: FeedManager): Set<string> {
   const feed = feeds.cachedDay(serviceClock().iso)?.feed;
-  return new Set(feed ? [...feed.routes.values()].filter((r) => r.type === "900").map((r) => r.short) : ["1V", "1AV", "2V"]);
+  return new Set(feed ? [...feed.routes.values()].filter((r) => r.type === "900" && isMvkId(r.id)).map((r) => r.short) : ["1V", "1AV", "2V"]);
 }
 
 /** A nap rekordjai: menetenként a csúcskésés és a legnagyobb sietés (egy adatbázis-összesítésből). */
 export function recordsOfDay(deps: Deps, iso: string): Promise<DayRecords> {
   const today = serviceClock().iso;
-  return cached(`fleet-rec:v2:${iso}`, iso < today ? 30 * DAY_S : 300, () => buildDayRecords(deps, iso));
+  return cached(`fleet-rec:v3:${iso}`, iso < today ? 30 * DAY_S : 300, () => buildDayRecords(deps, iso));
 }
 
 async function buildDayRecords({ feeds }: Deps, iso: string): Promise<DayRecords> {
@@ -265,7 +266,8 @@ async function buildDayRecords({ feeds }: Deps, iso: string): Promise<DayRecords
   const trams = tramShorts(feeds);
   const feed = feeds.cachedDay(serviceClock().iso)?.feed;
   const stops = feed?.stops;
-  const routeByShort = new Map(feed ? [...feed.routes.values()].map((r) => [r.short, r] as const) : []);
+  // csak az MVK vonalai: a közös menetrendben a Volán helyi vonalainak rövid neve ugyanaz lehet („23”)
+  const routeByShort = new Map(feed ? [...feed.routes.values()].filter((r) => isMvkId(r.id)).map((r) => [r.short, r] as const) : []);
   const name = (id: string) => stops?.get(id)?.name ?? id;
   const peaks: RunPeak[] = rows.map((r) => ({
     date: iso,

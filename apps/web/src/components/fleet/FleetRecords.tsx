@@ -93,7 +93,7 @@ export function FleetRecords({ date, onJump }: { date: string; onJump: (t: numbe
           ) : (
             <p className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">Ebben az időszakban nincs adat.</p>
           )}
-          {res.routes.length ? <RouteRanking routes={res.routes} colors={new Map(res.items.map((r) => [r.route, r] as const))} /> : null}
+          {res.routes.length ? <RouteRanking routes={res.routes} /> : null}
         </>
       ) : failed ? (
         <p className="py-6 text-center text-sm text-muted-foreground">A rekordok most nem érhetők el.</p>
@@ -150,7 +150,7 @@ function RecordRow({ r, rank, open, onToggle, onJump, showDate }: { r: RecordRun
 }
 
 /** A legrosszabb vonalak: a menetek mekkora része késett legalább 5 percet. */
-function RouteRanking({ routes, colors }: { routes: RecordsResult["routes"]; colors: Map<string, { color: string; text: string }> }) {
+function RouteRanking({ routes }: { routes: RecordsResult["routes"] }) {
   const top = Math.max(0.01, ...routes.map((r) => r.late5 / r.runs));
   return (
     <section aria-label="A legtöbbet késő vonalak">
@@ -158,7 +158,7 @@ function RouteRanking({ routes, colors }: { routes: RecordsResult["routes"]; col
       <ul className="mt-2 space-y-1.5">
         {routes.map((r) => (
           <li key={r.route} className="grid grid-cols-[3rem_minmax(0,1fr)_auto] items-center gap-2.5 text-[12px]">
-            <RouteTile short={r.route} size="sm" color={colors.get(r.route)?.color || null} text={colors.get(r.route)?.text || null} />
+            <RouteTile short={r.route} size="sm" color={r.color || null} text={r.text || null} />
             <span className="h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden>
               <span className="block h-full origin-left rounded-full bg-late" style={{ transform: `scaleX(${r.late5 / r.runs / top})` }} />
             </span>
