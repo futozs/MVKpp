@@ -112,6 +112,16 @@ A figyelőre háromféle kártya tehető:
 
 Az utazásnaplóból felismeri a rendszeres útjaidat: ugyanaz a vonal, ugyanaz a megálló, hasonló időpont, a hét napjaira is figyelve („minden munkanap”, „szerdánként és csütörtökönként”). A szokásos idő előtt másfél órával megjelenik a figyelő tetején a mai legközelebbi indulással.
 
+### Flotta: ki késik most a legtöbbet
+
+A figyelő harmadik füle (Megállók · Utazásaim · **Flotta**) az összes most úton lévő MVK-járművet rangsorolja, élőben, negyedpercenként frissítve.
+
+- **Késik / Siet / Mind**: a legtöbbet későtől lefelé, vagy a legjobban sietőtől. Szűrhető buszra vagy villamosra; a villamos-szűrőben a villamospótló busz is ott van.
+- **Soronként**: vonal, irány, jármű, hol jár most (melyik két megálló között), és **honnan jön a késés**: késve indult, vagy hol szedte fel útközben („Villanyrendőr → Malomszög u., +7 perc, dugóban”). Ha épp most veszít időt, azt külön jelzi; a hosszan egy helyben álló járművet is.
+- **Kinyitva**: a menet késése megállóról megállóra, a felszedett szakasz kiemelve, és a térképes követés.
+- **A villamosvonal állapota**: rendben jár, akadozik, kevés villamos jár a menetrendhez képest, **áll** (két szerelvény öt percnél tovább nem mozdul), vagy **villamospótló busz jár** (és hogy ez szerepelt-e a mai menetrendben).
+- **A buszhálózat gerince**: a legalább öt vonal közös szakaszain mért dugók folyosókká fűzve (honnan hová, mennyi pluszidő, hány vonalat érint), és a késő buszok aránya. Ebből dől el, hogy rendben halad, lassul, torlódik, vagy **beállt a gerinchálózat**.
+
 ### Megállónkénti értesítések
 
 - **Érkezik a busz**: push-értesítés, ennyi perccel az érkezés előtt.
