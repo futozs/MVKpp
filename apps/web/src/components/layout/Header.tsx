@@ -11,7 +11,7 @@ import { useWeather } from "@/hooks/useWeather";
 import { cn } from "@/lib/utils";
 import { BrandMark } from "./BrandMark";
 import { LiveStatus } from "./LiveStatus";
-import { NAV_TABS, TabBadge, tabBadge, type TabCounts } from "./navTabs";
+import { AlertDot, NAV_TABS, TabBadge, tabBadge, type TabCounts } from "./navTabs";
 import { useTabBadges } from "@/lib/watchPrefs";
 import { SettingsMenu } from "./SettingsMenu";
 import { RefreshSweep } from "./RefreshSweep";
@@ -27,6 +27,7 @@ interface HeaderProps {
   onManualRefresh: () => void;
   monitoredStopsCount: number;
   liveIncidentCount: number;
+  fleetAlert: boolean;
   onOpenNotifications: () => void;
   onOpenAccount: () => void;
 }
@@ -47,6 +48,7 @@ export function Header({
   onManualRefresh,
   monitoredStopsCount,
   liveIncidentCount,
+  fleetAlert,
   onOpenNotifications,
   onOpenAccount,
 }: HeaderProps) {
@@ -61,7 +63,7 @@ export function Header({
         <DesktopNav
           activeTab={activeTab}
           setActiveTab={setActiveTab}
-          counts={{ monitoredStopsCount, liveIncidentCount }}
+          counts={{ monitoredStopsCount, liveIncidentCount, fleetAlert }}
         />
 
         <div className="ml-auto flex shrink-0 items-center gap-1.5 pl-1 lg:gap-2">
@@ -159,6 +161,7 @@ function DesktopNav({ activeTab, setActiveTab, counts }: DesktopNavProps) {
                     <TabBadge {...badge} isActive={isActive} placement="inline" />
                   </span>
                 ) : null}
+                {tab.id === "fleet" && counts.fleetAlert ? <AlertDot className="relative" /> : null}
               </button>
             </li>
           );

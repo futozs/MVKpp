@@ -1,11 +1,11 @@
 import { motion, useReducedMotion } from "framer-motion";
-import { Bell } from "lucide-react";
+import { Bell, Gauge } from "lucide-react";
 import type { ActiveTab } from "@/types";
 import { useWeather } from "@/hooks/useWeather";
 import { cn } from "@/lib/utils";
 import { BrandMark } from "./BrandMark";
 import { LiveStatusCompact } from "./LiveStatus";
-import { NAV_TABS, TabBadge, tabBadge, type TabCounts } from "./navTabs";
+import { AlertDot, NAV_TABS, TabBadge, tabBadge, type TabCounts } from "./navTabs";
 import { useTabBadges } from "@/lib/watchPrefs";
 import { RefreshSweep } from "./RefreshSweep";
 import { SettingsMenu } from "./SettingsMenu";
@@ -13,7 +13,10 @@ import { formatTemp } from "./WeatherReadout";
 import { FOCUS_RING, ICON_BUTTON } from "./headerStyles";
 
 interface MobileHeaderProps {
+  activeTab: ActiveTab;
   setActiveTab: (tab: ActiveTab) => void;
+  /** a villamos vagy a buszhálózat most bajban van */
+  fleetAlert: boolean;
   vehicleCount: number;
   lastUpdated: Date | null;
   isRefreshing: boolean;
@@ -35,7 +38,9 @@ const INSET_X =
  * el, a kézi frissítés az állapot-panelen.
  */
 export function MobileHeader({
+  activeTab,
   setActiveTab,
+  fleetAlert,
   vehicleCount,
   lastUpdated,
   isRefreshing,
@@ -68,6 +73,17 @@ export function MobileHeader({
               {Math.round(weather.tempC)}°
             </span>
           ) : null}
+          {/* A Flotta az alsó sávba már nem fér: itt, minden oldalon egy koppintásra. */}
+          <button
+            type="button"
+            onClick={() => setActiveTab("fleet")}
+            aria-label="Flotta: ki késik most"
+            aria-current={activeTab === "fleet" ? "page" : undefined}
+            className={cn(ICON_BUTTON, FOCUS_RING, "relative h-11 w-11", activeTab === "fleet" && "text-primary")}
+          >
+            <Gauge aria-hidden />
+            {fleetAlert ? <AlertDot className="absolute right-2 top-2 ring-2 ring-card" /> : null}
+          </button>
           <button
             type="button"
             onClick={onOpenNotifications}
@@ -103,7 +119,7 @@ export function MobileTabBar({ activeTab, setActiveTab, counts }: MobileTabBarPr
       className={cn("shrink-0 border-t border-border bg-card pb-[env(safe-area-inset-bottom)] md:hidden", INSET_X)}
     >
       <ul className="grid grid-cols-6">
-        {NAV_TABS.map((tab) => {
+        {NAV_TABS.filter((tab) => !tab.desktopOnly).map((tab) => {
           const isActive = activeTab === tab.id;
           const badge = showBadges ? tabBadge(tab.id, counts) : null;
           const Icon = tab.icon;

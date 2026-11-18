@@ -19,6 +19,8 @@ import { TimetableView } from "@/components/timetable/TimetableView";
 import { RoutePlannerView } from "@/components/routeplanner/RoutePlannerView";
 import { StatsView } from "@/components/stats/StatsView";
 import { ParkingView } from "@/components/parking/ParkingView";
+import { FleetView } from "@/components/fleet/FleetView";
+import { useFleetAlert } from "@/components/fleet/useFleetStatus";
 import { RideLayer } from "@/components/ride/RideLayer";
 import { getActiveRide, useActiveRide } from "@/lib/rides";
 import { NotificationsModal } from "@/components/notifications/NotificationsModal";
@@ -75,6 +77,7 @@ function migrateFilters(saved: Partial<FilterState> & { type?: string }): Filter
 export function App() {
   useAppHeight();
   const liveIncidentCount = useLiveIncidents();
+  const fleetAlert = useFleetAlert();
   const activeRide = useActiveRide();
   // A bekapcsolt közlekedési módok (Beállítások): ezek megállói, vonalai és járművei töltődnek be.
   const enabledModes = useEnabledModes();
@@ -408,11 +411,14 @@ export function App() {
             onManualRefresh={fetchLivePositions}
             monitoredStopsCount={shownMonitoredCount}
             liveIncidentCount={liveIncidentCount}
+            fleetAlert={fleetAlert}
             onOpenNotifications={() => setNotificationsOpen(true)}
             onOpenAccount={() => setAccountOpen(true)}
           />
           <MobileHeader
+            activeTab={activeTab}
             setActiveTab={setActiveTab}
+            fleetAlert={fleetAlert}
             vehicleCount={liveVehicles.length}
             lastUpdated={lastUpdated}
             isRefreshing={isRefreshing}
@@ -517,6 +523,8 @@ export function App() {
             )}
 
             {activeTab === "planner" && <RoutePlannerView stops={stops} />}
+
+            {activeTab === "fleet" && <FleetView onFocusTrip={handleFocusTripOnMap} />}
           </div>
 
           <MobileTabBar

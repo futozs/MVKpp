@@ -1,6 +1,7 @@
 import {
   CalendarClock,
   ChartColumn,
+  Gauge,
   MapIcon,
   Radar,
   Route,
@@ -17,11 +18,14 @@ export interface NavTab {
   /** Rövid név  keskenyebb fejlécben és mobilon. */
   short: string;
   icon: LucideIcon;
+  /** a telefon alsó sávjába nem fér: ott a fejléc gombja nyitja */
+  desktopOnly?: boolean;
 }
 
 export const NAV_TABS: readonly NavTab[] = [
   { id: "map", label: "Forgalmi térkép", short: "Térkép", icon: MapIcon },
   { id: "multistop", label: "Megállófigyelő", short: "Figyelő", icon: Radar },
+  { id: "fleet", label: "Flotta", short: "Flotta", icon: Gauge, desktopOnly: true },
   { id: "timetable", label: "Menetrend", short: "Menetrend", icon: CalendarClock },
   { id: "parking", label: "Parkoló", short: "Parkoló", icon: SquareParking },
   { id: "planner", label: "Útvonaltervező", short: "Útvonal", icon: Route },
@@ -31,6 +35,8 @@ export const NAV_TABS: readonly NavTab[] = [
 export interface TabCounts {
   monitoredStopsCount: number;
   liveIncidentCount: number;
+  /** a villamos vagy a buszhálózat most bajban van (Flotta) */
+  fleetAlert?: boolean;
 }
 
 type BadgeKind = "monitored" | "incident";
@@ -97,6 +103,16 @@ export function TabBadge({ kind, value, isActive, placement }: TabBadgeProps) {
         {value}
       </span>
       <span className="sr-only">{SR_TEXT[kind](value)}</span>
+    </>
+  );
+}
+
+/** Piros pötty: a villamos vagy a buszhálózat most bajban van (a Flotta gombján). */
+export function AlertDot({ className }: { className?: string }) {
+  return (
+    <>
+      <span aria-hidden className={cn("h-2 w-2 shrink-0 rounded-full bg-late motion-safe:animate-pulse", className)} />
+      <span className="sr-only">, a villamos vagy a buszhálózat most bajban van</span>
     </>
   );
 }

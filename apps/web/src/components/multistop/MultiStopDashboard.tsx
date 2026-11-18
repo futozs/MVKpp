@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeftRight, Check, Gauge, LocateFixed, MonitorPlay, Plus, Radar, Ticket } from "lucide-react";
+import { ArrowLeftRight, Check, LocateFixed, MonitorPlay, Plus, Radar, Ticket } from "lucide-react";
 import type { Stop } from "@/types";
 import { useGeo } from "@/context/GeoContext";
 import { distanceKm } from "@/lib/geo";
@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn, normalizeSearchText } from "@/lib/utils";
 import { RidesPanel } from "@/components/ride/RidesPanel";
-import { FleetView } from "@/components/fleet/FleetView";
 import { CommuteCard } from "./CommuteCard";
 import { MENU_ITEM, MoreMenu } from "./MoreMenu";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
@@ -25,14 +24,12 @@ import { withHungarianSuffix } from "@/lib/utils";
 // a ki nem töltött oszlopok is helyet foglaltak, és a kártyák balra csúsztak)
 const STOP_GRID = "grid justify-center gap-4 grid-cols-[repeat(auto-fit,minmax(min(100%,340px),400px))]";
 
-type WatchView = "stops" | "rides" | "fleet";
+type WatchView = "stops" | "rides";
 const VIEW_KEY = "mvk_watch_view";
-/** `short`: telefonon, hogy a három fül és a gombok kiférjenek */
+/** `short`: telefonon, hogy a fülek és a gombok kiférjenek */
 const WATCH_VIEWS: { id: WatchView; label: string; short: string; icon: typeof Radar }[] = [
   { id: "stops", label: "Megállók", short: "Megállók", icon: Radar },
-  { id: "rides", label: "Utazásaim", short: "Utaim", icon: Ticket },
-  // élő késés-rangsor az egész flottára (villamos- és gerincállapottal)
-  { id: "fleet", label: "Flotta", short: "Flotta", icon: Gauge },
+  { id: "rides", label: "Utazásaim", short: "Utazásaim", icon: Ticket },
 ];
 const isWatchView = (v: string | null): v is WatchView => WATCH_VIEWS.some((x) => x.id === v);
 
@@ -325,8 +322,6 @@ export function MultiStopDashboard({
           </>
         ) : null}
       </div>
-
-      {view === "fleet" ? <FleetView onFocusTrip={onFocusTrip} /> : null}
 
       {view === "rides" ? (
         <div className="min-h-0 flex-1 overflow-y-auto">

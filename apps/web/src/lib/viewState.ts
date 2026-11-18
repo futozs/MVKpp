@@ -46,7 +46,7 @@ export interface ViewState {
   focusVehicleId: string | null;
 }
 
-const TABS: ActiveTab[] = ["map", "multistop", "timetable", "parking", "planner", "stats"];
+const TABS: ActiveTab[] = ["map", "multistop", "timetable", "parking", "planner", "stats", "fleet"];
 
 let cachedView: ViewState | null | undefined;
 

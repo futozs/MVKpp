@@ -220,7 +220,8 @@ export type ActiveTab =
   | "timetable"
   | "parking"
   | "planner"
-  | "stats";
+  | "stats"
+  | "fleet";
 
 export type SpeedFilter = "all" | "moving" | "idle";
 

@@ -10,6 +10,8 @@ import { NetworkStatus } from "./NetworkStatus";
 import { TramLineSection } from "./TramLineMap";
 import { causes, clockText, minutesText, whereText, type Cause } from "./fleetText";
 import { useFleetBoard } from "./useFleetBoard";
+import { FleetTimeline } from "./FleetTimeline";
+import { formatClockShort, formatDayLabel, serviceDayOf } from "@/components/map/historyTime";
 
 type Sort = "late" | "early" | "all";
 type Mode = "all" | "bus" | "tram";
@@ -39,19 +41,25 @@ const CAUSE_TONE: Record<Cause["tone"], string> = {
 const inMode = (v: BoardVehicle, m: Mode) => m === "all" || (m === "tram" ? v.mode === "tram" || v.replacement : v.mode === "bus" && !v.replacement);
 
 /**
- * Figyelő → Flotta: az összes most úton lévő MVK-jármű késés szerint
- * rangsorolva, élőben. Fölötte a villamos- és a buszhálózat állapota.
+ * Flotta: az összes úton lévő MVK-jármű késés szerint rangsorolva, a
+ * villamos- és a buszhálózat állapotával. Élőben, vagy visszanézve bármely
+ * múltbeli pillanatra, amíg van adat.
  */
 export function FleetView({ onFocusTrip }: { onFocusTrip?: (tripId: string, vehicleId?: string) => void }) {
-  const { data, failed } = useFleetBoard();
+  /** null: élő; különben a visszanézett pillanat (unix mp) */
+  const [at, setAt] = useState<number | null>(null);
+  const { data, failed, loading } = useFleetBoard(at);
   const [sort, setSort] = usePreference<Sort>("mvk_fleet_sort", "late");
   const [mode, setMode] = usePreference<Mode>("mvk_fleet_mode", "all");
   const [open, setOpen] = useState<string | null>(null);
+
+  const timeline = <FleetTimeline at={at} onAt={setAt} onLive={() => setAt(null)} loading={loading} />;
 
   if (!data) {
     return (
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-[1100px] space-y-3 px-3 py-4 sm:px-4">
+          {timeline}
           {failed ? (
             <p className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
               <CircleAlert className="h-4 w-4" /> A flotta adatai most nem érhetők el. Pár másodperc múlva újra próbálom.
@@ -81,12 +89,14 @@ export function FleetView({ onFocusTrip }: { onFocusTrip?: (tripId: string, vehi
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="mx-auto grid w-full max-w-[1100px] gap-4 px-3 py-3 sm:px-4 sm:py-4 lg:grid-cols-[340px_minmax(0,1fr)] lg:items-start">
+      <div className="mx-auto w-full max-w-[1100px] px-3 pt-3 sm:px-4 sm:pt-4">{timeline}</div>
+      <div className={cn("mx-auto grid w-full max-w-[1100px] gap-4 px-3 py-3 transition-opacity duration-fast sm:px-4 sm:py-4 lg:grid-cols-[340px_minmax(0,1fr)] lg:items-start", loading && "opacity-60")}>
         <div className="space-y-3 lg:sticky lg:top-4">
           <NetworkStatus data={data} />
           <TramLineSection analysis={data.tram.analysis} alert={mode === "tram" || !["ok", "off"].includes(data.tram.state)} />
           <p className="px-1 text-[11.5px] text-muted-foreground">
-            {data.vehicles.length} jármű úton · {onTime} időben jár · {failed ? "a frissítés most nem sikerült" : freshText(Date.now() / 1000 - data.at)}
+            {data.vehicles.length} jármű úton · {onTime} időben jár ·{" "}
+            {at != null ? `állapot ${formatDayLabel(serviceDayOf(data.at), true)} ${formatClockShort(data.at)}-kor` : failed ? "a frissítés most nem sikerült" : freshText(Date.now() / 1000 - data.at)}
           </p>
         </div>
 
@@ -138,8 +148,9 @@ export function FleetView({ onFocusTrip }: { onFocusTrip?: (tripId: string, vehi
                   scale={scale}
                   open={open === v.vehicleId}
                   onToggle={() => setOpen(open === v.vehicleId ? null : v.vehicleId)}
-                  onFocusTrip={onFocusTrip}
+                  onFocusTrip={at == null ? onFocusTrip : undefined}
                   refreshKey={data.at}
+                  past={at != null ? { t: data.at, date: serviceDayOf(data.at) } : null}
                 />
               ))}
             </ol>
@@ -163,6 +174,7 @@ function FleetRow({
   onToggle,
   onFocusTrip,
   refreshKey,
+  past,
 }: {
   v: BoardVehicle;
   rank: number;
@@ -171,6 +183,8 @@ function FleetRow({
   onToggle: () => void;
   onFocusTrip?: (tripId: string, vehicleId?: string) => void;
   refreshKey: number;
+  /** visszanézéskor a pillanat és a napja */
+  past: { t: number; date: string } | null;
 }) {
   const late = v.delayS >= ON_TIME_S;
   const early = v.delayS <= -ON_TIME_S;
@@ -242,7 +256,7 @@ function FleetRow({
               ))}
             </ul>
           ) : null}
-          <DelayTrail tripId={v.tripId} refreshKey={refreshKey} pickup={v.pickup} />
+          <DelayTrail tripId={v.tripId} refreshKey={refreshKey} pickup={v.pickup} past={past ? { ...past, delayS: v.delayS, lastIdx: v.stopsDone - 1 } : null} />
           {onFocusTrip ? (
             <Button variant="outline" size="sm" className="h-10 w-full" onClick={() => onFocusTrip(v.tripId, v.vehicleId)}>
               <MapPinned />

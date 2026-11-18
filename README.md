@@ -114,13 +114,15 @@ Az utazásnaplóból felismeri a rendszeres útjaidat: ugyanaz a vonal, ugyanaz 
 
 ### Flotta: ki késik most a legtöbbet
 
-A figyelő harmadik füle (Megállók · Utazásaim · **Flotta**) az összes most úton lévő MVK-járművet rangsorolja, élőben, negyedpercenként frissítve.
+Önálló oldal: asztalon a fő menüben, telefonon a fejléc mérőóra-gombjával érhető el bármelyik oldalról. A gomb piros pöttyel jelez, ha a villamos vagy a buszhálózat épp bajban van. Az összes úton lévő MVK-járművet rangsorolja, negyedpercenként frissítve.
 
 - **Késik / Siet / Mind**: a legtöbbet későtől lefelé, vagy a legjobban sietőtől. Szűrhető buszra vagy villamosra; a villamos-szűrőben a villamospótló busz is ott van.
-- **Soronként**: vonal, irány, jármű, hol jár most (melyik két megálló között), és **honnan jön a késés**: késve indult, vagy hol szedte fel útközben („Villanyrendőr → Malomszög u., +7 perc, dugóban”). Ha épp most veszít időt, azt külön jelzi; a hosszan egy helyben álló járművet is.
+- **Soronként**: vonal, irány, jármű, hol jár most (melyik két megálló között), és **honnan jön a késés**: késve indult, vagy hol szedte fel útközben („Villanyrendőr → Malomszög u., +7 perc, dugóban”). Ha épp most veszít időt, azt külön jelzi; a hosszan egy helyben álló járművet is (az araszolás is állásnak számít).
 - **Kinyitva**: a menet késése megállóról megállóra, a felszedett szakasz kiemelve, és a térképes követés.
-- **A villamosvonal állapota**: rendben jár, akadozik, kevés villamos jár a menetrendhez képest, **áll** (két szerelvény öt percnél tovább nem mozdul), vagy **villamospótló busz jár** (és hogy ez szerepelt-e a mai menetrendben).
+- **A villamosvonal állapota**: rendben jár, akadozik, kevés villamos jár, **összeomlott** (egyszerre legalább három villamos késik 10+ percet), **áll**, vagy **villamospótló busz jár**. Megmondja, melyik irányban és melyik szakaszon szedték fel a késést.
+- **Villamosvonal élőben**: a vonal sematikus rajza irányonként, a villamosokkal a helyükön. Ha áll egy sor, megmutatja, melyik villamos áll elöl (közvetlenül előtte van az akadály, vagy ő hibásodott meg), kik rekedtek mögötte, és mire utal: csak az egyik irány áll (a síneken álló jármű, baleset), mindkét irány ugyanott (a pályát elzáró akadály), vagy az egész vonal sok helyen (áram- vagy felsővezeték-hiba). Az egymás nyakában járó villamosokat is jelzi.
 - **A buszhálózat gerince**: a legalább öt vonal közös szakaszain mért dugók folyosókká fűzve (honnan hová, mennyi pluszidő, hány vonalat érint), és a késő buszok aránya. Ebből dől el, hogy rendben halad, lassul, torlódik, vagy **beállt a gerinchálózat**.
+- **Visszanézés, amíg van adat**: napválasztó, és a nap késésgörbéje két sávban (hány villamos és hány busz késett 5+ percet, ötpercenként), rajta az összeomlások. Az időpontot a görbén húzva vagy percekkel léptetve a teljes oldal (rangsor, villamosvonal, gerinc) az akkori állapotot mutatja. A **Legutóbbi villamos-összeomlás** gomb visszafelé keres, és a legrosszabb pillanatára ugrik; a nap és a korábbi napok összeomlásai listában is ott vannak.
 
 ### Megállónkénti értesítések
 

@@ -7,7 +7,7 @@ import type { ActiveTab } from "@/types";
 
 export const OPEN_LINK_EVENT = "mvk-open-link";
 
-const TABS: ActiveTab[] = ["map", "multistop", "timetable", "parking", "planner", "stats"];
+const TABS: ActiveTab[] = ["map", "multistop", "timetable", "parking", "planner", "stats", "fleet"];
 /** ugyanaz, mint a szerveren (`packages/api/src/push.ts`) */
 const STOP_ID_RE = /^[\w:.-]{1,32}$/;
 
