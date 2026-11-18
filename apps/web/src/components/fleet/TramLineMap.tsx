@@ -3,23 +3,30 @@ import { ArrowDown, ArrowUp, ChevronDown, Pause, TramFront } from "lucide-react"
 import type { BoardSnapshot, PlacedTram, TramLineView } from "@mvk/core";
 import { cn } from "@/lib/utils";
 import { minutesText, verdictText } from "./fleetText";
+import { spreadLabels } from "./spreadLabels";
 
 const ROW = 30;
-/** ennél közelebbi villamosokat egymás mellé tolunk a sávban (px) */
-const OVERLAP = 22;
+/** két címke legalább ennyire kerül egymástól (a címke 22 px magas) */
+const LABEL_GAP = 25;
+/** a címke ennyire van a vágánytól; a köz a vezetővonalé (px) */
+const LABEL_INSET = 14;
 
-type Chip = { t: PlacedTram; y: number; shift: number };
+/** `y`: a villamos valódi helye, `labelY`: a címkéé (a közeliek szétosztva, hogy ne takarják egymást) */
+type Chip = { t: PlacedTram; y: number; labelY: number };
 
-/** a sáv villamosai pixel-helyen; az egymást takarókat oldalra toljuk */
-function chips(trams: PlacedTram[], yOf: (t: PlacedTram) => number | null): Chip[] {
-  const out: Chip[] = [];
-  for (const t of trams) {
+function chips(trams: PlacedTram[], yOf: (t: PlacedTram) => number | null, height: number): Chip[] {
+  const placed = trams.flatMap((t) => {
     const y = yOf(t);
-    if (y == null) continue;
-    const near = out.filter((c) => Math.abs(c.y - y) < OVERLAP).length;
-    out.push({ t, y, shift: near });
-  }
-  return out;
+    return y == null ? [] : [{ t, y }];
+  });
+  placed.sort((a, b) => a.y - b.y);
+  const labels = spreadLabels(
+    placed.map((p) => p.y),
+    LABEL_GAP,
+    11,
+    height - 11,
+  );
+  return placed.map((p, i) => ({ ...p, labelY: labels[i] }));
 }
 
 /**
@@ -42,8 +49,8 @@ export function TramLineMap({ lines }: { lines: TramLineView[] }) {
     return (a + (b - a) * (t.pos - k)) * ROW + ROW / 2;
   };
   const downY = (t: PlacedTram) => t.pos * ROW + ROW / 2;
-  const left = chips(down.trams, downY);
-  const right = up ? chips(up.trams, upY) : [];
+  const left = chips(down.trams, downY, n * ROW);
+  const right = up ? chips(up.trams, upY, n * ROW) : [];
   const band = (view: TramLineView, yOf: (t: PlacedTram) => number | null) => {
     const head = view.blockage ? view.trams.find((t) => t.vehicleId === view.blockage?.head) : undefined;
     const y = head ? yOf(head) : null;
@@ -95,6 +102,9 @@ export function TramLineMap({ lines }: { lines: TramLineView[] }) {
       </div>
       <figcaption className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
         <span className="flex items-center gap-1">
+          <span className="h-2.5 w-2.5 rounded-full bg-late" aria-hidden /> a villamos helye (színe: késik / időben / siet)
+        </span>
+        <span className="flex items-center gap-1">
           <Pause className="h-3 w-3 text-nosignal" aria-hidden /> 3+ perce áll
         </span>
         <span className="flex items-center gap-1">
@@ -124,20 +134,33 @@ function TramChip({ c, side }: { c: Chip; side: "left" | "right" }) {
   const t = c.t;
   const late = t.delayS >= 60;
   const early = t.delayS <= -60;
-  const offset = 8 + c.shift * 46;
+  const edge = side === "left" ? "right" : "left";
+  const top = Math.min(c.y, c.labelY);
+  const moved = Math.abs(c.labelY - c.y) > 1;
   return (
-    <span
-      className={cn(
-        "absolute flex h-[22px] -translate-y-1/2 items-center gap-1 whitespace-nowrap rounded-md border bg-card px-1.5 text-[11px] font-bold tabular-nums shadow-sm",
-        t.role === "head" ? "border-late ring-2 ring-late/60" : t.role === "stuck" ? "border-nosignal/70" : "border-border",
-      )}
-      style={{ top: c.y, [side === "left" ? "right" : "left"]: offset }}
-      title={`${t.route} · ${t.vehicleId} · ${t.delayS >= 0 ? "+" : "−"}${Math.round(Math.abs(t.delayS) / 60)} perc${t.stallS ? ` · ${Math.round(t.stallS / 60)} perce áll` : ""}`}
-    >
-      {t.state === "stopped" ? <Pause className="h-3 w-3 text-nosignal" aria-label="áll" /> : null}
-      <span className="font-mono text-foreground/90">{t.vehicleId}</span>
-      {late || early ? <span className={late ? "text-late" : "text-early"}>{minutesText(t.delayS).replace(" perc", "")}</span> : null}
-    </span>
+    <>
+      {/* a valódi hely a vágányon */}
+      <span
+        className={cn("absolute z-[1] h-2.5 w-2.5 -translate-y-1/2 rounded-full ring-2 ring-card", late ? "bg-late" : early ? "bg-early" : "bg-ontime")}
+        style={{ top: c.y, [edge]: -5 }}
+        aria-hidden
+      />
+      {/* vezetővonal a címkéhez: a vágány mellett le/fel, majd a címkéig */}
+      {moved ? <span className="absolute w-px bg-muted-foreground/50" style={{ top, height: Math.abs(c.labelY - c.y), [edge]: 6 }} aria-hidden /> : null}
+      <span className="absolute h-px bg-muted-foreground/50" style={{ top: c.labelY, width: LABEL_INSET - (moved ? 6 : 0), [edge]: moved ? 6 : 0 }} aria-hidden />
+      <span
+        className={cn(
+          "absolute flex h-[22px] -translate-y-1/2 items-center gap-1 whitespace-nowrap rounded-md border bg-card px-1.5 text-[11px] font-bold tabular-nums shadow-sm",
+          t.role === "head" ? "border-late ring-2 ring-late/60" : t.role === "stuck" ? "border-nosignal/70" : "border-border",
+        )}
+        style={{ top: c.labelY, [edge]: LABEL_INSET }}
+        title={`${t.route} · ${t.vehicleId} · ${t.delayS >= 0 ? "+" : "−"}${Math.round(Math.abs(t.delayS) / 60)} perc${t.stallS ? ` · ${Math.round(t.stallS / 60)} perce áll` : ""}`}
+      >
+        {t.state === "stopped" ? <Pause className="h-3 w-3 text-nosignal" aria-label="áll" /> : null}
+        <span className="font-mono text-foreground/90">{t.vehicleId}</span>
+        {late || early ? <span className={late ? "text-late" : "text-early"}>{minutesText(t.delayS).replace(" perc", "")}</span> : null}
+      </span>
+    </>
   );
 }
 
