@@ -7,6 +7,7 @@ import { usePreference } from "@/hooks/usePreference";
 import { cn } from "@/lib/utils";
 import { DelayTrail } from "./DelayTrail";
 import { NetworkStatus } from "./NetworkStatus";
+import { TramLineSection } from "./TramLineMap";
 import { causes, clockText, minutesText, whereText, type Cause } from "./fleetText";
 import { useFleetBoard } from "./useFleetBoard";
 
@@ -83,6 +84,7 @@ export function FleetView({ onFocusTrip }: { onFocusTrip?: (tripId: string, vehi
       <div className="mx-auto grid w-full max-w-[1100px] gap-4 px-3 py-3 sm:px-4 sm:py-4 lg:grid-cols-[340px_minmax(0,1fr)] lg:items-start">
         <div className="space-y-3 lg:sticky lg:top-4">
           <NetworkStatus data={data} />
+          <TramLineSection analysis={data.tram.analysis} alert={mode === "tram" || !["ok", "off"].includes(data.tram.state)} />
           <p className="px-1 text-[11.5px] text-muted-foreground">
             {data.vehicles.length} jármű úton · {onTime} időben jár · {failed ? "a frissítés most nem sikerült" : freshText(Date.now() / 1000 - data.at)}
           </p>
