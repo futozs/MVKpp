@@ -7,6 +7,9 @@ export function minutesText(sec: number): string {
   return `${sec < 0 ? "−" : "+"}${m} perc`;
 }
 
+/** rövid perc: „+7 p” (a szűk helyekre) */
+export const minShort = (sec: number) => minutesText(sec).replace(" perc", " p");
+
 /** perc:mp, előjellel: „+6:51” (a rangsor pontos értéke) */
 export function clockText(sec: number): string {
   const a = Math.abs(Math.round(sec));
@@ -15,7 +18,7 @@ export function clockText(sec: number): string {
 
 /** Hol jár most a jármű, egy sorban. */
 export function whereText(v: BoardVehicle): string {
-  if (!v.at) return v.stopsDone <= 1 ? "Még a kiinduló megállóban" : "A végállomásnál";
+  if (!v.at) return v.stopsDone <= 1 ? "a kiinduló megállóban" : "a végállomásnál";
   if (!v.at.from) return `${v.at.to} felé indul`;
   return `${v.at.from} → ${v.at.to}`;
 }
@@ -23,26 +26,22 @@ export function whereText(v: BoardVehicle): string {
 export type Cause = { tone: "late" | "jam" | "early" | "muted"; text: string };
 
 /**
- * Honnan jön a késés (vagy a sietés): késve / korán indult, és hol szedte fel
- * útközben. Mindkettő igaz lehet, ezért lista.
+ * Honnan jön a késés (vagy a sietés), röviden: késve / korán indult, és hol
+ * szedte fel útközben. Mindkettő igaz lehet, ezért lista.
  */
 export function causes(v: BoardVehicle): Cause[] {
   const out: Cause[] = [];
   const start = v.startDelayS ?? 0;
-  if (start >= 120) out.push({ tone: "late", text: `Késve indult, ${minutesText(start)}` });
-  else if (start <= -60) out.push({ tone: "early", text: `Korán indult, ${minutesText(start)}` });
+  if (start >= 120) out.push({ tone: "late", text: `Késve indult ${minShort(start)}` });
+  else if (start <= -60) out.push({ tone: "early", text: `Korán indult ${minShort(start)}` });
   const p = v.pickup;
   if (p) {
     const where = p.from === p.to ? p.from : `${p.from} → ${p.to}`;
-    const jam = p.jam ? ", dugóban" : "";
-    out.push({ tone: p.jam ? "jam" : "late", text: p.ongoing ? `Most veszít időt: ${where}, ${minutesText(p.gainS)}${jam}` : `Itt szedte fel: ${where}, ${minutesText(p.gainS)}${jam}` });
+    out.push({ tone: p.jam ? "jam" : "late", text: `${p.ongoing ? "Most veszít" : "Felszedte"}: ${where} ${minShort(p.gainS)}${p.jam ? " · dugó" : ""}` });
   }
-  if (!out.length && v.delayS >= 180) out.push({ tone: "muted", text: "Apránként gyűlt össze, nem egy helyen" });
+  if (!out.length && v.delayS >= 180) out.push({ tone: "muted", text: "Apránként gyűlt össze" });
   return out;
 }
-
-/** határozott névelő a név elé: „a Tiszai”, „az Újgyőri” */
-const article = (name: string) => (/^[aáeéiíoóöőuúüű]/i.test(name) ? "Az" : "A");
 
 /** „a 609-es”, „az 501-es”: névelő és toldalék a pályaszám elé-mögé */
 export function vehicleRef(id: string): string {
@@ -52,108 +51,67 @@ export function vehicleRef(id: string): string {
 const cap = (s: string) => `${s[0]?.toUpperCase() ?? ""}${s.slice(1)}`;
 const between = (a: string, b: string) => (a === b ? `${a} megállónál` : `${a} és ${b} között`);
 
-/** Mi történik a villamosvonalon: a vonal-elemző következtetése mondatokban. */
+/** Mi történik a villamosvonalon: a vonal-elemző következtetése egy címben és egy-két mondatban. */
 export function verdictText(v: TramVerdict): { title: string; text: string } {
   switch (v.kind) {
     case "whole-line":
-      return {
-        title: "Az egész vonal áll",
-        text: "Mindkét irányban, sok helyen egyszerre állnak a villamosok. Ez áramkimaradásra vagy felsővezeték-hibára utal, nem egy helyi akadályra.",
-      };
+      return { title: "Az egész vonal áll", text: "Sok helyen egyszerre, mindkét irányban: áramkimaradás vagy felsővezeték-hiba." };
     case "both-ways":
       return v.samePlace
-        ? {
-            title: "Mindkét irány ugyanott áll",
-            text: `${v.places[0]} környékén mindkét oldalon feltorlódtak a villamosok. Ez a pályát mindkét irányban elzáró akadályra utal: baleset, a síneken álló jármű, vagy felsővezeték-hiba.`,
-          }
-        : {
-            title: "Mindkét irányban áll egy-egy sor",
-            text: `Más-más helyen: ${v.places.join(", ")}. Két külön akadály, vagy egy nagyobb forgalmi zavar.`,
-          };
-    case "one-way": {
-      const head = vehicleRef(v.head);
-      const other = v.otherOk && v.otherToward ? ` A másik irány (${v.otherToward} felé) halad, a baj csak a ${v.toward} felé tartó oldalon van.` : "";
+        ? { title: "Mindkét irány áll", text: `${v.places[0]} környékén mindkét oldalon. Pályát elzáró akadály: baleset, a síneken álló jármű vagy felsővezeték-hiba.` }
+        : { title: "Két helyen áll sor", text: `Más-más helyen: ${v.places.join(", ")}.` };
+    case "one-way":
       return {
         title: `Áll a sor ${v.toward} felé`,
-        text: `${cap(head)} villamos áll elöl ${between(v.fromStop, v.toStop)}, ${Math.max(1, Math.round(v.sinceS / 60))} perce${v.behind ? `; mögötte ${v.behind} villamos rekedt` : ""}. Vagy ő hibásodott meg, vagy közvetlenül előtte van az akadály: baleset, a síneken álló autó, pályahiba.${other}`,
+        text: `Elöl ${vehicleRef(v.head)} áll ${Math.max(1, Math.round(v.sinceS / 60))} perce, ${between(v.fromStop, v.toStop)}${v.behind ? `, mögötte ${v.behind} villamos` : ""}. Előtte akadály van, vagy ő hibásodott meg.${v.otherOk ? " A másik irány halad." : ""}`,
       };
-    }
     case "queue":
       return {
-        title: `Torlódnak a villamosok ${v.toward} felé`,
-        text: `${cap(between(v.fromStop, v.toStop))} lassan, egymás után araszolnak, elöl ${vehicleRef(v.head)}. Ez torlódásra utal a pályán (forgalmas kereszteződés, dugó a közúttal közös szakaszon), nem teljes leállásra.`,
+        title: `Torlódás ${v.toward} felé`,
+        text: `${cap(between(v.fromStop, v.toStop))} araszolnak, elöl ${vehicleRef(v.head)}. Nem teljes leállás.`,
       };
     default:
-      return { title: "Halad a vonal", text: "Egyik irányban sem áll sor, a villamosok mennek." };
+      return { title: "Halad a vonal", text: "" };
   }
 }
 
-type Status = { tone: "ok" | "warn" | "bad" | "off"; title: string; detail: string };
+export type Tone = "ok" | "warn" | "bad" | "off";
+export type Tile = { tone: Tone; title: string; sub: string };
 
-export function tramStatus(t: BoardSnapshot["tram"]): Status {
-  const where = t.stalled
-    .slice(0, 3)
-    .map((s) => `${s.at} (${Math.round(s.stallS / 60)} perce)`)
-    .join(", ");
-  const repl = `${t.replacementRunning} pótlóbusz úton, ${t.replacementPlanned ? "a menetrend szerint" : "a mai menetrendben nem szerepelt"}`;
-  const span = t.trouble ? (t.trouble.from === t.trouble.to ? t.trouble.from : `${t.trouble.from} és ${t.trouble.to} között`) : null;
-  const zone = t.trouble ? ` ${article(t.trouble.toward)} ${t.trouble.toward} felé tartók ${span} szedték fel a késést.` : "";
-  const worst = t.maxDelayS != null && t.maxDelayS >= 60 ? ` A legnagyobb késés ${minutesText(t.maxDelayS)}.` : "";
+/** A villamos állapota egy csempén: egy-két szó és egy rövid számsor. */
+export function tramTile(t: BoardSnapshot["tram"]): Tile {
+  const v = t.analysis.verdict;
   switch (t.state) {
-    case "halted": {
-      const v = t.analysis.verdict;
-      const lead =
-        v.kind === "one-way"
-          ? `${cap(vehicleRef(v.head))} villamos áll elöl ${between(v.fromStop, v.toStop)}${v.behind ? `, mögötte ${v.behind} villamos` : ""}, ${v.toward} felé.`
-          : v.kind === "ok" || v.kind === "queue"
-            ? `${t.stalled.length} szerelvény nem halad: ${where}.`
-            : verdictText(v).text;
-      return { tone: "bad", title: "Áll a villamosforgalom", detail: `${lead}${t.replacementRunning ? ` ${repl}.` : ""}` };
-    }
-    case "collapsed": {
+    case "halted":
+      return { tone: "bad", title: "Áll", sub: v.kind === "one-way" ? `elöl ${vehicleRef(v.head)}, ${v.fromStop}` : `${t.stalled.length} szerelvény áll` };
+    case "collapsed":
       // ha már minden villamos halad, a zavar elmúlt: a késés maradt meg
-      const moving = t.analysis.verdict.kind === "ok";
-      return {
-        tone: "bad",
-        title: moving ? "Nagy késésekkel jár a villamos" : "Összeomlott a villamosközlekedés",
-        detail: `${t.severe} villamos késik 10 percnél többet, ${t.late} legalább 5 percet.${zone}${worst}${moving ? " Most már minden villamos halad, a késés a korábbi zavarból maradt." : ""}${t.replacementRunning ? ` ${repl}.` : ""}`,
-      };
-    }
+      return { tone: "bad", title: v.kind === "ok" ? "Nagy késések" : "Összeomlott", sub: `${t.severe} késik 10+ percet` };
     case "replaced":
-      return { tone: "bad", title: "Villamospótló busz jár", detail: `${repl}. ${t.running ? `${t.running} villamos közlekedik.` : "Villamos most nem közlekedik."}` };
+      return { tone: "bad", title: "Pótlóbusz jár", sub: `${t.replacementRunning} pótlóbusz${t.replacementPlanned ? ", tervezett" : ", rendkívüli"}` };
     case "thin":
-      return { tone: "warn", title: "Kevés villamos jár", detail: `${t.running} van úton, a menetrend szerint ${t.scheduled} kellene.` };
+      return { tone: "warn", title: "Kevés jár", sub: `${t.running} a menetrendi ${t.scheduled} helyett` };
     case "late":
-      return {
-        tone: "warn",
-        title: "Akadozik a villamos",
-        detail: t.stalled.length
-          ? `Hosszan áll: ${where}.`
-          : `${t.late ? `${t.late} villamos késik legalább 5 percet.` : `Egy villamos rendkívül késik.`}${zone}${worst}`,
-      };
+      return { tone: "warn", title: "Akadozik", sub: t.late ? `${t.late} késik 5+ percet` : "egy villamos nagyon késik" };
     case "off":
-      return { tone: "off", title: "Most nem jár villamos", detail: "A menetrend szerint egy villamos sincs úton." };
+      return { tone: "off", title: "Nem jár", sub: "most nincs menet" };
     default:
-      return {
-        tone: "ok",
-        title: "Rendben jár a villamos",
-        detail: `${t.running} szerelvény úton${t.medianDelayS != null && Math.abs(t.medianDelayS) >= 60 ? `, jellemzően ${minutesText(t.medianDelayS)}` : ", menetrend szerint"}.`,
-      };
+      return { tone: "ok", title: "Rendben", sub: `${t.running} úton` };
   }
 }
 
-export function busStatus(b: BoardSnapshot["bus"]): Status {
-  const late = `${b.running} busz úton, ${b.late} késik 5 percnél többet`;
+/** A buszhálózat állapota egy csempén. */
+export function busTile(b: BoardSnapshot["bus"]): Tile {
+  const c = b.corridors[0];
+  const late = `${b.late} késik 5+ percet`;
   switch (b.state) {
     case "collapsed":
-      return { tone: "bad", title: "Beállt a gerinchálózat", detail: `${late}. Több fő útvonalon áll a forgalom.` };
+      return { tone: "bad", title: "Beállt a gerinc", sub: late };
     case "jammed":
-      return { tone: "bad", title: "Torlódik a gerinc", detail: `${late}.` };
+      return { tone: "bad", title: "Torlódik", sub: c ? `${c.from} → ${c.to}` : late };
     case "slow":
-      return { tone: "warn", title: "Lassul a forgalom", detail: `${late}.` };
+      return { tone: "warn", title: "Lassul", sub: c ? `${c.from} → ${c.to}` : late };
     default:
-      return b.running
-        ? { tone: "ok", title: "Rendben halad a busz", detail: `${b.running} busz úton, ${b.late ? `${b.late} késik 5 percnél többet` : "egyik sem késik 5 percnél többet"}.` }
-        : { tone: "off", title: "Most nem jár busz", detail: "Egy busz sincs úton." };
+      return b.running ? { tone: "ok", title: "Rendben", sub: `${b.running} úton · ${late}` } : { tone: "off", title: "Nem jár", sub: "most nincs menet" };
   }
 }

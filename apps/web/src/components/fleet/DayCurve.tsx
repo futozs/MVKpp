@@ -121,7 +121,7 @@ export function DayCurve({
         </svg>
       </div>
       <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
-        A sávok magassága: hány jármű késett legalább 5 percet. Színezett háttér: összeomlás. Húzd vagy koppints az időpontra.
+        5+ percet késő járművek · színes háttér: összeomlás · húzd az időpontot
       </p>
     </div>
   );

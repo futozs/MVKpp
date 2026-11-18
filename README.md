@@ -114,15 +114,17 @@ Az utazásnaplóból felismeri a rendszeres útjaidat: ugyanaz a vonal, ugyanaz 
 
 ### Flotta: ki késik most a legtöbbet
 
-Önálló oldal: asztalon a fő menüben, telefonon a fejléc mérőóra-gombjával érhető el bármelyik oldalról. A gomb piros pöttyel jelez, ha a villamos vagy a buszhálózat épp bajban van. Az összes úton lévő MVK-járművet rangsorolja, negyedpercenként frissítve.
+Önálló oldal: asztalon a fő menüben, telefonon a fejléc mérőóra-gombjával érhető el bármelyik oldalról. A gomb piros pöttyel jelez, ha a villamos vagy a buszhálózat épp bajban van.
 
-- **Késik / Siet / Mind**: a legtöbbet későtől lefelé, vagy a legjobban sietőtől. Szűrhető buszra vagy villamosra; a villamos-szűrőben a villamospótló busz is ott van.
-- **Soronként**: vonal, irány, jármű, hol jár most (melyik két megálló között), és **honnan jön a késés**: késve indult, vagy hol szedte fel útközben („Villanyrendőr → Malomszög u., +7 perc, dugóban”). Ha épp most veszít időt, azt külön jelzi; a hosszan egy helyben álló járművet is (az araszolás is állásnak számít).
-- **Kinyitva**: a menet késése megállóról megállóra, a felszedett szakasz kiemelve, és a térképes követés.
-- **A villamosvonal állapota**: rendben jár, akadozik, kevés villamos jár, **összeomlott** (egyszerre legalább három villamos késik 10+ percet), **áll**, vagy **villamospótló busz jár**. Megmondja, melyik irányban és melyik szakaszon szedték fel a késést.
-- **Villamosvonal élőben**: a vonal sematikus rajza irányonként, a villamosokkal a helyükön. Ha áll egy sor, megmutatja, melyik villamos áll elöl (közvetlenül előtte van az akadály, vagy ő hibásodott meg), kik rekedtek mögötte, és mire utal: csak az egyik irány áll (a síneken álló jármű, baleset), mindkét irány ugyanott (a pályát elzáró akadály), vagy az egész vonal sok helyen (áram- vagy felsővezeték-hiba). Az egymás nyakában járó villamosokat is jelzi.
-- **A buszhálózat gerince**: a legalább öt vonal közös szakaszain mért dugók folyosókká fűzve (honnan hová, mennyi pluszidő, hány vonalat érint), és a késő buszok aránya. Ebből dől el, hogy rendben halad, lassul, torlódik, vagy **beállt a gerinchálózat**.
-- **Visszanézés, amíg van adat**: napválasztó, és a nap késésgörbéje két sávban (hány villamos és hány busz késett 5+ percet, ötpercenként), rajta az összeomlások. Az időpontot a görbén húzva vagy percekkel léptetve a teljes oldal (rangsor, villamosvonal, gerinc) az akkori állapotot mutatja. A **Legutóbbi villamos-összeomlás** gomb visszafelé keres, és a legrosszabb pillanatára ugrik; a nap és a korábbi napok összeomlásai listában is ott vannak.
+Fent két csempe mondja meg egy-két szóban, mi a helyzet (Villamos: *Rendben / Akadozik / Összeomlott / Áll / Pótlóbusz jár*; Busz: *Rendben / Lassul / Torlódik / Beállt a gerinc*), mellette az idő: élő, vagy a visszanézett nap és óra. Alatta asztalon teljes szélességben három, külön görgethető oszlop, telefonon három fül:
+
+- **Hálózat**: a villamosvonal sematikus rajza irányonként, a villamosokkal a valódi helyükön. Ha áll egy sor: ki áll elöl (előtte az akadály, vagy ő hibásodott meg), kik rekedtek mögötte, melyik irányban, és mire utal (egy irány: a síneken álló jármű vagy baleset; mindkét irány ugyanott: pályát elzáró akadály; sok helyen egyszerre: áram- vagy felsővezeték-hiba). Alatta a busz-gerinc dugói folyosónként.
+- **Rangsor**: az összes úton lévő MVK-jármű késés vagy sietés szerint, busz/villamos szűrővel (a villamosnál a pótlóbusz is). Soronként hol jár és honnan jön a késése (késve indult, hol szedte fel, most veszít-e időt, dugóban-e); kinyitva a késés útja megállónként és a térképes követés.
+- **Idő**: a nap késésgörbéje két sávban (hány villamos és hány busz késett 5+ percet), rajta az összeomlások. A görbén húzva az egész oldal arra a pillanatra áll vissza, amíg van adat. Alatta:
+  - **Rekordok**: a legnagyobb késések és sietések menetenként, a napon, 7 vagy 30 napra, vagy mindig, busz/villamos szűrővel; az időszak összesítője (a menetek hány százaléka késett 5+ / 10+ percet) és a legtöbbet késő vonalak. Egy rekordból egy gombbal az egész hálózat arra a pillanatra ugrik.
+  - **Összeomlások**: a nap és a korábbi napok villamos-összeomlásai és gerinc-dugói, és a „Legutóbbi villamos-összeomlás” ugrás.
+
+A lezárt napok görbéjét és rekordjait a worker induláskor és hatóránként előre kiszámolja, a böngésző pedig megtartja a már betöltött pillanatokat, így a visszanézés gyorsítótárból jön.
 
 ### Megállónkénti értesítések
 

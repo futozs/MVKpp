@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
+import { delayPickup } from "@mvk/core/fleet";
 import { API_BASE } from "@/lib/apiBase";
 import { useMeasure } from "@/components/charts/Charts";
 import { cn } from "@/lib/utils";
-import { clockText } from "./fleetText";
+import { fetchCached } from "./fleetCache";
+import { clockText, minShort } from "./fleetText";
 
 type TripData = {
   stops: { id: string; name: string }[];
@@ -26,51 +28,60 @@ function niceStep(rangeMin: number): number {
 /**
  * A menet késése megállóról megállóra: hol szedte fel (pirosan kiemelve a
  * szakasz), és hol tart most (szaggatott vég). A nulla vonal a menetrend.
+ * `history` nélkül élőben; vele egy korábbi nap menete (`until`-ig, és ha
+ * megvan, az akkori helyzettel), a felszedés helyét maga számolja ki.
  */
 export function DelayTrail({
   tripId,
   refreshKey,
-  pickup,
-  past,
+  pickup: given,
+  history,
 }: {
   tripId: string;
-  refreshKey: number;
-  pickup: { fromIdx: number; toIdx: number } | null;
-  /** visszanézéskor: a pillanat, a napja, és akkor mennyit késett, hol tartott */
-  past: { t: number; date: string; delayS: number; lastIdx: number } | null;
+  refreshKey?: number;
+  pickup?: { fromIdx: number; toIdx: number } | null;
+  history?: { date: string; until?: number; at?: { delayS: number; lastIdx: number } };
 }) {
   const [trip, setTrip] = useState<TripData | null>(null);
   const [failed, setFailed] = useState(false);
   const [hover, setHover] = useState<number | null>(null);
   const { ref, width } = useMeasure<HTMLDivElement>();
 
+  const date = history?.date;
   useEffect(() => {
-    const ctl = new AbortController();
-    fetch(`${API_BASE}/engine/trip?trip=${encodeURIComponent(tripId)}${past ? `&date=${past.date}` : ""}`, { signal: ctl.signal })
-      .then((r) => (r.ok ? (r.json() as Promise<TripData>) : Promise.reject(new Error(`HTTP ${r.status}`))))
+    let alive = true;
+    // a régi nap menete nem változik: gyorsítótárból; az élő menet minden frissítéskor újra
+    const load = date
+      ? fetchCached<TripData>(`/engine/trip?trip=${encodeURIComponent(tripId)}&date=${date}`, 3600)
+      : fetch(`${API_BASE}/engine/trip?trip=${encodeURIComponent(tripId)}`).then((r) => (r.ok ? (r.json() as Promise<TripData>) : Promise.reject(new Error(`HTTP ${r.status}`))));
+    load
       .then((d) => {
+        if (!alive) return;
         setTrip(d);
         setFailed(false);
       })
-      .catch((e: unknown) => {
-        if (!(e instanceof DOMException && e.name === "AbortError")) setFailed(true);
-      });
-    return () => ctl.abort();
-  }, [tripId, refreshKey, past?.date]);
+      .catch(() => alive && setFailed(true));
+    return () => {
+      alive = false;
+    };
+  }, [tripId, refreshKey, date]);
 
   if (failed && !trip) return <p className="py-6 text-center text-xs text-muted-foreground">A menet megállónkénti adatai most nem érhetők el.</p>;
   if (!trip) return <div className="h-[132px] animate-pulse rounded-lg bg-muted/40" aria-label="Betöltés" />;
 
   const points: Point[] = trip.events
     // visszanézéskor csak az addig történt
-    .filter((e) => e.src !== SRC_FINAL && (!past || e.arr <= past.t))
+    .filter((e) => e.src !== SRC_FINAL && (history?.until == null || e.arr <= history.until))
     .sort((a, b) => a.stop_idx - b.stop_idx)
     .map((e) => ({ x: e.stop_idx, delayS: e.delay_s, label: trip.stops[e.stop_idx]?.name ?? "", live: false }));
-  const last = past ? past.lastIdx : trip.run?.lastStopIdx;
-  const nowDelay = past ? past.delayS : trip.liveDelaySec;
+  const last = history ? history.at?.lastIdx : trip.run?.lastStopIdx;
+  const nowDelay = history ? history.at?.delayS : trip.liveDelaySec;
   if (nowDelay != null && last != null && last >= 0 && last < trip.stops.length - 1) {
-    points.push({ x: last + 0.5, delayS: nowDelay, label: `${past ? "Akkor" : "Most"}, ${trip.stops[last + 1]?.name ?? ""} felé`, live: true });
+    points.push({ x: last + 0.5, delayS: nowDelay, label: `${history ? "Akkor" : "Most"}, ${trip.stops[last + 1]?.name ?? ""} felé`, live: true });
   }
+  // a rekordoknál nincs kész felszedés-adat: a mért pontokból számoljuk
+  const computed = given === undefined ? delayPickup(points.filter((p) => !p.live).map((p) => ({ idx: p.x, stopId: String(p.x), delayS: p.delayS }))) : null;
+  const pickup = given ?? computed;
   if (points.length < 2) return <p className="py-6 text-center text-xs text-muted-foreground">Még kevés megállón haladt át, nincs mit kirajzolni.</p>;
 
   const w = Math.max(width, 260);
@@ -141,6 +152,11 @@ export function DelayTrail({
           {shown ? clockText(shown.delayS) : ""}
         </span>
       </p>
+      {computed ? (
+        <p className="mt-1 text-xs font-medium text-late">
+          Felszedte: {trip.stops[computed.fromIdx]?.name} → {trip.stops[computed.toIdx]?.name} {minShort(computed.gainS)}
+        </p>
+      ) : null}
     </div>
   );
 }

@@ -1,8 +1,7 @@
-import { useState } from "react";
-import { ArrowDown, ArrowUp, ChevronDown, Pause, TramFront } from "lucide-react";
-import type { BoardSnapshot, PlacedTram, TramLineView } from "@mvk/core";
+import { ArrowDown, ArrowUp, Pause } from "lucide-react";
+import type { PlacedTram, TramLineView } from "@mvk/core";
 import { cn } from "@/lib/utils";
-import { minutesText, verdictText } from "./fleetText";
+import { minutesText } from "./fleetText";
 import { spreadLabels } from "./spreadLabels";
 
 const ROW = 30;
@@ -161,46 +160,5 @@ function TramChip({ c, side }: { c: Chip; side: "left" | "right" }) {
         {late || early ? <span className={late ? "text-late" : "text-early"}>{minutesText(t.delayS).replace(" perc", "")}</span> : null}
       </span>
     </>
-  );
-}
-
-/**
- * Figyelő → Flotta: a villamosvonal elemzése. Baj esetén magától nyitva;
- * a felhasználó kézzel be- és kicsukhatja.
- */
-export function TramLineSection({ analysis, alert }: { analysis: BoardSnapshot["tram"]["analysis"]; alert: boolean }) {
-  const [manual, setManual] = useState<boolean | null>(null);
-  const open = manual ?? alert;
-  const v = verdictText(analysis.verdict);
-  const bad = analysis.verdict.kind !== "ok";
-  const bunches = analysis.lines.flatMap((l) => l.bunches.map((ids) => ({ toward: l.toward, ids })));
-  return (
-    <section className="rounded-xl border border-border bg-card">
-      <button
-        type="button"
-        onClick={() => setManual(!open)}
-        aria-expanded={open}
-        className="flex w-full items-center gap-2 rounded-xl px-3.5 py-3 text-left text-sm font-bold hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <TramFront className="h-4 w-4 text-muted-foreground" aria-hidden />
-        <span className="flex-1">Villamosvonal élőben</span>
-        {bad ? <span className="rounded bg-late/15 px-1.5 py-0.5 text-[10.5px] font-bold text-late">{v.title}</span> : null}
-        <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform duration-fast", open && "rotate-180")} aria-hidden />
-      </button>
-      {open ? (
-        <div className="space-y-3 border-t border-border/70 px-3.5 pb-4 pt-3">
-          <div>
-            <p className={cn("text-[13.5px] font-bold", bad ? "text-late" : "text-foreground")}>{v.title}</p>
-            <p className="mt-1 text-[12.5px] leading-snug text-muted-foreground">{v.text}</p>
-            {bunches.map((b) => (
-              <p key={b.ids.join()} className="mt-1.5 text-[12.5px] leading-snug text-muted-foreground">
-                {b.toward} felé egymás nyakában jár {b.ids.length} villamos ({b.ids.join(", ")}).
-              </p>
-            ))}
-          </div>
-          <TramLineMap lines={analysis.lines} />
-        </div>
-      ) : null}
-    </section>
   );
 }
