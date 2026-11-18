@@ -41,3 +41,4 @@ export * from "./transit/stopTwins.ts";
 export * from "./transit/platformGuess.ts";
 export * from "./realtime/relation.ts";
 export * from "./apns.ts";
+export * from "./fleet.ts";

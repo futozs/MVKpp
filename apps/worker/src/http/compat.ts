@@ -36,6 +36,7 @@ import type { TripInsights } from "../insights.ts";
 import type { MotionPredictor } from "../motion/live.ts";
 import type { NewsSource } from "../news.ts";
 import type { TrafficMonitor } from "../traffic.ts";
+import type { FleetBoard } from "../fleet.ts";
 import type { Parking } from "../parking.ts";
 import type { VehiclePredictor } from "../predict.ts";
 import type { RegionalFeeds } from "../regional/feeds.ts";
@@ -53,6 +54,7 @@ export type Ctx = {
   parking: Parking;
   forecaster: DelayForecaster;
   traffic: TrafficMonitor;
+  fleet: FleetBoard;
   insights: TripInsights;
   motion: MotionPredictor;
   news: NewsSource;

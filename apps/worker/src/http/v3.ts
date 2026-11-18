@@ -271,6 +271,9 @@ export function registerV3(r: Router, ctx: Ctx) {
   /** Élő forgalom: a most torlódott szakaszok (a buszok menetidejéből), nyomvonallal. */
   r.get("/engine/traffic/live", (req, res) => sendJson(req, res, 200, ctx.traffic.snapshot(), { "cache-control": "no-store" }));
 
+  /** Élő flotta-rangsor: minden úton lévő MVK-jármű késése, hol szedte fel, és a villamos- és buszhálózat állapota. */
+  r.get("/engine/fleet/live", (req, res) => sendJson(req, res, 200, ctx.fleet.snapshot(), { "cache-control": "no-store" }));
+
   /** A késés-modell állapota: az utolsó tanítás visszamérése, és mi becsül most. */
   r.get("/engine/ml/status", async (req, res) => {
     const last = await latestReport();

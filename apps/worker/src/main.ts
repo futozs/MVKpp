@@ -35,6 +35,7 @@ import { trainDelayModelInThread } from "./ml/thread.ts";
 import { MotionPredictor } from "./motion/live.ts";
 import { trainMotionModelInThread } from "./motion/thread.ts";
 import { TrafficMonitor } from "./traffic.ts";
+import { FleetBoard } from "./fleet.ts";
 import { TripInsights } from "./insights.ts";
 import { Parking } from "./parking.ts";
 import { NewsSource } from "./news.ts";
@@ -83,6 +84,7 @@ async function main() {
   const parking = new Parking(engine, predictor);
   // a motor indulása előtt: a mai nap visszajátszott eseményeiből is épül
   const traffic = new TrafficMonitor(engine, forecaster);
+  const fleet = new FleetBoard(engine, traffic);
   const insights = new TripInsights(engine, forecaster, predictor, traffic);
   await parking.init().catch((e) => log.warn("parking", "indítás sikertelen", errMsg(e)));
 
@@ -94,7 +96,7 @@ async function main() {
   const server = createServer();
   const hub = new Hub(server, engine, predictor, parking, forecaster, insights, motion);
   const news = new NewsSource(feeds);
-  const ctx = { engine, feeds, predictor, parking, forecaster, traffic, insights, motion, news, regionalFeeds, regionalRt, startedAt: Date.now(), hubStats: () => hub.status() };
+  const ctx = { engine, feeds, predictor, parking, forecaster, traffic, fleet, insights, motion, news, regionalFeeds, regionalRt, startedAt: Date.now(), hubStats: () => hub.status() };
   registerCompat(router, ctx);
   registerV3(router, ctx);
   registerTransit(router, ctx);
