@@ -1,0 +1,14 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "plus jakarta sans",
+        "createdAt": "2026-11-24T14:34:10.215Z",
+        "reason": "incumbent design decision documented in apps/web/src/styles/tokens.css (Plus Jakarta Sans chosen over Inter/Space Grotesk/Geist); not touched by the map rewrite"
+      }
+    ]
+  }
+}
