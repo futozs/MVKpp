@@ -27,7 +27,7 @@ IMAGE="protomaps/go-pmtiles:v1.31.2"
 mkdir -p "$DIR"
 
 pmtiles() {
-  if command -v pmtiles >/dev/null 2>&1; then
+  if type -P pmtiles >/dev/null 2>&1; then
     (cd "$DIR" && command pmtiles "$@")
   else
     # a kép distroless és rootként futna: a saját felhasználónkkal, hogy a fájlokat utána mozgathassuk
