@@ -1,5 +1,6 @@
 # MVK v3  éles telepítés egy VPS-en.
 #   cp infra/.env.example infra/.env && (töltsd ki)
+#   tools/tiles-update.sh   # a térkép csempéi a data/tiles alá (~1,3 GB); havonta cronból is
 #   docker compose -f infra/docker-compose.yml --env-file infra/.env up -d --build
 name: mvk
 
@@ -77,6 +78,19 @@ services:
       DB_POOL: "8"
       # a rendszer-hub ezzel olvassa a web válaszidőit (/v3/admin/metrics)  NEM a mesterkulcs
       METRICS_KEY: ${METRICS_KEY:-}
+      # a /tileset.json innen olvassa, melyik csempekészlet él (tools/tiles-update.sh írja)
+      TILES_DIR: /tiles
+    volumes:
+      - ../data/tiles:/tiles:ro
+
+  # Térképcsempék a saját szerverről (Protomaps-alaptérkép + Mapterhorn-domborzat, PMTiles-ból).
+  # Az archívumokat a tools/tiles-update.sh tölti le a data/tiles alá; a Caddy irányítja ide a /tiles/*-t.
+  tiles:
+    image: protomaps/go-pmtiles:v1.31.2
+    restart: unless-stopped
+    command: ["serve", "/data", "--port=8080", "--cache-size=128"]
+    volumes:
+      - ../data/tiles:/data:ro
 
   # Rendszer-hub: üzemeltetői pult, CSAK a belső hálón (HUB_BIND = a szerver LAN-címe,
   # pl. 192.168.1.11). Soha ne kösd 0.0.0.0-ra egy nyilvános VPS-en!
@@ -113,7 +127,7 @@ services:
   caddy:
     image: caddy:2.10-alpine
     restart: unless-stopped
-    depends_on: [web, worker]
+    depends_on: [web, worker, tiles]
     ports: ["80:80", "443:443", "443:443/udp"]
     environment:
       DOMAIN: ${DOMAIN}

@@ -35,6 +35,12 @@ const WORKER_PATHS = [
   "/MVK_mobilapp/:path*",
 ];
 
+/**
+ * Fejlesztéskor (vagy ha a TILES_URL meg van adva) a térképcsempéket egy helyi
+ * `pmtiles serve` adja; élesben a Caddy irányítja őket a tiles konténerre, a Next nem is látja.
+ */
+const TILES_URL = (process.env.TILES_URL ?? (process.env.NODE_ENV !== "production" ? "http://127.0.0.1:8081" : "")).replace(/\/+$/, "");
+
 /** A bun workspace gyökere: innen jön a hoistolt node_modules. */
 const MONOREPO_ROOT = path.join(__dirname, "..", "..");
 
@@ -51,10 +57,11 @@ const nextConfig: NextConfig = {
     root: MONOREPO_ROOT,
   },
   async rewrites() {
-    return WORKER_PATHS.map((source) => ({
+    const worker = WORKER_PATHS.map((source) => ({
       source,
       destination: `${WORKER_URL}${source}`,
     }));
+    return TILES_URL ? [...worker, { source: "/tiles/:path*", destination: `${TILES_URL}/:path*` }] : worker;
   },
   // Az iOS-app passkey-je (webcredentials) ezt a fájlt olvassa: kiterjesztés nélküli, ezért a típust
   // meg kell adni  az Apple csak application/json-t fogad el, átirányítás nélkül.
@@ -63,6 +70,16 @@ const nextConfig: NextConfig = {
       {
         source: "/.well-known/apple-app-site-association",
         headers: [{ key: "Content-Type", value: "application/json" }],
+      },
+      // A térkép fontjai és ikonjai verziózott könyvtárban vannak (public/map-assets/vN): örökre
+      // gyorsítótárazhatók. A .pbf típusa nélkül a Caddy nem tömörítené (octet-stream).
+      {
+        source: "/map-assets/:path*",
+        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
+      },
+      {
+        source: "/map-assets/:path*.pbf",
+        headers: [{ key: "Content-Type", value: "application/x-protobuf" }],
       },
     ];
   },

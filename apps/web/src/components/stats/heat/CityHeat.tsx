@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import L from "leaflet";
+import type { GeoJSONSource, Map as MLMap } from "maplibre-gl";
+import "maplibre-gl/dist/maplibre-gl.css";
 import { Pause, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { serverNow } from "@/lib/realtime";
 import { cn } from "@/lib/utils";
 import { fmtSec, heatColor, hourLabel } from "./heatScale";
 import { Legend } from "./RouteHeat";
+import { buildStyle, firstLabelLayer } from "@/components/map/gl/basemap";
+import { loadMapLibre, loadTileset } from "@/components/map/gl/engine";
+import { lookById } from "@/components/map/gl/looks";
 
 export interface CitySegment {
   from: string;
@@ -27,10 +31,11 @@ export interface CityHeatData {
   segments: CitySegment[];
 }
 
-const CENTER: [number, number] = [48.1035, 20.7784];
+/** [lon, lat] */
+const CENTER: [number, number] = [20.7784, 48.1035];
 const PLAY_MS = 1100;
-const OSM_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-const OSM_ATTRIB = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> közreműködők';
+const SOURCE = "heat";
+const LAYER = "heat-lines";
 
 /** a vonal vastagsága a forgalomhoz (óránkénti buszszám) igazodik */
 const weightOf = (n: number, days: number) => {
@@ -51,72 +56,122 @@ function initialHour(from: number, to: number) {
  */
 export function CityHeat({ data }: { data: CityHeatData }) {
   const el = useRef<HTMLDivElement>(null);
-  const map = useRef<L.Map | null>(null);
-  const layer = useRef<L.LayerGroup | null>(null);
-  const lines = useRef<{ seg: CitySegment; line: L.Polyline }[]>([]);
+  const map = useRef<MLMap | null>(null);
+  const [ready, setReady] = useState(false);
   const [hour, setHour] = useState(() => initialHour(data.hours.from, data.hours.to));
   const [playing, setPlaying] = useState(false);
   const [picked, setPicked] = useState<CitySegment | null>(null);
   const idx = hour - data.hours.from;
+  const dataRef = useRef(data);
+  dataRef.current = data;
 
-  // Térkép egyszer.
+  // Térkép egyszer: a sötét nézet (a saját csempékből), hogy a színek beszéljenek.
   useEffect(() => {
-    if (!el.current || map.current) return;
-    const m = L.map(el.current, { center: CENTER, zoom: 13, zoomControl: true, attributionControl: true, preferCanvas: true });
-    L.tileLayer(OSM_URL, { attribution: OSM_ATTRIB, maxZoom: 19, crossOrigin: true }).addTo(m);
-    // A szűrő a teljes csemperétegen (csempénként hajszálvékony hézagok látszanának).
-    m.getPane("tilePane")?.classList.add("heat-base-tiles");
-    layer.current = L.layerGroup().addTo(m);
-    map.current = m;
-    // A panel (lusta betöltés, elforgatás) a térkép létrejötte után is méreteződhet.
-    const ro = new ResizeObserver(() => m.invalidateSize());
-    ro.observe(el.current);
+    const container = el.current;
+    if (!container) return;
+    let cancelled = false;
+    let ro: ResizeObserver | null = null;
+    void Promise.all([loadMapLibre(), loadTileset()])
+      .then(([ml, tileset]) => {
+        if (cancelled) return;
+        const style = buildStyle(lookById("dark"), tileset, { origin: window.location.origin });
+        const m = new ml.Map({
+          container,
+          style,
+          center: CENTER,
+          zoom: 12,
+          minZoom: 9,
+          maxZoom: 18,
+          attributionControl: { compact: true },
+          pixelRatio: Math.min(window.devicePixelRatio || 1, 2),
+          canvasContextAttributes: { antialias: false, powerPreference: "default" },
+          dragRotate: false,
+          pitchWithRotate: false,
+          touchPitch: false,
+          renderWorldCopies: false,
+          validateStyle: false,
+        });
+        m.touchZoomRotate.disableRotation();
+        m.addControl(new ml.NavigationControl({ showCompass: false }), "top-left");
+        m.on("error", () => undefined);
+        m.once("style.load", () => {
+          m.addSource(SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+          m.addLayer(
+            {
+              id: LAYER,
+              type: "line",
+              source: SOURCE,
+              layout: { "line-cap": "round", "line-join": "round", "line-sort-key": ["get", "ex"] },
+              paint: { "line-color": ["get", "color"], "line-width": ["get", "w"], "line-opacity": 0.92 },
+            },
+            firstLabelLayer(m.getStyle()),
+          );
+          setReady(true);
+        });
+        m.on("click", (e) => {
+          const { x, y } = e.point;
+          const hit = m.queryRenderedFeatures(
+            [
+              [x - 6, y - 6],
+              [x + 6, y + 6],
+            ],
+            { layers: [LAYER] },
+          )[0];
+          if (hit) setPicked(dataRef.current.segments[Number(hit.properties.i)] ?? null);
+        });
+        m.on("mousemove", LAYER, () => {
+          m.getCanvas().style.cursor = "pointer";
+        });
+        m.on("mouseleave", LAYER, () => {
+          m.getCanvas().style.cursor = "";
+        });
+        // A panel (lusta betöltés, elforgatás) a térkép létrejötte után is méreteződhet.
+        ro = new ResizeObserver(() => m.resize());
+        ro.observe(container);
+        map.current = m;
+      })
+      .catch(() => undefined);
     return () => {
-      ro.disconnect();
-      m.remove();
+      cancelled = true;
+      ro?.disconnect();
+      map.current?.remove();
       map.current = null;
-      layer.current = null;
-      lines.current = [];
     };
   }, []);
 
-  // Szakaszok kirajzolása (adatváltáskor).
+  // Nézet az adathoz: telefonon a belváros köré (az egész hálózat apró lenne).
   useEffect(() => {
     const m = map.current;
-    const g = layer.current;
-    if (!m || !g) return;
-    g.clearLayers();
-    const renderer = L.canvas({ padding: 0.3, tolerance: 6 });
-    lines.current = data.segments.map((seg) => {
-      const line = L.polyline(seg.path, { renderer, weight: 3, opacity: 0, lineCap: "round", lineJoin: "round" });
-      line.on("click", () => setPicked(seg));
-      line.addTo(g);
-      return { seg, line };
-    });
+    if (!m || !ready) return;
     const pts = data.segments.flatMap((s) => s.path);
     if (!pts.length) return;
-    // A végleges méret az első képkocka után ismert.
-    const raf = requestAnimationFrame(() => {
-      m.invalidateSize();
-      const bounds = L.latLngBounds(pts);
-      // Keskeny (telefonos) térképen az egész hálózat apró lenne: a belváros köré.
-      const narrow = m.getSize().x < 520;
-      if (narrow) m.setView(CENTER, Math.max(12, m.getBoundsZoom(bounds)));
-      else m.fitBounds(bounds, { padding: [12, 12], maxZoom: 14 });
-    });
-    return () => cancelAnimationFrame(raf);
-  }, [data]);
+    const lons = pts.map((p) => p[1]);
+    const lats = pts.map((p) => p[0]);
+    const bounds: [[number, number], [number, number]] = [
+      [Math.min(...lons), Math.min(...lats)],
+      [Math.max(...lons), Math.max(...lats)],
+    ];
+    const narrow = m.getContainer().clientWidth < 520;
+    if (narrow) m.jumpTo({ center: CENTER, zoom: Math.max(11, m.cameraForBounds(bounds)?.zoom ?? 11) });
+    else m.fitBounds(bounds, { padding: 12, maxZoom: 13, animate: false });
+  }, [data, ready]);
 
-  // Színezés a választott órára (a rétegek maradnak, csak a stílus változik).
+  // Színezés a választott órára; a legrosszabbak felül (line-sort-key).
   useEffect(() => {
-    for (const { seg, line } of lines.current) {
+    const m = map.current;
+    if (!m || !ready) return;
+    const features: GeoJSON.Feature[] = [];
+    data.segments.forEach((seg, i) => {
       const ex = seg.ex[idx];
-      if (ex == null) line.setStyle({ opacity: 0 });
-      else line.setStyle({ color: heatColor("loss", ex), opacity: 0.92, weight: weightOf(seg.n[idx], data.days) });
-    }
-    // A legrosszabbak legfelül.
-    for (const { seg, line } of [...lines.current].sort((a, b) => (a.seg.ex[idx] ?? -999) - (b.seg.ex[idx] ?? -999))) if (seg.ex[idx] != null) line.bringToFront();
-  }, [idx, data]);
+      if (ex == null) return;
+      features.push({
+        type: "Feature",
+        properties: { i, ex, color: heatColor("loss", ex), w: weightOf(seg.n[idx], data.days) },
+        geometry: { type: "LineString", coordinates: seg.path.map(([lat, lon]) => [lon, lat]) },
+      });
+    });
+    (m.getSource(SOURCE) as GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features });
+  }, [idx, data, ready]);
 
   useEffect(() => {
     if (!playing) return;
@@ -135,7 +190,7 @@ export function CityHeat({ data }: { data: CityHeatData }) {
   return (
     <div className="space-y-3">
       <div className="relative overflow-hidden rounded-xl border border-border">
-        <div ref={el} className="h-[min(62dvh,520px)] w-full bg-muted" aria-label="Városi hőtérkép" />
+        <div ref={el} className="mvk-map h-[min(62dvh,520px)] w-full bg-muted" aria-label="Városi hőtérkép" />
         <div className="pointer-events-none absolute inset-x-2 top-2 z-[500] flex justify-center">
           <span className="rounded-full border border-border bg-card/90 px-3 py-1 font-mono text-sm font-bold tabular-nums shadow-md backdrop-blur-sm">
             {hourLabel(hour)} óra

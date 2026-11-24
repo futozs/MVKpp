@@ -1,8 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 
-// A sorrend számít: az index.css felülírja a Leaflet alapstílusait.
-import "leaflet/dist/leaflet.css";
 import "@/index.css";
 
 import { Providers } from "./providers";

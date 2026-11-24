@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { angleDelta, approachAngle, arcDepth, bearingTo, easeInOutCubic, metersBetween } from "../src/components/map/map3d/chaseCam";
+import { angleDelta, approachAngle, arcDepth, bearingTo, easeInOutCubic, metersBetween } from "../src/components/map/gl/chaseCam";
 
 // Miskolc, Városház tér környéke
 const A: [number, number] = [48.1035, 20.7905];

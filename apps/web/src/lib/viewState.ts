@@ -1,7 +1,8 @@
 import type { ActiveTab } from "@/types";
 
 const VIEW_KEY = "mvk_view_state";
-const MAP_KEY = "mvk_map_view";
+// MapLibre-nagyítás (512 px-es csempék); a régi kulcs a Leaflet skáláján tárolt
+const MAP_KEY = "mvk_map_view2";
 const TIMETABLE_KEY = "mvk_timetable_view";
 
 const MAX_AGE_MS = 8 * 3600_000;

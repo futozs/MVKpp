@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
-import type L from "leaflet";
+import type { LiveMapHandle } from "./gl/LiveMap";
 import { Pause, Play, Radio } from "lucide-react";
 import type { FilterState, Route } from "@/types";
 import { Button } from "@/components/ui/button";
@@ -49,7 +49,7 @@ function defaultCursor(day: string): number {
 }
 
 interface MapTimelineProps {
-  mapRef: RefObject<L.Map | null>;
+  liveRef: RefObject<LiveMapHandle | null>;
   routes: Record<string, Route>;
   filters: FilterState;
   onExit: () => void;
@@ -61,12 +61,11 @@ interface MapTimelineProps {
  * Az idővonal: a térkép alján egy sáv, amellyel egy korábbi nap bármely
  * pillanata visszanézhető, vagy lejátszható gyorsítva.
  */
-export function MapTimeline({ mapRef, routes, filters, onExit, onInsetChange }: MapTimelineProps) {
+export function MapTimeline({ liveRef, routes, filters, onExit, onInsetChange }: MapTimelineProps) {
   const { days, error, reload } = useHistoryDays();
   const barRef = useRef<HTMLElement>(null);
   const insetCbRef = useRef(onInsetChange);
   const [wide, setWide] = useState(false);
-  const [inset, setInset] = useState(0);
 
   useEffect(() => {
     insetCbRef.current = onInsetChange;
@@ -79,7 +78,6 @@ export function MapTimeline({ mapRef, routes, filters, onExit, onInsetChange }: 
       const box = el.getBoundingClientRect();
       const covered = Math.round(box.height) + BAR_BOTTOM_PX;
       setWide(box.width >= WIDE_MIN_PX);
-      setInset(covered);
       insetCbRef.current(covered);
     });
     observer.observe(el);
@@ -112,8 +110,7 @@ export function MapTimeline({ mapRef, routes, filters, onExit, onInsetChange }: 
       <TimelinePlayer
         days={dayList}
         wide={wide}
-        inset={inset}
-        mapRef={mapRef}
+        liveRef={liveRef}
         routes={routes}
         filters={filters}
         onExit={onExit}
@@ -168,14 +165,13 @@ function StatusRow({
 interface TimelinePlayerProps {
   days: string[];
   wide: boolean;
-  inset: number;
-  mapRef: RefObject<L.Map | null>;
+  liveRef: RefObject<LiveMapHandle | null>;
   routes: Record<string, Route>;
   filters: FilterState;
   onExit: () => void;
 }
 
-function TimelinePlayer({ days, wide, inset, mapRef, routes, filters, onExit }: TimelinePlayerProps) {
+function TimelinePlayer({ days, wide, liveRef, routes, filters, onExit }: TimelinePlayerProps) {
   const compact = !wide;
   const rootRef = useRef<HTMLDivElement>(null);
   const frames = useHistoryFrames();
@@ -226,20 +222,10 @@ function TimelinePlayer({ days, wide, inset, mapRef, routes, filters, onExit }: 
     };
   }, [filters.watch, filters.vq]);
 
-  const invalidateRef = useRef<() => void>(() => {});
-  const render = useHistoryMarkers(
-    mapRef,
-    frames.get,
-    { routeByShort, isVisible, isTracked, showIds: filters.labels, bottomInset: inset },
-    () => invalidateRef.current(),
-  );
+  const render = useHistoryMarkers(liveRef, frames.get, { routeByShort, isVisible, isTracked, showIds: filters.labels });
   const playback = useTimelinePlayback(initialCursor, bounds, frames.get, render);
   const { cursor, playing, buffering, speed, stats, invalidate, togglePlay, step, seek } =
     playback;
-
-  useEffect(() => {
-    invalidateRef.current = invalidate;
-  }, [invalidate]);
 
   useEffect(() => {
     invalidate();
@@ -260,7 +246,7 @@ function TimelinePlayer({ days, wide, inset, mapRef, routes, filters, onExit }: 
     ensure(wantedKey.split(",").map(Number));
   }, [wantedKey, ensure, frames.version]);
 
-  useKeyboardControls(rootRef, mapRef, togglePlay, step);
+  useKeyboardControls(rootRef, liveRef, togglePlay, step);
 
   const changeDay = (next: string) => {
     const dayOffset = playback.cursor - range.start;
@@ -412,7 +398,7 @@ const ACTIVATABLE_TAGS = new Set(["BUTTON", "A"]);
  */
 function useKeyboardControls(
   rootRef: RefObject<HTMLElement | null>,
-  mapRef: RefObject<L.Map | null>,
+  liveRef: RefObject<LiveMapHandle | null>,
   togglePlay: () => void,
   step: (deltaSec: number) => void,
 ) {
@@ -424,7 +410,7 @@ function useKeyboardControls(
       if (target?.closest("[role='listbox'], [role='dialog']")) return;
 
       const inBar = Boolean(target && rootRef.current?.contains(target));
-      const inMap = Boolean(target && mapRef.current?.getContainer().contains(target));
+      const inMap = Boolean(target && liveRef.current?.map()?.getContainer().contains(target));
       const idle = !target || target === document.body || target === document.documentElement;
       if (!inBar && !inMap && !idle) return;
 
@@ -444,5 +430,5 @@ function useKeyboardControls(
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [rootRef, mapRef, togglePlay, step]);
+  }, [rootRef, liveRef, togglePlay, step]);
 }

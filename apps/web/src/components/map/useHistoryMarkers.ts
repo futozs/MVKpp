@@ -1,26 +1,27 @@
 import { useCallback, useEffect, useRef, type RefObject } from "react";
-import L from "leaflet";
+import type { Popup } from "maplibre-gl";
 import type { Route } from "@/types";
-import { routeAtPoint, WINDOW_SEC, windowStartOf, type HistoryWindow, type VehicleTrack } from "./historyData";
+import { routeAtPoint, WINDOW_SEC, windowStartOf, type HistoryWindow } from "./historyData";
 import { compassLabel, motionOf, sampleTrack, type Sample } from "./historySampler";
 import { formatClock } from "./historyTime";
-import { createVehicleIcon, safeHex } from "./vehicleIcon";
+import { safeHex } from "./vehicleIcon";
 import { displayVehicleId, vehicleModeOf } from "@/lib/modes";
+import type { AtlasEntry, BadgeSpec } from "./gl/badges";
+import type { LiveMapHandle } from "./gl/LiveMap";
+import { hits, toSprite } from "./gl/vehicles";
 
-/** Saját pane a visszajátszott járműveknek: így betöltés közben egyben halványítható. */
-const PANE = "mvkHistory";
-const PANE_Z = "610";
-const STALE_OPACITY = "0.35";
+/** Betöltés közben a régi kép halványan marad, nem ugrik el semmi. */
+const STALE_ALPHA = 0.35;
 /** A nyitott buborék szövegét ennél sűrűbben nem írjuk újra. */
 const POPUP_REFRESH_MS = 250;
+/** érintéskor ekkora ráhagyással találja el a járművet (px) */
+const HIT_SLOP = typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches ? 8 : 3;
 
 export interface HistoryMarkerOptions {
   routeByShort: Map<string, Route>;
   isVisible: (vehicleId: string, routeShort: string | null) => boolean;
   isTracked: (vehicleId: string) => boolean;
   showIds: boolean;
-  /** A térkép alját takaró idővonal-sáv magassága, a buborék ne bújjon alá. */
-  bottomInset: number;
 }
 
 export interface RenderResult {
@@ -37,15 +38,17 @@ interface PopupRefs {
 }
 
 interface VehicleState {
-  marker: L.Marker;
-  popup: L.Popup;
-  iconKey: string;
-  shown: boolean;
+  id: string;
+  key: string;
+  badge: AtlasEntry | null;
+  label: AtlasEntry | null;
+  gen: number;
+  spec: BadgeSpec;
+  labelText: string | null;
   hint: number;
   windowStart: number;
-  frame: number;
   route: string | null;
-  sample: Sample | null;
+  sample: Sample;
 }
 
 function el(tag: string, css: string, text?: string): HTMLElement {
@@ -61,11 +64,7 @@ function row(label: string, value: HTMLElement): HTMLElement {
   return line;
 }
 
-function buildPopup(
-  vehicleId: string,
-  route: Route | undefined,
-  routeShort: string | null,
-): { root: HTMLElement; refs: PopupRefs } {
+function buildPopup(vehicleId: string, route: Route | undefined, routeShort: string | null): { root: HTMLElement; refs: PopupRefs } {
   const root = el("div", "min-width:200px");
 
   const head = el("div", "display:flex;align-items:center;gap:9px;margin-bottom:10px");
@@ -75,28 +74,13 @@ function buildPopup(
       `display:inline-flex;align-items:center;justify-content:center;min-width:40px;height:26px;padding:0 8px;border-radius:8px;font-weight:800;font-size:14px;background:#${safeHex(route?.color, "1FB574")};color:#${safeHex(route?.text, "FFFFFF")}`,
       routeShort ?? "?",
     ),
-    el(
-      "span",
-      "font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:hsl(var(--muted-foreground))",
-      "Visszajátszás",
-    ),
+    el("span", "font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:hsl(var(--muted-foreground))", "Visszajátszás"),
   );
 
-  const idBox = el(
-    "div",
-    "border-radius:10px;background:hsl(var(--primary)/0.09);border:1px solid hsl(var(--primary)/0.25);padding:9px 11px;margin-bottom:8px",
-  );
+  const idBox = el("div", "border-radius:10px;background:hsl(var(--primary)/0.09);border:1px solid hsl(var(--primary)/0.25);padding:9px 11px;margin-bottom:8px");
   idBox.append(
-    el(
-      "div",
-      "font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:hsl(var(--muted-foreground))",
-      "Rendszám",
-    ),
-    el(
-      "div",
-      "font-family:var(--font-mono);font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;color:hsl(var(--foreground))",
-      vehicleId,
-    ),
+    el("div", "font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:hsl(var(--muted-foreground))", "Rendszám"),
+    el("div", "font-family:var(--font-mono);font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;color:hsl(var(--foreground))", vehicleId),
   );
 
   const strong = "color:hsl(var(--foreground));font-weight:700";
@@ -106,16 +90,8 @@ function buildPopup(
     heading: el("span", "color:hsl(var(--foreground))"),
     speed: el("span", "color:hsl(var(--foreground))"),
   };
-  const grid = el(
-    "div",
-    "font-family:var(--font-mono);font-size:12px;font-variant-numeric:tabular-nums;color:hsl(var(--muted-foreground));display:grid;gap:3px",
-  );
-  grid.append(
-    row("Időpont", refs.time),
-    row("Utolsó jel", refs.fix),
-    row("Irány", refs.heading),
-    row("Sebesség", refs.speed),
-  );
+  const grid = el("div", "font-family:var(--font-mono);font-size:12px;font-variant-numeric:tabular-nums;color:hsl(var(--muted-foreground));display:grid;gap:3px");
+  grid.append(row("Időpont", refs.time), row("Utolsó jel", refs.fix), row("Irány", refs.heading), row("Sebesség", refs.speed));
 
   root.append(head, idBox, grid);
   return { root, refs };
@@ -126,210 +102,162 @@ function fillPopup(refs: PopupRefs, t: number, sample: Sample | null): void {
   if (!sample) return;
   refs.fix.textContent = formatClock(sample.fixTs);
   const { bearing, speedKmh } = motionOf(sample);
-  refs.heading.textContent =
-    bearing == null ? "" : `${compassLabel(bearing)} · ${Math.round(bearing)}°`;
+  refs.heading.textContent = bearing == null ? "" : `${compassLabel(bearing)} · ${Math.round(bearing)}°`;
   refs.speed.textContent = speedKmh == null ? "" : `~${Math.round(speedKmh)} km/h`;
 }
 
 /**
- * A visszajátszott járművek Leaflet-rétege. A jelölők egyszer jönnek létre,
- * utána képkockánként csak `setLatLng` mozgatja őket.
+ * A visszajátszott járművek: ugyanazon a GPU-rétegen, ugyanazokkal a csempékkel, mint
+ * az élő nézet. A helyük képkockánként a mintavételből jön; a térkép csak akkor rajzol
+ * újra, amikor a kurzor halad.
  */
-export function useHistoryMarkers(
-  mapRef: RefObject<L.Map | null>,
-  getWindow: (start: number) => HistoryWindow | undefined,
-  options: HistoryMarkerOptions,
-  onSettled: () => void,
-): (t: number) => RenderResult {
-  const layerRef = useRef<L.LayerGroup | null>(null);
+export function useHistoryMarkers(liveRef: RefObject<LiveMapHandle | null>, getWindow: (start: number) => HistoryWindow | undefined, options: HistoryMarkerOptions): (t: number) => RenderResult {
   const statesRef = useRef(new Map<string, VehicleState>());
-  const frameRef = useRef(0);
-  const zoomingRef = useRef(false);
+  /** a kirajzolandók (alulról felfelé), a legutóbbi render szerint */
+  const drawRef = useRef<VehicleState[]>([]);
+  const alphaRef = useRef(1);
   const optionsRef = useRef(options);
   const getWindowRef = useRef(getWindow);
-  const settledRef = useRef(onSettled);
-  const openRef = useRef<{ id: string; refs: PopupRefs; at: number } | null>(null);
+  const openRef = useRef<{ id: string; refs: PopupRefs; popup: Popup; at: number } | null>(null);
   const lastRef = useRef<RenderResult>({ ready: false, visible: 0 });
   const lastT = useRef(0);
 
   useEffect(() => {
     optionsRef.current = options;
     getWindowRef.current = getWindow;
-    settledRef.current = onSettled;
   });
 
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    const pane = map.getPane(PANE) ?? map.createPane(PANE);
-    pane.style.zIndex = PANE_Z;
-    pane.style.transition = "opacity var(--dur-fast) ease-out";
-    const layer = L.layerGroup().addTo(map);
-    layerRef.current = layer;
+    const live = liveRef.current;
+    const map = live?.map();
+    if (!live || !map) return;
     const states = statesRef.current;
 
-    // Animált zoom közben a jelölők már a cél-nagyításon állnak; egy ekkor
-    // jövő setLatLng a régi nagyítás koordinátáira rántaná vissza őket.
-    const onZoomAnim = () => {
-      zoomingRef.current = true;
+    const project = (s: VehicleState) => map.project([s.sample.lon, s.sample.lat]);
+    const onClick = (x: number, y: number): boolean => {
+      const draw = drawRef.current;
+      for (let i = draw.length - 1; i >= 0; i--) {
+        const s = draw[i];
+        if (!s.badge || !hits(s.badge, project(s), x, y, HIT_SLOP)) continue;
+        openRef.current?.popup.remove();
+        const route = s.route ? optionsRef.current.routeByShort.get(s.route) : undefined;
+        const { root, refs } = buildPopup(s.id, route, s.route);
+        fillPopup(refs, lastT.current, s.sample);
+        const popup = live.popup().setLngLat([s.sample.lon, s.sample.lat]).setDOMContent(root).addTo(map);
+        const entry = { id: s.id, refs, popup, at: performance.now() };
+        openRef.current = entry;
+        popup.on("close", () => {
+          if (openRef.current === entry) openRef.current = null;
+        });
+        return true;
+      }
+      return false;
     };
-    const onZoomEnd = () => {
-      zoomingRef.current = false;
-      settledRef.current();
-    };
-    map.on("zoomanim", onZoomAnim);
-    map.on("zoomend", onZoomEnd);
+
+    const remove = live.addSprites((_t, labels, badges) => {
+      const atlas = live.atlas();
+      if (!atlas) return;
+      const alpha = alphaRef.current;
+      for (const s of drawRef.current) {
+        if (s.gen !== atlas.generation || !s.badge) {
+          s.badge = atlas.badge(s.spec);
+          s.label = s.labelText ? atlas.label(s.labelText, s.spec.tracked) : null;
+          s.gen = atlas.generation;
+        }
+        const p: [number, number, number] = [s.sample.lon, s.sample.lat, 0];
+        if (s.label) labels.push(toSprite(p, s.label, alpha));
+        badges.push(toSprite(p, s.badge, alpha));
+      }
+    }, onClick);
 
     return () => {
-      map.off("zoomanim", onZoomAnim);
-      map.off("zoomend", onZoomEnd);
-      layer.clearLayers();
-      map.removeLayer(layer);
-      pane.style.opacity = "";
-      states.clear();
-      layerRef.current = null;
+      remove();
+      openRef.current?.popup.remove();
       openRef.current = null;
+      states.clear();
+      drawRef.current = [];
     };
-  }, [mapRef]);
-
-  const createState = useCallback(
-    (id: string, track: VehicleTrack, sample: Sample): VehicleState => {
-      const popup = L.popup({ autoPanPaddingTopLeft: L.point(16, 16) });
-      const marker = L.marker([sample.lat, sample.lon], {
-        pane: PANE,
-        keyboard: false,
-        icon: createVehicleIcon("?", null, null, false, null),
-      });
-
-      const state: VehicleState = {
-        marker,
-        popup,
-        iconKey: "",
-        shown: false,
-        hint: -1,
-        windowStart: 0,
-        frame: 0,
-        route: track.route,
-        sample,
-      };
-
-      // A kattintás a bindPopup előtt fut le: ekkor még átírható, mennyi
-      // helyet hagyjon alul a buborék az idővonal-sávnak.
-      marker.on("click", () => {
-        popup.options.autoPanPaddingBottomRight = L.point(
-          16,
-          optionsRef.current.bottomInset + 16,
-        );
-        const { root, refs } = buildPopup(
-          id,
-          state.route ? optionsRef.current.routeByShort.get(state.route) : undefined,
-          state.route,
-        );
-        fillPopup(refs, lastT.current, state.sample);
-        popup.setContent(root);
-        openRef.current = { id, refs, at: performance.now() };
-      });
-      marker.bindPopup(popup);
-      marker.on("popupclose", () => {
-        if (openRef.current?.id === id) openRef.current = null;
-      });
-      return state;
-    },
-    [],
-  );
+  }, [liveRef]);
 
   return useCallback(
     (t: number): RenderResult => {
-      const map = mapRef.current;
-      const layer = layerRef.current;
-      if (!map || !layer) return lastRef.current;
+      const live = liveRef.current;
+      const map = live?.map();
+      if (!live || !map) return lastRef.current;
       lastT.current = t;
 
-      const pane = map.getPane(PANE);
       const start = windowStartOf(t);
       const current = getWindowRef.current(start);
       if (!current) {
-        // Nincs még adat: a régi kép halványan marad, nem ugrik el semmi.
-        if (pane) pane.style.opacity = STALE_OPACITY;
+        if (alphaRef.current !== STALE_ALPHA) {
+          alphaRef.current = STALE_ALPHA;
+          map.triggerRepaint();
+        }
         lastRef.current = { ready: false, visible: lastRef.current.visible };
         return lastRef.current;
       }
-      if (pane) pane.style.opacity = "";
-      if (zoomingRef.current) return lastRef.current;
+      alphaRef.current = 1;
 
       const prev = getWindowRef.current(start - WINDOW_SEC);
       const next = getWindowRef.current(start + WINDOW_SEC);
       const { routeByShort, isVisible, isTracked, showIds } = optionsRef.current;
       const states = statesRef.current;
-      const frame = ++frameRef.current;
-      let visible = 0;
+      const draw: VehicleState[] = [];
+      const tracked: VehicleState[] = [];
 
       for (const [id, track] of current.tracks) {
         const existing = states.get(id);
         const hint = existing && existing.windowStart === start ? existing.hint : -1;
-        const sample = sampleTrack(
-          track,
-          t,
-          hint,
-          prev?.tracks.get(id),
-          next?.tracks.get(id),
-        );
+        const sample = sampleTrack(track, t, hint, prev?.tracks.get(id), next?.tracks.get(id));
         if (!sample) continue;
         // A vonal a kurzornál lévő pontból jön: ablakon belül is válthat.
         const ref = sample.a ?? sample.b;
         const routeShort = ref ? routeAtPoint(ref.track, ref.i) : track.route;
         if (!isVisible(id, routeShort)) continue;
 
-        const state = existing ?? createState(id, track, sample);
-        if (!existing) states.set(id, state);
+        const isTr = isTracked(id);
+        const route = routeShort ? routeByShort.get(routeShort) : undefined;
+        const key = `${routeShort}|${route?.color}|${route?.text}|${isTr}|${showIds}`;
+        let state = existing;
+        if (!state || state.key !== key) {
+          const mode = vehicleModeOf({ id }, route?.type);
+          state = {
+            id,
+            key,
+            badge: null,
+            label: null,
+            gen: -1,
+            spec: { text: route?.short ?? routeShort ?? "?", bg: safeHex(route?.color, "1FB574"), fg: safeHex(route?.text, "FFFFFF"), mode, tracked: isTr, estimated: false },
+            labelText: showIds || isTr ? displayVehicleId(id) : null,
+            hint: -1,
+            windowStart: start,
+            route: routeShort,
+            sample,
+          };
+          states.set(id, state);
+        }
         state.hint = sample.index;
         state.windowStart = start;
-        state.frame = frame;
         state.route = routeShort;
         state.sample = sample;
-
-        const tracked = isTracked(id);
-        const route = routeShort ? routeByShort.get(routeShort) : undefined;
-        const iconKey = `${routeShort}|${route?.color}|${route?.text}|${tracked}|${showIds}`;
-        if (iconKey !== state.iconKey) {
-          state.iconKey = iconKey;
-          const mode = vehicleModeOf({ id }, route?.type);
-          state.marker.setIcon(
-            createVehicleIcon(
-              route?.short ?? routeShort ?? "?",
-              route?.color,
-              route?.text,
-              tracked,
-              showIds || tracked ? displayVehicleId(id) : null,
-              { mode },
-            ),
-          );
-          state.marker.setZIndexOffset(tracked ? 1000 : 500);
-        }
-
-        state.marker.setLatLng([sample.lat, sample.lon]);
-        if (!state.shown) {
-          layer.addLayer(state.marker);
-          state.shown = true;
-        }
-        visible++;
+        (isTr ? tracked : draw).push(state);
       }
-
-      for (const state of states.values()) {
-        if (state.frame === frame || !state.shown) continue;
-        layer.removeLayer(state.marker);
-        state.shown = false;
-      }
+      drawRef.current = [...draw, ...tracked];
+      map.triggerRepaint();
 
       const open = openRef.current;
-      if (open && performance.now() - open.at >= POPUP_REFRESH_MS) {
-        open.at = performance.now();
-        fillPopup(open.refs, t, states.get(open.id)?.sample ?? null);
+      if (open) {
+        const s = states.get(open.id);
+        if (s && drawRef.current.includes(s)) open.popup.setLngLat([s.sample.lon, s.sample.lat]);
+        if (performance.now() - open.at >= POPUP_REFRESH_MS) {
+          open.at = performance.now();
+          fillPopup(open.refs, t, s?.sample ?? null);
+        }
       }
 
-      lastRef.current = { ready: true, visible };
+      lastRef.current = { ready: true, visible: drawRef.current.length };
       return lastRef.current;
     },
-    [mapRef, createState],
+    [liveRef],
   );
 }

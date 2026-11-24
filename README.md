@@ -44,13 +44,17 @@ Egy járműre koppintva megnyílik a kártyája:
 
 ### 3D nézet
 
-Egy gombbal 3D-s városnézetre vált: domborzat, épületek, és követéskor üldözőkamera, amely a jármű mögül, annak haladási irányában néz előre. A választás eszközönként megmarad.
+Egy gombbal 3D-s városnézetre vált: ugyanaz a térkép megdől, kiemelkednek az épületek és a domborzat, követéskor pedig üldözőkamera néz a jármű mögül, a haladási irányba. A váltás azonnali, a választás eszközönként megmarad.
+
+### Gyors, saját térkép
+
+A térkép saját szerverről jön: vektoros csempék (OpenStreetMap-adat, Protomaps) és domborzat (Mapterhorn), magyar feliratokkal. A járműveket a GPU rajzolja egyetlen rétegen, és a térkép csak akkor rajzol újra, amikor valamelyik jármű látható mértékben haladt; városnézetben ez másodpercenként néhányszor, nem hatvanszor. A csempéket a böngésző és az app is megőrzi, Miskolc térképe pedig egy gombbal letölthető, hogy net nélkül is betöltsön.
 
 ### Alaptérképek és rétegek
 
 | Alaptérkép | Réteg |
 |---|---|
-| Utcatérkép · Halvány · Sötét · Műhold · Domborzat | **Forgalom (dugók)**: a most torlódott szakaszok, félpercenként frissítve, a buszok tényleges menetidejéből. A szakaszra koppintva látszik, mennyire lassú, és miből tudjuk. |
+| Halvány · Utcatérkép · Sötét (az app színeihez hangolva) · Műhold · Domborzat (szintvonalak, csúcsok, árnyékolt hegyek) | **Forgalom (dugók)**: a most torlódott szakaszok, félpercenként frissítve, a buszok tényleges menetidejéből. A szakaszra koppintva látszik, mennyire lassú, és miből tudjuk. |
 | | **Megállók**, vagy **csak a figyelt megállók** |
 | | **Járatok nyomvonala** a kiválasztott vonalakra |
 | | **Rendszám** felirat a járműveken |
@@ -375,7 +379,8 @@ Egy külön, csak a belső hálózatról elérhető vezérlőpult az egész rend
 
 | Réteg | Mi |
 |---|---|
-| Felület | Next.js 16, React 19, Tailwind, Leaflet (2D térkép), MapLibre GL (3D) |
+| Felület | Next.js 16, React 19, Tailwind, MapLibre GL 6 (2D és 3D egy motorban, WebGL-járműréteg) |
+| Térkép | Saját PMTiles-csempék (Protomaps-alaptérkép, Mapterhorn-domborzat) a `tiles` konténerből, service workeres gyorsítótár, offline Miskolc-csomag |
 | Élő motor | Node + TypeScript worker: adatgyűjtés 2,5 mp-enként, menet-illesztés, WebSocket-hub, push-sor (pg-boss), RAPTOR-tervező, saját GBDT-modellek |
 | Adat | PostgreSQL 17 + TimescaleDB + PostGIS; kétszintű gyorsítótár (memória + Redis) |
 | Fiók, értesítés | WebAuthn passkey, Web Push |

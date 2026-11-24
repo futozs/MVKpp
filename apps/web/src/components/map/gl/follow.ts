@@ -1,33 +1,36 @@
 /**
- * Követés 3D-ben: a kamera rárepül a buszra, aztán mögüle, a haladási irányba
- * nézve viszi a várost  a busz a látott rész alsó harmadában, előtte az út.
- * Elhúzásra megáll (mint a 2D-ben, „Busz középre” folytatja); kézi forgatás után
- * pár másodpercig a felhasználó iránya marad, utána visszafordul a busz mögé.
+ * Követés: a kamera rárepül a buszra, aztán vele halad. 2D-ben felülről, a busz a
+ * látható rész közepén; 3D-ben mögüle, a haladási irányba nézve, a busz a látott rész
+ * alsó harmadában, előtte az út. Elhúzásra megáll („Busz középre” folytatja); kézi
+ * forgatás után pár másodpercig a felhasználó iránya marad, utána visszafordul.
  */
-import type { Map as MLMap, Marker, PaddingOptions } from "maplibre-gl";
+import type { Map as MLMap, PaddingOptions } from "maplibre-gl";
 import type { GeoPosition } from "@/hooks/useGeolocation";
 import { pointAt, shapeFor } from "../liveMotion";
 import { projectOnShape, type ShapeLine } from "../onboard";
 import { coveredBottom, coveredRight } from "../mapCover";
 import { angleDelta, approachAngle, arcDepth, bearingTo, easeInOutCubic, lerp, metersBetween, type LatLon } from "./chaseCam";
-import { setFocusLine, setFocusProgress } from "./overlays3d";
-import { estimateTarget, newTrack, retarget, trackAt, vehicleElement, vehicleMarker, type LngLat, type MotionSubject, type Track } from "./vehicles3d";
+import type { AtlasEntry, BadgeAtlas, BadgeSpec } from "./badges";
+import { setFocusLine, setFocusProgress } from "./overlays";
+import type { Sprite } from "./vehicleLayer";
+import { estimateTarget, newTrack, retarget, toSprite, trackAt, type MotionSubject, type Pos, type Track } from "./vehicles";
 
-export type Focus3D = {
+export type FocusSpec = {
   /** a követés azonosítója (menet + jármű): ha változik, új rárepülés */
   key: string;
   /** a menet útja ([lat, lon]) */
   shape: [number, number][] | null;
   /** a vonal színe hexában (# nélkül) */
   color: string;
-  /** a követett jármű csempéje */
-  html: string;
+  badge: BadgeSpec;
+  label: string | null;
   vehicle: MotionSubject | null;
 };
 
-/** követéskor legalább ekkora nagyítás (MapLibre-szint; a 2D-ben ~17) */
-const FOLLOW_ZOOM = 16.2;
-/** a követő kamera dőlése (fok) */
+/** követéskor legalább ekkora nagyítás */
+const FOLLOW_ZOOM_2D = 14.5;
+const FOLLOW_ZOOM_3D = 16.2;
+/** a 3D követő kamera dőlése (fok) */
 const FOLLOW_PITCH = 60;
 /** ennyivel a busz előtt nézzük a nyomvonal irányát (m): a kanyar előtt már fordul */
 const LOOKAHEAD_M = 45;
@@ -37,7 +40,7 @@ const HEADING_STEP_M = 12;
 const USER_BEARING_HOLD_MS = 5000;
 /** a „Busz középre” csúszása (ms) */
 const RESUME_MS = 650;
-/** a látott rész felső részének ekkora hányada üres sáv: a busz lejjebb, előtte az út */
+/** 3D-ben a látott rész felső részének ekkora hányada üres sáv: a busz lejjebb, előtte az út */
 const CHASE_TOP_SHARE = 0.3;
 /** a takaró panelek (követés kártyája) helyét ilyen gyakran nézzük meg (ms) */
 const PAD_REFRESH_MS = 500;
@@ -48,7 +51,7 @@ const OFF_LINE_M = 80;
 
 const NO_PAD: PaddingOptions = { top: 0, bottom: 0, left: 0, right: 0 };
 
-type Intro = { t0: number; dur: number; center: LngLat; zoom: number; pitch: number; bearing: number; pad: PaddingOptions; toZoom: number; toPitch: number; arc: number };
+type Intro = { t0: number; dur: number; center: [number, number]; zoom: number; pitch: number; bearing: number; pad: PaddingOptions; toZoom: number; toPitch: number; arc: number };
 
 function shapeLine(shape: [number, number][]): ShapeLine {
   const cum = [0];
@@ -77,9 +80,8 @@ const lerpPad = (a: PaddingOptions, b: PaddingOptions, k: number): PaddingOption
 export class FocusFollower {
   private key = "";
   private track: Track | null = null;
-  private marker: Marker | null = null;
-  private el: HTMLDivElement | null = null;
-  private html = "";
+  private spec: FocusSpec | null = null;
+  private images: { badge: AtlasEntry; label: AtlasEntry | null; gen: number } | null = null;
   private shape: [number, number][] | null = null;
   private color = "#1FB574";
   private line: ShapeLine | null = null;
@@ -95,9 +97,11 @@ export class FocusFollower {
   private pad: PaddingOptions = NO_PAD;
   private padAt = -Infinity;
   private last: { lng: number; lat: number; bearing: number } | null = null;
+  private three = false;
 
   constructor(
     private readonly map: MLMap,
+    private readonly atlas: BadgeAtlas,
     private readonly onPausedChange: (paused: boolean) => void,
     private readonly passedColor: () => string,
   ) {}
@@ -106,8 +110,20 @@ export class FocusFollower {
     return this.key !== "";
   }
 
+  get id(): string | null {
+    return this.track?.v.id ?? null;
+  }
+
+  /** 2D ↔ 3D váltáskor a kamera átúszik az új nézetbe (követés közben). */
+  setThree(three: boolean, t: number): void {
+    if (three === this.three) return;
+    this.three = three;
+    this.padAt = -Infinity;
+    if (this.active && this.track && !this.paused) this.startIntro(t, true);
+  }
+
   /** A követett menet adatai (az élő adatfolyamból, másodpercenként). */
-  set(focus: Focus3D | null, t: number): void {
+  set(focus: FocusSpec | null, t: number, elevation: (lon: number, lat: number) => number): void {
     if (!focus) {
       if (this.active) this.end(true);
       return;
@@ -127,19 +143,16 @@ export class FocusFollower {
       setFocusLine(this.map, focus.shape, this.color);
       setFocusProgress(this.map, this.color, this.passedColor(), null);
     }
+    if (!this.spec || this.spec.badge !== focus.badge || this.spec.label !== focus.label) this.images = null;
+    this.spec = focus;
     const v = focus.vehicle;
     if (v && v.lat != null && v.lon != null) {
-      if (!this.track) {
-        const pos: LngLat = [v.lon, v.lat];
-        this.track = newTrack(v, pos, t);
-        this.el = vehicleElement(focus.html, false);
-        this.el.style.zIndex = "20";
-        this.marker = vehicleMarker(this.map, this.el, pos);
-      } else {
+      if (!this.track) this.track = newTrack(v, [v.lon, v.lat, elevation(v.lon, v.lat)], t);
+      else {
         this.track.v = v;
         if (!v.motion) {
           this.track.shown = undefined;
-          retarget(this.track, [v.lon, v.lat], t);
+          retarget(this.track, [v.lon, v.lat, elevation(v.lon, v.lat)], t);
         }
       }
     } else if (this.track) {
@@ -147,8 +160,6 @@ export class FocusFollower {
       const [lon, lat] = this.track.drawn;
       this.track.v = { id: this.track.v.id, lat, lon, motion: null };
     }
-    if (this.el && focus.html !== this.html) this.el.innerHTML = focus.html;
-    this.html = focus.html;
     // Busz még nincs (nem indult el, nincs jele): a teljes út látszik.
     if (!this.track && this.shape && this.shape.length > 1 && !this.fitted) {
       this.fitted = true;
@@ -170,26 +181,23 @@ export class FocusFollower {
     this.progressAt = -Infinity;
   }
 
-  tick(nowServer: number, t: number, gps: GeoPosition | null): void {
+  tick(nowServer: number, t: number, gps: GeoPosition | null, elevation: (lon: number, lat: number) => number): void {
     const tr = this.track;
     if (!tr) return;
-    retarget(tr, estimateTarget(tr, nowServer, false, gps), t);
+    retarget(tr, estimateTarget(tr, nowServer, false, gps, elevation), t);
     if (t - this.progressAt >= PROGRESS_MS) {
       this.progressAt = t;
       this.updateProgress(tr.to);
     }
   }
 
-  /** Képkockánként: a jelölő siklik, a kamera vele megy (ha épp nem a felhasználó mozgatja). */
+  /** Képkockánként: a busz helye, és a kamera vele megy (ha épp nem a felhasználó mozgatja). */
   frame(t: number, dtS: number, interacting: boolean): void {
     const tr = this.track;
-    if (!tr || !this.marker) return;
+    if (!tr) return;
     const pos = trackAt(tr, t);
-    if (pos[0] !== tr.drawn[0] || pos[1] !== tr.drawn[1]) {
-      tr.drawn = pos;
-      this.marker.setLngLat(pos);
-    }
-    const heading = this.headingTarget(tr);
+    tr.drawn = pos;
+    const heading = this.three ? this.headingTarget(tr) : null;
     if (this.paused || interacting) {
       this.last = null;
       return;
@@ -208,8 +216,28 @@ export class FocusFollower {
     const last = this.last;
     // áll a busz, és a kamera is beállt: nincs mit újrarajzolni
     if (last && last.lng === pos[0] && last.lat === pos[1] && Math.abs(angleDelta(last.bearing, bearing)) < 0.01 && this.padAt !== t) return;
-    this.map.jumpTo({ center: pos, bearing, padding: this.pad });
+    this.map.jumpTo({ center: [pos[0], pos[1]], bearing, padding: this.pad });
     this.last = { lng: pos[0], lat: pos[1], bearing };
+  }
+
+  /** A követett jármű képe a többi fölé (a kamera ugyanezt a helyet nézi). */
+  collect(labels: Sprite[], badges: Sprite[]): void {
+    const tr = this.track;
+    const spec = this.spec;
+    if (!tr || !spec) return;
+    if (!this.images || this.images.gen !== this.atlas.generation) {
+      this.images = {
+        badge: this.atlas.badge(spec.badge),
+        label: spec.label ? this.atlas.label(spec.label, true) : null,
+        gen: this.atlas.generation,
+      };
+    }
+    if (this.images.label) labels.push(toSprite(tr.drawn, this.images.label, 1));
+    badges.push(toSprite(tr.drawn, this.images.badge, 1));
+  }
+
+  drawn(): Pos | null {
+    return this.track?.drawn ?? null;
   }
 
   /** A felhasználó elhúzta a térképet: körül lehet nézni, a kamera nem rángat vissza. */
@@ -242,10 +270,9 @@ export class FocusFollower {
   }
 
   private end(animate: boolean): void {
-    this.marker?.remove();
-    this.marker = null;
-    this.el = null;
     this.track = null;
+    this.spec = null;
+    this.images = null;
     const wasActive = this.active;
     this.key = "";
     this.shape = null;
@@ -265,7 +292,7 @@ export class FocusFollower {
     if (animate) this.map.easeTo({ padding: NO_PAD, duration: 600 });
   }
 
-  /** Követés közben a nagyítás (csípés, görgő) a busz körül marad. */
+  /** Követés közben a nagyítás (csípés, görgő, dupla koppintás) a busz körül marad. */
   private zoomAroundCenter(on: boolean): void {
     const opts = on ? ({ around: "center" } as const) : undefined;
     this.map.scrollZoom.enable(opts);
@@ -276,7 +303,8 @@ export class FocusFollower {
     const el = this.map.getContainer();
     const h = el.clientHeight;
     const bottom = coveredBottom(el);
-    return { top: Math.round(Math.max(0, h - bottom) * CHASE_TOP_SHARE), bottom, left: 0, right: coveredRight(el) };
+    const top = this.three ? Math.round(Math.max(0, h - bottom) * CHASE_TOP_SHARE) : 0;
+    return { top, bottom, left: 0, right: coveredRight(el) };
   }
 
   /** Merre néz a kamera: a nyomvonalon a busz előtt, vagy (nyomvonal nélkül) az eddigi haladás iránya. */
@@ -308,6 +336,9 @@ export class FocusFollower {
     const dist = metersBetween([c.lat, c.lng], [tr.drawn[1], tr.drawn[0]]);
     const zoom = this.map.getZoom();
     const pitch = this.map.getPitch();
+    const minZoom = this.three ? FOLLOW_ZOOM_3D : FOLLOW_ZOOM_2D;
+    this.padAt = -Infinity;
+    this.pad = this.padding();
     this.intro = {
       t0: t,
       dur: follow ? Math.min(2400, Math.max(1100, 900 + dist / 4)) : RESUME_MS,
@@ -316,18 +347,21 @@ export class FocusFollower {
       pitch,
       bearing: this.map.getBearing(),
       pad: this.map.getPadding(),
-      toZoom: follow ? Math.max(zoom, FOLLOW_ZOOM) : zoom,
-      toPitch: follow ? Math.max(pitch, FOLLOW_PITCH) : pitch,
+      toZoom: follow ? Math.max(zoom, minZoom) : zoom,
+      toPitch: this.three ? (follow ? Math.max(pitch, FOLLOW_PITCH) : pitch) : 0,
       arc: follow ? arcDepth(dist) : 0,
     };
   }
 
   /** A rárepülés: középpont, nagyítás (távolról ívben), dőlés, irány és a takarás együtt úszik át. */
-  private introFrame(t: number, pos: LngLat, heading: number | null): void {
-    const i = this.intro!;
+  private introFrame(t: number, pos: Pos, heading: number | null): void {
+    const i = this.intro;
+    if (!i) return;
     const u = Math.min(1, (t - i.t0) / i.dur);
     const e = easeInOutCubic(u);
-    const bearing = heading == null ? i.bearing : i.bearing + angleDelta(i.bearing, heading) * e;
+    // 2D-ben észak felfelé; 3D-ben a busz mögé fordul
+    const target = this.three ? heading : 0;
+    const bearing = target == null ? i.bearing : i.bearing + angleDelta(i.bearing, target) * e;
     this.map.jumpTo({
       center: [lerp(i.center[0], pos[0], e), lerp(i.center[1], pos[1], e)],
       zoom: lerp(i.zoom, i.toZoom, e) - i.arc * Math.sin(Math.PI * u),
@@ -338,7 +372,7 @@ export class FocusFollower {
     if (u >= 1) this.intro = null;
   }
 
-  private updateProgress(at: LngLat): void {
+  private updateProgress(at: Pos): void {
     const line = this.line;
     if (!line) return;
     const [lon, lat] = at;

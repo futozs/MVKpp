@@ -26,6 +26,15 @@
 		}
 	}
 
+	# Térképcsempék: a címükben a készlet verziója van, így örökre gyorsítótárazhatók (a böngésző
+	# és a service worker is). Csak a sikeres válasz kapja meg; egy újraindulás alatti 502 nem ragad be.
+	handle_path /tiles/* {
+		header Cache-Control "public, max-age=31536000, immutable" {
+			match status 2xx
+		}
+		reverse_proxy tiles:8080
+	}
+
 	handle {
 		reverse_proxy web:3000
 	}

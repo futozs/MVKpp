@@ -1,22 +1,25 @@
 /**
- * A 3D térkép saját rétegei (GeoJSON): a kiválasztott vonalak nyomvonala, a dugók,
+ * A térkép saját rétegei (GeoJSON): a kiválasztott vonalak nyomvonala, a dugók,
  * a követett menet útja (a megtett rész halványan), a megállók és a saját helyzet.
- * Stílusváltáskor (alaptérkép-csere) újra fel kell tenni őket: `ensureOverlays`.
+ * A vonalak az alaptérkép feliratai alá kerülnek (az utcanevek olvashatók maradnak),
+ * a megállók fölé. Stílusváltáskor újra fel kell tenni őket: `ensureOverlays`.
  */
-import type { CircleLayerSpecification, ExpressionSpecification, GeoJSONSource, Map as MLMap } from "maplibre-gl";
+import type { CircleLayerSpecification, ExpressionSpecification, GeoJSONSource, LayerSpecification, Map as MLMap } from "maplibre-gl";
 import type { Stop } from "@/types";
 import type { GeoPosition } from "@/hooks/useGeolocation";
 import type { TrafficSegment } from "../liveTraffic";
 import { trafficColor } from "../trafficColor";
-import { BUILDINGS_LAYER } from "./style3d";
 
 export const SOURCES = { routes: "mvk-routes", traffic: "mvk-traffic", focus: "mvk-focus", stops: "mvk-stops", me: "mvk-me" } as const;
 export const STOP_LAYERS = ["mvk-stops", "mvk-stops-coach"];
+const STOP_NAMES = "mvk-stop-names";
 export const TRAFFIC_LAYER = "mvk-traffic-line";
 const FOCUS_LINE = "mvk-focus-line";
 
-/** a Volán-megállók csak ettől a nagyítástól (a 2D 14-es szintjének felel meg) */
+/** a Volán-megállók (a megyében ~3500) csak ettől a nagyítástól */
 const COACH_STOPS_ZOOM = 13;
+/** a megállók neve ettől a nagyítástól */
+const STOP_NAMES_ZOOM = 15.5;
 const RAIL_COLOR = "#1E5AA8";
 const EARTH_M = 40_075_016.686;
 
@@ -34,44 +37,79 @@ function width(atZ12: number, atZ16: number, atZ19: number): ExpressionSpecifica
   return ["interpolate", ["exponential", 1.6], ["zoom"], 12, atZ12, 16, atZ16, 19, atZ19];
 }
 
-export function ensureOverlays(map: MLMap, c: OverlayColors, touch: boolean): void {
-  if (map.getSource(SOURCES.routes)) return;
-  for (const id of Object.values(SOURCES)) {
-    map.addSource(id, { type: "geojson", data: EMPTY, lineMetrics: id === SOURCES.focus });
-  }
-  // A földön futó csíkok az épületek alá: a ház eltakarja, ami mögötte van.
-  const below = map.getLayer(BUILDINGS_LAYER) ? BUILDINGS_LAYER : undefined;
+/** A saját rétegek: `lines` az alaptérkép feliratai alá, `top` minden fölé (a járművek alá). */
+export function overlayLayers(c: OverlayColors, touch: boolean, dark: boolean): { lines: LayerSpecification[]; top: LayerSpecification[] } {
   const round = { "line-join": "round", "line-cap": "round" } as const;
-  map.addLayer({ id: "mvk-routes-casing", type: "line", source: SOURCES.routes, layout: round, paint: { "line-color": c.halo, "line-width": width(4, 7, 16), "line-opacity": 0.55 } }, below);
-  map.addLayer({ id: "mvk-routes-line", type: "line", source: SOURCES.routes, layout: round, paint: { "line-color": ["get", "color"], "line-width": width(2, 4, 10), "line-opacity": 0.95 } }, below);
-  map.addLayer({ id: "mvk-traffic-casing", type: "line", source: SOURCES.traffic, layout: round, paint: { "line-color": c.halo, "line-width": ["+", ["get", "w"], 4], "line-opacity": 0.55 } }, below);
-  map.addLayer({ id: TRAFFIC_LAYER, type: "line", source: SOURCES.traffic, layout: round, paint: { "line-color": ["get", "color"], "line-width": ["get", "w"], "line-opacity": 0.95 } }, below);
-  map.addLayer({ id: "mvk-focus-casing", type: "line", source: SOURCES.focus, layout: round, paint: { "line-color": c.halo, "line-width": width(7, 12, 26), "line-opacity": 0.6 } }, below);
-  map.addLayer({ id: "mvk-focus-glow", type: "line", source: SOURCES.focus, layout: round, paint: { "line-color": ["get", "color"], "line-width": width(10, 20, 44), "line-blur": width(6, 12, 26), "line-opacity": 0.28 } }, below);
-  map.addLayer({ id: FOCUS_LINE, type: "line", source: SOURCES.focus, layout: round, paint: { "line-color": ["get", "color"], "line-width": width(3, 6, 13), "line-opacity": 0.98 } }, below);
-
   const stopPaint: CircleLayerSpecification["paint"] = {
-    "circle-radius": ["get", "r"],
+    // városnyi távolságból kisebb pötty: a buszok a lényeg, a megállók csak háttér
+    // (a nagyítás csak a legkülső interpolate-ben állhat)
+    "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, ["*", 0.6, ["get", "r"]], 13, ["get", "r"]],
     "circle-color": ["get", "color"],
     "circle-stroke-color": c.halo,
     "circle-stroke-width": ["get", "sw"],
   };
-  map.addLayer({ id: "mvk-stops-coach", type: "circle", source: SOURCES.stops, minzoom: COACH_STOPS_ZOOM, filter: ["==", ["get", "coach"], true], paint: stopPaint });
-  map.addLayer({ id: "mvk-stops", type: "circle", source: SOURCES.stops, filter: ["!=", ["get", "coach"], true], paint: stopPaint });
+  return {
+    lines: [
+      { id: "mvk-routes-casing", type: "line", source: SOURCES.routes, layout: round, paint: { "line-color": c.halo, "line-width": width(4, 7, 16), "line-opacity": 0.55 } },
+      { id: "mvk-routes-line", type: "line", source: SOURCES.routes, layout: round, paint: { "line-color": ["get", "color"], "line-width": width(2, 4, 10), "line-opacity": 0.95 } },
+      { id: "mvk-traffic-casing", type: "line", source: SOURCES.traffic, layout: round, paint: { "line-color": c.halo, "line-width": ["+", ["get", "w"], 4], "line-opacity": 0.55 } },
+      { id: TRAFFIC_LAYER, type: "line", source: SOURCES.traffic, layout: round, paint: { "line-color": ["get", "color"], "line-width": ["get", "w"], "line-opacity": 0.95 } },
+      { id: "mvk-focus-casing", type: "line", source: SOURCES.focus, layout: round, paint: { "line-color": c.halo, "line-width": width(7, 12, 26), "line-opacity": 0.6 } },
+      { id: "mvk-focus-glow", type: "line", source: SOURCES.focus, layout: round, paint: { "line-color": ["get", "color"], "line-width": width(10, 20, 44), "line-blur": width(6, 12, 26), "line-opacity": 0.28 } },
+      { id: FOCUS_LINE, type: "line", source: SOURCES.focus, layout: round, paint: { "line-color": ["get", "color"], "line-width": width(3, 6, 13), "line-opacity": 0.98 } },
+    ],
+    top: [
+      { id: "mvk-stops-coach", type: "circle", source: SOURCES.stops, minzoom: COACH_STOPS_ZOOM, filter: ["==", ["get", "coach"], true], paint: stopPaint },
+      { id: "mvk-stops", type: "circle", source: SOURCES.stops, filter: ["!=", ["get", "coach"], true], paint: stopPaint },
+      {
+        id: STOP_NAMES,
+        type: "symbol",
+        source: SOURCES.stops,
+        minzoom: STOP_NAMES_ZOOM,
+        layout: {
+          "text-field": ["get", "name"],
+          "text-font": ["Noto Sans Medium"],
+          "text-size": 11,
+          "text-variable-anchor": ["left", "right", "top", "bottom"],
+          "text-radial-offset": 0.75,
+          "text-justify": "auto",
+          "text-max-width": 9,
+          "text-padding": 4,
+        },
+        paint: {
+          "text-color": dark ? "#c5d1cb" : "#2f3633",
+          "text-halo-color": dark ? "rgba(10, 15, 13, 0.92)" : "rgba(255, 255, 255, 0.92)",
+          "text-halo-width": 1.4,
+        },
+      },
+      {
+        id: "mvk-me-accuracy",
+        type: "circle",
+        source: SOURCES.me,
+        // a sugarat a helyzet pontossága adja (`setMe`)
+        paint: { "circle-radius": 0, "circle-color": c.mine, "circle-opacity": 0.12, "circle-stroke-color": c.mine, "circle-stroke-width": 1, "circle-stroke-opacity": 0.5, "circle-pitch-alignment": "map" },
+      },
+      {
+        id: "mvk-me",
+        type: "circle",
+        source: SOURCES.me,
+        paint: { "circle-radius": touch ? 8 : 7, "circle-color": c.mine, "circle-stroke-color": c.halo, "circle-stroke-width": 3, "circle-pitch-alignment": "viewport" },
+      },
+    ],
+  };
+}
 
-  map.addLayer({
-    id: "mvk-me-accuracy",
-    type: "circle",
-    source: SOURCES.me,
-    // a sugarat a helyzet pontossága adja (`setMe`)
-    paint: { "circle-radius": 0, "circle-color": c.mine, "circle-opacity": 0.12, "circle-stroke-color": c.mine, "circle-stroke-width": 1, "circle-stroke-opacity": 0.5, "circle-pitch-alignment": "map" },
-  });
-  map.addLayer({
-    id: "mvk-me",
-    type: "circle",
-    source: SOURCES.me,
-    paint: { "circle-radius": touch ? 8 : 7, "circle-color": c.mine, "circle-stroke-color": c.halo, "circle-stroke-width": 3, "circle-pitch-alignment": "viewport" },
-  });
+export const OVERLAY_SOURCES = Object.values(SOURCES);
+
+/** `below`: az alaptérkép első felirat-rétege (a vonalak ez alá kerülnek) */
+export function ensureOverlays(map: MLMap, c: OverlayColors, touch: boolean, below: string | undefined, dark: boolean): void {
+  if (map.getSource(SOURCES.routes)) return;
+  for (const id of OVERLAY_SOURCES) {
+    map.addSource(id, { type: "geojson", data: EMPTY, lineMetrics: id === SOURCES.focus });
+  }
+  const { lines, top } = overlayLayers(c, touch, dark);
+  for (const l of lines) map.addLayer(l, below);
+  for (const l of top) map.addLayer(l);
 }
 
 function setData(map: MLMap, id: string, data: GeoJSON.FeatureCollection): void {
