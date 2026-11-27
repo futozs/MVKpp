@@ -175,7 +175,14 @@ export function deployScript(opts: { pull: boolean; services: Deployable[]; comp
   if (opts.pull) {
     lines.push(
       'echo "▸ git pull"',
-      'if [ -n "${GIT_TOKEN:-}" ]; then AUTH="Authorization: Basic $(printf \'x-access-token:%s\' "$GIT_TOKEN" | base64 | tr -d \'\\n\')"; git -c "http.extraHeader=$AUTH" pull --ff-only; else git pull --ff-only; fi',
+      'if [ -n "${GIT_TOKEN:-}" ]; then AUTH="Authorization: Basic $(printf \'x-access-token:%s\' "$GIT_TOKEN" | base64 | tr -d \'\\n\')"; git -c "http.extraHeader=$AUTH" fetch; else git fetch; fi',
+      // Ha a helyi ág elvált (van fel nem töltött helyi commit), ne álljunk le: tegyük a helyi commitokat a friss upstream tetejére.
+      'if git merge --ff-only @{u} >/dev/null 2>&1; then echo "  fast-forward ok"; else',
+      '  echo "  a helyi ág elvált az upstreamtől ($(git rev-list --count @{u}..HEAD) helyi commit) → rebase"',
+      '  export GIT_COMMITTER_NAME="${GIT_COMMITTER_NAME:-mvk-hub}" GIT_COMMITTER_EMAIL="${GIT_COMMITTER_EMAIL:-hub@localhost}"',
+      '  if ! git rebase @{u}; then git rebase --abort || true; echo "✗ a helyi commitok ütköznek az upstreammel — kézzel kell rendezni (~/mvk)"; exit 1; fi',
+      'fi',
+      'ahead=$(git rev-list --count @{u}..HEAD); if [ "$ahead" -gt 0 ]; then echo "  figyelem: $ahead helyi commit nincs feltöltve (git push)"; fi',
       'echo "  most: $(git log -1 --format=\'%h %s\')"',
     );
   }

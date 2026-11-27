@@ -174,7 +174,7 @@ export function DeployPage() {
           </div>
           <label className="mt-3 flex items-center gap-2 text-[13px]">
             <input type="checkbox" checked={pull} onChange={(e) => setPull(e.target.checked)} className="accent-[hsl(var(--primary))]" />
-            előtte <span className="font-mono">git pull --ff-only</span> {g.behind ? <span className="text-early">({g.behind} új commit jön)</span> : null}
+            előtte <span className="font-mono">git fetch + ff / rebase</span> {g.behind ? <span className="text-early">({g.behind} új commit jön)</span> : null}
           </label>
           <div className="mt-4 flex flex-wrap gap-2">
             <Button variant="primary" icon={<Rocket className="h-3.5 w-3.5" />} disabled={!services.length || !data.dockerAvailable || Boolean(data.running)} busy={busy === "deploy"} onClick={() => setConfirm(true)}>
