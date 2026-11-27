@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, CircleAlert, Radio } from "lucide-react";
 import { dayPlan, seasonOf, type AdventSeason } from "@mvk/core/advent/season";
 import { shiftIso } from "@mvk/core/time";
 import type { AdventIncident } from "@mvk/core/advent/day";
-import type { LiveVehicle, Route } from "@/types";
+import type { LiveVehicle, Route, Stop } from "@/types";
 import { serverNow } from "@/lib/realtime";
 import { cn } from "@/lib/utils";
 import { useAdventDay, useAdventMeta, useAdventSeason, useLineTrams, type SeasonMeta } from "./adventApi";
@@ -21,7 +21,7 @@ import { WrappedStory, WrappedTeaser } from "./WrappedStory";
  * hol és mikor érhető el, és az évad (naptár, rekordok, megállók, Wrapped).
  * Telefonon egy görgetett oldal, széles kijelzőn három oszlop: Ma · térkép · Évad.
  */
-export function AdventView({ routes }: { routes: Route[] }) {
+export function AdventView({ routes, stops }: { routes: Route[]; stops: Stop[] }) {
   const { meta, failed } = useAdventMeta();
   const [date, setDate] = useState<string | null>(null);
   const year = meta?.current ?? null;
@@ -198,7 +198,7 @@ export function AdventView({ routes }: { routes: Route[] }) {
 
           {live && day && !over ? (
             <Section title="Hol éred el?" className="order-5 xl:order-none">
-              <CatchPlanner day={day} season={season} stop={stop} onStop={setStop} />
+              <CatchPlanner season={season} stops={stops} onStop={setStop} />
             </Section>
           ) : null}
         </div>

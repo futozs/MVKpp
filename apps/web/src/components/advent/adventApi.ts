@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { CatchPlan } from "@mvk/core/advent/catch";
 import type { AdventDay } from "@mvk/core/advent/day";
 import type { DayReplay, ReplayDir } from "@mvk/core/advent/replay";
 import type { AdventSeason, AdventStop } from "@mvk/core/advent/season";
@@ -51,6 +52,8 @@ export type ReplayResp = DayReplay & {
 const LIVE_MS = 5000;
 const SEASON_MS = 60_000;
 const TRACK_MS = 20_000;
+/** az Elkapó ennyi időnként tervez újra (ms): a villamos és a buszok ideje is változik */
+const PLAN_MS = 30_000;
 
 async function getJson<T>(path: string): Promise<T> {
   const r = await fetch(`${API_BASE}${path}`, { cache: "no-store" });
@@ -129,6 +132,33 @@ export function useAdventSeason(year: number | null) {
     [year],
   );
   return resp?.summary.year === year ? resp : null;
+}
+
+/**
+ * Az Elkapó terve `from`-ból (lat,lon vagy stop:ID). `key` váltja ki az újratervezést
+ * (a helyzet ~100 m-es rácsa, hogy a GPS remegése ne kérjen újat); közben 30 mp-enként frissül.
+ */
+export function useAdventPlan(from: string | null, key: string | null) {
+  const [state, setState] = useState<{ key: string; plan: CatchPlan | null; error: string | null } | null>(null);
+  const fromRef = useRef(from);
+  fromRef.current = from;
+  useVisiblePoll(
+    () => {
+      const f = fromRef.current;
+      if (!f || !key) return;
+      fetch(`${API_BASE}/engine/advent/plan?from=${encodeURIComponent(f)}`, { cache: "no-store" })
+        .then(async (r) => {
+          if (r.ok) return setState({ key, plan: (await r.json()) as CatchPlan, error: null });
+          const body: unknown = await r.json().catch(() => null);
+          const msg = body && typeof body === "object" && "error" in body && typeof body.error === "string" ? body.error : null;
+          setState({ key, plan: null, error: msg ?? "Most nem sikerült tervezni." });
+        })
+        .catch(() => setState((s) => (s?.key === key && s.plan ? s : { key, plan: null, error: "Most nem sikerült tervezni." })));
+    },
+    PLAN_MS,
+    [key],
+  );
+  return state?.key === key ? state : null;
 }
 
 /** a nap GPS-nyoma (a térképre): ma 20 mp-enként frissül */

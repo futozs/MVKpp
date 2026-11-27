@@ -9,6 +9,8 @@ import { seasonSummary } from "@mvk/core/advent/seasonStats";
 import { dayCards, seasonCards } from "@mvk/core/advent/wrapped";
 import { cached } from "@mvk/cache";
 import type { AdventTracker } from "../advent.ts";
+import { adventPlan } from "../adventPlan.ts";
+import type { Engine } from "../engine.ts";
 import { HttpError, sendJson, type Router } from "./router.ts";
 
 /** a nap nyilvános alakja: a menetek GPS-pontjai nélkül (azok a /track-en) */
@@ -31,7 +33,16 @@ function dateParam(raw: string | null, today: string): string {
   return iso;
 }
 
-export function registerAdvent(r: Router, advent: AdventTracker) {
+/** ?from=lat,lon (4 tizedesre kerekítve: ~10 m, így a közeli kérések egy tervet kapnak) vagy stop:ID */
+function fromParam(raw: string | null): string {
+  const v = (raw ?? "").trim();
+  const m = v.match(/^(-?\d{1,3}(?:\.\d+)?),(-?\d{1,3}(?:\.\d+)?)$/);
+  if (m) return `${Number(m[1]).toFixed(4)},${Number(m[2]).toFixed(4)}`;
+  if (/^stop:[\w:.-]{1,64}$/.test(v)) return v;
+  throw new HttpError(400, "hiányzó vagy hibás ?from= (lat,lon vagy stop:ID)");
+}
+
+export function registerAdvent(r: Router, advent: AdventTracker, engine: Engine) {
   /** az évadok (menetrend, megállók, vonal) és a mai nap */
   r.get("/engine/advent", async (req, res) => {
     const today = serviceClock().iso;
@@ -88,6 +99,15 @@ export function registerAdvent(r: Router, advent: AdventTracker) {
     if (!lc || !got) throw new HttpError(503, "a vonal még nem töltődött be");
     const body = { date: iso, at: now, closed: got.closed, shapes: { out: roundLine(lc.out.shape.points), back: roundLine(lc.back.shape.points) }, ...got.replay };
     sendJson(req, res, 200, body, { "cache-control": got.closed ? "public, max-age=600" : "public, max-age=10" });
+  });
+
+  /** Elkapó: ?from=-ból melyik megállóban, mivel és mikor éred el ma a villamost */
+  r.get("/engine/advent/plan", async (req, res) => {
+    const from = fromParam(req.query.get("from"));
+    const now = nowUnix();
+    const body = await cached(`advent:plan:${from}:${Math.floor(now / 15)}`, 15, () => adventPlan(engine, advent, from, now));
+    if ("error" in body) throw new HttpError(404, body.error);
+    sendJson(req, res, 200, body, { "cache-control": "no-store" });
   });
 
   /** az évad: naptár, összesen, rekordok, megállók, indulások, Wrapped-lapok */

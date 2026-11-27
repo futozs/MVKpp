@@ -144,6 +144,17 @@ describe("adventi villamos: hibák és csend", () => {
     expect(d.stats.missedTrips).toBe(0);
   });
 
+  it("a törölt menetnek és a régóta jel nélkülinek nincs várható ideje", () => {
+    const now = plan.trips[9].dep;
+    const key = at(pings, now).trips[10].key;
+    const d = adventDay(season, plan, "2026-11-26", line, pings.filter((p) => p.ts <= now), now, { feedOk: true, cancelled: new Set([key]) });
+    expect(d.trips[10].verdict).toBe("cancelled");
+    expect(d.etas.some((e) => e.trip === key)).toBe(false);
+    const silent = at([], plan.trips[3].dep + 45 * 60);
+    expect(silent.trips.slice(0, 3).every((x) => x.verdict === "no_data")).toBe(true);
+    expect(silent.etas.some((e) => silent.trips.slice(0, 3).some((x) => x.key === e.trip))).toBe(false);
+  });
+
   it("nem látjuk: a napon egy jel sem jött, az első indulás után 10 perccel", () => {
     expect(at([], plan.trips[0].dep - 3600).now.code).toBe("before");
     expect(at([], plan.trips[0].dep + 11 * 60).now.code).toBe("not_seen");

@@ -25,17 +25,19 @@ import {
   type ServiceDay,
   type TransitMode,
 } from "@mvk/core";
+import type { AdventRun } from "@mvk/core/advent/runs";
+import { ADVENT_COLORS, type AdventSeason } from "@mvk/core/advent/season";
 import { sql } from "@mvk/db";
 import type { Engine } from "./engine.ts";
 import type { TripInsights } from "./insights.ts";
 import { scheduleFor } from "./schedule.ts";
 
-const WALK_MPS = 1.25;
-const WALK_DETOUR = 1.3;
+export const WALK_MPS = 1.25;
+export const WALK_DETOUR = 1.3;
 const MAX_FOOTPATH_M = 450;
-const MAX_ACCESS_M = 700;
+export const MAX_ACCESS_M = 700;
 /** a tervezett szakasz módja (az MVK API `mode` értékeivel egyezően; COACH, RAIL a regionális) */
-const LEG_MODE: Record<TransitMode, string> = { tram: "TRAM", bus: "BUS", coach: "COACH", rail: "RAIL" };
+export const LEG_MODE: Record<TransitMode, string> = { tram: "TRAM", bus: "BUS", coach: "COACH", rail: "RAIL" };
 
 /**
  * Vágány / kocsiállás a felszállásnál: mára az élő (a MÁV táblájáról, a változással együtt),
@@ -56,15 +58,15 @@ function trainOf(tripShort: string): { trainNo?: string; trainName?: string } {
   const t = trainParts(tripShort);
   return { ...(t.no ? { trainNo: t.no } : {}), ...(t.name ? { trainName: t.name } : {}) };
 }
-const MIN_TRANSFER_S = 60;
-const MAX_ROUNDS = 4;
-const INF = 1e12;
+export const MIN_TRANSFER_S = 60;
+export const MAX_ROUNDS = 4;
+export const INF = 1e12;
 
-type PStop = { id: string; name: string; lat: number; lon: number };
+export type PStop = { id: string; name: string; lat: number; lon: number };
 /** `key`: a vonal kulcsa a statisztikában (MVK: a rövid név, máshol a vonal-azonosító); `mode`: a közlekedési mód */
-type PTrip = { id: string; routeId: string; short: string; key: string; mode: TransitMode; long: string; color: string; text: string; type: string; headsign: string; dep: number[]; arr: number[]; tripShort?: string };
+export type PTrip = { id: string; routeId: string; short: string; key: string; mode: TransitMode; long: string; color: string; text: string; type: string; headsign: string; dep: number[]; arr: number[]; tripShort?: string };
 type Pattern = { stops: number[]; trips: PTrip[]; shapeId: string | null };
-type Net = {
+export type Net = {
   iso: string;
   feedVersion: string;
   source: "feed" | "legacy";
@@ -79,20 +81,23 @@ type Net = {
 
 const netCache = new Map<string, Net>();
 
-function finishNet(base: Omit<Net, "stopPatterns" | "foot">): Net {
+/** gyalogos átszállás két megálló közt (mp), ha elég közel vannak */
+function footS(sa: PStop, sb: PStop): number | null {
+  if (Math.abs(sa.lat - sb.lat) > 0.005 || Math.abs(sa.lon - sb.lon) > 0.007) return null;
+  const d = fastDistM(sa.lat, sa.lon, sb.lat, sb.lon);
+  if ((d > MAX_FOOTPATH_M && sa.name !== sb.name) || d > 900) return null;
+  return Math.round((d * WALK_DETOUR) / WALK_MPS) + 20;
+}
+
+export function finishNet(base: Omit<Net, "stopPatterns" | "foot">): Net {
   const n = base.stops.length;
   const stopPatterns: Net["stopPatterns"] = Array.from({ length: n }, () => []);
   base.patterns.forEach((pt, p) => pt.stops.forEach((s, pos) => stopPatterns[s].push({ p, pos })));
   const foot: Net["foot"] = Array.from({ length: n }, () => []);
   for (let a = 0; a < n; a++) {
     for (let b = a + 1; b < n; b++) {
-      const sa = base.stops[a];
-      const sb = base.stops[b];
-      if (Math.abs(sa.lat - sb.lat) > 0.005 || Math.abs(sa.lon - sb.lon) > 0.007) continue;
-      const d = fastDistM(sa.lat, sa.lon, sb.lat, sb.lon);
-      if (d > MAX_FOOTPATH_M && sa.name !== sb.name) continue;
-      if (d > 900) continue;
-      const s = Math.round((d * WALK_DETOUR) / WALK_MPS) + 20;
+      const s = footS(base.stops[a], base.stops[b]);
+      if (s == null) continue;
       foot[a].push({ to: b, s });
       foot[b].push({ to: a, s });
     }
@@ -186,20 +191,99 @@ export async function netFor(engine: Engine, iso: string): Promise<Net | null> {
   return net;
 }
 
+/**
+ * A hálózat az adventi villamos ma még elérhető meneteivel (az élő késéssel eltolva).
+ * A feed saját ADV-menetei kiesnek: a futások már azokból (vagy a plakátból) épültek.
+ * A gyorsítótárazott alaphálózatot nem módosítja: csak a változó tömbök másolódnak.
+ */
+export function withAdventRuns(net: Net, runs: AdventRun[], season: AdventSeason, place: (id: string) => Omit<PStop, "id"> | null): { net: Net; tripIds: Set<string> } {
+  const isAdvent = (t: PTrip) => season.routeShorts.includes(t.short);
+  const patterns = net.patterns.map((p) => (p.trips.some(isAdvent) ? { ...p, trips: p.trips.filter((t) => !isAdvent(t)) } : p));
+  const stops = [...net.stops];
+  const stopIdx = new Map(net.stopIdx);
+  const stopPatterns = [...net.stopPatterns];
+  const foot = [...net.foot];
+  const copied = new Set<number>();
+  const own = (i: number) => {
+    if (!copied.has(i)) {
+      stopPatterns[i] = [...stopPatterns[i]];
+      foot[i] = [...foot[i]];
+      copied.add(i);
+    }
+  };
+  const idx = (id: string): number | null => {
+    const hit = stopIdx.get(id);
+    if (hit != null) return hit;
+    const p = place(id);
+    if (!p) return null;
+    const i = stops.length;
+    const s = { id, ...p };
+    stops.push(s);
+    stopIdx.set(id, i);
+    stopPatterns.push([]);
+    foot.push([]);
+    copied.add(i);
+    for (let b = 0; b < i; b++) {
+      const w = footS(s, stops[b]);
+      if (w == null) continue;
+      own(b);
+      foot[i].push({ to: b, s: w });
+      foot[b].push({ to: i, s: w });
+    }
+    return i;
+  };
+  const midnight = localMidnightUnix(net.iso);
+  const route = season.routeShorts[0];
+  const byKey = new Map<string, number>();
+  const tripIds = new Set<string>();
+  for (const r of runs) {
+    if (r.stops.length < 2) continue;
+    const ids: number[] = [];
+    for (const s of r.stops) {
+      const i = idx(s.stopId);
+      if (i == null) break;
+      ids.push(i);
+    }
+    if (ids.length !== r.stops.length) continue;
+    const key = ids.join(">");
+    let p = byKey.get(key);
+    if (p == null) {
+      p = patterns.length;
+      patterns.push({ stops: ids, trips: [], shapeId: r.dir === "out" ? season.shapeIds.out : season.shapeIds.back });
+      byKey.set(key, p);
+      for (const [pos, s] of ids.entries()) {
+        own(s);
+        stopPatterns[s].push({ p, pos });
+      }
+    }
+    const times = r.stops.map((s) => s.t - midnight);
+    patterns[p].trips.push({
+      id: r.tripId, routeId: route, short: route, key: route, mode: "tram", long: season.title, color: ADVENT_COLORS.bg, text: ADVENT_COLORS.fg, type: "0", headsign: r.headsign, dep: times, arr: times,
+    });
+    tripIds.add(r.tripId);
+  }
+  return { net: { ...net, patterns, stops, stopIdx, stopPatterns, foot }, tripIds };
+}
+
 // ── RAPTOR ─────────────────────────────────────────────────────────────
 
-type Parent =
+export type Parent =
   | { t: "origin"; walk: number }
   | { t: "ride"; p: number; trip: PTrip; board: number; alight: number; from: number }
   | { t: "walk"; from: number; s: number };
 
-type Endpoint = { stop: number; walk: number };
+export type Endpoint = { stop: number; walk: number };
+
+export type Search = { tau: Float64Array[]; parent: (Parent | null)[][] };
 
 /**
+ * Körönkénti legkorábbi érkezés minden megállóba. `dests`: ha megvan, a célnál
+ * későbbi címkéket nem visszük tovább (gyorsabb); null: teljes keresés.
  * `skip`: kihagyandó menetek (az MVK által ma kihúzottak  azokra nem tervezünk);
- * `modes`: csak ezekkel a közlekedési módokkal (a felhasználó beállítása szerint).
+ * `modes`: csak ezekkel a közlekedési módokkal (a felhasználó beállítása szerint);
+ * `until`: ennél későbbi érkezés már nem érdekes (a nap mp-e).
  */
-function raptor(net: Net, origins: Endpoint[], dests: Endpoint[], dep: number, skip: ReadonlySet<string> = new Set(), modes: ReadonlySet<TransitMode> | null = null) {
+export function search(net: Net, origins: Endpoint[], dests: Endpoint[] | null, dep: number, skip: ReadonlySet<string> = new Set(), modes: ReadonlySet<TransitMode> | null = null, until = INF): Search {
   const n = net.stops.length;
   const tau: Float64Array[] = Array.from({ length: MAX_ROUNDS + 1 }, () => new Float64Array(n).fill(INF));
   const parent: (Parent | null)[][] = Array.from({ length: MAX_ROUNDS + 1 }, () => new Array(n).fill(null));
@@ -216,7 +300,7 @@ function raptor(net: Net, origins: Endpoint[], dests: Endpoint[], dep: number, s
   }
   const destBest = () => {
     let b = INF;
-    for (const d of dests) b = Math.min(b, best[d.stop] + d.walk);
+    for (const d of dests ?? []) b = Math.min(b, best[d.stop] + d.walk);
     return b;
   };
 
@@ -228,7 +312,7 @@ function raptor(net: Net, origins: Endpoint[], dests: Endpoint[], dep: number, s
         if (cur == null || pos < cur) queue.set(p, pos);
       }
     const nextMarked = new Set<number>();
-    const bound = destBest();
+    const bound = Math.min(destBest(), until);
     for (const [p, startPos] of queue) {
       const pat = net.patterns[p];
       let trip: PTrip | null = null;
@@ -261,7 +345,7 @@ function raptor(net: Net, origins: Endpoint[], dests: Endpoint[], dep: number, s
     for (const s of [...nextMarked]) {
       for (const f of net.foot[s]) {
         const a = tau[k][s] + f.s;
-        if (a < tau[k][f.to] && a < best[f.to]) {
+        if (a < tau[k][f.to] && a < best[f.to] && a <= until) {
           tau[k][f.to] = a;
           best[f.to] = a;
           parent[k][f.to] = { t: "walk", from: s, s: f.s };
@@ -272,7 +356,31 @@ function raptor(net: Net, origins: Endpoint[], dests: Endpoint[], dep: number, s
     if (!nextMarked.size) break;
     marked = nextMarked;
   }
+  return { tau, parent };
+}
 
+/** a k. körös címke útja visszafelé a kiindulásig (null, ha nem az indulásból jön) */
+export function trace(sr: Search, k: number, stop: number): { legs: Parent[]; stops: number[] } | null {
+  const legs: Parent[] = [];
+  const stops: number[] = [];
+  let s = stop;
+  let r = k;
+  for (let guard = 0; guard < 20; guard++) {
+    const pa = sr.parent[r][s];
+    if (!pa) break;
+    legs.unshift(pa);
+    stops.unshift(s);
+    if (pa.t === "origin") break;
+    if (pa.t === "ride") {
+      s = pa.from;
+      r -= 1;
+    } else s = pa.from;
+  }
+  return legs[0]?.t === "origin" ? { legs, stops } : null;
+}
+
+function raptor(net: Net, origins: Endpoint[], dests: Endpoint[], dep: number, skip: ReadonlySet<string> = new Set(), modes: ReadonlySet<TransitMode> | null = null) {
+  const sr = search(net, origins, dests, dep, skip, modes);
   // Pareto: körönként (átszállásszám) a legjobb érkezés.
   type Journey = { arrival: number; rounds: number; dest: Endpoint; legs: Parent[]; stops: number[] };
   const out: Journey[] = [];
@@ -281,7 +389,7 @@ function raptor(net: Net, origins: Endpoint[], dests: Endpoint[], dep: number, s
     let bd: Endpoint | null = null;
     let ba = INF;
     for (const d of dests) {
-      const a = tau[k][d.stop] + d.walk;
+      const a = sr.tau[k][d.stop] + d.walk;
       if (a < ba) {
         ba = a;
         bd = d;
@@ -289,22 +397,8 @@ function raptor(net: Net, origins: Endpoint[], dests: Endpoint[], dep: number, s
     }
     if (!bd || ba >= bestSoFar) continue;
     bestSoFar = ba;
-    const legs: Parent[] = [];
-    const legStops: number[] = [];
-    let s = bd.stop;
-    let r = k;
-    for (let guard = 0; guard < 20; guard++) {
-      const pa = parent[r][s];
-      if (!pa) break;
-      legs.unshift(pa);
-      legStops.unshift(s);
-      if (pa.t === "origin") break;
-      if (pa.t === "ride") {
-        s = pa.from;
-        r -= 1;
-      } else s = pa.from;
-    }
-    if (legs[0]?.t === "origin") out.push({ arrival: ba, rounds: k, dest: bd, legs, stops: legStops });
+    const path = trace(sr, k, bd.stop);
+    if (path) out.push({ arrival: ba, rounds: k, dest: bd, ...path });
   }
   return out;
 }
@@ -314,7 +408,7 @@ function raptor(net: Net, origins: Endpoint[], dests: Endpoint[], dep: number, s
 /** `modes`: a tervezésben használható módok (alapból csak az MVK, mint eddig) */
 export type PlanQuery = { from: string; to: string; at: number; arriveBy?: boolean; limit?: number; modes?: ReadonlySet<TransitMode> };
 
-function endpoints(net: Net, spec: string, maxWalk: number, lookup: (id: string) => { lat: number; lon: number; name: string } | null): { eps: Endpoint[]; point: { lat: number; lon: number; name: string } } | null {
+export function endpoints(net: Net, spec: string, maxWalk: number, lookup: (id: string) => { lat: number; lon: number; name: string } | null): { eps: Endpoint[]; point: { lat: number; lon: number; name: string } } | null {
   let lat: number;
   let lon: number;
   let name: string;
@@ -342,6 +436,11 @@ function endpoints(net: Net, spec: string, maxWalk: number, lookup: (id: string)
   return eps.length ? { eps, point: { lat, lon, name } } : null;
 }
 
+/** az MVK és a MÁV ma kihúzott menetei */
+export function cancelledToday(engine: Engine): ReadonlySet<string> {
+  return engine.regional?.cancelled.size ? new Set([...engine.cancelled.ids, ...engine.regional.cancelled]) : engine.cancelled.ids;
+}
+
 export async function plan(engine: Engine, q: PlanQuery, insights?: TripInsights) {
   const clock = serviceClock(q.at);
   const net = await netFor(engine, clock.iso);
@@ -356,8 +455,7 @@ export async function plan(engine: Engine, q: PlanQuery, insights?: TripInsights
   const midnight = localMidnightUnix(clock.iso);
   const limit = Math.max(1, Math.min(6, q.limit ?? 4));
   // a mai kihúzott menetekkel nem tervezünk (más napra nincs ilyen lista)
-  const skip: ReadonlySet<string> =
-    net.iso === engine.today ? (engine.regional?.cancelled.size ? new Set([...engine.cancelled.ids, ...engine.regional.cancelled]) : engine.cancelled.ids) : new Set();
+  const skip = net.iso === engine.today ? cancelledToday(engine) : new Set<string>();
   const modes = q.modes ?? new Set(MVK_MODES);
 
   type J = ReturnType<typeof raptor>[number];

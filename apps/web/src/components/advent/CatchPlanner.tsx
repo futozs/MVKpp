@@ -1,187 +1,217 @@
 import { useMemo, useState } from "react";
-import { Footprints, LocateFixed, Minus, Plus, TriangleAlert } from "lucide-react";
-import { walkSecondsFor } from "@mvk/core/catchBus";
-import type { StopEta } from "@mvk/core/advent/day";
+import { ChevronRight, Footprints, LocateFixed, Minus, Plus, TriangleAlert } from "lucide-react";
+import type { CatchLeg, CatchOption } from "@mvk/core/advent/catch";
+import type { Stop } from "@/types";
 import { useGeo } from "@/context/GeoContext";
-import { distanceKm } from "@/lib/geo";
+import { feedOfId, pickableStops } from "@/lib/modes";
 import { serverNow } from "@/lib/realtime";
 import { cn } from "@/lib/utils";
-import type { PublicDay, SeasonMeta } from "./adventApi";
+import { PlaceSelect } from "@/components/routeplanner/PlaceSelect";
+import { RouteTile } from "@/components/transit/RouteTile";
+import { useAdventPlan, type SeasonMeta } from "./adventApi";
 import { hm } from "./adventText";
 
-/** ennyivel érj oda előbb (mp): a villamos a várhatónál korábban is jöhet */
-const MARGIN_S = 120;
+const minutes = (s: number) => Math.max(1, Math.round(s / 60));
+const optionKey = (o: CatchOption) => `${o.run}:${o.stop}`;
 
 /**
- * Elkapó: melyik megállóban és mikor éred el, honnan és mikor indulj, és ha
- * felszállsz pár megállóra, hol szállj le és mikor jön vissza ugyanoda.
+ * Elkapó: a helyzetedből (vagy egy megállóból) gyalog és bármelyik MVK-járattal
+ * oda, ahol pár perccel a villamos előtt ott vagy. Menetenként a legkényelmesebb
+ * megálló, és ha elébe mész, a korábbi is; felszállás után: hol vagy, mivel jössz vissza.
  */
-export function CatchPlanner({ day, season, stop, onStop }: { day: PublicDay; season: SeasonMeta; stop: number | null; onStop: (i: number) => void }) {
+export function CatchPlanner({ season, stops, onStop }: { season: SeasonMeta; stops: Stop[]; onStop: (i: number) => void }) {
   const geo = useGeo();
-  const [ride, setRide] = useState(4);
+  const [placeId, setPlaceId] = useState("");
+  const [open, setOpen] = useState<string | null>(null);
+  const places = useMemo(() => {
+    const byName = new Map<string, Stop>();
+    for (const s of pickableStops(stops)) if (feedOfId(s.id) === "mvk" && !byName.has(s.name)) byName.set(s.name, s);
+    return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name, "hu"));
+  }, [stops]);
+
   const pos = geo.position;
-  const nearest = useMemo(() => {
-    if (!pos) return null;
-    let best: { i: number; m: number } | null = null;
-    season.stops.forEach((s, i) => {
-      for (const at of [s.outAt, s.backAt]) {
-        if (!at) continue;
-        const m = distanceKm(pos.lat, pos.lon, at.lat, at.lon) * 1000;
-        if (!best || m < best.m) best = { i, m };
-      }
-    });
-    return best as { i: number; m: number } | null;
-  }, [pos, season]);
-  const sel = stop ?? nearest?.i ?? null;
+  const usingGeo = !placeId;
+  const from = placeId ? `stop:${placeId}` : pos ? `${pos.lat.toFixed(4)},${pos.lon.toFixed(4)}` : null;
+  const key = placeId ? `stop:${placeId}` : pos ? `${pos.lat.toFixed(3)},${pos.lon.toFixed(3)}` : null;
+  const res = useAdventPlan(from, key);
+  const plan = res?.plan ?? null;
+  const options = plan?.options ?? [];
+  const openKey = options.some((o) => optionKey(o) === open) ? open : options[0] ? optionKey(options[0]) : null;
   const now = serverNow();
 
-  const passes = (i: number, dir: "out" | "back") => day.etas.filter((e) => e.stop === i && e.dir === dir && e.eta >= now - 60).sort((a, b) => a.eta - b.eta);
+  const useHere = () => {
+    setPlaceId("");
+    if (!pos) geo.start();
+  };
 
   return (
     <div className="space-y-2.5">
-      <div className="flex items-center gap-2">
-        <label className="sr-only" htmlFor="advent-stop">
-          Megálló
-        </label>
-        <select
-          id="advent-stop"
-          value={sel ?? ""}
-          onChange={(e) => onStop(Number(e.target.value))}
-          className="h-10 min-w-0 flex-1 rounded-lg border border-input bg-background px-2.5 text-[14px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <option value="" disabled>
-            Válassz megállót
-          </option>
-          {season.stops.map((s, i) => (
-            <option key={s.out} value={i}>
-              {s.name}
-            </option>
-          ))}
-        </select>
+      <div className="flex items-end gap-2">
+        <div className="min-w-0 flex-1">
+          <PlaceSelect label="Honnan indulsz?" places={places} value={placeId} onChange={setPlaceId} />
+        </div>
         <button
           type="button"
-          onClick={() => (nearest ? onStop(nearest.i) : geo.start())}
+          onClick={useHere}
+          aria-pressed={usingGeo && pos != null}
           className={cn(
             "flex h-10 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-[13px] font-semibold transition-colors duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            nearest && sel === nearest.i ? "border-advent-gold/60 text-advent-gold" : "border-border hover:bg-accent",
+            usingGeo && pos ? "border-advent-gold/60 text-advent-gold" : "border-border hover:bg-accent",
           )}
         >
           <LocateFixed className={cn("h-4 w-4", geo.status === "requesting" && "animate-pulse")} aria-hidden />
-          Legközelebbi
+          Itt vagyok
         </button>
       </div>
 
-      {sel == null ? (
-        <p className="text-[13px] text-muted-foreground">Válaszd ki, hol néznéd meg vagy hol szállnál fel.</p>
+      {!from ? (
+        <p className="text-[13px] text-muted-foreground">
+          {geo.status === "denied" || geo.status === "unavailable" || geo.status === "error"
+            ? "A helyzeted nem érhető el: írd be, melyik megálló felől jössz."
+            : "Írd be, honnan indulsz, vagy add meg a helyzeted."}
+        </p>
+      ) : !res ? (
+        <div className="space-y-1.5" aria-busy="true" aria-label="Tervezés">
+          <div className="h-[68px] animate-pulse rounded-xl bg-muted/40" />
+          <div className="h-[52px] animate-pulse rounded-xl bg-muted/30" />
+        </div>
+      ) : res.error ? (
+        <p className="text-[13px] text-muted-foreground">{res.error}</p>
+      ) : !options.length ? (
+        <p className="text-[13px] text-muted-foreground">{plan?.runsLeft ? "Innen ma már nem éred el időben." : "Ma már nem indul több menet."}</p>
       ) : (
-        <>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {(["out", "back"] as const).map((dir) => (
-              <PassCard
-                key={dir}
-                title={dir === "out" ? "Felső-Majláth felé" : "Tiszai pu. felé"}
-                list={passes(sel, dir)}
-                walkS={pos ? walkTo(pos, dir === "out" ? season.stops[sel].outAt : season.stops[sel].backAt) : null}
+        <ol className="space-y-1.5">
+          {options.map((o) => {
+            const k = optionKey(o);
+            const calm = o.chase ? options.find((x) => x.run === o.run && !x.chase) : null;
+            return (
+              <OptionRow
+                key={k}
+                option={o}
+                earlierBy={calm ? calm.at - o.at : null}
+                live={plan?.live ?? false}
+                open={k === openKey}
                 now={now}
+                onOpen={() => {
+                  setOpen(k);
+                  onStop(o.stop);
+                }}
               />
-            ))}
-          </div>
-          <RideAlong day={day} season={season} from={sel} ride={ride} onRide={setRide} now={now} />
-          {!season.facts.lowFloor ? <p className="text-[11.5px] text-muted-foreground">Lépcsős, nem alacsony padlós kocsi · {season.facts.fare}</p> : null}
-        </>
+            );
+          })}
+        </ol>
       )}
+
+      {!season.facts.lowFloor ? <p className="text-[11.5px] text-muted-foreground">Lépcsős, nem alacsony padlós kocsi · {season.facts.fare}</p> : null}
     </div>
   );
 }
 
-function walkTo(pos: { lat: number; lon: number }, at: { lat: number; lon: number } | null): number | null {
-  if (!at) return null;
-  return walkSecondsFor(distanceKm(pos.lat, pos.lon, at.lat, at.lon) * 1000);
-}
-
-function PassCard({ title, list, walkS, now }: { title: string; list: StopEta[]; walkS: number | null; now: number }) {
-  const first = list[0];
-  const leave = first && walkS != null ? first.eta - walkS - MARGIN_S : null;
-  const late = leave != null && leave < now;
+function OptionRow({ option: o, earlierBy, live, open, now, onOpen }: { option: CatchOption; earlierBy: number | null; live: boolean; open: boolean; now: number; onOpen: () => void }) {
+  const leaveNow = o.leave - now < 90;
   return (
-    <div className="rounded-xl border border-border bg-card px-3 py-2.5">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>
-      {first ? (
-        <>
-          <p className="mt-0.5 flex items-baseline gap-2">
-            <span className="font-mono text-[22px] font-bold tabular-nums text-advent-gold">{hm(first.eta)}</span>
-            {first.eta - first.sched >= 120 ? <span className="text-[12px] font-semibold text-nosignal">{hm(first.sched)} helyett</span> : null}
-            <span className="ml-auto text-[12px] text-muted-foreground">{Math.max(0, Math.round((first.eta - now) / 60))} perc múlva</span>
-          </p>
-          {first.uncertain ? (
-            <p className="mt-1 flex items-center gap-1 text-[11.5px] text-nosignal">
-              <TriangleAlert className="h-3.5 w-3.5" aria-hidden /> Bizonytalan: lehet, hogy nem jön
-            </p>
-          ) : null}
-          {walkS != null ? (
-            <p className={cn("mt-1 flex items-center gap-1 text-[12px]", late ? "text-late" : "text-foreground")}>
-              <Footprints className="h-3.5 w-3.5" aria-hidden />
-              {Math.max(1, Math.round(walkS / 60))} perc séta · {late ? "ezt már nem éred el gyalog" : leave! - now < 120 ? "indulj most" : `indulj ${hm(leave)}-kor`}
-            </p>
-          ) : null}
-          {list.length > 1 ? (
-            <p className="mt-1 text-[11.5px] text-muted-foreground">
-              Utána:{" "}
-              {list
-                .slice(1, 4)
-                .map((e) => hm(e.eta))
-                .join(", ")}
-            </p>
-          ) : null}
-        </>
-      ) : (
-        <p className="mt-1 text-[13px] text-muted-foreground">Ma erre már nem jön.</p>
-      )}
-    </div>
+    <li className={cn("rounded-xl border bg-card transition-colors duration-fast", open ? "border-advent-gold/45" : "border-border")}>
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-expanded={open}
+        className="grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 rounded-xl px-3 py-2 text-left hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <span className="flex flex-col items-start leading-none">
+          <span className="font-mono text-[22px] font-bold tabular-nums text-advent-gold">{hm(o.at)}</span>
+          {o.at - o.sched >= 120 ? <span className="mt-1 text-[11px] font-semibold text-nosignal">{hm(o.sched)} helyett</span> : null}
+        </span>
+        <span className="min-w-0">
+          <span className="block truncate text-[14px] font-semibold">{o.name}</span>
+          <span className="flex flex-wrap items-center gap-x-1.5 text-[12px] text-muted-foreground">
+            {o.dir === "out" ? "Felső-Majláth felé" : "Tiszai pu. felé"}
+            {earlierBy != null ? <span className="font-semibold text-advent-gold">· elébe mész, {minutes(earlierBy)} perccel hamarabb</span> : null}
+            {!live ? <span>· menetrend szerint</span> : null}
+          </span>
+        </span>
+        <span className="flex flex-col items-end text-right leading-tight">
+          <span className={cn("text-[13px] font-bold tabular-nums", leaveNow ? "text-advent-gold" : "text-foreground")}>{leaveNow ? "Indulj most" : `Indulj ${hm(o.leave)}`}</span>
+          <span className="text-[11.5px] tabular-nums text-muted-foreground">{minutes(o.slackS)} perc tartalék</span>
+        </span>
+      </button>
+
+      <div className="flex flex-wrap items-center gap-x-1 gap-y-1 px-3 pb-2 text-[12px]">
+        {o.legs.map((l, i) => (
+          <span key={i} className="flex items-center gap-1">
+            {i > 0 ? <ChevronRight className="h-3 w-3 text-muted-foreground" aria-hidden /> : null}
+            <LegChip leg={l} />
+          </span>
+        ))}
+      </div>
+      {o.uncertain ? (
+        <p className="flex items-center gap-1 px-3 pb-2 text-[11.5px] text-nosignal">
+          <TriangleAlert className="h-3.5 w-3.5" aria-hidden /> Bizonytalan: lehet, hogy nem jön
+        </p>
+      ) : null}
+      {open && o.rides.length ? <RideAlong option={o} /> : null}
+    </li>
   );
 }
 
-/** felszállsz és pár megállót utazol: hol szállj le, és mikor jön vissza oda */
-function RideAlong({ day, season, from, ride, onRide, now }: { day: PublicDay; season: SeasonMeta; from: number; ride: number; onRide: (n: number) => void; now: number }) {
-  const n = season.stops.length;
-  // a következő elérhető menet ebből a megállóból (bármelyik irányba)
-  const board = day.etas.filter((e) => e.stop === from && e.eta >= now).sort((a, b) => a.eta - b.eta)[0];
-  if (!board) return null;
-  const step = board.dir === "out" ? 1 : -1;
-  const to = Math.min(n - 1, Math.max(0, from + step * ride));
-  if (to === from) return null;
-  const arrive = day.etas.find((e) => e.trip === board.trip && e.stop === to);
-  const back = arrive ? day.etas.filter((e) => e.stop === to && e.dir !== board.dir && e.eta > arrive.eta).sort((a, b) => a.eta - b.eta)[0] : null;
+function LegChip({ leg }: { leg: CatchLeg }) {
+  if (leg.kind === "walk")
+    return (
+      <span className="inline-flex items-center gap-1 text-muted-foreground">
+        <Footprints className="h-3.5 w-3.5" aria-hidden />
+        <span className="tabular-nums">{minutes(leg.arr - leg.dep)} perc</span>
+        <span className="sr-only">gyalog: {leg.to}</span>
+      </span>
+    );
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-advent-gold/30 bg-advent-navy/60 px-3 py-2.5">
+    <span className="inline-flex items-center gap-1">
+      <RouteTile short={leg.route} color={leg.color} text={leg.text} size="sm" />
+      <span className="font-semibold tabular-nums">{hm(leg.dep)}</span>
+      {leg.delayS != null && leg.delayS >= 120 ? <span className="font-semibold tabular-nums text-nosignal">+{minutes(leg.delayS)}</span> : null}
+      <span className="max-w-[9rem] truncate text-muted-foreground">{leg.to}</span>
+    </span>
+  );
+}
+
+/** felszállsz és pár megállót utazol: hol szállsz le, és mivel érsz vissza a felszállás helyére */
+function RideAlong({ option: o }: { option: CatchOption }) {
+  const [want, setWant] = useState(4);
+  const n = Math.min(want, o.rides.length);
+  const r = o.rides[n - 1];
+  return (
+    <div className="mx-2 mb-2 flex items-center gap-3 rounded-lg border border-advent-gold/30 bg-advent-navy/60 px-2.5 py-2">
       <div className="flex shrink-0 items-center rounded-lg border border-border bg-background">
         <button
           type="button"
           aria-label="Kevesebb megálló"
-          onClick={() => onRide(Math.max(1, ride - 1))}
-          className="flex h-9 w-8 items-center justify-center hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          disabled={n <= 1}
+          onClick={() => setWant(Math.max(1, n - 1))}
+          className="flex h-9 w-8 items-center justify-center hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40"
         >
           <Minus className="h-3.5 w-3.5" aria-hidden />
         </button>
-        <span className="w-6 text-center font-mono text-[14px] font-bold tabular-nums">{Math.abs(to - from)}</span>
+        <span className="w-6 text-center font-mono text-[14px] font-bold tabular-nums" aria-live="polite" aria-label={`${n} megálló`}>
+          {n}
+        </span>
         <button
           type="button"
           aria-label="Több megálló"
-          onClick={() => onRide(Math.min(n - 1, ride + 1))}
-          className="flex h-9 w-8 items-center justify-center hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          disabled={n >= o.rides.length}
+          onClick={() => setWant(Math.min(o.rides.length, n + 1))}
+          className="flex h-9 w-8 items-center justify-center hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40"
         >
           <Plus className="h-3.5 w-3.5" aria-hidden />
         </button>
       </div>
       <p className="min-w-0 text-[12.5px] leading-snug text-advent-ink">
-        Felszállsz <span className="font-mono font-bold">{hm(board.eta)}</span>, leszállsz: <span className="font-semibold">{season.stops[to].name}</span>
-        {arrive ? (
+        Leszállsz: <span className="font-semibold">{r.name}</span> <span className="font-mono font-bold">{hm(r.at)}</span>.{" "}
+        {r.back ? (
           <>
-            {" "}
-            <span className="font-mono font-bold">{hm(arrive.eta)}</span>
+            Vissza <RouteTile short={r.back.route} color={r.back.color} text={r.back.text} size="sm" className="align-[-0.3em]" /> <span className="font-mono font-bold">{hm(r.back.dep)}</span>, {o.name}{" "}
+            <span className="font-mono font-bold">{hm(r.back.arr)}</span>
           </>
-        ) : null}
-        .{back ? ` Visszafelé ${hm(back.eta)}-kor jön újra arra.` : " Vissza bármelyik 1-es villamossal."}
+        ) : (
+          "Vissza ma már nincs közvetlen járat."
+        )}
       </p>
     </div>
   );

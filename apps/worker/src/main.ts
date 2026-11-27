@@ -106,7 +106,7 @@ async function main() {
   registerV3(router, ctx);
   registerTransit(router, ctx);
   registerRideLog(router, ctx);
-  registerAdvent(router, advent);
+  registerAdvent(router, advent, engine);
   registerAdmin(router, { ...ctx, liveBreakdown: () => hub.liveBreakdown() });
 
   server.on("request", async (raw, res) => {

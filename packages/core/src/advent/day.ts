@@ -707,7 +707,8 @@ function etasOf(trips: AdventTrip[], now: AdventNow, nowTs: number): StopEta[] {
   const uncertain = ["stalled", "breakdown", "no_signal", "not_departed", "not_seen", "no_data", "line_down", "depot"].includes(now.code);
   let arrAt: Partial<Record<AdventEnd, number>> = {};
   for (const t of trips) {
-    if (t.verdict === "done" || t.verdict === "missed" || t.verdict === "turned" || t.verdict === "lost") continue;
+    // a törölt menet nem jön; a jel nélküli már fél órája elindult volna, a mostra tolt ideje kitalált lenne
+    if (t.verdict === "done" || t.verdict === "missed" || t.verdict === "turned" || t.verdict === "lost" || t.verdict === "cancelled" || t.verdict === "no_data") continue;
     const dir = dirOf(t.from);
     if (t.verdict === "running") {
       const delay = Math.max(0, now.delayS ?? 0);
