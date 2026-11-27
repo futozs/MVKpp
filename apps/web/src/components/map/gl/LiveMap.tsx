@@ -62,6 +62,8 @@ export interface LiveMapHandle {
   zoomBy(delta: number): void;
   view(): MapView | null;
   resumeFollow(): void;
+  /** a követés megáll (mint elhúzáskor): a kamera szabad, a jármű tovább látszik */
+  pauseFollow(): void;
   map(): MLMap | null;
   atlas(): BadgeAtlas | null;
   /**
@@ -214,6 +216,9 @@ export const LiveMap = forwardRef<LiveMapHandle, LiveMapProps>(function LiveMap(
     },
     resumeFollow() {
       engineRef.current?.follower.resume(performance.now());
+    },
+    pauseFollow() {
+      engineRef.current?.follower.pauseByUser();
     },
     map: () => engineRef.current?.map ?? null,
     atlas: () => engineRef.current?.atlas ?? null,
@@ -720,7 +725,7 @@ function runLoop(eng: Engine, propsRef: React.RefObject<LiveMapProps>): () => vo
     const dt = lastFrame ? Math.min(0.1, (t - lastFrame) / 1000) : 0;
     lastFrame = t;
     const interacting = pointers.size > 0 || t - lastWheel < WHEEL_QUIET_MS || map.isMoving();
-    follower.frame(t, dt, interacting);
+    follower.frame(t, dt, interacting, elevationFn(eng));
 
     // a nyitott buborék a járművel megy
     const pop = eng.popup;

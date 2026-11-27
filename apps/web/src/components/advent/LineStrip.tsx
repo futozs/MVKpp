@@ -30,18 +30,31 @@ function chainage(line: [number, number][]) {
  * kelet jobbra: Tiszai). A villamos a nyomvonal szerinti helyén; a menet közben
  * megtett megállók aranyak. A jelölő egy menetben sosem lép vissza.
  */
+/** visszajátszáskor a villamos a kurzornál (a térképpel egy ütemben) */
+export type StripReplay = {
+  lat: number;
+  lon: number;
+  dir: "out" | "back";
+  /** menet közben (különben a végállomáson vagy egy menet végén áll) */
+  inLeg: boolean;
+  passed: Set<number>;
+  nextStop: number | null;
+};
+
 export function LineStrip({
   meta,
   season,
   day,
   selected,
   onSelect,
+  replay,
 }: {
   meta: AdventMeta;
   season: SeasonMeta;
   day: PublicDay | null;
   selected: number | null;
   onSelect: (i: number) => void;
+  replay: StripReplay | null;
 }) {
   const geo = useMemo(() => {
     if (!meta.line) return null;
@@ -50,19 +63,23 @@ export function LineStrip({
       const a = s.outAt;
       return a ? c.at(a.lat, a.lon) / c.length : 0;
     });
-    return { length: c.length, x };
+    return { length: c.length, x, at: c.at };
   }, [meta.line, season]);
 
   const now: AdventNow | null = day?.now ?? null;
   const pos = now?.position ?? null;
   const running = day?.trips.find((t) => t.verdict === "running") ?? null;
-  const passed = new Set((running?.stops ?? []).filter((s) => s.arr != null || s.dep != null).map((s) => s.stop));
-  const nextStop = pos?.nextStop ?? null;
+  const passed = replay ? replay.passed : new Set((running?.stops ?? []).filter((s) => s.arr != null || s.dep != null).map((s) => s.stop));
+  const nextStop = replay ? replay.nextStop : (pos?.nextStop ?? null);
+  const dir = replay ? replay.dir : (pos?.dir ?? null);
+  /** a megtett rész iránya: Tiszairól indulva jobbról balra telik */
+  const progressFrom = replay ? (replay.inLeg ? (replay.dir === "out" ? "tiszai" : "majlath") : null) : (running?.from ?? null);
 
-  // a menet legjobb helye: a visszaugró jel nem viszi hátrébb a jelölőt
+  // a menet legjobb helye: a visszaugró jel nem viszi hátrébb a jelölőt (a visszajátszás eleve sosem lép vissza)
   const best = useRef<{ key: string; f: number } | null>(null);
   let frac: number | null = null;
-  if (pos && geo && pos.ageS < 15 * 60) {
+  if (replay && geo) frac = Math.min(1, Math.max(0, geo.at(replay.lat, replay.lon) / geo.length));
+  else if (pos && geo && pos.ageS < 15 * 60) {
     const f = Math.min(1, Math.max(0, pos.m / geo.length));
     const key = running?.key ?? `idle:${pos.place}`;
     const sign = pos.dir === "back" ? -1 : 1;
@@ -74,17 +91,17 @@ export function LineStrip({
   if (!geo) return null;
   // nyugat balra: a Tiszai (a vonal eleje) a jobb szélen
   const left = (f: number) => `${(1 - f) * 100}%`;
-  const towardWest = pos?.dir === "out";
+  const towardWest = dir === "out";
 
   return (
     <div className="relative select-none px-4 pb-2 pt-3">
       <div className="relative h-10">
         <div className="absolute inset-x-0 top-[13px] h-[3px] rounded-full bg-border" aria-hidden />
-        {running && frac != null ? (
+        {progressFrom && frac != null ? (
           <div
             aria-hidden
             className="absolute top-[13px] h-[3px] rounded-full bg-advent-gold/70"
-            style={running.from === "tiszai" ? { left: left(frac), right: 0 } : { left: 0, right: `${frac * 100}%` }}
+            style={progressFrom === "tiszai" ? { left: left(frac), right: 0 } : { left: 0, right: `${frac * 100}%` }}
           />
         ) : null}
         {season.stops.map((s, i) => {
@@ -115,13 +132,16 @@ export function LineStrip({
         })}
         {frac != null ? (
           <div
-            className="pointer-events-none absolute top-[2px] -translate-x-1/2 transition-[left] duration-700 ease-out motion-reduce:transition-none"
+            className={cn(
+              "pointer-events-none absolute top-[2px] -translate-x-1/2",
+              !replay && "transition-[left] duration-700 ease-out motion-reduce:transition-none",
+            )}
             style={{ left: left(frac) }}
           >
             <span className="flex h-[25px] items-center gap-0.5 rounded-md bg-advent-gold px-1.5 font-mono text-[10.5px] font-bold text-advent-navy shadow-md">
-              {pos?.dir && towardWest ? <ChevronLeft className="h-3 w-3" strokeWidth={3} aria-hidden /> : null}
+              {dir && towardWest ? <ChevronLeft className="h-3 w-3" strokeWidth={3} aria-hidden /> : null}
               {season.routeShorts[0]}
-              {pos?.dir && !towardWest ? <ChevronRight className="h-3 w-3" strokeWidth={3} aria-hidden /> : null}
+              {dir && !towardWest ? <ChevronRight className="h-3 w-3" strokeWidth={3} aria-hidden /> : null}
             </span>
           </div>
         ) : null}

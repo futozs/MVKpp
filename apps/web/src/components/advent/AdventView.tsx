@@ -1,14 +1,16 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight, CircleAlert, Radio } from "lucide-react";
 import { dayPlan, seasonOf, type AdventSeason } from "@mvk/core/advent/season";
 import { shiftIso } from "@mvk/core/time";
+import type { AdventIncident } from "@mvk/core/advent/day";
 import type { LiveVehicle, Route } from "@/types";
+import { serverNow } from "@/lib/realtime";
 import { cn } from "@/lib/utils";
 import { useAdventDay, useAdventMeta, useAdventSeason, useLineTrams, type SeasonMeta } from "./adventApi";
 import { dowShort, hm, shortDate, VERDICT } from "./adventText";
-import { AdventMap } from "./AdventMap";
+import { AdventMap, type ReplayTarget } from "./AdventMap";
+import type { ReplayRequest } from "./AdventReplay";
 import { CatchPlanner } from "./CatchPlanner";
-import { LineStrip } from "./LineStrip";
 import { SeasonCalendar, SeasonSlots, SeasonStops, SeasonTotals } from "./SeasonParts";
 import { StatusRow } from "./StatusRow";
 import { DayCounters, DeparturePills, IncidentLog, TripList } from "./TodayParts";
@@ -35,6 +37,11 @@ export function AdventView({ routes }: { routes: Route[] }) {
   const [stop, setStop] = useState<number | null>(null);
   const [openTrip, setOpenTrip] = useState<string | null>(null);
   const [story, setStory] = useState<"day" | "season" | null>(null);
+  /** a mai nap visszanézése (múltbeli napon a térkép mindig visszajátszik) */
+  const [todayReplay, setTodayReplay] = useState(false);
+  const [replayReq, setReplayReq] = useState<ReplayRequest | null>(null);
+  const mapRef = useRef<HTMLElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   if (failed) return <Notice>Az adventi villamos adatai most nem érhetők el.</Notice>;
   if (!meta || !season) return <Skeleton />;
@@ -50,15 +57,46 @@ export function AdventView({ routes }: { routes: Route[] }) {
   const totalDays = Math.round((Date.parse(season.end) - Date.parse(season.start)) / 86_400_000) + 1;
   const canPrev = shown > season.start;
   const canNext = shown < today && shown < season.end;
+  const pickDate = (iso: string | null) => {
+    setDate(iso);
+    setOpenTrip(null);
+    setReplayReq(null);
+    setTodayReplay(false);
+  };
   const step = (d: number) => {
     const next = shiftIso(shown, d);
-    setDate(next >= today ? null : next);
-    setOpenTrip(null);
+    pickDate(next >= today ? null : next);
   };
+  const replay: ReplayTarget | null = live ? (todayReplay ? { iso: today, today: true, request: replayReq } : null) : { iso: shown, today: false, request: replayReq };
+  /** a térkép visszajátssza a napot `t`-től (telefonon a térkép a képbe gördül) */
+  const watchFrom = (t: number) => {
+    if (live) setTodayReplay(true);
+    setReplayReq((r) => ({ t, play: true, n: (r?.n ?? 0) + 1 }));
+    showMap();
+  };
+  /** egy oszlopban (telefon) a térkép a ragadós fejléc alá gördül, ha nem látszik egészen */
+  const showMap = () => {
+    const root = rootRef.current;
+    const map = mapRef.current;
+    if (!root || !map || getComputedStyle(root).overflowY !== "auto") return;
+    const head = root.querySelector("header")?.offsetHeight ?? 0;
+    const box = root.getBoundingClientRect();
+    const r = map.getBoundingClientRect();
+    if (r.top >= box.top + head && r.bottom <= box.bottom) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    root.scrollTo({ top: root.scrollTop + r.top - box.top - head - 8, behavior: reduce ? "auto" : "smooth" });
+  };
+  const selectTrip = (key: string | null) => {
+    setOpenTrip(key);
+    const t = key ? day?.trips.find((x) => x.key === key) : null;
+    const at = t ? (t.dep ?? t.sched.dep) : null;
+    if (at != null && at < serverNow()) watchFrom(at - 60);
+  };
+  const selectIncident = (i: AdventIncident) => watchFrom(i.from - 60);
   const dayCards = resp?.cards ?? null;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto xl:overflow-hidden">
+    <div ref={rootRef} className="flex min-h-0 flex-1 flex-col overflow-y-auto xl:overflow-hidden">
       <header className="sticky top-0 z-bar flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-border bg-background/90 px-3 py-2 backdrop-blur-md sm:px-4 xl:static">
         <h2 className="flex items-baseline gap-2">
           <span className="text-[17px] font-extrabold tracking-tight">Adventi villamos</span>
@@ -85,7 +123,7 @@ export function AdventView({ routes }: { routes: Route[] }) {
           {!live ? (
             <button
               type="button"
-              onClick={() => setDate(null)}
+              onClick={() => pickDate(null)}
               className="ml-1 h-8 rounded-lg border border-advent-gold/50 px-2.5 text-[12px] font-bold text-advent-gold hover:bg-advent-gold/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               Élő
@@ -115,7 +153,7 @@ export function AdventView({ routes }: { routes: Route[] }) {
 
           {day && day.trips.length ? (
             <section className="order-3 space-y-2 xl:order-none" aria-label="Indulások">
-              <DeparturePills day={day} selected={openTrip} onSelect={setOpenTrip} />
+              <DeparturePills day={day} selected={openTrip} onSelect={selectTrip} />
               {day.trips.some((t) => t.leg != null) ? <DayCounters day={day} season={season} /> : null}
             </section>
           ) : null}
@@ -134,14 +172,14 @@ export function AdventView({ routes }: { routes: Route[] }) {
 
           {day && day.verdict !== "future" && day.verdict !== "none" ? (
             <Section title="Zavarok" className="order-7 xl:order-none">
-              <IncidentLog incidents={day.incidents} />
+              <IncidentLog incidents={day.incidents} onSelect={selectIncident} />
             </Section>
           ) : null}
         </div>
 
         {/* Térkép és az Elkapó */}
         <div className="contents xl:flex xl:min-h-0 xl:flex-col xl:gap-3 xl:overflow-y-auto xl:overscroll-contain xl:py-3">
-          <section className="order-2 overflow-hidden rounded-2xl border border-border bg-card xl:order-none" aria-label="Térkép">
+          <section ref={mapRef} className="order-2 overflow-hidden rounded-2xl border border-border bg-card xl:order-none" aria-label="Térkép">
             <AdventMap
               meta={meta}
               season={season}
@@ -151,9 +189,11 @@ export function AdventView({ routes }: { routes: Route[] }) {
               routes={routes}
               selectedStop={stop}
               onSelectStop={setStop}
+              replay={replay}
+              onReplay={live && !todayReplay && day?.legs.length ? () => setTodayReplay(true) : null}
+              onLive={live && todayReplay ? () => pickDate(null) : null}
               className="h-[46svh] min-h-[300px] rounded-none border-0 xl:h-[62vh]"
             />
-            <LineStrip meta={meta} season={season} day={day} selected={stop} onSelect={setStop} />
           </section>
 
           {live && day && !over ? (
@@ -168,11 +208,11 @@ export function AdventView({ routes }: { routes: Route[] }) {
           <Section title={`Az évad · ${dayNo && !before ? `${Math.min(dayNo, totalDays)}. nap a ${totalDays}-ből` : `${totalDays} nap`}`} className="order-8 xl:order-none">
             {seasonResp ? (
               <div className="space-y-3">
-                <SeasonCalendar summary={seasonResp.summary} today={today} selected={date} onSelect={(iso) => setDate(iso)} />
+                <SeasonCalendar summary={seasonResp.summary} today={today} selected={date} onSelect={(iso) => pickDate(iso === today ? null : iso)} />
                 {seasonResp.summary.totals.daysRun ? (
                   <WrappedTeaser cards={seasonResp.cards} title={over ? "Az évad összegzője" : "Az évad eddig"} onOpen={() => setStory("season")} />
                 ) : null}
-                <SeasonTotals summary={seasonResp.summary} season={season} onDay={(iso) => setDate(iso === today ? null : iso)} />
+                <SeasonTotals summary={seasonResp.summary} season={season} onDay={(iso) => pickDate(iso === today ? null : iso)} />
               </div>
             ) : (
               <div className="h-64 animate-pulse rounded-xl bg-muted/40" />

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { windowStartOf, type HistoryWindow } from "./historyData";
+import { windowStartOf } from "./historyData";
 import type { RenderResult } from "./useHistoryMarkers";
 
 /** Egy elakadt (háttérbe tett) lap után se ugorjon nagyot a kurzor. */
@@ -7,8 +7,7 @@ const MAX_FRAME_DT_SEC = 0.25;
 /** A felirat és a csúszka ennyi időnként frissül lejátszás közben. */
 const UI_REFRESH_MS = 100;
 
-export const SPEEDS = [1, 10, 60, 300] as const;
-export type PlaybackSpeed = (typeof SPEEDS)[number];
+export const SPEEDS = [1, 10, 60, 300];
 
 export interface PlaybackBounds {
   start: number;
@@ -21,13 +20,13 @@ export interface Playback {
   playing: boolean;
   /** Lejátszás közben az adatra vár (a következő ablak még töltődik). */
   buffering: boolean;
-  speed: PlaybackSpeed;
+  speed: number;
   stats: RenderResult;
   /** `nextBounds`: napváltáskor az új nap határai, mielőtt a render utolérné. */
   seek: (t: number, nextBounds?: PlaybackBounds) => void;
   step: (deltaSec: number) => void;
   togglePlay: () => void;
-  setSpeed: (speed: PlaybackSpeed) => void;
+  setSpeed: (speed: number) => void;
   scrubStart: () => void;
   scrubEnd: () => void;
   /** Újrarajzolást kér a következő képkockára (pl. új adat vagy szűrő). */
@@ -39,23 +38,25 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v
 /**
  * Lejátszás: a kurzor egy ref-ben él, és requestAnimationFrame lépteti. A
  * React-állapot csak ritkítva követi, így a szülő nem renderel képkockánként.
- * Ha a következő ablak még nincs meg, a kurzor az ablakhatáron megvárja.
+ * Ha a következő (2 órás) ablak még nincs meg (`hasWindow`), a kurzor az
+ * ablakhatáron megvárja.
  */
 export function useTimelinePlayback(
   initial: number,
   bounds: PlaybackBounds,
-  getWindow: (start: number) => HistoryWindow | undefined,
+  hasWindow: (start: number) => boolean,
   render: (t: number) => RenderResult,
+  initialSpeed = 60,
 ): Playback {
   const [cursor, setCursor] = useState(initial);
   const [playing, setPlaying] = useState(false);
   const [buffering, setBuffering] = useState(false);
-  const [speed, setSpeedState] = useState<PlaybackSpeed>(60);
+  const [speed, setSpeedState] = useState(initialSpeed);
   const [stats, setStats] = useState<RenderResult>({ ready: false, visible: 0 });
 
   const cursorRef = useRef(initial);
   const playingRef = useRef(false);
-  const speedRef = useRef<PlaybackSpeed>(60);
+  const speedRef = useRef(initialSpeed);
   const scrubbingRef = useRef(false);
   const boundsRef = useRef(bounds);
   const statsRef = useRef(stats);
@@ -73,13 +74,13 @@ export function useTimelinePlayback(
   const advance = useCallback(
     (t: number, delta: number): number => {
       const here = windowStartOf(t);
-      if (!getWindow(here)) return t;
+      if (!hasWindow(here)) return t;
       let next = Math.min(t + delta, boundsRef.current.limit);
       const there = windowStartOf(next);
-      if (there !== here && !getWindow(there)) next = Math.max(t, there - 0.001);
+      if (there !== here && !hasWindow(there)) next = Math.max(t, there - 0.001);
       return next;
     },
-    [getWindow],
+    [hasWindow],
   );
 
   const tick = useCallback(
@@ -189,7 +190,7 @@ export function useTimelinePlayback(
     invalidate();
   }, [invalidate]);
 
-  const setSpeed = useCallback((value: PlaybackSpeed) => {
+  const setSpeed = useCallback((value: number) => {
     speedRef.current = value;
     setSpeedState(value);
   }, []);

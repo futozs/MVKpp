@@ -22,7 +22,8 @@ import {
 import { adventDay, type AdventDay, type LineTram } from "@mvk/core/advent/day";
 import { buildAdventLine, placeFix, type AdventLine } from "@mvk/core/advent/line";
 import { dayPlan, isAdventVehicle, latestSeason, seasonDays, seasonOf, seasonOn, stopOrder, type AdventSeason } from "@mvk/core/advent/season";
-import type { AdventPing } from "@mvk/core/advent/track";
+import { replayDay, type DayReplay } from "@mvk/core/advent/replay";
+import { trackDay, type AdventPing } from "@mvk/core/advent/track";
 import { sql } from "@mvk/db";
 import type { Engine } from "./engine.ts";
 import type { FeedManager } from "./feeds.ts";
@@ -72,6 +73,7 @@ export class AdventTracker {
   /** az MVK mai törlés-listájából az évad menetei (T1022 / M1105) */
   private cancelledToday = new Set<string>();
   private dayCache = new Map<string, { at: number; day: AdventDay }>();
+  private replayCache = new Map<string, { at: number; pings: number; closed: boolean; replay: DayReplay }>();
   readonly stats = { pings: 0, glitches: 0, errors: 0, lastPingAt: 0 };
 
   constructor(engine: Engine, feeds: FeedManager) {
@@ -350,6 +352,27 @@ export class AdventTracker {
       [season.vehicleIds, from, from + 86400],
     );
     return raw.map((r) => ({ ts: Math.round(r.t), lat: r.lat, lon: r.lon, speed: r.speed }));
+  }
+
+  /**
+   * A nap visszajátszása: menetenként a menet irányának nyomvonalára vetített,
+   * sosem visszalépő helyek (a menetek indexe a day.legs-szel azonos).
+   */
+  async replay(iso: string, now = nowUnix()): Promise<{ replay: DayReplay; closed: boolean } | null> {
+    const lc = this.line();
+    if (!lc) return null;
+    const today = serviceClock(now).iso;
+    // a lezárt nap pontjai már nem változnak; a mai a memóriában gyűlik
+    const closed = iso < today;
+    const hit = this.replayCache.get(iso);
+    if (hit && (closed ? hit.closed : iso === today && hit.pings === this.today.pings.length && now - hit.at < 10)) return hit;
+    const season = seasonOn(iso) ?? this.season(iso);
+    const pings = iso !== today ? await this.pingsOf(iso, season) : iso === this.today.iso ? this.today.pings : [];
+    const replay = replayDay(trackDay(lc.line, pings, now), { out: lc.out.shape, back: lc.back.shape });
+    const entry = { at: now, pings: pings.length, closed, replay };
+    this.replayCache.set(iso, entry);
+    if (this.replayCache.size > 40) this.replayCache.delete(this.replayCache.keys().next().value!);
+    return entry;
   }
 
   /** a nap nyers pontjai (visszanézéshez, exporthoz) */

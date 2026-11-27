@@ -5,6 +5,20 @@ import { hourTicks, type ServiceDayRange } from "./historyTime";
 /** Minden harmadik óra felirata keskeny sávon is kifér. */
 const MAJOR_EVERY = 3;
 
+/** egy jelölt szakasz a sávon (menet, állás, zavar) */
+export interface SliderMark {
+  key: string;
+  from: number;
+  to: number;
+  /** a szakasz színe (Tailwind-osztály) */
+  className: string;
+}
+
+const THUMB = {
+  primary: "bg-primary group-hover:ring-primary/20 group-active:ring-primary/30",
+  gold: "bg-advent-gold group-hover:ring-advent-gold/25 group-active:ring-advent-gold/35",
+} as const;
+
 interface TimelineSliderProps {
   range: ServiceDayRange;
   value: number;
@@ -15,6 +29,12 @@ interface TimelineSliderProps {
   onScrub: (t: number) => void;
   onScrubStart: () => void;
   onScrubEnd: () => void;
+  /** jelölt szakaszok: ha van, a sáv vastagabb, és a megtett rész nem színeződik */
+  marks?: SliderMark[];
+  /** minden hányadik óra felirata (keskeny sávon csak ezeké) */
+  majorEvery?: number;
+  /** a fogantyú színe: az élő adat zöldje, vagy az adventi arany */
+  accent?: keyof typeof THUMB;
 }
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
@@ -28,6 +48,9 @@ export function TimelineSlider({
   onScrub,
   onScrubStart,
   onScrubEnd,
+  marks,
+  majorEvery = MAJOR_EVERY,
+  accent = "primary",
 }: TimelineSliderProps) {
   const trackRef = useRef<HTMLDivElement>(null);
   const rectRef = useRef<DOMRect | null>(null);
@@ -88,11 +111,22 @@ export function TimelineSlider({
         onPointerCancel={endDrag}
         className="group relative h-12 cursor-pointer touch-none select-none focus-visible:outline-none"
       >
-        <div className="absolute inset-x-0 top-[13px] h-1.5 overflow-hidden rounded-full bg-muted">
-          <div
-            className="h-full w-full origin-left bg-primary/75"
-            style={{ transform: `scaleX(${pct})` }}
-          />
+        <div className={cn("absolute inset-x-0 overflow-hidden rounded-full bg-muted", marks ? "top-[11px] h-2.5" : "top-[13px] h-1.5")}>
+          {marks ? (
+            marks.map((m) => (
+              <span
+                key={m.key}
+                aria-hidden
+                className={cn("absolute inset-y-0 min-w-[3px]", m.className)}
+                style={{ left: `${clamp01((m.from - range.start) / span) * 100}%`, width: `${clamp01((m.to - m.from) / span) * 100}%` }}
+              />
+            ))
+          ) : (
+            <div
+              className="h-full w-full origin-left bg-primary/75"
+              style={{ transform: `scaleX(${pct})` }}
+            />
+          )}
           {availablePct < 1 ? (
             <div
               className="absolute inset-y-0 right-0 bg-background/70"
@@ -103,7 +137,7 @@ export function TimelineSlider({
 
         {ticks.map((tick, i) => {
           const left = `${((tick.t - range.start) / span) * 100}%`;
-          const major = i % MAJOR_EVERY === 0;
+          const major = i % majorEvery === 0;
           return (
             <span key={tick.t} aria-hidden>
               <span
@@ -136,9 +170,9 @@ export function TimelineSlider({
           <span
             className={cn(
               "absolute left-0 top-4 block h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full",
-              "border-2 border-card bg-primary shadow-md transition-shadow duration-fast",
-              "group-hover:ring-4 group-hover:ring-primary/20 group-focus-visible:ring-4 group-focus-visible:ring-ring/50",
-              "group-active:ring-4 group-active:ring-primary/30",
+              "border-2 border-card shadow-md transition-shadow duration-fast",
+              "group-hover:ring-4 group-focus-visible:ring-4 group-focus-visible:ring-ring/50 group-active:ring-4",
+              THUMB[accent],
             )}
           />
         </div>

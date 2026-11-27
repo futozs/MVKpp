@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowLeft, ArrowRight, ChevronDown, CircleSlash, Info, Wrench } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, ChevronDown, CircleSlash, Info, Play, Wrench } from "lucide-react";
 import type { AdventIncident, AdventTrip } from "@mvk/core/advent/day";
 import { END_LABEL } from "@mvk/core/advent/season";
 import { cn } from "@/lib/utils";
@@ -201,8 +201,8 @@ function StopTable({ trip, season }: { trip: AdventTrip; season: SeasonMeta }) {
 
 const KIND_ICON = { bad: AlertTriangle, warn: Wrench, info: Info } as const;
 
-/** a nap eseményei egy-egy sorban (az elmaradások összevonva) */
-export function IncidentLog({ incidents }: { incidents: AdventIncident[] }) {
+/** a nap eseményei egy-egy sorban (az elmaradások összevonva); koppintásra a térkép visszajátssza */
+export function IncidentLog({ incidents, onSelect }: { incidents: AdventIncident[]; onSelect: (i: AdventIncident) => void }) {
   if (!incidents.length)
     return (
       <p className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2.5 text-[13px] text-muted-foreground">
@@ -214,19 +214,28 @@ export function IncidentLog({ incidents }: { incidents: AdventIncident[] }) {
       {incidents.map((i) => {
         const Icon = KIND_ICON[i.severity];
         return (
-          <li
-            key={`${i.kind}-${i.from}`}
-            className={cn(
-              "flex items-start gap-2.5 rounded-xl border px-3 py-2",
-              i.severity === "bad" ? "border-late/45 bg-late/[0.07]" : i.severity === "warn" ? "border-nosignal/35 bg-nosignal/[0.06]" : "border-border bg-card",
-            )}
-          >
-            <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", i.severity === "bad" ? "text-late" : i.severity === "warn" ? "text-nosignal" : "text-muted-foreground")} aria-hidden />
-            <span className="min-w-0 flex-1 text-[13px] leading-snug">{i.text}</span>
-            <span className="shrink-0 font-mono text-[12px] tabular-nums text-muted-foreground">
-              {hm(i.from)}
-              {i.to ? `–${hm(i.to)}` : ""}
-            </span>
+          <li key={`${i.kind}-${i.from}`}>
+            <button
+              type="button"
+              onClick={() => onSelect(i)}
+              title="Visszajátszás innen"
+              className={cn(
+                "flex w-full items-start gap-2.5 rounded-xl border px-3 py-2 text-left transition-colors duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                i.severity === "bad"
+                  ? "border-late/45 bg-late/[0.07] hover:bg-late/[0.12]"
+                  : i.severity === "warn"
+                    ? "border-nosignal/35 bg-nosignal/[0.06] hover:bg-nosignal/[0.11]"
+                    : "border-border bg-card hover:bg-accent/60",
+              )}
+            >
+              <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", i.severity === "bad" ? "text-late" : i.severity === "warn" ? "text-nosignal" : "text-muted-foreground")} aria-hidden />
+              <span className="min-w-0 flex-1 text-[13px] leading-snug">{i.text}</span>
+              <span className="flex shrink-0 items-center gap-1 font-mono text-[12px] tabular-nums text-muted-foreground">
+                {hm(i.from)}
+                {i.to ? `–${hm(i.to)}` : ""}
+                <Play className="h-3 w-3 fill-current opacity-60" aria-hidden />
+              </span>
+            </button>
           </li>
         );
       })}

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { AdventDay } from "@mvk/core/advent/day";
+import type { DayReplay, ReplayDir } from "@mvk/core/advent/replay";
 import type { AdventSeason, AdventStop } from "@mvk/core/advent/season";
 import type { SeasonSummary } from "@mvk/core/advent/seasonStats";
 import type { Leg } from "@mvk/core/advent/track";
@@ -36,6 +37,14 @@ export type TrackResp = {
   date: string;
   vehicles: string[];
   points: [number, number, number, number | null][];
+};
+
+/** a nap visszajátszása: a két irány nyomvonala és menetenként a sosem visszalépő helyek */
+export type ReplayResp = DayReplay & {
+  date: string;
+  at: number;
+  closed: boolean;
+  shapes: Record<ReplayDir, [number, number][]>;
 };
 
 /** az élő nap ennyi időnként frissül (ms): a szerver 5 mp-re kerekít */
@@ -135,6 +144,29 @@ export function useAdventTrack(date: string, live: boolean) {
     [date],
   );
   return track?.date === date ? track : null;
+}
+
+/** a nap visszajátszása (`date` null: nem kell): a mai 20 mp-enként bővül, a lezárt a gyorsítótárból jön */
+export function useAdventReplay(date: string | null, today: boolean) {
+  const [resp, setResp] = useState<ReplayResp | null>(null);
+  const [failed, setFailed] = useState(false);
+  const want = useRef(date);
+  want.current = date;
+  useVisiblePoll(
+    () => {
+      if (date == null) return;
+      fetchCached<ReplayResp>(`/engine/advent/replay?date=${date}`, today ? 15 : 3600)
+        .then((r) => {
+          if (r.date !== want.current) return;
+          setResp(r);
+          setFailed(false);
+        })
+        .catch(() => want.current === date && setFailed(true));
+    },
+    today ? TRACK_MS : 24 * 3600_000,
+    [date, today],
+  );
+  return { replay: resp?.date === date ? resp : null, failed: failed && date != null };
 }
 
 /**

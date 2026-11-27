@@ -22,6 +22,9 @@ function dayNo(iso: string): number | null {
   return s ? Math.round((Date.parse(iso) - Date.parse(s.start)) / 86_400_000) + 1 : null;
 }
 
+/** a nyomvonal pontjai 6 tizedesre (~0,1 m) */
+const roundLine = (pts: [number, number][]) => pts.map(([la, lo]) => [Math.round(la * 1e6) / 1e6, Math.round(lo * 1e6) / 1e6]);
+
 function dateParam(raw: string | null, today: string): string {
   const iso = (raw ?? "").trim() || today;
   if (!isPlausibleIso(iso, today, 3 * 366)) throw new HttpError(400, "érvénytelen dátum");
@@ -38,7 +41,7 @@ export function registerAdvent(r: Router, advent: AdventTracker) {
       current: advent.season(today).year,
       inSeason: seasonOn(today) != null,
       seasons: SEASONS.map((s) => ({ ...s, stops: s.stops.map((st, i) => ({ ...st, outAt: lc?.line.platforms[i]?.out ?? null, backAt: lc?.line.platforms[i]?.back ?? null })) })),
-      line: lc ? { out: lc.out.shape.points.map(([la, lo]) => [Math.round(la * 1e6) / 1e6, Math.round(lo * 1e6) / 1e6]), lengthM: Math.round(lc.out.shape.lengthM) } : null,
+      line: lc ? { out: roundLine(lc.out.shape.points), lengthM: Math.round(lc.out.shape.lengthM) } : null,
     }));
     sendJson(req, res, 200, body, { "cache-control": "public, max-age=300" });
   });
@@ -69,6 +72,22 @@ export function registerAdvent(r: Router, advent: AdventTracker) {
     const rows = await advent.track(iso);
     const points = rows.filter((p) => !p.glitch).map((p) => [Math.round(p.t), p.lat, p.lon, p.speed == null ? null : Math.round(p.speed * 10) / 10]);
     sendJson(req, res, 200, { date: iso, vehicles: [...new Set(rows.map((p) => p.v))], points }, { "cache-control": iso < today ? "public, max-age=600" : "public, max-age=10" });
+  });
+
+  /**
+   * a nap visszajátszása a térképre: a két irány nyomvonala, és menetenként (a /day
+   * legs sorrendjében) [ts, m a menet nyomvonalán] pontok, sosem csökkenő m-mel;
+   * plusz a folyamatos jel szakaszai
+   */
+  r.get("/engine/advent/replay", async (req, res) => {
+    const now = nowUnix();
+    const today = serviceClock(now).iso;
+    const iso = dateParam(req.query.get("date"), today);
+    const lc = advent.line();
+    const got = lc ? await advent.replay(iso, now) : null;
+    if (!lc || !got) throw new HttpError(503, "a vonal még nem töltődött be");
+    const body = { date: iso, at: now, closed: got.closed, shapes: { out: roundLine(lc.out.shape.points), back: roundLine(lc.back.shape.points) }, ...got.replay };
+    sendJson(req, res, 200, body, { "cache-control": got.closed ? "public, max-age=600" : "public, max-age=10" });
   });
 
   /** az évad: naptár, összesen, rekordok, megállók, indulások, Wrapped-lapok */

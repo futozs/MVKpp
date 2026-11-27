@@ -25,7 +25,15 @@ export type FocusSpec = {
   badge: BadgeSpec;
   label: string | null;
   vehicle: MotionSubject | null;
+  /**
+   * visszajátszás: a jármű helye képkockánként kívülről (nem a becslésből); null: nincs
+   * adat, ott marad, ahol látszik
+   */
+  pose?: () => FocusPose | null;
 };
+
+/** a jármű helye és haladási iránya (fok) egy képkockán */
+export type FocusPose = { lat: number; lon: number; heading: number | null };
 
 /** követéskor legalább ekkora nagyítás */
 const FOLLOW_ZOOM_2D = 14.5;
@@ -150,7 +158,7 @@ export class FocusFollower {
       if (!this.track) this.track = newTrack(v, [v.lon, v.lat, elevation(v.lon, v.lat)], t);
       else {
         this.track.v = v;
-        if (!v.motion) {
+        if (!v.motion && !focus.pose) {
           this.track.shown = undefined;
           retarget(this.track, [v.lon, v.lat, elevation(v.lon, v.lat)], t);
         }
@@ -184,7 +192,7 @@ export class FocusFollower {
   tick(nowServer: number, t: number, gps: GeoPosition | null, elevation: (lon: number, lat: number) => number): void {
     const tr = this.track;
     if (!tr) return;
-    retarget(tr, estimateTarget(tr, nowServer, false, gps, elevation), t);
+    if (!this.spec?.pose) retarget(tr, estimateTarget(tr, nowServer, false, gps, elevation), t);
     if (t - this.progressAt >= PROGRESS_MS) {
       this.progressAt = t;
       this.updateProgress(tr.to);
@@ -192,12 +200,18 @@ export class FocusFollower {
   }
 
   /** Képkockánként: a busz helye, és a kamera vele megy (ha épp nem a felhasználó mozgatja). */
-  frame(t: number, dtS: number, interacting: boolean): void {
+  frame(t: number, dtS: number, interacting: boolean, elevation: (lon: number, lat: number) => number): void {
     const tr = this.track;
     if (!tr) return;
+    const pose = this.spec?.pose?.() ?? null;
+    if (pose) {
+      const p: Pos = [pose.lon, pose.lat, elevation(pose.lon, pose.lat)];
+      tr.from = p;
+      tr.to = p;
+    }
     const pos = trackAt(tr, t);
     tr.drawn = pos;
-    const heading = this.three ? this.headingTarget(tr) : null;
+    const heading = this.three ? (pose?.heading ?? this.headingTarget(tr)) : null;
     if (this.paused || interacting) {
       this.last = null;
       return;
