@@ -52,6 +52,7 @@ export const TRIP_LABEL: Record<TripVerdict, string> = {
   not_departed: "nem indult",
   missed: "elmaradt",
   no_data: "nincs adat",
+  cancelled: "törölve",
 };
 
 export const VERDICT: Record<DayVerdict, { label: string; cell: string; dot: string }> = {

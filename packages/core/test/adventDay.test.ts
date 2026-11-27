@@ -100,13 +100,39 @@ describe("adventi villamos: hibák és csend", () => {
     expect(missed[0].text).toContain("7 menet elmaradt");
   });
 
-  it("a végállomáson elhallgat: késik az indulás → nem indult → valószínű hiba", () => {
+  it("a végállomáson elhallgat: késik az indulás → nincs jel, de csendből soha nem piros", () => {
     const t = plan.trips[5];
     const quiet = pings.filter((p) => p.ts < t.dep - 300);
     expect(at(quiet, t.dep + 60).now.code).toBe("terminus");
     expect(at(quiet, t.dep + 5 * 60).now.code).toBe("late_dep");
-    expect(at(quiet, t.dep + 9 * 60).now.code).toBe("not_departed");
-    expect(at(quiet, t.dep + 16 * 60).now.code).toBe("breakdown");
+    for (const m of [9, 16, 40, 90]) {
+      const now = at(quiet, t.dep + m * 60).now;
+      expect(now.code).toBe("no_signal");
+      expect(now.tone).not.toBe("bad");
+    }
+    // csendben nem „elmaradt”, hanem „nincs adat”
+    expect(at(quiet, t.dep + 90 * 60).trips[5].verdict).toBe("no_data");
+  });
+
+  it("látjuk a végállomáson, de nem indul: nem indult → két kimaradt indulás után kiesett", () => {
+    const t = plan.trips[5];
+    const last = pings.filter((p) => p.ts < t.dep - 300).at(-1)!;
+    const standing = [...pings.filter((p) => p.ts < t.dep - 300), ...Array.from({ length: 400 }, (_, i) => ({ ts: t.dep - 300 + i * 20, lat: last.lat, lon: last.lon, speed: 0 }))];
+    expect(at(standing, t.dep + 9 * 60).now.code).toBe("not_departed");
+    expect(at(standing, t.dep + 9 * 60).now.tone).toBe("bad");
+    const later = at(standing, plan.trips[6].dep + 9 * 60);
+    expect(later.trips[5].verdict).toBe("missed");
+    expect(later.now.code).toBe("dropped");
+  });
+
+  it("a beérkezés előtti hosszú csend után a célvégállomáson: beért, nem félbemaradt", () => {
+    const t = plan.trips[3];
+    const silentFrom = t.arr - 8 * 60;
+    const holey = pings.filter((p) => p.ts < silentFrom || p.ts > t.arr + 16 * 60);
+    const d = at(holey, plan.trips[plan.trips.length - 1].arr + 3600);
+    expect(d.trips[3].verdict).toBe("done");
+    expect(d.trips[3].arrDelayS).toBeNull();
+    expect(d.stats.partialTrips).toBe(0);
   });
 
   it("ha később újra jön a jele, a csendes menetek nem elmaradtak, csak jel nélküliek", () => {

@@ -77,7 +77,7 @@ export function AdventMap({
   const focus = useMemo<FocusSpec | null>(() => {
     if (!subject || !follow) return null;
     return {
-      key: `advent|${running?.key ?? "idle"}`,
+      key: `advent|${day?.iso ?? ""}`,
       shape: inService ? shape : null,
       color: GOLD,
       badge: {
@@ -91,7 +91,7 @@ export function AdventMap({
       label: subject.id,
       vehicle: subject,
     };
-  }, [subject, follow, running?.key, inService, shape, season.routeShorts, tram]);
+  }, [subject, follow, day?.iso, inService, shape, season.routeShorts, tram]);
 
   // menet nélkül az egész vonal (egyszer, amikor kész a térkép)
   useEffect(() => {

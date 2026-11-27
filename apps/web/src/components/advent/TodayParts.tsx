@@ -11,7 +11,7 @@ export function DeparturePills({ day, selected, onSelect }: { day: PublicDay; se
   return (
     <ul className="-mx-3 flex gap-1.5 overflow-x-auto px-3 pb-1 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:px-0 [&::-webkit-scrollbar]:hidden" aria-label="A nap indulásai">
       {day.trips.map((t) => {
-        const bad = t.verdict === "missed" || t.verdict === "not_departed";
+        const bad = t.verdict === "missed" || t.verdict === "not_departed" || t.verdict === "cancelled";
         const running = t.verdict === "running";
         const isNext = t === next;
         const done = t.verdict === "done";
@@ -134,8 +134,8 @@ export function TripList({ day, season, open, onOpen }: { day: PublicDay; season
               <span className="block truncate text-[13px] font-semibold">{t.from === "tiszai" ? "Tiszai → Felső-Majláth" : "Felső-Majláth → Tiszai"}</span>
               <span className="block truncate text-[11.5px] text-muted-foreground">{tripLine(t)}</span>
             </span>
-            <span className={cn("font-mono text-[13px] font-bold tabular-nums", t.verdict === "missed" ? "text-late" : delayTone(t.arrDelayS ?? t.depDelayS))}>
-              {t.verdict === "missed" ? "elmaradt" : t.verdict === "running" ? "úton" : signedMin(t.arrDelayS ?? t.depDelayS)}
+            <span className={cn("font-mono text-[13px] font-bold tabular-nums", t.verdict === "missed" || t.verdict === "cancelled" ? "text-late" : delayTone(t.arrDelayS ?? t.depDelayS))}>
+              {t.verdict === "missed" || t.verdict === "cancelled" ? TRIP_LABEL[t.verdict] : t.verdict === "running" ? "úton" : t.verdict === "no_data" ? "–" : signedMin(t.arrDelayS ?? t.depDelayS)}
             </span>
             <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform duration-fast", open === t.key && "rotate-180")} aria-hidden />
           </button>
@@ -147,6 +147,7 @@ export function TripList({ day, season, open, onOpen }: { day: PublicDay; season
 }
 
 function tripLine(t: AdventTrip): string {
+  if (t.verdict === "cancelled") return "az MVK törölte";
   if (t.verdict === "missed" || t.verdict === "not_departed") return `nem indult el ${END_LABEL[t.from]}ról`;
   if (t.verdict === "no_data") return "nem jött jel, valószínűleg jel nélkül járt";
   const parts: string[] = [];

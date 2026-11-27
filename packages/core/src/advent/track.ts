@@ -38,8 +38,8 @@ export type StopPass = {
   arr: number | null;
   /** kilépés a sávból (unix); a cél-végállomásnál null */
   dep: number | null;
-  /** megállt (nem csak áthaladt) */
-  served: boolean;
+  /** megállt (nem csak áthaladt); null: jel nélkül nem tudjuk */
+  served: boolean | null;
   /** a sávban töltött idő (mp) */
   dwellS: number | null;
 };
@@ -101,19 +101,48 @@ export function cleanPings(pings: AdventPing[]): AdventPing[] {
   return out;
 }
 
-/** az idő, amikor a pontsor a `target` helyet átlépte a menet irányában (lineárisan a két pont között) */
-function crossTime(fixes: LineFix[], target: number, sign: 1 | -1, fromIdx = 0): { ts: number; idx: number } | null {
+/** jel nélküli közben feltételezett tempó (m/s) a végállomás elhagyásakor és a beérkezéskor */
+const GAP_SPEED = 6;
+/** ennél hosszabb jelköz közepén a megálló ideje nem becsülhető (mp) */
+const BLIND_S = 180;
+
+type Cross = { ts: number; idx: number; dt: number };
+
+/**
+ * Mikor lépte át a pontsor a `target` helyet a menet irányában. Két közeli pont között
+ * lineárisan; hosszú jelköznél az `anchor` dönt: „late” — a későbbi pontnál már mozgott
+ * (indulás a végállomásról), „early” — a korábbinál még mozgott (beérkezés).
+ */
+function crossTime(fixes: LineFix[], target: number, sign: 1 | -1, fromIdx = 0, anchor: "linear" | "late" | "early" = "linear"): Cross | null {
   for (let i = Math.max(1, fromIdx); i < fixes.length; i++) {
     const a = fixes[i - 1];
     const b = fixes[i];
     const da = (a.m - target) * sign;
     const db = (b.m - target) * sign;
     if (da < 0 && db >= 0) {
-      const f = b.m === a.m ? 1 : (target - a.m) / (b.m - a.m);
-      return { ts: Math.round(a.ts + (b.ts - a.ts) * f), idx: i };
+      const dt = b.ts - a.ts;
+      let ts: number;
+      if (dt > 60 && anchor === "late") ts = Math.max(a.ts, b.ts - Math.abs(b.m - target) / GAP_SPEED);
+      else if (dt > 60 && anchor === "early") ts = Math.min(b.ts, a.ts + Math.abs(target - a.m) / GAP_SPEED);
+      else ts = a.ts + dt * (b.m === a.m ? 1 : (target - a.m) / (b.m - a.m));
+      return { ts: Math.round(ts), idx: i, dt };
     }
   }
   return null;
+}
+
+/** a pontok közti sebesség (m/s) a szomszédaiból: az MVK villamosokra küldött sebessége megbízhatatlan (mozgás közben is 0) */
+function derivedSpeeds(fixes: LineFix[]): void {
+  for (let i = 0; i < fixes.length; i++) {
+    const a = fixes[i - 1];
+    const b = fixes[i + 1];
+    const f = fixes[i];
+    const pa = a && f.ts - a.ts <= 60 ? a : null;
+    const pb = b && b.ts - f.ts <= 60 ? b : null;
+    const x = pa ?? f;
+    const y = pb ?? f;
+    f.speed = y.ts > x.ts ? fastDistM(x.lat, x.lon, y.lat, y.lon) / (y.ts - x.ts) : null;
+  }
 }
 
 function passesOf(line: AdventLine, leg: { dir: "out" | "back"; from: AdventEnd | null; to: AdventEnd | null }, fixes: LineFix[]): StopPass[] {
@@ -129,19 +158,26 @@ function passesOf(line: AdventLine, leg: { dir: "out" | "back"; from: AdventEnd 
     const last = k === n - 1;
     const z = TRACK.stopZoneM;
     if (first && leg.from) {
-      const exit = crossTime(fixes, s + sign * z, sign);
+      const exit = crossTime(fixes, s + sign * z, sign, 0, "late");
       if (!exit) break;
       out.push({ stop, arr: null, dep: exit.ts, served: true, dwellS: null });
       cursor = exit.idx;
       continue;
     }
-    const entry = crossTime(fixes, s - sign * z, sign, cursor);
+    const entry = crossTime(fixes, s - sign * z, sign, cursor, last ? "early" : "linear");
     if (!entry) break;
     if (last && leg.to) {
       out.push({ stop, arr: entry.ts, dep: null, served: true, dwellS: null });
       break;
     }
     const exit = crossTime(fixes, s + sign * z, sign, entry.idx);
+    // hosszú jelköz közepén nem tudjuk, mikor ért oda és megállt-e
+    if (entry.dt > BLIND_S || (exit && exit.dt > BLIND_S)) {
+      out.push({ stop, arr: entry.dt > BLIND_S ? null : entry.ts, dep: exit && exit.dt <= BLIND_S ? exit.ts : null, served: null, dwellS: null });
+      if (!exit) break;
+      cursor = exit.idx;
+      continue;
+    }
     const dwellS = exit ? exit.ts - entry.ts : null;
     // a sávban (vagy közvetlenül előtte–utána) állva látott pont: megállt
     const inZone = fixes.slice(Math.max(0, entry.idx - 1), (exit?.idx ?? fixes.length) + 1).some(
@@ -209,16 +245,15 @@ function finishLeg(line: AdventLine, raw: Omit<Leg, "passes" | "stalls" | "gaps"
   const dep = raw.from && passes[0]?.dep != null ? passes[0].dep : raw.dep;
   const lastPass = passes[passes.length - 1];
   const arr = raw.to && lastPass?.dep === null && lastPass.arr != null ? lastPass.arr : raw.arr;
-  // a GPS-sebesség, ha küld; különben a két jel közti út (10–60 mp-es közökből, a remegés nélkül)
-  let speeds = raw.fixes.map((f) => f.speed).filter((s): s is number => s != null && s > 0);
-  if (!speeds.length)
-    for (let i = 1; i < raw.fixes.length; i++) {
-      const a = raw.fixes[i - 1];
-      const b = raw.fixes[i];
-      const dt = b.ts - a.ts;
-      if (dt >= 10 && dt <= 60) speeds.push(Math.min(25, fastDistM(a.lat, a.lon, b.lat, b.lon) / dt));
-    }
-  speeds = speeds.filter((v) => v < 30);
+  // a két jel közti út (10–60 mp-es közökből): a remegés és az ugrás nélkül
+  const speeds: number[] = [];
+  for (let i = 1; i < raw.fixes.length; i++) {
+    const a = raw.fixes[i - 1];
+    const b = raw.fixes[i];
+    const dt = b.ts - a.ts;
+    if (dt >= 10 && dt <= 60) speeds.push(fastDistM(a.lat, a.lon, b.lat, b.lon) / dt);
+  }
+  const plausible = speeds.filter((v) => v < 25);
   return {
     ...raw,
     dep,
@@ -227,7 +262,7 @@ function finishLeg(line: AdventLine, raw: Omit<Leg, "passes" | "stalls" | "gaps"
     stalls: stallsOf(line, raw.fixes, open),
     gaps: gapsOf(raw.fixes),
     distM: pathM(raw.fixes),
-    maxSpeed: speeds.length ? Math.max(...speeds) : null,
+    maxSpeed: plausible.length ? Math.max(...plausible) : null,
   };
 }
 
@@ -237,6 +272,7 @@ function finishLeg(line: AdventLine, raw: Omit<Leg, "passes" | "stalls" | "gaps"
  */
 export function trackDay(line: AdventLine, pings: AdventPing[], now: number): Track {
   const fixes = cleanPings(pings).map((p) => placeFix(line, p));
+  derivedSpeeds(fixes);
   const legs: Leg[] = [];
   const looseFixes: LineFix[] = [];
   let lastEnd: { end: AdventEnd; fix: LineFix } | null = null;
@@ -253,7 +289,25 @@ export function trackDay(line: AdventLine, pings: AdventPing[], now: number): Tr
 
   for (const f of fixes) {
     const prev: LineFix | undefined = cur?.fixes[cur.fixes.length - 1];
-    if (cur && prev && f.ts - prev.ts > TRACK.lostS) close("lost", null, null);
+    if (cur && prev && f.ts - prev.ts > TRACK.lostS) {
+      // a beérkezés előtt gyakran hosszan hallgat: ha a célvégállomáson bukkan fel, beért (az ideje nem ismert)
+      const dest: AdventEnd | null = cur.dir === "out" ? "majlath" : cur.dir === "back" ? "tiszai" : null;
+      if (dest && f.place === dest && cur.from !== dest) {
+        close("arrived", dest, null);
+        lastEnd = { end: dest, fix: f };
+        continue;
+      }
+      // a csend alatt beért, megfordult, és már a visszaúton jelentkezett
+      const sign = cur.dir === "out" ? 1 : -1;
+      if (dest && f.place === "line" && (f.m - prev.m) * sign < -200) {
+        const back: "out" | "back" = cur.dir === "out" ? "back" : "out";
+        close("arrived", dest, null);
+        cur = { dir: back, from: null, fixes: [f], best: f.m };
+        lastEnd = null;
+        continue;
+      }
+      close("lost", null, null);
+    }
 
     if (f.place === "tiszai" || f.place === "majlath") {
       if (cur) {

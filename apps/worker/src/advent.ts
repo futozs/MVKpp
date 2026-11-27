@@ -69,6 +69,8 @@ export class AdventTracker {
   /** a többi villamos: mióta áll egy helyben, merre megy */
   private trams = new Map<string, { lat: number; lon: number; since: number; ts: number; m: number; dir: "out" | "back" | null }>();
   private liveCache: { key: string; day: AdventDay } | null = null;
+  /** az MVK mai törlés-listájából az évad menetei (T1022 / M1105) */
+  private cancelledToday = new Set<string>();
   private dayCache = new Map<string, { at: number; day: AdventDay }>();
   readonly stats = { pings: 0, glitches: 0, errors: 0, lastPingAt: 0 };
 
@@ -87,7 +89,21 @@ export class AdventTracker {
         if (this.stats.errors < 5) log.warn("advent", "tick hiba", errMsg(e));
       }
     });
+    this.engine.on("cancelled", (ids) => {
+      const keys = cancelledKeys(this.season(), ids);
+      if (keys.size !== this.cancelledToday.size || [...keys].some((k) => !this.cancelledToday.has(k))) this.liveCache = null;
+      this.cancelledToday = keys;
+    });
     setInterval(() => void this.flush(), 5000).unref();
+  }
+
+  /** egy nap hivatalos törlései a tárolt listából */
+  private async cancelledOn(iso: string, season: AdventSeason): Promise<Set<string>> {
+    const rows = await sql<{ trip_id: string }>(`SELECT trip_id FROM cancelled_trip WHERE service_date = $1 AND split_part(trip_id, '_', 2) = ANY($2)`, [
+      iso,
+      [season.shapeIds.out, season.shapeIds.back],
+    ]);
+    return cancelledKeys(season, rows.map((r) => r.trip_id));
   }
 
   /** a mostani vagy a legutóbbi évad (a nézet ezt mutatja alapból) */
@@ -146,7 +162,8 @@ export class AdventTracker {
     let tramCount = 0;
     const lc = this.line();
     for (const v of snap.decoded) {
-      if (!isMvkId(v.id) || v.lat == null || v.lon == null || !v.timestamp) continue;
+      // a MÁV+ menetrendből becsült helye nem GPS: nem tároljuk, nem számolunk vele
+      if (!isMvkId(v.id) || v.lat == null || v.lon == null || !v.timestamp || v.estimated) continue;
       const ts = v.timestamp - offset;
       const advent = isAdventVehicle(season, { id: v.id, routeShort: v.routeShort, rtTripId: v.rtTripId ?? v.tripId });
       if (!advent) {
@@ -226,7 +243,8 @@ export class AdventTracker {
     const minute = Math.floor(now / 60) * 60;
     if (this.presence && this.presence.minute !== minute) this.flushPresence();
     const p = this.presence ?? { minute, serviceDate: iso, ok: 0, fail: 0, seen: 0, trams: 0, fixAgeS: null };
-    const ok = !snap.rtError && snap.decoded.length > 0;
+    // az MVK pozíció-lekérése sikerült-e most (a regionális járművek nem számítanak)
+    const ok = Date.now() - this.engine.positionsAt() < 10_000;
     if (ok) p.ok++;
     else p.fail++;
     if (seen) p.seen++;
@@ -294,7 +312,11 @@ export class AdventTracker {
     const key = `${iso}|${this.today.pings.length}|${Math.floor(now / 5)}`;
     if (this.liveCache?.key === key) return this.liveCache.day;
     const feedOk = Date.now() - this.engine.positionsAt() < 60_000;
-    const day = adventDay(season, dayPlan(season, iso), iso, lc.line, iso === this.today.iso ? this.today.pings : [], now, { feedOk, trams: this.lineTrams(now) });
+    const day = adventDay(season, dayPlan(season, iso), iso, lc.line, iso === this.today.iso ? this.today.pings : [], now, {
+      feedOk,
+      trams: this.lineTrams(now),
+      cancelled: this.cancelledToday,
+    });
     this.liveCache = { key, day };
     return day;
   }
@@ -307,8 +329,8 @@ export class AdventTracker {
     const hit = this.dayCache.get(iso);
     if (hit && (hit.day.closed || now - hit.at < 60)) return hit.day;
     const season = seasonOn(iso) ?? this.season(iso);
-    const pings = await this.pingsOf(iso, season);
-    const day = adventDay(season, dayPlan(season, iso), iso, lc.line, pings, now, { feedOk: null });
+    const [pings, cancelled] = await Promise.all([this.pingsOf(iso, season), this.cancelledOn(iso, season)]);
+    const day = adventDay(season, dayPlan(season, iso), iso, lc.line, pings, now, { feedOk: null, cancelled });
     this.dayCache.set(iso, { at: now, day });
     if (this.dayCache.size > 120) this.dayCache.delete(this.dayCache.keys().next().value!);
     return day;
@@ -387,12 +409,14 @@ export class AdventTracker {
     if (!season.vehicleIds.includes(vehicleId)) return null;
     const day = this.live(now);
     const lc = this.line();
-    if (!day || !lc) return null;
+    const last = this.today.pings[this.today.pings.length - 1];
+    if (!day || !lc || !last || now - last.ts > 120) return null;
+    // csak menet közben: álltában (végállomás, remíz) a valós helye a pontos, a becslés elvinné
     const trip = day.trips.find((t) => t.verdict === "running");
     const leg = trip?.leg != null ? day.legs[trip.leg] : null;
-    const last = this.today.pings[this.today.pings.length - 1];
-    if (!trip || !leg || !last || now - last.ts > 120) return null;
-    const ds = leg.dir === "out" ? lc.out : lc.back;
+    if (!trip || !leg) return null;
+    const dir = leg.dir;
+    const ds = dir === "out" ? lc.out : lc.back;
     const proj = ds.shape.project(last.lat, last.lon);
     if (!proj || proj.distM > 80) return null;
     const order = stopOrder(season, trip.from);
@@ -401,7 +425,7 @@ export class AdventTracker {
     if (k >= order.length || k === 0) return null;
     const a = order[k - 1];
     const b = order[k];
-    const ids = (i: number) => (leg.dir === "out" ? season.stops[i].out : season.stops[i].back);
+    const ids = (i: number) => (dir === "out" ? season.stops[i].out : season.stops[i].back);
     const sched = trip.stops;
     const midnight = serviceClock(trip.sched.dep).midnightUnix;
     const segS = sched[k].sched - sched[k - 1].sched;
@@ -416,7 +440,7 @@ export class AdventTracker {
       toAlongM: Math.round(ds.stopAlong[b]),
       schedSegS: segS > 0 ? segS : null,
       segDepS: sched[k - 1].sched - midnight,
-      stopped: last.speed != null ? last.speed <= 1 : false,
+      stopped: last.speed != null && last.speed <= 1,
     };
   }
 
@@ -432,6 +456,18 @@ export function summaryOf(day: AdventDay) {
     legs: day.legs.map(({ fixes, ...l }) => ({ ...l, fixes: fixes.length })),
     etas: [],
   };
+}
+
+/** az MVK törölt menetei (valós idejű trip_id-k) → az évad menetkulcsai: az ADV-nyomvonalból az irány, az időből a perc */
+function cancelledKeys(season: AdventSeason, ids: Iterable<string>): Set<string> {
+  const out = new Set<string>();
+  for (const id of ids) {
+    const [, shape, hms] = id.split("_");
+    if (!hms || hms.length < 4) continue;
+    if (shape === season.shapeIds.out) out.add(`T${hms.slice(0, 4)}`);
+    else if (shape === season.shapeIds.back) out.add(`M${hms.slice(0, 4)}`);
+  }
+  return out;
 }
 
 /** az irány nyomvonala a feedből: az ADV-menet, ha van, különben az 1-es villamos teljes menete */
