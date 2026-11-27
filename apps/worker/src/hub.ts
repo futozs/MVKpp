@@ -31,6 +31,7 @@ import {
 import { vehicleMode } from "./http/compat.ts";
 import { sql } from "@mvk/db";
 import { sha256Hex } from "@mvk/db/crypto";
+import type { AdventTracker } from "./advent.ts";
 import type { Engine } from "./engine.ts";
 import { journalRecord } from "./http/compat.ts";
 import { errMsg, log } from "./log.ts";
@@ -81,6 +82,8 @@ export class Hub {
   private parking: Parking;
   private forecaster: DelayForecaster;
   private motion: MotionPredictor;
+  /** az adventi villamos követője (a mozgásbecsléshez) */
+  advent: AdventTracker | null = null;
   /** járművenként az utolsó jel helye/ideje és a simított tempó (a régi pályához) */
   private pace = new Map<string, { trip: string; a: number; t: number; pace: number }>();
   private insights: TripInsights;
@@ -205,7 +208,8 @@ export class Hub {
    * A pálya a tanított mozgás-modelltől jön; amíg nincs modell, a régi becslés.
    */
   private motionOf(veh: DecodedVehicle, offset: number) {
-    const m = this.engine.matcher.motion(veh.id);
+    // az adventi villamosnak a saját követője ad helyzetet, amíg az ADV-menete nincs a feedben
+    const m = this.engine.matcher.motion(veh.id) ?? this.advent?.motion(veh.id) ?? null;
     if (!m) return null;
     // Az illesztő régóta nem tudta a jeleit a nyomvonalra tenni (terelés, rossz vetítés):
     // a becslés a következő megállónál tartaná a buszt  inkább a valós helye látszik.

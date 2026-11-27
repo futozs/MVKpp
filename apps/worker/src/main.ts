@@ -21,7 +21,9 @@ import { config } from "./config.ts";
 import { Engine } from "./engine.ts";
 import { FeedManager } from "./feeds.ts";
 import { Hub } from "./hub.ts";
+import { AdventTracker } from "./advent.ts";
 import { registerAdmin } from "./http/admin.ts";
+import { registerAdvent } from "./http/advent.ts";
 import { registerCompat } from "./http/compat.ts";
 import { HttpError, readBody, Router, sendJson, type Req } from "./http/router.ts";
 import { registerRideLog } from "./http/rideLog.ts";
@@ -96,12 +98,15 @@ async function main() {
   const router = new Router();
   const server = createServer();
   const hub = new Hub(server, engine, predictor, parking, forecaster, insights, motion);
+  const advent = new AdventTracker(engine, feeds);
+  hub.advent = advent;
   const news = new NewsSource(feeds);
   const ctx = { engine, feeds, predictor, parking, forecaster, traffic, fleet, insights, motion, news, regionalFeeds, regionalRt, startedAt: Date.now(), hubStats: () => hub.status() };
   registerCompat(router, ctx);
   registerV3(router, ctx);
   registerTransit(router, ctx);
   registerRideLog(router, ctx);
+  registerAdvent(router, advent);
   registerAdmin(router, { ...ctx, liveBreakdown: () => hub.liveBreakdown() });
 
   server.on("request", async (raw, res) => {
@@ -151,6 +156,7 @@ async function main() {
   });
 
   regionalRt.start();
+  await advent.start();
   await engine.start();
   // natív iOS-értesítés és élő tevékenység: egy APNs-kapcsolat mindkettőnek
   const apns = new ApnsClient();
@@ -258,6 +264,7 @@ async function main() {
     }, 8 * 60_000).unref();
   }
   await boss.work("minutely", async () => {
+    await advent.finalize().catch((e) => log.warn("advent", "a napok lezárása sikertelen", errMsg(e)));
     await predictor.recordHorizons();
   });
   await boss.work("gtfs-refresh", async () => {

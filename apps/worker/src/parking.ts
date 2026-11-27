@@ -348,7 +348,8 @@ async function loadFleet(iso: string, isTramRoute: (route: string) => boolean): 
     let streak = 0;
     for (let i = days.length - 1; i >= 0 && active.has(days[i]); i--) streak++;
     const top = (routes.get(r.id) ?? []).sort((a, b) => b.n - a.n).slice(0, 3).map((x) => x.r);
-    const kind: FleetKind = r.kind === "TRAM" || (r.kind !== "BUS" && top.some(isTramRoute)) ? "tram" : "bus";
+    // amit a leggyakrabban jár, az dönt (a v2-import a Tatrákat busznak vette fel); vonal nélkül a tárolt fajta
+    const kind: FleetKind = top.length ? (isTramRoute(top[0]) ? "tram" : "bus") : r.kind === "TRAM" ? "tram" : "bus";
     return {
       id: r.id,
       kind,

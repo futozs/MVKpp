@@ -18,6 +18,7 @@ import {
   type RunOut,
   type StopEventOut,
 } from "@mvk/core";
+import { markAdventVehicles } from "@mvk/core/advent/season";
 import { getPool } from "@mvk/db";
 import { config } from "./config.ts";
 import type { FeedManager } from "./feeds.ts";
@@ -349,6 +350,7 @@ export class Engine extends EventEmitter<EngineEvents> {
       this.pushExtra(regional, now);
       snap.source = fallback ? "otp2" : "mvk";
       snap.regionalAt = this.regional?.at ?? 0;
+      markAdventVehicles(snap.decoded, clock.iso);
       this.snapshot = snap;
       const ok = fallback ? otpMvk.length > 0 : positions != null && errs.length === 0;
       if (!ok) {
@@ -455,6 +457,11 @@ export class Engine extends EventEmitter<EngineEvents> {
     this.otp2Base = c ? { ok: -c.ok, fail: -c.fail } : { ok: 0, fail: 0 };
     this.regional?.rollDay();
     if (next) this.emit("cancelled", next.ids);
+  }
+
+  /** a legutóbbi sikeres pozíció-lekérés ideje (ms) */
+  positionsAt(): number {
+    return this.positionsOkAt;
   }
 
   get today() {

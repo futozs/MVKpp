@@ -10,6 +10,7 @@ import { unzipSync, strFromU8 } from "fflate";
 import { parseCsv } from "./csv.ts";
 import { hmsToSec, isoToYmd, ymdToIso, isoDow, shiftIso, SERVICE_DAY_CUTOFF_SEC } from "../time.ts";
 import { ProjectedShape, type LatLon } from "../geo.ts";
+import { SEASONS } from "../advent/season.ts";
 
 export type Stop = {
   id: string;
@@ -88,6 +89,7 @@ export type FeedValidation = {
 };
 
 const TRAM_TYPES = new Set(["0", "900"]);
+const ADVENT_ROUTES = new Set(SEASONS.flatMap((s) => s.routeShorts));
 
 export class Feed {
   readonly info: FeedInfo;
@@ -140,7 +142,8 @@ export class Feed {
         id: r.route_id,
         short,
         long: r.route_long_name || "",
-        type: r.route_type || "3",
+        // az adventi villamos vonalát (ADV) az MVK buszként (704) adja ki, pedig villamos
+        type: ADVENT_ROUTES.has(short) && !r.route_id.includes(":") ? "900" : r.route_type || "3",
         color: (r.route_color || "888888").toUpperCase(),
         text: (r.route_text_color || "FFFFFF").toUpperCase(),
         key: r.route_id.includes(":") ? r.route_id : short,

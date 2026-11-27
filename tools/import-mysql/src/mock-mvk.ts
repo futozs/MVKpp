@@ -41,6 +41,16 @@ const pings: P[] = (rows as any[]).map((r) => ({
   trip: r.trip_hint ?? "",
 }));
 const cancelled = (cancelledRows as any[]).map((r) => r.trip_id as string);
+// Az adventi villamos próbája: ez a villamos a „202” lesz, ADV-nyomvonalú menetazonosítóval
+// (a feedben nincs ilyen menet, mint élesben, amíg az ADV-menetek hiányoznak a betöltött GTFS-ből).
+const adventAs = process.env.MOCK_ADVENT_AS;
+if (adventAs)
+  for (const p of pings) {
+    if (p.id !== adventAs) continue;
+    p.id = "202";
+    const shape = p.trip.split("_")[1];
+    p.trip = shape === "1954" ? "11073_1880_000000_MOCK" : shape === "1943" ? "11073_1881_000000_MOCK" : "";
+  }
 const shift = startAt
   ? Math.floor(Date.now() / 1000) - (localMidnightUnix(day) + Number(startAt.split(":")[0]) * 3600 + Number(startAt.split(":")[1] ?? 0) * 60)
   : localMidnightUnix(serviceClock().iso) - localMidnightUnix(day);
@@ -62,7 +72,7 @@ function positions(): Uint8Array {
       id: p.id,
       vehicle: {
         trip: { tripId: p.trip },
-        vehicle: { id: p.id, label: p.id },
+        vehicle: { id: p.id, label: p.id === "202" ? "TRAM" : p.id },
         position: { latitude: p.lat, longitude: p.lon, bearing: p.bearing ?? undefined, speed: p.speed ?? undefined },
         // Az MVK helyi időt küld unix-ként  a szimulátor is így tesz.
         timestamp: p.ts + shift + off,
