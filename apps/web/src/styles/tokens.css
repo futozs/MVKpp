@@ -81,6 +81,16 @@
     --nosignal: 38 92% 56%;
 
     /* ------------------------------------------------------------------
+       Adventi villamos (2026: „Advent Expressz”, királykék és arany).
+       Csak az adventi nézet és a szerelvény jelvénye használja: az arany
+       maga a villamos (jelölő, megtett szakasz), a mélykék a saját felülete.
+       ------------------------------------------------------------------ */
+    --adv-gold: 43 74% 64%;
+    --adv-navy: 226 48% 11%;
+    --adv-blue: 224 64% 58%;
+    --adv-ink: 43 70% 90%;
+
+    /* ------------------------------------------------------------------
        Mélység. Valódi, rétegzett árnyékok  a felületek tényleg
        egymás fölött lebegnek, nem hajszálvonalak választják el őket.
        ------------------------------------------------------------------ */

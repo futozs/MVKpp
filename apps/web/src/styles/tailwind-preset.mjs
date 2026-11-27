@@ -66,6 +66,14 @@ export default {
         depot: 'hsl(var(--depot))',
         nosignal: 'hsl(var(--nosignal))',
 
+        /* Az adventi villamos évadszínei (csak az adventi nézet). */
+        advent: {
+          gold: 'hsl(var(--adv-gold))',
+          navy: 'hsl(var(--adv-navy))',
+          blue: 'hsl(var(--adv-blue))',
+          ink: 'hsl(var(--adv-ink))',
+        },
+
         /* Teljes zöld skála árnyalatokhoz. */
         signal: {
           50: 'hsl(var(--sg-50))',

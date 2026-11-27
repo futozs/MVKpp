@@ -16,6 +16,12 @@ export function publicDay(day: AdventDay) {
   return { ...day, legs: day.legs.map(({ fixes, passes, ...l }) => ({ ...l, fixes: fixes.length, passes: passes.length })) };
 }
 
+/** hányadik napja az évadnak (az évadon kívül null) */
+function dayNo(iso: string): number | null {
+  const s = seasonOn(iso);
+  return s ? Math.round((Date.parse(iso) - Date.parse(s.start)) / 86_400_000) + 1 : null;
+}
+
 function dateParam(raw: string | null, today: string): string {
   const iso = (raw ?? "").trim() || today;
   if (!isPlausibleIso(iso, today, 3 * 366)) throw new HttpError(400, "érvénytelen dátum");
@@ -42,7 +48,7 @@ export function registerAdvent(r: Router, advent: AdventTracker) {
     const now = nowUnix();
     const day = advent.live(now);
     if (!day) throw new HttpError(503, "a vonal még nem töltődött be");
-    sendJson(req, res, 200, { at: now, day: publicDay(day) }, { "cache-control": "public, max-age=4" });
+    sendJson(req, res, 200, { at: now, day: publicDay(day), cards: dayCards(advent.season(day.iso), day, dayNo(day.iso)) }, { "cache-control": "public, max-age=4" });
   });
 
   /** egy nap (a mai élőben, a múltbeli a tárolt pontokból) */
@@ -53,7 +59,7 @@ export function registerAdvent(r: Router, advent: AdventTracker) {
     const day = await advent.day(iso, now);
     if (!day) throw new HttpError(503, "a vonal még nem töltődött be");
     const settled = day.closed && iso < today;
-    sendJson(req, res, 200, { at: now, day: publicDay(day), cards: dayCards(advent.season(iso), day, null) }, { "cache-control": settled ? "public, max-age=600" : "public, max-age=10" });
+    sendJson(req, res, 200, { at: now, day: publicDay(day), cards: dayCards(advent.season(iso), day, dayNo(iso)) }, { "cache-control": settled ? "public, max-age=600" : "public, max-age=10" });
   });
 
   /** a nap nyers GPS-pontjai: [ts, lat, lon, sebesség m/s] (visszanézéshez, exporthoz) */

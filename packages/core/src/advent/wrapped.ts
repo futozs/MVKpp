@@ -19,6 +19,18 @@ export type WrappedCard = {
   tone: "gold" | "ok" | "warn" | "bad";
 };
 
+const VERDICT_WORD: Record<AdventDay["verdict"], string> = {
+  perfect: "Hibátlan",
+  ok: "Rendben",
+  late: "Késős",
+  partial: "Félbemaradt",
+  down: "Lerobbant",
+  nodata: "Nincs adat",
+  live: "Ma eddig",
+  future: "Holnap",
+  none: "Nem járt",
+};
+
 const fmt = (n: number, d = 0) => n.toLocaleString("hu-HU", { maximumFractionDigits: d, minimumFractionDigits: d });
 const mins = (s: number) => Math.round(s / 60);
 
@@ -31,7 +43,7 @@ export function dayCards(season: AdventSeason, day: AdventDay, dayNo: number | n
   const km = s.serviceDistM / 1000;
   cards.push({
     id: "cover",
-    big: day.verdict === "perfect" ? "Hibátlan" : day.verdict === "down" ? "Lerobbant" : day.verdict === "partial" ? "Félbemaradt" : day.verdict === "late" ? "Késős" : day.verdict === "nodata" ? "Nincs adat" : "Megvolt",
+    big: VERDICT_WORD[day.verdict],
     unit: null,
     title: `${dayNo ? `${dayNo}. nap · ` : ""}${day.dayType}`,
     line: day.note,

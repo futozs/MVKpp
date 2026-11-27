@@ -30,6 +30,8 @@ export type SeasonSummary = {
   totals: {
     days: number;
     daysRun: number;
+    /** lezárt nap, amelyről egy jel sem jött */
+    daysNoData: number;
     perfectDays: number;
     tripsPlanned: number;
     tripsDone: number;
@@ -94,7 +96,8 @@ export function seasonSummary(season: AdventSeason, analysed: AdventDay[]): Seas
     const plan = dayPlan(season, iso);
     return { iso, verdict: "future", dayType: plan ? DAY_TYPE_LABEL[plan.type] : "", note: plan?.note ?? null, special: plan?.special ?? false, planned: plan?.trips.length ?? 0, stats: null, incidents: 0, badIncidents: 0, trips: [] };
   });
-  const past = analysed.filter((d) => d.verdict !== "future" && d.verdict !== "none");
+  // a jel nélküli napokról nem tudjuk, mi történt: a számokba nem számítanak bele
+  const past = analysed.filter((d) => d.verdict !== "future" && d.verdict !== "none" && d.verdict !== "nodata");
   const st = past.map((d) => d.stats);
   const sum = (f: (s: DayStats) => number) => st.reduce((a, s) => a + f(s), 0);
 
@@ -167,9 +170,11 @@ export function seasonSummary(season: AdventSeason, analysed: AdventDay[]): Seas
     days,
     totals: {
       days: days.length,
+      daysNoData: analysed.filter((d) => d.verdict === "nodata").length,
       daysRun: past.filter((d) => d.stats.doneTrips + d.stats.partialTrips > 0).length,
       perfectDays: past.filter((d) => d.verdict === "perfect").length,
-      tripsPlanned: sum((s) => s.plannedTrips),
+      // a mai napból csak az, aminek már el kellett indulnia
+      tripsPlanned: past.reduce((a, d) => a + d.trips.filter((t) => t.verdict !== "upcoming" && t.verdict !== "due").length, 0),
       tripsDone: sum((s) => s.doneTrips),
       tripsPartial: sum((s) => s.partialTrips),
       tripsMissed: sum((s) => s.missedTrips),

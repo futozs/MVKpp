@@ -332,6 +332,8 @@ function buildTrips(season: AdventSeason, plan: AdventDayPlan | null, track: Tra
  * maradt el. Ha a jel után sem jött vissza, elmaradt marad.
  */
 function creditSilent(trips: AdventTrip[], track: Track): AdventTrip[] {
+  // egész nap egyetlen jel sem: nem tudjuk, járt-e (az OBU is hallgathatott)
+  if (!track.fixes.length) return trips.map((t) => (t.verdict === "missed" ? { ...t, verdict: "no_data" } : t));
   const lastMatched = trips.reduce((a, t) => (t.leg != null ? t.n : a), -1);
   return trips.map((t) => {
     if (t.verdict !== "missed" || t.n > lastMatched) return t;

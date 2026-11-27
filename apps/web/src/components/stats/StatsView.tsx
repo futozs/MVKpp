@@ -4,6 +4,7 @@ import {
   Bus,
   Flame,
   MapPinned,
+  Sparkles,
   Route as RouteIcon,
   Wrench,
   TrainFront,
@@ -19,6 +20,10 @@ import { StopPanel } from "./StopPanel";
 import { NetworkPanel } from "./NetworkPanel";
 import { HeatPanel } from "./HeatPanel";
 import { RegionalPanel } from "./RegionalPanel";
+import { AdventView } from "@/components/advent/AdventView";
+import { seasonOn } from "@mvk/core/advent/season";
+import { serviceClock } from "@mvk/core/time";
+import { serverNow } from "@/lib/realtime";
 import { cn } from "@/lib/utils";
 import { hasRegional, isRegionalId, useEnabledModes } from "@/lib/modes";
 
@@ -30,7 +35,8 @@ type PanelId =
   | "stop"
   | "network"
   | "heat"
-  | "regional";
+  | "regional"
+  | "advent";
 
 const OVERVIEW_PANEL: { id: PanelId; label: string; short: string; icon: LucideIcon } = {
   id: "overview",
@@ -53,6 +59,9 @@ const PANELS: {
   { id: "heat", label: "Hőtérkép", short: "Hőtérkép", icon: Flame },
 ];
 
+/** az adventi villamos: az évad alatt elöl, és ez nyílik meg elsőként; utána a sor végén */
+const ADVENT_PANEL = { id: "advent" as PanelId, label: "Adventi villamos", short: "Advent", icon: Sparkles };
+
 /** a Volán és a vasút saját panele  csak ha legalább az egyik be van kapcsolva */
 const REGIONAL_PANEL = { id: "regional" as PanelId, label: "Vasút és Volán", short: "Vasút", icon: TrainFront };
 
@@ -71,11 +80,13 @@ export function StatsView({
   /** van élő zavar (piros jelvény) → az Üzemzavarok nyíljon meg elsőként */
   liveIncidents?: number;
 }) {
-  const [panel, setPanel] = useState<PanelId>(() => (liveIncidents ? "incident" : "vehicle"));
+  const adventNow = useMemo(() => seasonOn(serviceClock(serverNow()).iso) != null, []);
+  const [panel, setPanel] = useState<PanelId>(() => (liveIncidents ? "incident" : adventNow ? "advent" : "vehicle"));
   const navRef = useRef<HTMLUListElement>(null);
   const modes = useEnabledModes();
   const regional = hasRegional(modes);
-  const panels = regional ? [...PANELS, REGIONAL_PANEL] : PANELS;
+  const base = regional ? [...PANELS, REGIONAL_PANEL] : PANELS;
+  const panels = adventNow ? [ADVENT_PANEL, ...base] : [...base, ADVENT_PANEL];
   // az üzemzavar és a hőtérkép az MVK hálózatáé (a regionálisra nincs ilyen mérés)
   const mvkRoutes = useMemo(() => routes.filter((r) => !isRegionalId(r.id)), [routes]);
   // a kikapcsolt regionális módnál ne maradjon a panelen
@@ -147,7 +158,8 @@ export function StatsView({
         </button>
       </nav>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      {panel === "advent" ? <AdventView routes={routes} /> : null}
+      <div className={cn("min-h-0 flex-1 overflow-y-auto", panel === "advent" && "hidden")}>
         <div className="mx-auto w-full max-w-[1600px] space-y-4 px-3 py-3 sm:px-4 sm:py-4 lg:px-6 lg:py-6">
           {panel === "overview" && (
             <OverviewPanel onJumpToVehicles={() => setPanel("vehicle")} />
