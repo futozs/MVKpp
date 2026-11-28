@@ -385,3 +385,4 @@ Egy külön, csak a belső hálózatról elérhető vezérlőpult az egész rend
 | Adat | PostgreSQL 17 + TimescaleDB + PostGIS; kétszintű gyorsítótár (memória + Redis) |
 | Fiók, értesítés | WebAuthn passkey, Web Push |
 | Üzem | Docker Compose, Caddy (HTTPS), Bun workspace monorepo |
+| macOS-szerver | OrbStack Docker-motor, LaunchAgentes automatikus indulás – [leírás](docs/MACOS_ORBSTACK.md) |
